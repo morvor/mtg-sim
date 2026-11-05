@@ -76,7 +76,7 @@ fn mercurial_spelldancer_copies_a_countered_spell_and_the_copy_resolves_first() 
 
 #[test]
 fn pearl_lake_ancient_can_be_targeted_by_a_counterspell() {
-    cr!("101.1", "608.2c");
+    cr!("101.2", "608.2c");
     ruling!(
         "Pearl Lake Ancient",
         "A spell or ability that counters spells can still target Pearl Lake Ancient. When one resolves, Pearl Lake Ancient won’t be countered, but any additional effects of that spell or ability will still happen."
@@ -413,7 +413,7 @@ fn ty_lee_effect_lasts_only_while_you_control_her() {
 
 #[test]
 fn lilah_doesnt_exile_a_countered_spell() {
-    cr!("701.5a", "702.170a");
+    cr!("701.6a", "608.2b");
     ruling!(
         "Lilah, Undefeated Slickshot",
         "If a spell is countered or it never resolves, Lilah, Undefeated Slickshot will not exile it."
@@ -513,7 +513,7 @@ fn the_mechanist_sets_base_pt_in_timestamp_order() {
 
 #[test]
 fn discard_your_hand_then_draw_three_with_an_empty_hand() {
-    cr!("701.9b");
+    cr!("609.3");
     ruling!(
         "Bedlam Reveler",
         "If you have no cards in hand when Bedlam Reveler’s enters ability resolves, you just draw three cards."
@@ -552,7 +552,7 @@ fn discard_your_hand_then_draw_three_with_an_empty_hand() {
 
 #[test]
 fn eshki_dragonclaw_checks_as_combat_begins() {
-    cr!("603.4", "507.1");
+    cr!("603.4", "603.2b");
     ruling!(
         "Eshki Dragonclaw",
         "If you haven’t cast both a creature spell and a noncreature spell this turn by the time your beginning of combat step begins, Eshki’s last ability won’t trigger at all. You won’t be able to cast a creature or noncreature spell during your beginning of combat step in time to have the ability trigger."
@@ -648,7 +648,7 @@ fn each_opponent_in_two_headed_giant_is_the_whole_team() {
 
 #[test]
 fn a_noncreature_spell_cast_this_turn_counts_whatever_happened_to_it() {
-    cr!("601.2i", "602.5b");
+    cr!("601.2i");
     ruling!(
         "Seeker of Insight",
         "It doesn’t matter whether the noncreature spell has resolved or was countered, as long as it was cast. That spell may even still be on the stack when you activate Seeker of Insight’s ability."

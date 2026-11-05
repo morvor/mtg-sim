@@ -17,7 +17,7 @@ use mtg_engine::*;
 
 #[test]
 fn time_of_heroes_pumps_any_creature_with_a_level_counter() {
-    cr!("122.1", "711.1");
+    cr!("122.1", "613.4c");
     ruling!(
         "Time of Heroes",
         "Time of Heroes affects any creature you control with a level counter on it, not just levelers. (Of course, it’s pretty hard to get level counters onto a creature that’s not a leveler, but it can be done with copy effects, Fate Transfer, or Quicksilver Elemental, among other possibilities.)"
@@ -76,7 +76,7 @@ fn font_of_agonies_needs_another_way_to_pay_life() {
 
 #[test]
 fn narset_exiled_cards_not_cast_stay_exiled() {
-    cr!("406.3");
+    cr!("611.2a");
     ruling!(
         "Narset, Enlightened Master",
         "Any exiled cards you don't cast remain in exile."
@@ -214,7 +214,7 @@ fn astrologians_planisphere_counts_draws_before_it_was_attached() {
 
 #[test]
 fn elsha_looks_at_the_top_card_any_time() {
-    cr!("401.5", "116.1");
+    cr!("401.5");
     ruling!(
         "Elsha of the Infinite",
         "Elsha lets you look at the top card of your library whenever you want (with one restriction—see below), even if you don't have priority. This action doesn't use the stack. Knowing what that card is becomes part of the information you have access to, just like you can look at the cards in your hand."
@@ -289,3 +289,4 @@ fn party_thrasher_convoke_cant_tap_a_creature_that_paid_for_mana() {
     assert!(!run(&[], true));
     assert!(run(&["Grizzly Bears"], true));
 }
+

@@ -168,7 +168,7 @@ fn arena_of_glory_mana_on_any_part_of_a_creature_spells_cost_gives_haste() {
 
 #[test]
 fn arena_of_glory_enters_tapped_alongside_a_mountain() {
-    cr!("614.12", "305.7");
+    cr!("614.12", "614.1c");
     ruling!(
         "Arena of Glory",
         "You must already control a Mountain as Arena of Glory enters the battlefield for it to enter untapped. If it enters the battlefield at the same time as a Mountain when you control no other Mountains, it will enter tapped."
@@ -221,7 +221,7 @@ fn mountain_types_not_names() {
 
 #[test]
 fn jaws_of_stone_locks_in_and_divides_as_it_is_cast() {
-    cr!("601.2d", "601.2h", "115.7");
+    cr!("601.2d");
     ruling!(
         "Jaws of Stone",
         "The amount of damage is locked in as you cast Jaws of Stone. It won’t change, even if the number of Mountains you control changes."

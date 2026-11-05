@@ -22,7 +22,7 @@ fn opponents_equipment_on(t: &mut TestGame, to: ObjectId) -> ObjectId {
 
 #[test]
 fn a_creature_equipped_by_an_opponents_equipment_is_modified() {
-    cr!("700.9", "301.5c");
+    cr!("700.9", "301.5d");
     ruling!(
         "Upriser Renegade",
         "A creature that is equipped is considered modified no matter who controls the Equipment that's attached to it."
@@ -173,7 +173,7 @@ fn divides_since(t: &TestGame, from: usize) -> Vec<(u32, usize, u32)> {
 
 #[test]
 fn throw_a_line_divides_as_cast_and_an_illegal_target_loses_its_counter() {
-    cr!("601.2d", "608.2b", "115.7");
+    cr!("601.2d", "608.2b");
     ruling!(
         "Ondu Knotmaster // Throw a Line",
         "You choose how the counters will be distributed as you cast Throw a Line. Each target must receive at least one +1/+1 counter."

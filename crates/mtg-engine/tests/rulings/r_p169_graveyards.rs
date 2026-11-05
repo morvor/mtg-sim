@@ -1,5 +1,5 @@
 //! Rulings batch P169 — "whenever a card is put into an opponent's graveyard from
-//! anywhere" (CR 603.6c, 603.10a, 111.7), Laboratory Maniac (CR 614.1a, 104.3b, 104.4),
+//! anywhere" (CR 603.6c, 603.10a, 111.7), Laboratory Maniac (CR 614.1a, 101.2),
 //! "a library has twenty or fewer cards", mill triggers, and a creature gaining menace
 //! after it was blocked (CR 509.1h).
 
@@ -54,7 +54,7 @@ fn profane_memento_doesnt_see_a_creature_card_going_to_a_graveyard_with_it() {
 
 #[test]
 fn profane_memento_ownership_and_tokens() {
-    cr!("404.2", "111.7", "603.2");
+    cr!("404.1", "111.7", "603.2");
     ruling!(
         "Profane Memento",
         "Profane Memento’s ability will trigger when a nontoken creature you control but an opponent owns dies."
@@ -182,7 +182,7 @@ fn vulturous_zombie_sees_cards_from_every_zone_but_not_tokens() {
 
 #[test]
 fn laboratory_maniac_cant_win_but_the_draw_is_still_replaced() {
-    cr!("614.1a", "104.3c", "704.5b");
+    cr!("614.1a", "101.2", "704.5b");
     ruling!(
         "Laboratory Maniac",
         "If for some reason you can't win the game (because your opponent has cast Angel's Grace this turn, for example), you won't lose for having tried to draw a card from a library with no cards in it. The draw was still replaced."

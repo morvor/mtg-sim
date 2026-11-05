@@ -133,7 +133,7 @@ fn disciples_of_the_inferno_adds_two_after_dividing() {
 
 #[test]
 fn disciples_of_the_inferno_hits_any_creature_and_battle_but_not_teammates() {
-    cr!("614.1a", "102.3", "310.8");
+    cr!("614.1a", "102.3", "120.3h");
     ruling!(
         "Invasion of Regatha // Disciples of the Inferno",
         "Disciples of the Inferno modifies damage that would be dealt to any creature, no matter who controls it, as well as any battle, no matter who protects it. Your teammates are safe. For now."
@@ -169,7 +169,7 @@ fn disciples_of_the_inferno_hits_any_creature_and_battle_but_not_teammates() {
 
 #[test]
 fn soul_scar_mage_converts_damage_its_controllers_source_deals_for_an_opponent() {
-    cr!("614.1a", "701.14a");
+    cr!("614.1a", "701.14a", "701.14d");
     ruling!(
         "Soul-Scar Mage",
         "If a spell or ability an opponent controls causes a source you control to deal noncombat damage to a creature an opponent controls, that damage will be replaced with -1/-1 counters."
@@ -195,7 +195,7 @@ fn soul_scar_mage_converts_damage_its_controllers_source_deals_for_an_opponent()
 
 #[test]
 fn soul_scar_mage_fight_damage_is_simultaneous() {
-    cr!("701.14b", "120.3");
+    cr!("701.14a", "701.14d");
     ruling!(
         "Soul-Scar Mage",
         "If an effect causes a creature you control to fight a creature an opponent controls, the damage is dealt simultaneously. For instance, if your 2/2 creature fights an opponent’s 4/4 creature, your creature will be dealt 4 damage and your opponent’s creature will have two -1/-1 counters put on it."

@@ -181,7 +181,7 @@ fn mishra_copy(t: &mut TestGame, target: ObjectId) -> ObjectId {
 
 #[test]
 fn mishras_token_gets_the_copied_permanents_enter_abilities() {
-    cr!("707.4", "614.1c", "603.6a");
+    cr!("707.2", "614.1c", "603.6a");
     ruling!(
         "Mishra, Eminent One",
         "Any enters-the-battlefield abilities of the copied permanent will trigger when the token enters the battlefield. Any “as [this permanent] enters the battlefield” or “[this permanent] enters the battlefield with” abilities of the target permanent will also work."
@@ -233,7 +233,7 @@ fn mishras_token_copies_only_the_printed_values() {
 
 #[test]
 fn mishras_copy_of_a_token_uses_the_creating_effects_characteristics() {
-    cr!("707.2", "111.4");
+    cr!("707.2", "111.3");
     ruling!(
         "Mishra, Eminent One",
         "If the copied permanent is a token, the new token that’s created copies the original characteristics of that token as stated by the effect that created that token (with the listed exceptions)."
@@ -252,7 +252,7 @@ fn mishras_copy_of_a_token_uses_the_creating_effects_characteristics() {
 
 #[test]
 fn caretakers_talent_token_copy_gets_its_enters_with_counters() {
-    cr!("707.4", "614.1c");
+    cr!("707.2", "614.1c");
     ruling!(
         "Caretaker's Talent",
         "Any \"as [this permanent] enters\" or \"[this permanent] enters with\" abilities of the new token will work."
