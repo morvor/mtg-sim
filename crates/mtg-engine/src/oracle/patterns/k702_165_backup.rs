@@ -66,9 +66,11 @@ fn group_backup(blocks: Vec<String>, ctx: &CompileContext) -> Vec<String> {
 
 inventory::submit! { BlockGroupPattern { name: "k702.165 backup and the abilities below it", priority: 80, group: group_backup } }
 
-/// Whether a compiled ability is itself a backup ability (not granted by another one).
-fn is_backup(a: &Ability) -> bool {
-    backup_line(&a.text).is_some()
+/// Whether a compiled ability is itself a backup ability (not granted by another one):
+/// the triggered ability labeled "Backup N" (CR 702.165a). Also what "becomes the target of
+/// a backup ability" looks for on the stack (Mirror-Shield Hoplite).
+pub fn is_backup(a: &AbilityDef) -> bool {
+    matches!(a.kind, AbilityKind::Triggered(_)) && backup_line(&a.text).is_some()
 }
 
 /// The triggered ability "Backup N" granting `granted`.
