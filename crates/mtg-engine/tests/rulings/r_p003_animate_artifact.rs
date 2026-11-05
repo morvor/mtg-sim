@@ -2,7 +2,7 @@
 //! set in layer 7b under counters and modifications (7c) and switches (7d) whenever they
 //! began (CR 613.4); a later setting effect overwrites an earlier one (CR 613.7); crewing
 //! sets no power and toughness (CR 702.122); summoning sickness of an artifact that
-//! becomes a creature (CR 302.6); durations (CR 611.2, 514.2).
+//! becomes a creature (CR 302.6); durations (CR 611.2a).
 
 use crate::r_p003_common::*;
 use crate::r_s01_common::supported;
@@ -25,7 +25,7 @@ fn elders_animate(t: &mut TestGame, target: ObjectId) {
 
 #[test]
 fn workshop_elders_artifact_has_summoning_sickness_and_the_effect_lasts() {
-    cr!("302.6", "508.1a", "611.2b");
+    cr!("302.6", "508.1a", "611.2a");
     ruling!(
         "Workshop Elders",
         "An artifact that becomes a creature due to Workshop Elders can't attack unless you've controlled it continuously since your turn began."
@@ -229,7 +229,7 @@ fn an_aura_or_tezzeret_overwrites_earlier_setting_effects_and_later_ones_overwri
 
 #[test]
 fn tezzeret_zero_keeps_abilities_and_ends_before_your_turn_begins() {
-    cr!("611.2b", "613.1d", "613.4b");
+    cr!("611.2a", "613.1d", "613.4b");
     ruling!(
         "Tezzeret, Cruel Machinist",
         "Tezzeret's second ability doesn't remove any abilities the target artifact has."

@@ -27,7 +27,7 @@ fn tapped(t: &TestGame, id: ObjectId) -> bool {
 
 #[test]
 fn fendeep_summoner_swamps_keep_their_types_and_colors_and_tap_for_black() {
-    cr!("205.1b", "613.1d", "302.6", "115.1d");
+    cr!("205.1b", "613.1d", "302.6", "601.2c");
     ruling!(
         "Fendeep Summoner",
         "A Swamp affected by this ability is still a land, still a Swamp, and may still be tapped for black mana. If it had any other card types or subtypes, it retains those as well. This ability doesn’t affect the permanent’s colors, if any."
@@ -175,7 +175,7 @@ fn cyclone_sire_and_wall_of_resurgence_set_an_animated_land_to_base_0_0() {
 
 #[test]
 fn noyan_dar_resolves_first_and_isnt_awaken() {
-    cr!("405.5", "603.3", "702.113a");
+    cr!("405.5", "603.3");
     ruling!(
         "Noyan Dar, Roil Shaper",
         "The ability will resolve before the instant or sorcery spell that caused it to trigger."
@@ -208,7 +208,7 @@ fn noyan_dar_resolves_first_and_isnt_awaken() {
 
 #[test]
 fn rootwise_survivor_land_remains_a_creature_indefinitely() {
-    cr!("611.2b", "611.2a");
+    cr!("611.2a");
     ruling!(
         "Rootwise Survivor",
         "Rootwise Survivor's last ability doesn't have a duration, which means the land remains a creature indefinitely."
@@ -238,7 +238,7 @@ fn rootwise_survivor_land_remains_a_creature_indefinitely() {
 
 #[test]
 fn wakeroot_elemental_untaps_and_overwrites_setting_effects() {
-    cr!("613.4b", "613.4c", "613.7a", "611.2b");
+    cr!("613.4b", "613.4c", "613.7a", "611.2a");
     ruling!(
         "Wakeroot Elemental",
         "Wakeroot Elemental’s ability can target a land that’s already a creature or a land that’s already untapped. The ability will untap it if possible and set its base power and toughness to 5/5. Any counters or effects modifying that creature’s power and toughness will continue to apply, and any effects that set the creature’s power and toughness will be overwritten."
@@ -269,7 +269,7 @@ fn wakeroot_elemental_untaps_and_overwrites_setting_effects() {
 
 #[test]
 fn awakening_of_vitu_ghazi_names_the_land_doesnt_untap_it_and_lasts() {
-    cr!("613.1d", "611.2b", "205.4");
+    cr!("613.1d", "611.2a");
     ruling!(
         "Awakening of Vitu-Ghazi",
         "Awakening of Vitu-Ghazi doesn’t untap the land that becomes a creature."
@@ -305,7 +305,7 @@ fn awakening_of_vitu_ghazi_names_the_land_doesnt_untap_it_and_lasts() {
 
 #[test]
 fn relive_the_past_returns_5_5_elementals_keeping_their_creature_types() {
-    cr!("613.1d", "205.3d", "613.4b");
+    cr!("613.1d", "205.1b", "613.4b");
     ruling!(
         "Relive the Past",
         "An artifact creature, land creature, or enchantment creature returned this way will be a 5/5 creature and will be an Elemental in addition to its other creature types."

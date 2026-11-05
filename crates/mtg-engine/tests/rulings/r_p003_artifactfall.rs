@@ -233,7 +233,7 @@ fn sentinel_sarah_lyons_cares_whether_an_artifact_entered_this_turn() {
 
 #[test]
 fn akal_pakal_triggers_whatever_happened_to_the_artifact() {
-    cr!("603.4", "603.10");
+    cr!("603.4");
     ruling!(
         "Akal Pakal, First Among Equals",
         "The ability will trigger no matter what happened to the artifact after it entered. It may have left the battlefield, come under another player's control, or stopped being an artifact."

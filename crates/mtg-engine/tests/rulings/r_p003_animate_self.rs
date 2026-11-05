@@ -47,7 +47,7 @@ fn mimics_are_still_treasures_and_treasure_is_never_a_creature_type() {
 
 #[test]
 fn an_effect_that_refers_to_a_treasure_means_any_treasure_artifact() {
-    cr!("205.3g", "111.10a");
+    cr!("205.3g");
     ruling!(
         "Dire Mimic",
         "If an effect refers to a Treasure, it means any Treasure artifact, not just a Treasure artifact token."
@@ -129,7 +129,7 @@ fn glint_hawk_idol_sets_its_base_2_2_over_other_setters_and_is_a_bird() {
 
 #[test]
 fn glint_hawk_idol_entering_this_turn_is_summoning_sick() {
-    cr!("302.6", "603.6a", "603.10a");
+    cr!("302.6", "603.6a");
     ruling!(
         "Glint Hawk Idol",
         "If Glint Hawk Idol and another artifact enter under your control at the same time, Glint Hawk Idol's first ability will trigger. You may have it become a creature, but since it will be affected by \"summoning sickness,\" it won't be able to attack that turn."
@@ -225,7 +225,7 @@ fn gruul_war_plow_is_a_juggernaut_with_trample_but_no_juggernaut_abilities() {
 
 #[test]
 fn tangle_tumbler_may_tap_summoning_sick_tokens() {
-    cr!("302.6", "118.3");
+    cr!("302.6");
     ruling!(
         "Tangle Tumbler",
         "You may tap any untapped tokens you control, including creature tokens you control that you haven't controlled continuously since the beginning of your most recent turn, to pay the cost of Tangle Tumbler's last ability."

@@ -2,7 +2,7 @@
 //! spell's total cost (CR 601.2f-h), including cost increases and additional costs, none
 //! for a spell cast without paying its mana cost (CR 118.9) or mana paid later; Verazol's
 //! copies (CR 707.10) and its counter removal; illegal targets (CR 608.2b); snow mana
-//! (CR 106.3).
+//! (CR 107.4h); a cost of removing counters (CR 118.3, 118.12).
 
 use crate::r_p003_common::*;
 use crate::r_s01_common::supported;
@@ -28,7 +28,7 @@ fn looked_at(t: &TestGame, from: usize) -> usize {
 
 #[test]
 fn memory_deluge_cast_without_paying_looks_at_nothing_and_mana_leak_mana_doesnt_count() {
-    cr!("118.9", "601.2h", "107.3m");
+    cr!("118.9", "601.2h");
     ruling!(
         "Memory Deluge",
         "If an effect allows you to cast Memory Deluge without paying its mana cost, X will be 0. Memory Deluge will resolve, but you won't do anything."
@@ -78,7 +78,7 @@ fn verazol(t: &mut TestGame, n: u32) -> ObjectId {
 
 #[test]
 fn verazol_counts_cost_increases_and_a_clone_counts_its_own_mana() {
-    cr!("601.2f", "601.2h", "614.1c", "707.9a");
+    cr!("601.2f", "601.2h", "614.1c", "707.2", "903.8");
     ruling!(
         "Verazol, the Split Current",
         "The amount of mana you spent to cast Verazol is usually equal to its mana value, normally 2 plus the value chosen for X. However, you also include any additional costs you pay"
@@ -112,11 +112,23 @@ fn verazol_counts_cost_increases_and_a_clone_counts_its_own_mana() {
     let put_in = t.enter(P1, "Clone");
     assert_eq!(t.counters(put_in, counters::PLUS1), 0);
     assert_eq!(t.obj_now(put_in).chars.name, "Verazol, the Split Current");
+    // As a commander cast once before: X = 1 and {2} of commander tax, five counters.
+    let mut t = crate::r_s13_common::commander_game();
+    t.set_step(P0, Step::PrecombatMain);
+    let v = crate::r_s13_common::commander(&mut t, P0, "Verazol, the Split Current");
+    t.g.players[0]
+        .commander_casts
+        .insert("Verazol, the Split Current".into(), 1);
+    mana(&mut t, P0, "3GU");
+    t.cast(P0, v).x(1).go();
+    t.resolve_all();
+    let v = t.named_on_battlefield("Verazol, the Split Current")[0];
+    assert_eq!(t.counters(v, counters::PLUS1), 5);
 }
 
 #[test]
 fn verazol_copies_kicked_spells_with_or_without_targets_kicked_and_with_the_same_modes() {
-    cr!("707.10", "707.10c", "702.33d", "700.2g");
+    cr!("707.10", "702.33d", "700.2g");
     ruling!(
         "Verazol, the Split Current",
         "Verazol's last ability can copy any kicked spell, not just one with targets."
@@ -198,7 +210,7 @@ fn verazol_removes_exactly_two_counters_and_none_once_its_gone() {
 
 #[test]
 fn liberator_counts_the_mana_actually_spent_and_grants_no_sorcery_speed_activation() {
-    cr!("601.2h", "118.9", "702.8a", "307.1");
+    cr!("601.2h", "118.9", "702.8a", "602.5d");
     ruling!(
         "Liberator, Urza's Battlethopter",
         "The last ability cares only about the amount of mana that was actually spent to cast the spell, regardless of its mana cost."
@@ -267,7 +279,7 @@ fn molten_note_with_an_illegal_target_doesnt_untap() {
 
 #[test]
 fn search_for_glory_without_snow_mana_gains_no_life_but_searches() {
-    cr!("106.3", "601.2h");
+    cr!("107.4h");
     ruling!(
         "Search for Glory",
         "If you cast Search for Glory without spending snow mana, you won’t gain any life. You’ll still perform the search."

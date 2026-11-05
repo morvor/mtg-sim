@@ -116,7 +116,7 @@ fn glory_of_warfare_switches_bonuses_with_the_turn() {
 
 #[test]
 fn wedding_announcement_looks_back_at_this_turns_attacks() {
-    cr!("508.1", "603.4");
+    cr!("508.1");
     ruling!(
         "Wedding Announcement // Wedding Festivity",
         "Wedding Announcement's ability looks back in time to the combat phase of this turn, even if it wasn't yet on the battlefield when you attacked. If you attacked with at least two creatures this turn, you will draw a card as the ability resolves. This is true even if one or more of those permanents is no longer a creature or no longer on the battlefield."

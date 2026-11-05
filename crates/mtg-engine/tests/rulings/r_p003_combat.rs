@@ -1,5 +1,5 @@
 //! Rulings batch P003 — attacking matters: "whenever you attack" triggers (CR 508.3d) and
-//! what's counted as they resolve (CR 608.2h) or fixed once they have (CR 611.2c);
+//! what's counted as they resolve (CR 608.2h) and fixed from then on;
 //! counters from an Equipment's trigger stay (CR 122); combat damage assigned by
 //! toughness (CR 510.1a) but fights by power (CR 701.14); "nonattacking, nonblocking"
 //! targets (CR 115.1); Magus of the Arena's targets (CR 115.7, 608.2b).
@@ -41,7 +41,7 @@ fn razorkin_hordecaller_triggers_whoever_attacks() {
 
 #[test]
 fn rubblebelt_raiders_and_akroan_hoplite_count_attackers_as_they_resolve() {
-    cr!("608.2h", "611.2c", "506.4");
+    cr!("608.2h");
     ruling!(
         "Rubblebelt Raiders",
         "Count the number of attacking creatures you control when Rubblebelt Raiders’s ability resolves, including Rubblebelt Raiders itself, to determine how many +1/+1 counters to put on it."
@@ -73,7 +73,7 @@ fn rubblebelt_raiders_and_akroan_hoplite_count_attackers_as_they_resolve() {
 
 #[test]
 fn attack_triggers_dont_care_what_happens_to_the_attackers_afterwards() {
-    cr!("508.3d", "603.4");
+    cr!("508.3d");
     ruling!(
         "Seasoned Consultant",
         "It doesn't matter what happens to the creatures in response. As long as you attacked with at least three creatures, Seasoned Consultant will still get +2/+0 until end of turn when its triggered ability resolves."
@@ -127,7 +127,7 @@ fn attack_triggers_dont_care_what_happens_to_the_attackers_afterwards() {
 
 #[test]
 fn armory_of_iroas_counters_stay_when_it_moves() {
-    cr!("122.1", "301.5c");
+    cr!("122.1", "702.6a");
     ruling!(
         "Armory of Iroas",
         "If you move Armory of Iroas from one creature to another, any +1/+1 counters on the first creature remain where they are."
@@ -231,7 +231,7 @@ fn magus_of_the_arena_with_a_target_gone_taps_the_other_and_deals_no_damage() {
 
 #[test]
 fn magus_of_the_arena_second_target_changes_only_to_the_chosen_opponents_creature() {
-    cr!("115.7", "115.7d");
+    cr!("115.7a", "115.7b");
     ruling!(
         "Magus of the Arena",
         "If an effect changes the targets of this ability, the second target can be changed to any creature the chosen opponent controls. The choice of opponent can't be changed."

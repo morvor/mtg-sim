@@ -1,8 +1,8 @@
 //! Rulings batch P003 — Tezzeret, Cruel Machinist's −7 ("Put any number of cards from
 //! your hand onto the battlefield face down. They're 5/5 artifact creatures.") and
 //! Magar of the Magic Strings: face-down permanents with characteristics listed by the
-//! effect (CR 708.2), copies of them (CR 708.10), looking at them (CR 708.5), revealing
-//! them (CR 708.9), returning them (CR 708.10/400.7) and turning them face up (CR 708.8).
+//! effect (CR 708.2), copies of them (CR 707.2), looking at them (CR 708.5), revealing
+//! them (CR 708.9), returning them (CR 400.7) and turning them face up (CR 708.8).
 //! Also Depthshaker Titan on Vehicles and Spacecraft.
 
 use crate::r_p003_common::*;
@@ -56,7 +56,7 @@ fn revealed(t: &TestGame, id: ObjectId) -> bool {
 
 #[test]
 fn tezzeret_cards_enter_as_5_5_artifact_creatures() {
-    cr!("708.2", "603.6a");
+    cr!("708.2", "708.3", "603.6a");
     ruling!(
         "Tezzeret, Cruel Machinist",
         "Cards put onto the battlefield using Tezzeret's third ability enter the battlefield as 5/5 artifact creatures. They don't enter the battlefield with their own characteristics and then become 5/5."
@@ -84,7 +84,7 @@ fn tezzeret_cards_enter_as_5_5_artifact_creatures() {
 
 #[test]
 fn a_copy_of_a_tezzeret_face_down_creature_is_a_face_up_5_5_artifact_creature() {
-    cr!("708.10", "707.2");
+    cr!("707.2", "708.2");
     ruling!(
         "Tezzeret, Cruel Machinist",
         "If a creature enters the battlefield as a copy of a face-down creature or if a token is created that's a copy of one, that copy has the same characteristics as the face-down creature (in this case, a 5/5 artifact creature with no other characteristics), even though the copy is face up."
@@ -102,7 +102,7 @@ fn a_copy_of_a_tezzeret_face_down_creature_is_a_face_up_5_5_artifact_creature() 
 
 #[test]
 fn a_double_faced_card_put_face_down_isnt_revealed_and_has_no_back_face() {
-    cr!("708.2", "711.1");
+    cr!("708.2", "712.15");
     ruling!(
         "Tezzeret, Cruel Machinist",
         "If a double-faced card (such as Nicol Bolas, the Ravager) is put onto the battlefield face down, you don't reveal it as you do so. The characteristics of its back face don't apply."
@@ -131,7 +131,7 @@ fn a_face_down_permanent_leaving_the_battlefield_is_revealed() {
 
 #[test]
 fn a_returned_face_down_card_returns_face_up_and_an_instant_stays_in_exile() {
-    cr!("708.10", "400.7", "400.4a");
+    cr!("400.7", "400.4a");
     ruling!(
         "Tezzeret, Cruel Machinist",
         "If an effect tries to return a face-down creature to the battlefield after it leaves (such as Oath of Teferi from the Dominaria set or Abnormal Endurance from this set), that effect returns the card face up. If it tries to put an instant or sorcery card onto the battlefield this way, that card remains in its current zone instead."
@@ -155,7 +155,7 @@ fn a_returned_face_down_card_returns_face_up_and_an_instant_stays_in_exile() {
 
 #[test]
 fn turning_a_tezzeret_card_face_up_ends_the_5_5_effect_but_an_instant_stays_face_down() {
-    cr!("708.8", "701.40g");
+    cr!("708.8");
     ruling!(
         "Tezzeret, Cruel Machinist",
         "If an effect from cards outside of this set does turn one face up, the effect causing it to be a 5/5 artifact creature ends. If such an effect tries to turn an instant or sorcery card face up, reveal that card and it stays face down. In that case, it remains a 5/5 artifact creature."
