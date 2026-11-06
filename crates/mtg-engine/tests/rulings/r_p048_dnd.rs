@@ -459,6 +459,48 @@ fn green_dragons_poison_breath_outlasts_it_and_isnt_deathtouch() {
     assert!(!t.on_battlefield(giant));
 }
 
+/// Where the Poison Breath ruling is outdated ("before dealing damage to another blocking
+/// creature", written under the damage assignment order of the CR of 2021): since the CR
+/// effective 2024-11-08 a creature blocked by several creatures divides its damage among
+/// them as its controller chooses (CR 510.1c), so P0's Grizzly Bears can deal 1 damage to
+/// each of the two Hill Giants blocking it, and Poison Breath destroys both
+/// (docs/RULING_DISCREPANCIES.md, "outdated").
+#[test]
+fn green_dragons_poison_breath_with_damage_divided_among_blockers() {
+    cr!("510.1c", "603.7a");
+    supported("Green Dragon");
+    let mut t = TestGame::new(2);
+    t.enter(P0, "Green Dragon");
+    t.resolve_all();
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let a = t.battlefield(P1, "Hill Giant");
+    let b = t.battlefield(P1, "Hill Giant");
+    to_combat(&mut t, P0);
+    let from = t.asked().len();
+    t.answer(P0, DecisionKind::Damage, Answer::Numbers(vec![1, 1]));
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(bears, Entity::Player(P1))]),
+    );
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(a, bears), (b, bears)]),
+    );
+    t.advance_to_step(Step::CombatDamage);
+    t.settle();
+    // Asked to divide the Bears' 2 damage between the two Giants; 1 each was dealt.
+    let asked = t.asked()[from..].iter().any(|(p, d)| {
+        *p == P0
+            && matches!(d, Decision::AssignCombatDamage { recipients, .. } if recipients.len() == 2)
+    });
+    assert!(asked);
+    assert_eq!((t.obj_now(a).damage, t.obj_now(b).damage), (1, 1));
+    t.resolve_all();
+    assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
+}
+
 #[test]
 fn explosive_crystals_division_is_chosen_on_casting_and_kept() {
     cr!("601.2d", "608.2b");

@@ -106,6 +106,29 @@ fn zhalfirs_phased_out_permanents_stay_out_while_the_saga_is_controlled() {
     assert!(!phased_out(&t, bears));
 }
 
+/// The Oracle text ("It can't phase in for as long as you control this Saga.") where the
+/// ruling's words ("while the Saga is on the battlefield") say otherwise: once P0 stops
+/// controlling the Saga, the duration is over for good (CR 611.2b), so P1's Bears phase in
+/// during P1's next untap step with the Saga still on the battlefield, even if P0 has
+/// taken it back by then (docs/RULING_DISCREPANCIES.md, "narrower than stated").
+#[test]
+fn zhalfirs_permanent_phases_in_once_you_stop_controlling_the_saga() {
+    cr!("611.2b", "702.26a");
+    for back_to_p0 in [false, true] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        let saga = zhalfir_on(&mut t, bears);
+        crate::r_s06_common::give_control(&mut t, saga, P1);
+        if back_to_p0 {
+            crate::r_s06_common::give_control(&mut t, saga, P0);
+        }
+        assert!(phased_out(&t, bears));
+        next_upkeep(&mut t, P1);
+        assert!(t.on_battlefield(saga));
+        assert!(!phased_out(&t, bears), "back to P0: {back_to_p0}");
+    }
+}
+
 #[test]
 fn a_permanent_phasing_in_keeps_its_counters_and_can_attack() {
     cr!("702.26a", "702.26d", "302.6");
