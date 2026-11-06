@@ -436,7 +436,7 @@ fn runehorn_hellkite_is_exiled_as_a_cost_and_empty_hands_just_draw() {
 
 #[test]
 fn commit_puts_a_spell_or_permanent_into_its_owners_library() {
-    cr!("608.2c", "401.4", "704.5d", "704.5e", "707.10", "111.8");
+    cr!("608.2c", "704.5d", "704.5e", "707.10", "111.8");
     ruling!(
         "Commit // Memory",
         "If the target's owner's library contains no cards, the target spell or permanent will be put into that player's library as the only card."
