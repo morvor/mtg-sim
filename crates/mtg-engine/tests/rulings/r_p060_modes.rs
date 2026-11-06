@@ -118,7 +118,7 @@ fn rankle_performs_each_mode_in_full_in_printed_order() {
 
 #[test]
 fn rankle_may_choose_no_modes() {
-    cr!("700.2d", "603.3c");
+    cr!("700.2b", "603.3c");
     ruling!(
         "Rankle, Master of Pranks",
         "If you really want, you can choose zero modes for Rankle's triggered ability, but carefully consider the hidden costs in not entertaining someone titled Master of Pranks."
@@ -246,21 +246,37 @@ fn unite_the_coalition_triggers_wait_until_it_has_resolved() {
         "No player can cast spells or activate abilities in between the modes of a resolving spell. Any abilities that trigger won’t be put onto the stack until Unite the Coalition is done resolving."
     );
     // Spiteful Visions triggers on each of the five draws; all five go on the stack only
-    // after Unite the Coalition is in the graveyard, and no player was asked for priority
-    // in between.
+    // after Unite the Coalition is in the graveyard.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Spiteful Visions");
     unite_draws(&mut t, [P1, P0, P1, P0, P1]);
     t.settle();
-    let from = t.asked().len();
     t.g.resolve_top();
     assert!(t.in_graveyard(P0, "Unite the Coalition"));
     assert_eq!(triggers_on_stack(&t, "damage to that player"), 0);
-    assert!(!t.asked()[from..]
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::Priority { .. })));
     t.settle();
     assert_eq!(triggers_on_stack(&t, "damage to that player"), 5);
+    // The players pass priority as the game runs: at each priority, whether the spell is on
+    // the stack and the cards drawn so far are recorded. No player had priority while it
+    // was on the stack with some of its draws done.
+    let mut t = TestGame::new(2);
+    unite_draws(&mut t, [P1, P0, P1, P0, P1]);
+    let look = |g: &mtg_engine::game::Game| {
+        (
+            g.find_in_zone(Zone::Stack, "Unite the Coalition").len(),
+            g.player(PlayerId(0)).hand.len() + g.player(PlayerId(1)).hand.len(),
+        )
+    };
+    let priority = |d: &Decision| matches!(d, Decision::Priority { .. });
+    let seen: Vec<_> = [P0, P1].map(|p| watch(&mut t, p, priority, look)).into();
+    assert!(t.g.run_until(100, |g| g.stack.is_empty()));
+    t.g.advance();
+    let all: Vec<(usize, usize)> = seen
+        .iter()
+        .flat_map(|s| s.lock().unwrap().clone())
+        .collect();
+    assert!(all.contains(&(1, 0)) && all.contains(&(0, 5)), "{all:?}");
+    assert!(all.iter().all(|(on_stack, drawn)| *on_stack == 0 || *drawn == 0), "{all:?}");
 }
 
 #[test]
@@ -294,7 +310,7 @@ fn a_copy_of_unite_the_coalition_keeps_its_modes() {
 
 #[test]
 fn unite_the_coalition_phased_out_permanents_phase_in_untapped_with_counters() {
-    cr!("502.1", "702.26c", "702.26a");
+    cr!("502.1", "702.26a", "702.26c", "702.26d");
     ruling!(
         "Unite the Coalition",
         "Permanents phase back in during their controller’s untap step, immediately before that player untaps their permanents. Creatures that phase in this way are able to attack and pay a cost of {T} during that turn. If a permanent had counters on it when it phased out, it will have those counters when it phases back in."

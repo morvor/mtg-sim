@@ -363,10 +363,15 @@ fn done_cond(e: &Effect) -> Option<Condition> {
         | Effect::Exile { .. }
         | Effect::Move { .. }
         | Effect::PayOptional { .. } => Some(Condition::PrevHappened),
-        // Cards drawn, also because a replacement effect replaced the draw ("draw two cards
-        // instead": the player drew cards this way; Cut a Deal rulings).
+        // Cards the player drew, also because a replacement effect replaced the draw ("draw
+        // two cards instead": the player drew cards this way; Cut a Deal rulings), but not
+        // those another player drew instead ("that player skips that draw and you draw a
+        // card": the player didn't draw).
         Effect::Draw { .. } => Some(Condition::Compare(
-            Value::CountSel(Box::new(Sel::Var(crate::draw_rules::DRAWN_THIS_WAY))),
+            Value::CountSel(Box::new(Sel::Matching(
+                Box::new(Sel::Var(crate::draw_rules::DRAWN_THIS_WAY)),
+                Filter::OwnedBy(PlayerRel::Iterated),
+            ))),
             Cmp::Ge,
             Value::c(1),
         )),

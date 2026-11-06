@@ -69,7 +69,7 @@ fn second_card_triggers_count_draws_from_before_you_controlled_it() {
 
 #[test]
 fn putting_a_card_into_a_hand_without_drawing_doesnt_trigger_draw_abilities() {
-    cr!("121.1", "121.2", "603.2");
+    cr!("121.1", "603.2");
     ruling!(
         "Zurzoth, Chaos Rider",
         "If a spell or ability causes a player to put a card into their hand without specifically using the word \"draw,\" it's not a card drawn."
@@ -136,7 +136,7 @@ fn zurzoth_you_lose_before_the_devils_death_trigger_goes_on_the_stack() {
 
 #[test]
 fn spiteful_visions_damages_for_any_draw() {
-    cr!("603.2", "121.2");
+    cr!("603.2", "121.1");
     ruling!(
         "Spiteful Visions",
         "Spiteful Visions's second ability triggers any time any player draws a card, not just when a player draws a card as a result of its first ability."
@@ -153,12 +153,17 @@ fn spiteful_visions_damages_for_any_draw() {
 
 #[test]
 fn cut_a_deal_draws_one_per_opponent_who_drew() {
-    cr!("614.11", "608.2c");
+    cr!("614.6", "614.11", "608.2c");
     ruling!(
         "Cut a Deal",
         "If an opponent drew more than one card this way due to a replacement effect, you still draw only one card for that player."
     );
+    ruling!(
+        "Cut a Deal",
+        "Although the draws are not optional, if an opponent doesn't draw a card, perhaps because a replacement effect replaced the draw with another effect, that player is not counted when determining how many cards you draw."
+    );
     supported("Cut a Deal");
+    supported("Notion Thief");
     // P1's Thought Reflection: "If you would draw a card, draw two cards instead." P1
     // draws two cards, and counts once; without it, one each.
     for reflection in [true, false] {
@@ -174,11 +179,22 @@ fn cut_a_deal_draws_one_per_opponent_who_drew() {
         let p1 = if reflection { 2 } else { 1 };
         assert_eq!(drawn_since(&t, &before), vec![2, p1, 1], "{reflection}");
     }
+    // P0's Notion Thief: each opponent's draw is replaced by P0 drawing ("that player skips
+    // that draw and you draw a card"). No opponent drew, so P0 draws only the two cards
+    // Notion Thief gave.
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Notion Thief");
+    give_mana_for(&mut t, P0, "Cut a Deal");
+    let s = t.hand(P0, "Cut a Deal");
+    t.cast(P0, s).go();
+    let before = libraries(&t);
+    t.resolve_all();
+    assert_eq!(drawn_since(&t, &before), vec![2, 0, 0]);
 }
 
 #[test]
 fn a_player_whose_draw_was_replaced_by_draws_drew_a_card_this_way() {
-    cr!("614.11", "608.2c");
+    cr!("614.6", "614.11", "608.2c");
     // Kwain, Itinerant Meddler: "{T}: Each player may draw a card, then each player who
     // drew a card this way gains 1 life." P1's Thought Reflection replaces P1's draw with
     // two draws: P1 drew cards this way too.
@@ -207,6 +223,31 @@ fn a_player_whose_draw_was_replaced_by_draws_drew_a_card_this_way() {
     t.activate(P0, kwain, 0, &[]).unwrap();
     t.resolve_all();
     assert_eq!((t.life(P0), t.life(P1)), (21, 20));
+    // A draw replaced by another player's draw isn't a card drawn this way: with P0's
+    // Notion Thief, P1's draw is replaced by P0 drawing; P1 didn't draw and gains no life.
+    supported("Notion Thief");
+    let mut t = TestGame::new(2);
+    let kwain = t.battlefield(P0, "Kwain, Itinerant Meddler");
+    t.battlefield(P0, "Notion Thief");
+    t.answer_yes(P0, true);
+    t.answer_yes(P1, true);
+    t.activate(P0, kwain, 0, &[]).unwrap();
+    let before = libraries(&t);
+    t.resolve_all();
+    assert_eq!(drawn_since(&t, &before), vec![2, 0]);
+    assert_eq!((t.life(P0), t.life(P1)), (21, 20));
+    // With P1's Notion Thief, P0's draw is replaced by P1 drawing: P0 didn't draw and gains
+    // no life; P1 draws its own card too, and gains 1.
+    let mut t = TestGame::new(2);
+    let kwain = t.battlefield(P0, "Kwain, Itinerant Meddler");
+    t.battlefield(P1, "Notion Thief");
+    t.answer_yes(P0, true);
+    t.answer_yes(P1, true);
+    t.activate(P0, kwain, 0, &[]).unwrap();
+    let before = libraries(&t);
+    t.resolve_all();
+    assert_eq!(drawn_since(&t, &before), vec![0, 2]);
+    assert_eq!((t.life(P0), t.life(P1)), (20, 21));
 }
 
 /// Advances from P1's end step into P0's draw step (the draw-step draw done and triggers
@@ -343,7 +384,7 @@ fn howling_mine_checks_untapped_twice_using_last_known_information() {
 
 #[test]
 fn ghirapur_orrery_additional_land_plays_follow_normal_timing_and_add_up() {
-    cr!("305.2", "305.2a", "305.3", "505.6b");
+    cr!("305.1", "305.2", "305.2a", "505.6b");
     ruling!(
         "Ghirapur Orrery",
         "Ghirapur Orrery's first ability allows a player to play an additional land during their main phase. Doing so follows the normal timing rules for playing lands."
@@ -377,7 +418,12 @@ fn ghirapur_orrery_additional_land_plays_follow_normal_timing_and_add_up() {
                 t.play_land(P0, *land).unwrap();
             }
         }
-        assert_eq!(t.g.permanents().filter(|o| o.is(CardType::Land) && o.controller == P0 && o.chars.name == "Forest").count(), orreries + 1);
+        let forests = t
+            .g
+            .permanents()
+            .filter(|o| o.is(CardType::Land) && o.controller == P0 && o.chars.name == "Forest")
+            .count();
+        assert_eq!(forests, orreries + 1);
         // In the combat phase, a land play left can't be used.
         let mut t = TestGame::new(2);
         t.battlefield(P1, "Ghirapur Orrery");
@@ -443,7 +489,7 @@ fn ghirapur_orrery_checks_the_hand_at_the_start_of_the_upkeep_and_on_resolution(
 
 #[test]
 fn ghirapur_orrery_in_two_headed_giant_triggers_for_each_player() {
-    cr!("603.4", "810.10a");
+    cr!("603.4", "805.4d");
     ruling!(
         "Ghirapur Orrery",
         "In a Two-Headed Giant game, Ghirapur Orrery's second ability triggers for each player on a team separately. If one player has cards in hand, it can still trigger for the other player."
@@ -496,7 +542,9 @@ fn shatter_the_sky_draws_then_destroys_all_creatures() {
         "No player may take any actions between the time each qualifying player draws a card and the time all creatures are destroyed."
     );
     supported("Shatter the Sky");
-    // P1's Serra Angel (power 4) qualifies; P0's Grizzly Bears doesn't.
+    // P1's Serra Angel (power 4) qualifies; P0's Grizzly Bears doesn't. The players pass
+    // priority as the game runs; at each priority, the Angels on the battlefield and the
+    // cards in P1's hand are recorded.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Grizzly Bears");
     let angel = t.battlefield(P1, "Serra Angel");
@@ -504,18 +552,29 @@ fn shatter_the_sky_draws_then_destroys_all_creatures() {
     let s = t.hand(P0, "Shatter the Sky");
     t.cast(P0, s).go();
     let before = libraries(&t);
-    let seen = watch(
-        &mut t,
-        P1,
-        |d| matches!(d, Decision::Priority { .. }),
-        |g| g.find_in_zone(Zone::Battlefield, "Serra Angel").len(),
-    );
-    t.resolve_all();
+    let look = |g: &mtg_engine::game::Game| {
+        (
+            g.find_in_zone(Zone::Battlefield, "Serra Angel").len(),
+            g.player(PlayerId(1)).hand.len(),
+        )
+    };
+    let priority = |d: &Decision| matches!(d, Decision::Priority { .. });
+    let seen: Vec<_> = [P0, P1].map(|p| watch(&mut t, p, priority, look)).into();
+    assert!(t.g.run_until(100, |g| g.stack.is_empty()));
+    // One more priority, after it has resolved.
+    t.g.advance();
     assert_eq!(drawn_since(&t, &before), vec![0, 1]);
     assert!(!t.on_battlefield(angel));
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
-    // P1 never had priority with the card drawn and the Angel still on the battlefield.
-    assert!(seen.lock().unwrap().iter().all(|n| *n == 0));
+    let all: Vec<(usize, usize)> = seen
+        .iter()
+        .flat_map(|s| s.lock().unwrap().clone())
+        .collect();
+    // Players had priority before it resolved (the Angel there, no card drawn) and after
+    // (the Angel destroyed, the card drawn), but never with the card drawn and the Angel
+    // still on the battlefield.
+    assert!(all.contains(&(1, 0)) && all.contains(&(0, 1)), "{all:?}");
+    assert!(!all.contains(&(1, 1)), "{all:?}");
     // No creature with power 4 or greater: no one draws; all creatures are destroyed.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Grizzly Bears");
@@ -567,7 +626,7 @@ fn the_revealed_card_is_the_one_drawn() {
 }
 
 #[test]
-fn gandalf_copy_keeps_the_division_of_damage() {
+fn gandalf_copy_keeps_the_division_of_damage_and_counters() {
     cr!("707.10", "707.10c", "601.2d");
     ruling!(
         "Gandalf, Westward Voyager",
@@ -598,11 +657,34 @@ fn gandalf_copy_keeps_the_division_of_damage() {
     assert!(!t.asked()[from..]
         .iter()
         .any(|(_, d)| matches!(d, Decision::Divide { .. })));
+    // Counters: Blessings of Nature (mana value 5), "Distribute four +1/+1 counters among
+    // any number of target creatures." P1 reveals a sorcery: the copy, with new targets,
+    // keeps the 3/1 distribution.
+    supported("Blessings of Nature");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Gandalf, Westward Voyager");
+    t.library_top(P1, "Divination");
+    let b: Vec<ObjectId> = (0..4).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
+    t.lands(P0, "Forest", 5);
+    let bon = t.hand(P0, "Blessings of Nature");
+    t.answer_targets(P0, &[obj(b[0]), obj(b[1])]);
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![3, 1]));
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[obj(b[2])]);
+    t.answer_targets(P0, &[obj(b[3])]);
+    t.cast(P0, bon).go();
+    let from = t.asked().len();
+    t.resolve_all();
+    let counters: Vec<u32> = b.iter().map(|id| t.counters(*id, "+1/+1")).collect();
+    assert_eq!(counters, vec![3, 1, 3, 1]);
+    assert!(!t.asked()[from..]
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::Divide { .. })));
 }
 
 #[test]
 fn selvalas_enforcer_still_reveals_and_draws_if_it_left() {
-    cr!("608.2h", "603.10");
+    cr!("113.7a", "400.7");
     ruling!(
         "Selvala's Enforcer",
         "If Selvala’s Enforcer leaves the battlefield before its ability resolves, the top card of each library will still be revealed and drawn, although no +1/+1 counters will be placed."
@@ -642,11 +724,12 @@ fn selvala_explorer_returned_isnt_a_mana_ability() {
         &a.kind,
         mtg_engine::ability::AbilityKind::Activated(act) if act.is_mana_ability
     )));
-    // It can't pay for a spell: with only Selvala for mana, Grizzly Bears can't be cast.
+    // It can't pay for a spell: with only Selvala for mana, Llanowar Elves ({G}) can't be
+    // cast, though Selvala would add {G} for the Hill Giant on top of P0's library.
     t.library_top(P0, "Hill Giant");
     t.library_top(P1, "Forest");
-    let bears = t.hand(P0, "Grizzly Bears");
-    assert!(t.cast(P0, bears).try_go().is_err());
+    let elves = t.hand(P0, "Llanowar Elves");
+    assert!(t.cast(P0, elves).try_go().is_err());
     // Activated: it uses the stack (no mana or life yet), and can be responded to.
     t.activate(P0, s, 0, &[]).unwrap();
     assert_eq!(t.stack_len(), 1);
@@ -705,10 +788,15 @@ fn playing_a_land_triggers_but_putting_one_onto_the_battlefield_doesnt() {
     t.lands(P1, "Wastes", 1);
     let plains = t.library_top(P1, "Plains");
     t.answer_choose(P1, &[obj(plains)]);
+    // (Had it triggered, P0 would put the second Island onto the battlefield.)
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[obj(mine2)]);
     let rg = t.hand(P1, "Rampant Growth");
     t.cast(P1, rg).go();
     t.settle();
-    t.resolve_all();
+    t.g.resolve_top();
+    t.settle();
     assert_eq!(t.named_on_battlefield("Plains").len(), 1, "the land entered");
-    assert_eq!(t.zone(mine2), Zone::Hand(P0), "no trigger");
+    assert_eq!(t.stack_len(), 0, "no trigger");
+    assert_eq!(t.zone(mine2), Zone::Hand(P0));
 }

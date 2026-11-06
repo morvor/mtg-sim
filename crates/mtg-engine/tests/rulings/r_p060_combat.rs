@@ -16,7 +16,7 @@ use mtg_engine::*;
 
 #[test]
 fn flumph_triggers_once_per_damage_event_even_if_lethal() {
-    cr!("603.2c", "510.2", "603.10a");
+    cr!("603.2c", "510.2", "603.3", "603.3d");
     ruling!(
         "Flumph",
         "Flumph's ability only triggers once each time it is dealt damage, even if multiple sources are dealing damage to it at once."
@@ -70,7 +70,7 @@ fn monolith_giant(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn requiem_monolith_triggers_once_for_simultaneous_damage_and_for_lethal_damage() {
-    cr!("603.2c", "510.2", "603.10a");
+    cr!("603.2c", "510.2", "603.3");
     ruling!(
         "Requiem Monolith",
         "If multiple sources deal damage to a creature that has been granted the listed ability by Requiem Monolith’s ability (probably because multiple creatures blocked that creature), the granted ability triggers only once. When it resolves, the creature’s controller draws cards and loses life equal to the total amount of damage dealt to that creature by those sources."
@@ -133,7 +133,7 @@ fn grothama_counts_damage_from_any_source_not_only_fights() {
 
 #[test]
 fn diviner_spirit_damage_redirected_to_its_controller_draws_twice() {
-    cr!("510.2", "603.2", "615.1");
+    cr!("510.2", "603.2", "614.9");
     ruling!(
         "Diviner Spirit",
         "If Diviner Spirit deals combat damage to its controller (perhaps because damage was redirected), that player will draw twice that number of cards."
@@ -156,11 +156,55 @@ fn diviner_spirit_damage_redirected_to_its_controller_draws_twice() {
     t.resolve_all();
     assert_eq!((t.life(P0), t.life(P1)), (18, 20));
     assert_eq!(drawn_since(&t, &before), vec![4, 0]);
+    // Its combat damage dealt to P1: each player draws two.
+    let mut t = TestGame::new(2);
+    let ds = t.battlefield(P0, "Diviner Spirit");
+    attack_with(&mut t, &[(ds, pl(P1))]);
+    let before = libraries(&t);
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1)), (20, 18));
+    assert_eq!(drawn_since(&t, &before), vec![2, 2]);
+}
+
+#[test]
+fn a_player_named_twice_draws_twice_as_two_instructions() {
+    cr!("121.2", "121.2a", "614.9");
+    interp!("player-named-twice-draws-twice");
+    supported("Alms Collector");
+    // P1's Alms Collector: "If an opponent would draw two or more cards, instead you and
+    // that player each draw a card." Diviner Spirit's 2 combat damage, redirected to P0,
+    // has P0 draw two cards twice: each instruction is replaced, so P0 and P1 each draw
+    // two cards (one instruction to draw four would have them each draw one).
+    let mut t = TestGame::new(2);
+    let ds = t.battlefield(P0, "Diviner Spirit");
+    t.battlefield(P1, "Alms Collector");
+    attack_with(&mut t, &[(ds, pl(P1))]);
+    t.lands(P1, "Plains", 1);
+    let hw = t.hand(P1, "Harm's Way");
+    t.answer_choose(P1, &[obj(ds)]);
+    t.cast(P1, hw).target(pl(P0)).go();
+    t.resolve();
+    let before = libraries(&t);
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 18);
+    assert_eq!(drawn_since(&t, &before), vec![2, 2]);
+    // Not redirected: P1 draws its two cards, and P0's are replaced (one each).
+    let mut t = TestGame::new(2);
+    let ds = t.battlefield(P0, "Diviner Spirit");
+    t.battlefield(P1, "Alms Collector");
+    attack_with(&mut t, &[(ds, pl(P1))]);
+    let before = libraries(&t);
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(drawn_since(&t, &before), vec![1, 3]);
 }
 
 #[test]
 fn sokrates_players_draw_half_even_if_the_damage_cant_be_prevented() {
-    cr!("615.12", "614.1a", "510.2");
+    cr!("615.12", "615.1", "510.2");
     ruling!(
         "Sokrates, Athenian Teacher",
         "If damage dealt by a creature with the ability granted by Sokrates's last ability can't be prevented for some reason, the appropriate players will still draw half that many cards, rounded down."
@@ -219,6 +263,10 @@ fn bribery_counters_stop_attacks_and_blocks_only_while_a_gwafa_is_there() {
     attack_with(&mut t, &[(raider, pl(P1))]);
     assert!(!legal_blocks(&mut t, P1, &[(bears, raider)]), "can't block");
     assert!(legal_blocks(&mut t, P1, &[(other, raider)]));
+    // Gwafa leaves: the counter stays, and the creature can block.
+    destroy(&mut t, gwafa);
+    assert_eq!(t.counters(bears, "bribery"), 1);
+    assert!(legal_blocks(&mut t, P1, &[(bears, raider)]), "blocks as normal");
     // A bribed creature can't attack.
     let mut t = TestGame::new(2);
     let gwafa = t.battlefield(P0, "Gwafa Hazid, Profiteer");
@@ -324,7 +372,7 @@ fn rowans_attack_requirement_doesnt_force_creatures_that_cant_attack_or_costs() 
 
 #[test]
 fn will_kenrith_creatures_keep_abilities_gained_afterward() {
-    cr!("613.1f", "613.7", "613.4b");
+    cr!("613.1f", "613.7", "613.4b", "613.4c");
     ruling!(
         "Will Kenrith",
         "If an affected creature gains an ability after Will's first ability resolves, it will keep that ability."
@@ -392,7 +440,7 @@ fn nessian_boar_block_requirement_and_costs() {
 
 #[test]
 fn nessian_boar_draws_for_each_blocker_before_damage() {
-    cr!("509.3c", "509.4", "510.1");
+    cr!("509.3d", "509.2", "509.2a");
     ruling!(
         "Nessian Boar",
         "Nessian Boar’s second ability triggers for each creature blocking it."

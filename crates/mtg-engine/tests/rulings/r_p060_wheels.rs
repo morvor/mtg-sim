@@ -7,7 +7,7 @@
 use crate::r_p055_common::{all_pass, run_to_turn_of};
 use crate::r_p060_common::*;
 use crate::r_s02_common::create_token;
-use mtg_engine::decision::Answer;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::events::Event;
 use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
@@ -173,7 +173,7 @@ fn drawing_from_too_small_a_library_loses_and_all_losing_is_a_draw() {
 
 #[test]
 fn whispering_madness_multiplayer_losers_leave_and_the_game_goes_on() {
-    cr!("704.5b", "800.4a", "104.2a");
+    cr!("704.5b", "800.4");
     ruling!(
         "Whispering Madness",
         "(In multiplayer games, multiple players drawing from an empty library will cause those players to lose although the game may continue.)"
@@ -204,7 +204,7 @@ fn draws_and_discards(t: &TestGame, from: usize) -> Vec<(PlayerId, bool)> {
 
 #[test]
 fn burning_inquiry_and_noggle_ransacker_draw_in_turn_order_then_discard_together() {
-    cr!("101.4", "608.2e", "701.9c");
+    cr!("101.4", "608.2e", "701.9b");
     ruling!(
         "Burning Inquiry",
         "First the player whose turn it is draws three cards, then each other player in turn order does so. Then the active player randomly chooses the three cards they will discard, then each other player in turn order does so. Then all the cards are discarded at the same time."
@@ -221,6 +221,7 @@ fn burning_inquiry_and_noggle_ransacker_draw_in_turn_order_then_discard_together
         t.set_step(P1, Step::PrecombatMain);
         bears_in_hand(&mut t, P2, 1);
         let from = t.g.turn_events.len();
+        let asked = t.asked().len();
         if card == "Burning Inquiry" {
             // Leyline of Anticipation lets P0 cast it during P1's turn.
             t.battlefield(P0, "Leyline of Anticipation");
@@ -246,6 +247,13 @@ fn burning_inquiry_and_noggle_ransacker_draw_in_turn_order_then_discard_together
             assert_eq!(k, discard, "{card}: {p} discards");
         }
         assert_eq!(t.hand_size(P2), 1 + n - discard, "{card}");
+        // The cards are chosen at random: no player was asked to choose them.
+        assert!(
+            !t.asked()[asked..]
+                .iter()
+                .any(|(_, d)| matches!(d, Decision::ChooseEntities { .. })),
+            "{card}: discarded at random"
+        );
     }
 }
 
@@ -276,7 +284,7 @@ fn burning_inquiry_discards_three_even_after_drawing_fewer() {
 
 #[test]
 fn echo_of_eons_isnt_shuffled_into_your_library_by_its_own_effect() {
-    cr!("608.2n", "702.34a");
+    cr!("608.2n");
     ruling!(
         "Echo of Eons",
         "Echo of Eons won't be put into your graveyard until after it's finished resolving, which means it won't be shuffled into your library as part of its own effect."
@@ -406,7 +414,7 @@ fn players_with_one_or_no_cards_draw_none_with_dark_deal() {
 
 #[test]
 fn runehorn_hellkite_is_exiled_as_a_cost_and_empty_hands_just_draw() {
-    cr!("602.2b", "118.3", "608.2e");
+    cr!("602.2b", "601.2h", "608.2e");
     ruling!(
         "Runehorn Hellkite",
         "Exiling Runehorn Hellkite from your graveyard is part of the cost of its activated ability. An opponent can't remove Runehorn Hellkite from your graveyard in response to you activating the ability."
@@ -436,7 +444,7 @@ fn runehorn_hellkite_is_exiled_as_a_cost_and_empty_hands_just_draw() {
 
 #[test]
 fn commit_puts_a_spell_or_permanent_into_its_owners_library() {
-    cr!("608.2c", "704.5d", "704.5e", "707.10", "111.8");
+    cr!("608.2c", "401.7", "704.5d", "704.5e", "707.10", "111.7");
     ruling!(
         "Commit // Memory",
         "If the target's owner's library contains no cards, the target spell or permanent will be put into that player's library as the only card."

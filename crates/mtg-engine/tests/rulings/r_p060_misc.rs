@@ -17,7 +17,7 @@ use mtg_engine::*;
 
 #[test]
 fn communal_brewing_uses_its_last_known_ingredient_counters() {
-    cr!("608.2h", "603.10");
+    cr!("608.2h", "113.7a");
     ruling!(
         "Communal Brewing",
         "If Communal Brewing leaves the battlefield before its last ability resolves, use the number of ingredient counters that were on it as it last existed on the battlefield to determine the value of X."
@@ -46,7 +46,7 @@ fn communal_brewing_uses_its_last_known_ingredient_counters() {
 
 #[test]
 fn induced_amnesia_gone_before_its_first_ability_exiles_forever() {
-    cr!("603.6c", "607.2a", "610.3");
+    cr!("603.6c", "607.2a");
     ruling!(
         "Induced Amnesia",
         "If Induced Amnesia leaves the battlefield before its first ability resolves, its second ability will trigger (if appropriate) and do nothing. Then its first ability will resolve, and the exiled cards will be exiled indefinitely."
@@ -146,7 +146,7 @@ fn mathas_two_bounty_abilities_trigger_separately() {
 
 #[test]
 fn garland_you_must_sacrifice_a_creature_you_own() {
-    cr!("701.21a", "101.3");
+    cr!("701.21a", "101.2");
     ruling!(
         "Garland, Royal Kidnapper",
         "If an effect instructs you to sacrifice a creature and you control any creatures other than ones you control but don't own, you must sacrifice one of those other creatures. You can't try to sacrifice a creature you control but don't own."
@@ -217,7 +217,7 @@ fn simultaneous_madness_discards_stack_in_apnap_order() {
 
 #[test]
 fn a_back_face_name_isnt_found_in_other_zones() {
-    cr!("712.8a", "712.8c", "201.2");
+    cr!("712.8a", "712.8f", "201.2");
     ruling!(
         "Test of Talents",
         "If the back face of a modal double-faced card is countered, you will not be able to exile any cards, including the one that you countered, because those cards have only their front-face characteristics (including name) in the graveyard, hand, and library."
@@ -295,9 +295,19 @@ fn a_back_face_name_isnt_found_in_other_zones() {
 #[test]
 fn acolyte_hybrid_draws_only_if_the_artifact_was_destroyed() {
     cr!("701.8a", "702.12b", "614.1a");
+    interp!("ruling-contradicting-oracle-gives-way");
+    // Oracle: "Whenever this creature attacks, destroy up to one target artifact. If an
+    // artifact is destroyed this way, its controller draws a card." Its ruling (2022-10-07)
+    // has "you" draw (a template error; exempt in docs/rulings-exemptions/rulings-P060.tsv):
+    // the destroyed artifact's controller, P1, draws, and Acolyte Hybrid's controller, P0,
+    // doesn't. What it says of when a card is drawn holds.
     ruling!(
         "Acolyte Hybrid",
-        "If the target artifact has indestructible, it isn't destroyed this way and you won't draw a card. If it is destroyed but put into a zone other than a graveyard, you'll draw a card."
+        "If the target artifact has indestructible, it isn't destroyed this way"
+    );
+    ruling!(
+        "Acolyte Hybrid",
+        "If it is destroyed but put into a zone other than a graveyard"
     );
     supported("Acolyte Hybrid");
     // (artifact, Rest in Peace, P1 draws)
@@ -381,7 +391,8 @@ fn malignant_growth_affects_each_opponent() {
     supported("Malignant Growth");
     let mut t = TestGame::new(3);
     let mg = t.battlefield(P0, "Malignant Growth");
-    t.g.objects[mg.0 as usize].counters.insert("growth".into(), 2);
+    t.g.add_counters(Entity::Object(mg), "growth", 2, None);
+    t.g.flush_events();
     for p in [P1, P2] {
         t.set_step(PlayerId(p.0 - 1), Step::End);
         let before = libraries(&t);
@@ -510,6 +521,7 @@ fn naming_searches_skip_permanents_on_the_battlefield() {
         let l = t.library_top(P1, "Grizzly Bears");
         t.answer(P0, DecisionKind::Name, Answer::Text("Grizzly Bears".into()));
         t.answer_choose(P0, &[obj(h), obj(g), obj(l)]);
+        let from = t.asked().len();
         if card == "Ancient Vendetta" {
             t.lands(P0, "Swamp", 4);
             let v = t.hand(P0, card);
@@ -524,6 +536,17 @@ fn naming_searches_skip_permanents_on_the_battlefield() {
         for c in [h, g, l] {
             assert_eq!(t.zone(c), Zone::Exile, "{card}");
         }
+        // The search offered the three cards, not the permanent.
+        let asked = t.asked();
+        let offered: Vec<&Vec<Entity>> = asked[from..]
+            .iter()
+            .filter_map(|(p, d)| match d {
+                Decision::ChooseEntities { candidates, .. } if *p == P0 => Some(candidates),
+                _ => None,
+            })
+            .collect();
+        assert!(offered.iter().any(|c| c.contains(&obj(h))), "{card}");
+        assert!(offered.iter().all(|c| !c.contains(&obj(on_bf))), "{card}");
     }
 }
 

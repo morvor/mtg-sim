@@ -118,7 +118,7 @@ fn run(case: &Case, hexproof: Option<bool>) -> (usize, usize) {
 
 #[test]
 fn you_and_target_opponent_each_draw_only_if_the_target_is_legal() {
-    cr!("608.2b", "603.3d", "702.11b");
+    cr!("608.2b", "603.3d", "702.11c");
     ruling!(
         "Farsight Adept",
         "If Farsight Adept’s ability can’t legally target an opponent, or if the ability’s target becomes illegal while the ability is on the stack, you don’t draw a card."
@@ -316,7 +316,7 @@ fn ob_nixilis_draws_if_the_target_is_legal_even_if_not_destroyed() {
 
 #[test]
 fn ob_nixilis_gone_before_his_ability_resolves_doesnt_trigger_on_the_draws() {
-    cr!("603.2", "704.5i", "608.2h");
+    cr!("113.6", "113.7a", "704.5i");
     ruling!(
         "Ob Nixilis, the Hate-Twisted",
         "If Ob Nixilis leaves the battlefield before his last ability resolves, most likely because he only had 2 loyalty when you activated the ability, his first ability won't exist to trigger when the creature's controller draws two cards."
@@ -369,7 +369,7 @@ fn glen_elendra_guardian_no_draw_if_the_spell_is_gone() {
 
 #[test]
 fn thief_of_existence_gains_nothing_if_its_target_is_gone() {
-    cr!("608.2b", "603.3d");
+    cr!("608.2b");
     ruling!(
         "Thief of Existence",
         "If the target of Thief of Existence's triggered ability is illegal as the ability tries to resolve, it won't resolve and none of its effects will happen. Thief of Existence won't gain another ability."
@@ -402,7 +402,7 @@ fn thief_of_existence_gains_nothing_if_its_target_is_gone() {
 
 #[test]
 fn jace_memory_adept_plus_one_targets_and_draws() {
-    cr!("608.2b", "701.17a", "121.1");
+    cr!("608.2b", "608.2c", "701.17a", "121.1");
     ruling!(
         "Jace, Memory Adept",
         "If you activate Jace’s first ability, and the player is an illegal target when the ability tries to resolve, it won’t resolve and none of its effects will happen. You won’t draw a card."
@@ -499,7 +499,7 @@ fn chandra_ablaze_discards_only_when_the_ability_resolves() {
 
 #[test]
 fn explosion_affects_the_other_target_if_one_becomes_illegal() {
-    cr!("608.2b", "709.3b");
+    cr!("608.2b");
     ruling!(
         "Expansion // Explosion",
         "If one of Explosion's two targets becomes illegal, the other is affected as appropriate."
