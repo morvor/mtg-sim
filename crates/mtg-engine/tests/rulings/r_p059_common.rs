@@ -77,12 +77,21 @@ pub fn put(t: &mut TestGame, id: ObjectId, kind: &str, n: u32) {
 /// `p` casts the real spell `name` (with the mana for it) with the given targets (one per
 /// slot), leaving it on the stack.
 pub fn cast(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) -> ObjectId {
-    crate::r_p044_common::cast_only(t, p, name, targets)
+    crate::r_s01_common::supported(name);
+    crate::r_s01_common::give_mana_for(t, p, name);
+    let s = t.hand(p, name);
+    let mut b = t.cast(p, s);
+    for e in targets {
+        b = b.target(*e);
+    }
+    b.go()
 }
 
 /// `p` casts the real spell `name` and everything resolves.
 pub fn cast_resolve(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) -> ObjectId {
-    crate::r_p044_common::cast_spell(t, p, name, targets)
+    let s = cast(t, p, name, targets);
+    t.resolve_all();
+    s
 }
 
 /// The legal choices for target slot `slot` of the `index`th activated ability of the
