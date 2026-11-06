@@ -52,7 +52,7 @@ fn thuds_sacrifice_is_paid_before_anyone_can_respond() {
 
 #[test]
 fn thud_uses_the_sacrificed_creatures_last_known_power() {
-    cr!("608.2h", "113.7a");
+    cr!("608.2h");
     ruling!(
         "Thud",
         "The sacrificed creature’s last known existence on the battlefield is checked to determine its power."
@@ -98,7 +98,7 @@ fn thud_needs_exactly_one_creature_to_sacrifice() {
 
 #[test]
 fn voldaren_thrillseeker_uses_its_last_known_power() {
-    cr!("608.2h", "702.165a");
+    cr!("608.2h", "113.7a", "702.165a");
     ruling!(
         "Voldaren Thrillseeker",
         "Use the creature’s power as it last existed on the battlefield to determine how much damage it deals to the target."
@@ -201,7 +201,7 @@ fn pump(t: &mut TestGame, id: ObjectId, needle: &str) {
 
 #[test]
 fn flowstone_crusher_dies_once_its_toughness_is_zero() {
-    cr!("704.5f", "602.2");
+    cr!("704.5f");
     ruling!(
         "Flowstone Crusher",
         "Flowstone Crusher's ability can be activated multiple times, but Flowstone Crusher is put into the graveyard after an effect resolves that makes its toughness 0."
@@ -253,7 +253,7 @@ fn flowstone_hellion_dies_as_soon_as_its_toughness_is_too_low() {
 
 #[test]
 fn ravenous_bloodseeker_dies_and_its_other_activations_do_nothing() {
-    cr!("704.5f", "602.2", "608.2b");
+    cr!("704.5f", "608.2b");
     ruling!(
         "Ravenous Bloodseeker",
         "You can activate Ravenous Bloodseeker's ability any number of times to discard several cards. It will be put into its owner's graveyard once its toughness is 0 or less. Any other instances of the ability still on the stack will resolve with no effect."
@@ -438,10 +438,12 @@ fn dromosaur_doesnt_retrigger_when_its_blockers_change() {
 #[test]
 fn spatial_contortion_cant_be_played_in_pauper() {
     cr!("100.6");
-    ruling!(
-        "Spatial Contortion",
-        "Spatial Contortion is banned in Pauper (not just non-legal), due to a special case on MTGO"
-    );
+    // Its ruling "Spatial Contortion is banned in Pauper (not just non-legal), due to a
+    // special case on MTGO" is tournament policy and exempt (rulings-P059.tsv), like the
+    // same note on Circle of Flame and Hada Freeblade. The deck check has one problem for
+    // a card banned in or not legal in a format, and the data has Pauper "not_legal", not
+    // "banned" (docs/RULING_DISCREPANCIES.md, "Not yet investigated"): either way the
+    // card can't be in a Pauper deck.
     let deck: Vec<_> = (0..4)
         .map(|_| card("Spatial Contortion"))
         .chain((0..56).map(|_| card("Wastes")))

@@ -472,6 +472,22 @@ decides whether they become a conflict case.
   printing still show it), which the English Oracle text no longer has; the date of that
   Oracle change wasn't found. Left uncited; the engine always applies the reduction
   (`tests/rulings/r_p033_generic_only.rs`, `stone_calendar_reduces_what_you_pay_not_the_mana_cost`).
+- **Spatial Contortion, Circle of Flame and Hada Freeblade** (rulings-P059): the same note
+  on each, written by Scryfall (source "scryfall", 2021-02-01), not by Wizards: "Spatial
+  Contortion is banned in Pauper (not just non-legal), due to a special case on MTGO:
+  https://magic.wizards.com/en/articles/archive/news/january-21-2019-banned-and-restricted-announcement"
+  (the other two with their own names), against the same snapshot's legalities, which have
+  Pauper `not_legal` for all three, while the 76 cards Scryfall lists as banned in Pauper
+  have `banned`. Web search results (scryfall.com and magic.wizards.com were outside the
+  allowed hosts) say the three were MTGO promos printed at common, and a June 2022 Reddit
+  thread still counted Circle of Flame and Hada Freeblade among Pauper's bans for that
+  reason; when the legality became `not_legal` wasn't found, so this isn't an outdated
+  entry. The engine plays the same either way: its deck check has one problem for a card
+  banned in or not legal in a format (`DeckProblem::NotLegalInFormat`), so none of the three
+  can be in a Pauper deck (`tests/rulings/r_p059_fling_flowstone.rs`,
+  `spatial_contortion_cant_be_played_in_pauper`). The notes are tournament policy and exempt
+  (`docs/rulings-exemptions/rulings-P059.tsv`, `rulings-P079.tsv`, `rulings-P183.tsv`); a
+  report would go to Scryfall.
 - Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (copying errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the
