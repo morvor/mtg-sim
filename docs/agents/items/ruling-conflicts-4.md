@@ -22,7 +22,9 @@ texts (https://github.com/pit142857/mtg-cr), the ormos mirror of the Wizards art
 repositories Card-Forge/forge, magefree/mage and taw/magic-search-engine (MTGJSON-built index);
 magic.wizards.com, web.archive.org and Scryfall's API were outside the allowed hosts. The two cases
 were the only open entries of the "Apparent conflicts (Nov 5)" list (`docs/agents/engine-gaps.md`)
-and of "Not yet investigated" in `docs/RULING_DISCREPANCIES.md`; none is left.
+and of "Not yet investigated" in `docs/RULING_DISCREPANCIES.md`; none is left (the Spatial Contortion,
+Circle of Flame and Hada Freeblade bullet there came later, from rulings-P059: a Scryfall note, not a
+Wizards ruling, and not part of this item).
 
 | # | Case | Conclusion | Commit(s) |
 |---|---|---|---|
