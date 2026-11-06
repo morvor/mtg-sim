@@ -26,6 +26,8 @@ enum Unable {
     NotAttacked,
     /// Its controller is attacked only through a planeswalker (it still must block).
     WalkerAttacked,
+    /// Only a battle its controller protects is attacked (it still must block).
+    BattleAttacked,
     /// War Cadence for 1 ("This turn, creatures can't block unless their controller pays
     /// {X} for each blocking creature they control."); its controller has the mana.
     Cost,
@@ -84,9 +86,24 @@ fn blocks(name: &str, why: Unable) -> bool {
     let attackers = match why {
         NotAttacked => vec![(giant, pl(P2))],
         WalkerAttacked => vec![(giant, o(walker))],
+        BattleAttacked => {
+            // P0's Invasion of Azgol, which P1 protects.
+            let battle = t.battlefield(P0, "Invasion of Azgol");
+            put(&mut t, battle, mtg_engine::types::counters::DEFENSE, 3);
+            t.g.objects[battle.0 as usize].choices.player = Some(P1);
+            t.g.dirty = true;
+            t.g.recompute();
+            vec![(giant, o(battle))]
+        }
         _ => vec![(giant, pl(P1))],
     };
     attack_with(&mut t, &attackers);
+    let target = t.g.combat.as_ref().and_then(|c| c.attack_target(giant));
+    assert_eq!(
+        target,
+        Some(attackers[0].1),
+        "{name}: {why:?}: the declared attack"
+    );
     block(&mut t, P1, &[]);
     t.g.is_blocking(bears)
 }
@@ -123,6 +140,10 @@ fn forced_blockers_dont_block_when_unable_or_when_it_costs() {
         "Each creature controlled by an opponent blocks only if it's able to do so as the declare blockers step begins. If, at that time, the creature is tapped, is affected by a spell or ability that says it can't block, or no creatures are attacking that player, a planeswalker controlled by that player, or a battle that player protects, then it doesn't block. If there's a cost associated with having the creature block, the player isn't forced to pay that cost, so it doesn't block in that case either."
     );
     check("Predatory Rampage", &[Tapped, CantBlock, NotAttacked, Cost]);
+    assert!(
+        blocks("Predatory Rampage", BattleAttacked),
+        "a battle its controller protects is attacked"
+    );
     // Hustle on an opponent's creature during the caster's turn: the block side of the
     // ruling (its attack side is in r_p059_forced_attacks.rs).
     ruling!(
