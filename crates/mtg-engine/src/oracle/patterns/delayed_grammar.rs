@@ -679,12 +679,12 @@ fn mentions_object(l: &str) -> bool {
 }
 
 /// "Return it to the battlefield under its owner's control at the beginning of your next
-/// upkeep. It gains haste.", "At the beginning of the next end step, return that card to
-/// the battlefield under its owner's control. If it entered under your control, put a
-/// +1/+1 counter on ~.", "... at the beginning of your next upkeep. If you do, discard cards
-/// equal to that creature's toughness.": sentences about the permanent the delayed
+/// upkeep. It gains haste.", "... at the beginning of your next upkeep. If you do, discard
+/// cards equal to that creature's toughness.": sentences about the permanent the delayed
 /// instruction will put onto the battlefield are part of the delayed ability (they happen
-/// when it does, to the new object, CR 400.7).
+/// when it does, to the new object, CR 400.7). (A return at the next end step right after
+/// an exile is read by `damage_removal::f_return_exiled` instead; Phelia's "If it entered
+/// under your control, ..." after it, by `delayed_return_entered.rs`.)
 fn f_delayed_continues(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(result) = b
         .named
