@@ -13,10 +13,11 @@ Wizards of the Coast if erroneous."
   (most likely) a copy of a similar card's ruling. Policy `ruling-contradicting-oracle-gives-way`
   (`docs/interpretations/sources.md`, decided by the user Nov 5): the Oracle text wins
   (CR 108.1); the parts of the ruling that agree with it stay cited.
-- **transcription error**: the ruling's words contradict the card's own Oracle text, and
-  the same ruling as Wizards first published it (in the set's release notes) has words that
-  agree with the card: the data's text differs from its own source. The same policy
-  applies.
+- **copying error** (a kind decided by the user Nov 5): the ruling's words contradict the
+  card's own Oracle text, and the same ruling as Wizards first published it (in the set's
+  release notes) has words that agree with the card: the data's text differs from its own
+  source, as though miscopied. It falls under the same policy,
+  `ruling-contradicting-oracle-gives-way`.
 - **misattached**: the ruling describes another card. Policy (decided by the user Nov 5):
   it is tested on the card it describes and cited under the card it is attached to (the
   `ruling!` macro needs that), with a comment naming the card it describes; the attached
@@ -52,7 +53,7 @@ each file naming its capture; commit bd11dee2), whose archive ends in 2022.
 **Keeping it complete.** `cargo test -p mtg-data` (`ruling_discrepancies_log_is_complete`)
 and `cargo run --release -q -p mtg-tools -- rulings-coverage --check` fail when a rulings
 exemption whose reason calls the ruling outdated, superseded, overridden, inconsistent,
-misattached, a template error or a transcription error, or cites
+misattached, a template error or a copying error, or cites
 `ruling-contradicting-oracle-gives-way`, has no
 entry here quoting that ruling under that card; when a quoted ruling isn't word for word one
 of that card's rulings, or has another date; and when a file, test or register id an entry
@@ -98,10 +99,10 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: every opponent's artifact spells put a counter on it, in free-for-all and team games; its controller's and teammates' don't.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P178.tsv`; register `ruling-contradicting-oracle-gives-way`; test `tests/rulings/ruling_contradicting_oracle.rs` (`citanul_druid_grows_for_each_opponents_artifact_spells_but_not_its_controllers`).
 
-## Transcription errors
+## Copying errors
 
 ### Run Out of Town: "controller" for "owner"
-- Kind: transcription error
+- Kind: copying error
 - Status: open for review
 - Ruling, Run Out of Town (2022-04-29): "That permanent's controller chooses whether to put it on the top or bottom of the library. If the target permanent is made up of multiple cards (due to mutate or meld, for example), that permanent's controller puts all of them on the top or all of them on the bottom. They do not need to reveal the order those cards were put into the library this way."
 - Conflicts with: the card's Oracle text, "The owner of target nonland permanent puts it on their choice of the top or bottom of their library." (printed in Streets of New Capenna, 2022-04-29, as "The owner of target nonland permanent puts it on the top or bottom of their library.", per the set's release notes). The two differ when a player other than its owner controls the permanent.
@@ -110,7 +111,7 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P140.tsv` (the two sentences with "controller"; the third stays cited); register `ruling-contradicting-oracle-gives-way`; tests `tests/rulings/r_p140_tuck.rs` (`run_out_of_town_follows_its_oracle_text`, `run_out_of_town_puts_a_melded_permanent_all_on_top_or_all_on_the_bottom`).
 
 ### Sanguine Spy: "cards you control" for "cards in your graveyard"
-- Kind: transcription error
+- Kind: copying error
 - Status: open for review
 - Ruling, Sanguine Spy (2022-04-29): "Sanguine Spy's triggered ability checks the number of mana values among cards you control both when the ability triggers and when it resolves. If you no longer have five or more mana values among those cards when the ability resolves, you may not pay 2 life."
 - Conflicts with: the card's Oracle text: "At the beginning of your end step, if there are five or more mana values among cards in your graveyard, you may pay 2 life. If you do, draw a card." (an intervening "if" clause, CR 603.4: checked as the ability triggers and again as it resolves).
@@ -134,18 +135,18 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Status: open for review
 - Ruling, Araumi of the Dead Tide (2020-11-10): "If the creature card has {X} in its mana cost, you can choose any value for X, but the value you choose won't apply to the tokens that are created. X will be 0 for those tokens."
 - Conflicts with: the rulings on cards that give scavenge in the same words ("The scavenge cost is equal to its mana cost."): Varolz, the Scar-Striped (2013-04-15) and Young Deathclaws (2024-03-08), "If the creature card you scavenge has {X} in its mana cost, X is 0."; and CR 107.3h: "If an effect instructs a player to pay an object’s mana cost that includes {X}, the value of X is treated as 0 unless the object is a spell on the stack. In that case, the value of X is the value chosen or determined for it as the spell was cast." The card: "{T}, Exile cards from your graveyard equal to the number of opponents you have: Target creature card in your graveyard gains encore until end of turn. The encore cost is equal to its mana cost. (Exile the creature card and pay its mana cost: ...)".
-- Evidence: the ruling is in the Commander Legends Release Notes as the data has it (Eli Shiffrin, 2020-11-06; ormos mirror, Wayback capture 2020-11-07). 107.3h was added, as 107.3g, in the CR effective 2015-01-23, before the ruling, and hasn't changed since but for its number (107.3h from the CR effective 2020-09-25); the Fate Reforged Update Bulletin (Matt Tabak, 2015-01-15) explains it: "Essentially, if the object is a spell on the stack, you pay the actual value of X. Any other time, X is 0.", with manifest's cost to turn a card face up as its first use. CR 702.1a's example (since the CR effective 2016-09-30, the Kaladesh update) calls the scavenge cost Varolz gives "an amount of mana equal to its mana cost", and 107.3g has a card's X be 0 off the stack. Likely origin (an inference): the ruling on cards that give flashback "equal to its mana cost" (Past in Flames, Snapcaster Mage: "If you cast an instant or sorcery with {X} in its mana cost this way, you still choose the value of X as part of casting the spell and pay that cost."), right there because the card is cast and is a spell on the stack, applied to encore, whose card is never cast. Its second sentence (the tokens' X is 0) agrees with the CR and is cited. Investigated in work item ruling-conflicts-3, case 6 (conclusion D: the user decides; recommended: set the first clause aside as inconsistent, as Gnoll War Band's ruling was).
+- Evidence: the ruling is in the Commander Legends Release Notes as the data has it (Eli Shiffrin, 2020-11-06; ormos mirror, Wayback capture 2020-11-07). 107.3h was added, as 107.3g, in the CR effective 2015-01-23, before the ruling, and hasn't changed since but for its number (107.3h from the CR effective 2020-09-25); the Fate Reforged Update Bulletin (Matt Tabak, 2015-01-15) explains it: "Essentially, if the object is a spell on the stack, you pay the actual value of X. Any other time, X is 0.", with manifest's cost to turn a card face up as its first use. CR 702.1a's example (since the CR effective 2016-09-30, the Kaladesh update) calls the scavenge cost Varolz gives "an amount of mana equal to its mana cost", and 107.3g has a card's X be 0 off the stack. Likely origin (an inference): the ruling on cards that give flashback "equal to its mana cost" (Past in Flames, Snapcaster Mage: "If you cast an instant or sorcery with {X} in its mana cost this way, you still choose the value of X as part of casting the spell and pay that cost."), right there because the card is cast and is a spell on the stack, applied to encore, whose card is never cast. Its second sentence (the tokens' X is 0) agrees with the CR and is cited. Investigated in work item ruling-conflicts-3, case 6 (conclusion D); its first clause set aside as inconsistent by the user's decision of Nov 5 (evening; work item register-decisions-nov5b), as Gnoll War Band's ruling was.
 - Engine: X is 0 for the encore cost Araumi gives (no X is announced) and for the tokens, as for scavenge.
-- Recorded: no exemption until the user decides; register `x-in-a-cost-equal-to-a-cards-mana-cost-is-0` (provisional); tests `tests/rulings/r_p024_x_values.rs` (`araumi_encore_cost_and_tokens_have_x_0`), `tests/rulings/r_s27_mana_value_x.rs` (`a_scavenged_card_s_x_is_0`).
+- Recorded: exemption `docs/rulings-exemptions/rulings-P024.tsv` (its "you can choose any value for X"; the second sentence stays cited); register `x-in-a-cost-equal-to-a-cards-mana-cost-is-0`; tests `tests/rulings/r_p024_x_values.rs` (`araumi_encore_cost_and_tokens_have_x_0`), `tests/rulings/r_s27_mana_value_x.rs` (`a_scavenged_card_s_x_is_0`).
 
 ### Arbiter of Knollridge: each player's own range of influence
 - Kind: inconsistent
 - Status: open for review
 - Ruling, Arbiter of Knollridge (2007-10-01): "In other multiplayer formats, each player's life total is set to the highest life total within their range of influence. These changes happen at the same time. For example, if each player has a range of influence of one, and the players in the game are Alice (4 life), Barry (8 life), Carrie (11 life), and Doug (7 life), in that order, then Alice's life total will become 8 and Barry and Doug's life totals will each become 11."
 - Conflicts with: CR 801.10: "Spells and abilities can’t affect objects or players outside their controller’s range of influence. The parts of the effect that attempt to affect an out-of-range object or player will do nothing. The rest of the effect will work normally." CR 801.11: "If a spell or ability requires information from the game, it gets only information from within its controller’s range of influence. It doesn’t see objects or events outside its controller’s range of influence." The other rulings on range of influence, which use the controller's: Imperial Mask (2007-05-01) "Only teammates within the range of influence of Imperial Mask's controller will get a token. ..."; Benediction of Moons (2006-02-01) "... In a Free-for-All multiplayer game, players who have been eliminated or who are outside your range of influence don't count toward the total." The card: "When this creature enters, each player's life total becomes the highest life total among all players."
-- Evidence: the example uses each affected player's own range: Alice's {Doug, Alice, Barry} gives 8, Barry's {Alice, Barry, Carrie} and Doug's {Carrie, Doug, Alice} give Carrie's 11. No controller fits it under the CR: only Alice has Alice, Barry and Doug in range, and Carrie, whose 11 they get, is outside Alice's range. The CR said the same when the ruling was written (Lorwyn, 2007-10-01; archived CR texts): the CR current as of 2007-10-01 had 801.10 and 801.11 word for word as 601.10 and 601.11, and 601.11's second example then narrowed what an affected player's object sees to "players within range of both Rob and the controller of Coat of Arms" (changed to the controller's whole range in the CR effective 2011-05-01), which gives Barry 8 and Doug 7, not 11; so no rules change explains the ruling. Read alone, its first sentence could mean the controller's range ("their" for the Arbiter's controller), but the example rules that out. Found by work item rulings-P014; investigated in work item ruling-conflicts-3, case 7 (conclusion D: the user decides; recommended: set it aside as inconsistent with 801.10, 801.11 and the other rulings, as Gnoll War Band's was). Its other two rulings (life-gain triggers; Two-Headed Giant teams, 2010-06-15) are cited.
+- Evidence: the example uses each affected player's own range: Alice's {Doug, Alice, Barry} gives 8, Barry's {Alice, Barry, Carrie} and Doug's {Carrie, Doug, Alice} give Carrie's 11. No controller fits it under the CR: only Alice has Alice, Barry and Doug in range, and Carrie, whose 11 they get, is outside Alice's range. The CR said the same when the ruling was written (Lorwyn, 2007-10-01; archived CR texts): the CR current as of 2007-10-01 had 801.10 and 801.11 word for word as 601.10 and 601.11, and 601.11's second example then narrowed what an affected player's object sees to "players within range of both Rob and the controller of Coat of Arms" (changed to the controller's whole range in the CR effective 2011-05-01), which gives Barry 8 and Doug 7, not 11; so no rules change explains the ruling. Read alone, its first sentence could mean the controller's range ("their" for the Arbiter's controller), but the example rules that out. Found by work item rulings-P014; investigated in work item ruling-conflicts-3, case 7 (conclusion D); set aside as inconsistent with 801.10, 801.11 and the other rulings by the user's decision of Nov 5 (evening; work item register-decisions-nov5b), as Gnoll War Band's was. Its other two rulings (life-gain triggers; Two-Headed Giant teams, 2010-06-15) are cited.
 - Engine: with a limited range of influence, the ability affects only the players within its controller's range and sets each to the highest life total among the players within that range (Alice controlling it: Alice, Barry and Doug become 8; Carrie, out of range, keeps 11).
-- Recorded: no exemption until the user decides (the ruling stays uncited); test `tests/rulings/r_p014_catch_up.rs` (`arbiter_of_knollridge_with_range_of_influence_uses_its_controllers_range`).
+- Recorded: exemption `docs/rulings-exemptions/rulings-P014.tsv`; register `arbiter-of-knollridge-uses-controllers-range`; test `tests/rulings/r_p014_catch_up.rs` (`arbiter_of_knollridge_with_range_of_influence_uses_its_controllers_range`).
 
 ## Narrower than stated
 
@@ -472,9 +473,9 @@ decides whether they become a conflict case.
   Oracle change wasn't found. Left uncited; the engine always applies the reduction
   (`tests/rulings/r_p033_generic_only.rs`, `stone_calendar_reduces_what_you_pay_not_the_mana_cost`).
 - Work item ruling-conflicts-3 took up the craft copy ruling (now an
-  outdated entry above), Run Out of Town and Sanguine Spy (transcription errors), Caller of
+  outdated entry above), Run Out of Town and Sanguine Spy (copying errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the
-  Dead Tide and Arbiter of Knollridge (inconsistent entries above, for the user to decide).
+  Dead Tide and Arbiter of Knollridge (inconsistent entries above, set aside by the user Nov 5).
   It also compared the 69 release-notes files in the ormos mirror (2013 to 2022) with the
   data, card by card, for notes the data has with at most four words changed (about 1,100,
   most for grammar such as "they" for "he or she", or later rules updates). Of the 25 or so
