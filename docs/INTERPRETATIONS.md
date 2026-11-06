@@ -73,9 +73,9 @@ None.
 | `growing-loops-run-to-the-limit` | A loop that grows the game state isn't recognized and ends only at the action limit | deviation | decided | [game-end](interpretations/game-end.md) |
 | `mandatory-loop-detection` | A loop of mandatory actions is recognized when the game state repeats | interpretation | decided | [game-end](interpretations/game-end.md) |
 | `simulation-limits` | A game past the turn or decision limit is a draw | policy | decided | [game-end](interpretations/game-end.md) |
+| `arbiter-of-knollridge-uses-controllers-range` | Arbiter of Knollridge's ability uses its controller's range of influence, not each player's own | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
 | `attacking-player-with-shared-team-turns` | "The attacking player" is one specific attacking player, fixed by a blocking creature (CR 805.10c) | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
 | `conspiracy-draft-needs-three-players` | A Conspiracy Draft game (like every multiplayer variant) needs more than two players | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
-| `each-player-effect-uses-controllers-range` | With a limited range of influence, an effect on "each player" affects and sees only the players within its controller's range | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
 | `greatest-card-unique-player` | "The player who exiled the card with the greatest mana value" is one player; with a tie, no player is | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
 | `history-counts-players-who-left` | "For each opponent who [did something] this turn" counts opponents who have since left the game | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
 | `range-combat-trigger-events` | The trigger event of "attacks", "blocks" and "blocks or becomes blocked" is the creature alone (CR 801.7) | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |

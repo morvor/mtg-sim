@@ -933,7 +933,7 @@ ruling-conflicts-2.
   (as 601.10 and 601.11; its Coat of Arms example was then narrower still, the players in range of both), so no
   rules change explains the ruling; logged in `docs/RULING_DISCREPANCIES.md` as inconsistent. Decided by the user
   on Nov 5 (evening): set aside as inconsistent, as Gnoll War Band's was (`rulings-P014.tsv`, register
-  `each-player-effect-uses-controllers-range`).
+  `arbiter-of-knollridge-uses-controllers-range`).
 - **Fiery Annihilation** (rulings-P047, left uncited). Oracle: "Fiery Annihilation deals 5 damage to target
   creature. Exile up to one target Equipment attached to that creature. If that creature would die this turn,
   exile it instead." Ruling 2024-11-08: "If the target creature is an illegal target when Fiery Annihilation

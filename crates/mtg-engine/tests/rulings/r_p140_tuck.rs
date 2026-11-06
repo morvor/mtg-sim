@@ -300,10 +300,7 @@ fn run_out_of_town_puts_a_melded_permanent_all_on_top_or_all_on_the_bottom() {
             let deciders: Vec<PlayerId> = asked_since(&t, from)
                 .iter()
                 .filter(|(_, d)| {
-                    matches!(
-                        d,
-                        Decision::Order { .. } | Decision::ChooseOption { .. }
-                    )
+                    matches!(d, Decision::Order { .. } | Decision::ChooseOption { .. })
                 })
                 .map(|(p, _)| *p)
                 .collect();
