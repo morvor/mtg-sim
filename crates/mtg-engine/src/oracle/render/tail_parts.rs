@@ -415,7 +415,8 @@ impl Renderer<'_> {
 /// destroyed permanents in [`vars::IT`] (not those that were regenerated or
 /// indestructible), a discard instruction the discarded cards in
 /// [`crate::discard_rules::DISCARDED`], a draw instruction the drawn cards in
-/// [`vars::REVEALED`].
+/// [`vars::REVEALED`] (and in [`crate::draw_rules::DRAWN_THIS_WAY`] with those a
+/// replacement effect drew instead).
 pub(crate) fn this_way(prev: &[Effect]) -> Vec<(Var, &'static str, Option<CardType>)> {
     let mut out: Vec<(Var, &'static str, Option<CardType>)> = Vec::new();
     for e in prev {
@@ -492,7 +493,14 @@ fn note_this_way(e: &Effect, out: &mut Vec<(Var, &'static str, Option<CardType>)
             crate::discard_rules::DISCARDED,
             Some(("discarded", None)),
         ),
-        Effect::Draw { .. } => set(out, vars::REVEALED, Some(("drawn", None))),
+        Effect::Draw { .. } => {
+            set(out, vars::REVEALED, Some(("drawn", None)));
+            set(
+                out,
+                crate::draw_rules::DRAWN_THIS_WAY,
+                Some(("drawn", None)),
+            );
+        }
         // "You may discard your hand. If you do, draw that many cards.": what the
         // optional instruction did, if it was done.
         Effect::May { effect, .. } => note_this_way(effect, out),

@@ -1133,6 +1133,7 @@ impl Game {
             *c += 1;
             *c
         };
+        self.history.drawn.push(new);
         self.emit(Event::Drew {
             player: p,
             card: new,

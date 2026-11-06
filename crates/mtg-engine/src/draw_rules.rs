@@ -10,6 +10,13 @@ use crate::object::EventInfo;
 use crate::replacement::ReplKey;
 use crate::types::*;
 
+/// The cards a draw instruction drew, including those drawn because a replacement effect
+/// replaced one of its draws ("draw two cards instead"): "each opponent who drew a card
+/// this way" counts a player whose draw was replaced so (Cut a Deal rulings). The
+/// instruction's own draws, on which its later instructions act, are `vars::REVEALED`
+/// (CR 614.11b).
+pub const DRAWN_THIS_WAY: Var = vars::USER + 6061;
+
 /// How many more cards `p` may draw this turn because of effects that say a player can't
 /// draw more than N cards each turn (or can't draw cards at all). `None`: no limit.
 pub fn draws_left(g: &Game, p: PlayerId) -> Option<u32> {

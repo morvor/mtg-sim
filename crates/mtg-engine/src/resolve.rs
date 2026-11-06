@@ -1705,9 +1705,15 @@ impl Game {
                 let n = players.len() as u32;
                 let total = |g: &Game| g.history.cards_drawn.values().sum::<u32>();
                 let before = total(self);
+                let start = self.history.drawn.len();
                 for p in players {
                     drawn.extend(self.draw_cards(p, k));
                 }
+                let all = self.history.drawn.get(start..).unwrap_or_default().to_vec();
+                ctx.set_var(
+                    crate::draw_rules::DRAWN_THIS_WAY,
+                    all.into_iter().map(Entity::Object).collect(),
+                );
                 // "Draw four cards. When you do, ...": done only if at least that many cards
                 // were drawn (a draw from an empty library or a draw replaced by something
                 // else isn't one, CR 614.6, 603.12), counting cards drawn by replacement

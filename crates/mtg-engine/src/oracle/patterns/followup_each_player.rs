@@ -363,7 +363,13 @@ fn done_cond(e: &Effect) -> Option<Condition> {
         | Effect::Exile { .. }
         | Effect::Move { .. }
         | Effect::PayOptional { .. } => Some(Condition::PrevHappened),
-        Effect::Draw { .. } => Some(Condition::Compare(Value::Prev, Cmp::Ge, Value::c(1))),
+        // Cards drawn, also because a replacement effect replaced the draw ("draw two cards
+        // instead": the player drew cards this way; Cut a Deal rulings).
+        Effect::Draw { .. } => Some(Condition::Compare(
+            Value::CountSel(Box::new(Sel::Var(crate::draw_rules::DRAWN_THIS_WAY))),
+            Cmp::Ge,
+            Value::c(1),
+        )),
         Effect::ChooseOne { options, .. } => options
             .iter()
             .all(|(_, e)| matches!(done_cond(e), Some(Condition::PrevHappened)))
@@ -389,7 +395,12 @@ fn record_done(v: &mut Vec<Effect>, at: usize) -> Option<Var> {
     };
     let cond = done_cond(effect)?;
     let old = std::mem::take(&mut **effect);
-    **effect = Effect::seq(vec![
+    // What the player drew is recorded afresh: none, if they decline to draw.
+    let reset = crate::draw_rules::draws_cards(&old).then(|| Effect::Store {
+        var: crate::draw_rules::DRAWN_THIS_WAY,
+        sel: Sel::None,
+    });
+    **effect = Effect::seq(reset.into_iter().chain([
         old,
         Effect::If {
             cond,
@@ -399,7 +410,7 @@ fn record_done(v: &mut Vec<Effect>, at: usize) -> Option<Var> {
             }),
             otherwise: Box::new(Effect::Noop),
         },
-    ]);
+    ]).collect());
     v.insert(
         at,
         Effect::Store {
