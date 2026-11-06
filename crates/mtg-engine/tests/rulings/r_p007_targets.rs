@@ -284,6 +284,7 @@ fn bites_deal_no_damage_if_either_target_is_illegal() {
 #[test]
 fn two_target_burn_still_affects_the_legal_target() {
     cr!("608.2b");
+    interp!("dependent-target-checked-against-an-illegal-target");
     ruling!(
         "Punish the Enemy",
         "If one of Punish the Enemy’s targets is illegal when it tries to resolve, it will still deal damage to the remaining legal target."

@@ -716,6 +716,7 @@ fn run_away_together_same_controller() {
 #[test]
 fn run_away_together_one_target_illegal_uses_lki() {
     cr!("608.2b", "608.2h");
+    interp!("dependent-target-checked-against-an-illegal-target");
     ruling!(
         "Run Away Together",
         "If one of the two target creatures becomes an illegal target, Run Away Together can still determine its controller only to check whether the other creature is a legal target. If the illegal target has left the battlefield, use its last known information. If the other creature is still a legal target, it's returned to its owner's hand."

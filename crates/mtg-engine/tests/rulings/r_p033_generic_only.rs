@@ -296,9 +296,11 @@ fn stone_calendar_reduces_what_you_pay_not_the_mana_cost() {
     );
     supported("Stone Calendar");
     // "Spells you cast cost {1} less to cast." Divination ({2}{U}): {1}{U}, mana value 3;
-    // Opt ({U}): {U}. (Its 2004 ruling that the reduction may be declined, likely from the
-    // printed "up to 1 less", isn't cited: the Oracle text has no "up to", and the conflict
-    // is listed under "Not yet investigated" in docs/RULING_DISCREPANCIES.md.)
+    // Opt ({U}): {U}. The reduction always applies; no decision is offered. (Its 2004
+    // ruling that the reduction may be declined glosses the old Oracle text "cost up to {1}
+    // less", which the Oracle update that went with Bloomburrow (July 2024) changed: it is
+    // exempt as outdated in docs/rulings-exemptions/rulings-P033.tsv and logged under
+    // "Outdated rulings" in docs/RULING_DISCREPANCIES.md, work item ruling-conflicts-4.)
     let mut t = main_phase(2);
     t.battlefield(P0, "Stone Calendar");
     costs(&mut t, P0, "Divination", "{1}{U}", "Stone Calendar");

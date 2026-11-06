@@ -279,6 +279,7 @@ fn suffer_the_past(respond: fn(&mut TestGame)) -> TestGame {
 #[test]
 fn suffer_the_past_player_illegal_cards_legal() {
     cr!("608.2b", "608.2c", "702.11c", "702.11d");
+    interp!("dependent-target-checked-against-an-illegal-target");
     ruling!(
         "Suffer the Past",
         "If the targeted player becomes an illegal target by the time Suffer the Past resolves but the targeted cards don’t, you still exile the cards and gain life. The player won’t be lose any life, though."
