@@ -43,3 +43,44 @@ pub fn end_step_of(t: &mut TestGame, p: PlayerId) {
     t.advance_to(p, Step::End);
     t.resolve_all();
 }
+
+/// Runs the game to `step` of the current turn, with priority, and settles.
+pub fn run_to(t: &mut TestGame, step: Step) {
+    use mtg_engine::turn::Stage;
+    let turn = t.g.turn.number;
+    let ok = t.g.run_until(10_000, |g| {
+        (g.turn.step == step && g.turn.stage == Stage::Priority) || g.turn.number != turn
+    });
+    assert!(ok && t.g.turn.number == turn, "did not reach {step:?}");
+    t.settle();
+}
+
+/// From the declare attackers step: `dp` declares these blocks; the declare blockers step
+/// begins (its triggers on the stack).
+pub fn block(t: &mut TestGame, dp: PlayerId, blocks: &[(ObjectId, ObjectId)]) {
+    use mtg_engine::decision::Answer;
+    t.answer(
+        dp,
+        DecisionKind::Blockers,
+        Answer::Blockers(blocks.to_vec()),
+    );
+    run_to(t, Step::DeclareBlockers);
+}
+
+/// Puts `n` counters of `kind` on `id`.
+pub fn put(t: &mut TestGame, id: ObjectId, kind: &str, n: u32) {
+    let id = t.g.current(id);
+    t.g.add_counters(Entity::Object(id), kind, n, None);
+    t.g.recompute();
+}
+
+/// `p` casts the real spell `name` (with the mana for it) with the given targets (one per
+/// slot), leaving it on the stack.
+pub fn cast(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) -> ObjectId {
+    crate::r_p044_common::cast_only(t, p, name, targets)
+}
+
+/// `p` casts the real spell `name` and everything resolves.
+pub fn cast_resolve(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) -> ObjectId {
+    crate::r_p044_common::cast_spell(t, p, name, targets)
+}
