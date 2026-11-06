@@ -256,7 +256,7 @@ fn a_legal_target_that_isnt_destroyed_still_gives_its_controller_the_token() {
 
 #[test]
 fn soul_of_emancipation_gives_an_angel_for_a_target_a_shield_counter_saves() {
-    cr!("608.2b", "122.1g");
+    cr!("608.2b", "122.1c");
     ruling!(
         "Soul of Emancipation",
         "If a permanent is still a legal target as Soul of Emancipation's triggered ability resolves but it isn't destroyed, perhaps because it had a shield counter, its controller will create an Angel token for that permanent."
@@ -271,6 +271,29 @@ fn soul_of_emancipation_gives_an_angel_for_a_target_a_shield_counter_saves() {
     assert!(t.on_battlefield(a));
     assert_eq!(t.counters(a, "shield"), 0);
     assert_eq!(tokens_by_player(&t, "Angel"), vec![0, 1]);
+}
+
+#[test]
+fn cavalier_of_dawns_ability_without_a_target_does_nothing() {
+    cr!("603.3d", "115.1");
+    ruling!(
+        "Cavalier of Dawn",
+        "You may put this creature’s enters ability onto the stack without choosing any target. It will resolve with no effect."
+    );
+    supported("Cavalier of Dawn");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[]);
+    t.enter(P0, "Cavalier of Dawn");
+    t.settle();
+    // On the stack with no target ("up to one").
+    assert_eq!(t.stack_len(), 1);
+    let ab = *t.g.stack.last().unwrap();
+    assert!(crate::r_s25_common::targets_of(&t, ab).is_empty());
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    // No one creates a Golem.
+    assert_eq!(tokens_by_player(&t, "Golem"), vec![0, 0]);
 }
 
 #[test]
@@ -356,7 +379,7 @@ fn terastodon_can_target_permanents_of_different_players() {
 
 #[test]
 fn death_by_dragons_targets_one_player_and_does_nothing_if_that_player_is_illegal() {
-    cr!("608.2b", "702.11d");
+    cr!("608.2b", "702.11c");
     ruling!(
         "Death by Dragons",
         "If Death by Dragons resolves, the player who’s targeted is the only one who won’t put a Dragon token onto the battlefield."

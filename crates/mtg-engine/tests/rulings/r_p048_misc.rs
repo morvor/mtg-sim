@@ -1,6 +1,6 @@
 //! Rulings batch P048 — the other cards that give tokens or permanents to other players:
-//! Fractured Identity (token copies, CR 707.2, 111.5, 903.3), Declaration in Stone (names,
-//! CR 201.2, 708.2), Oversimplify (last known power, CR 608.2h), Dark Salvation, Baffling
+//! Fractured Identity (token copies, CR 707.2, 111.3, 903.3), Declaration in Stone (names,
+//! CR 201.2a, 708.2), Oversimplify (last known power, CR 608.2h), Dark Salvation, Baffling
 //! End, Awaken the Erstwhile, Strix Serenade and Swan Song (can't be countered, CR 101.2),
 //! Unyielding Gatekeeper; "doesn't untap" and {Q} (Alirios, Farmstead Gleaner); and target
 //! legality on resolution (Molten Frame, Petty Revenge, Go for the Throat).
@@ -51,6 +51,10 @@ fn fractured_identitys_tokens_have_enters_abilities_and_replacements() {
         (t.hand_size(P0), t.hand_size(P2)),
         (hands.0 + 1, hands.1 + 1)
     );
+    ruling!(
+        "Fractured Identity",
+        "abilities of the copied permanent will also work."
+    );
     // Spike Feeder: "This creature enters with two +1/+1 counters on it."
     supported("Spike Feeder");
     let mut t = TestGame::new(3);
@@ -60,11 +64,28 @@ fn fractured_identitys_tokens_have_enters_abilities_and_replacements() {
     for tok in fracture(&mut t, f) {
         assert_eq!(t.counters(tok, "+1/+1"), 2);
     }
+    // Adaptive Automaton: "As this creature enters, choose a creature type. This creature
+    // is the chosen type in addition to its other types." P1 chose Elf; each token's
+    // controller chooses as it enters: P0 Goblin, P2 Zombie.
+    supported("Adaptive Automaton");
+    let mut t = TestGame::new(3);
+    choose_creature_type(&mut t, P1, "Elf");
+    let a = t.enter(P1, "Adaptive Automaton");
+    t.resolve_all();
+    assert!(t.obj_now(a).chars.has_subtype("Elf"));
+    choose_creature_type(&mut t, P0, "Goblin");
+    choose_creature_type(&mut t, P2, "Zombie");
+    let toks = fracture(&mut t, a);
+    t.g.recompute();
+    for (tok, ty) in toks.into_iter().zip(["Goblin", "Zombie"]) {
+        let ch = &t.obj(tok).chars;
+        assert!(ch.has_subtype(ty) && !ch.has_subtype("Elf"), "{ty}");
+    }
 }
 
 #[test]
 fn fractured_identity_copies_only_the_copiable_values() {
-    cr!("707.2", "707.3", "111.5", "903.3");
+    cr!("707.2", "707.3", "111.3", "903.3");
     ruling!(
         "Fractured Identity",
         "The tokens copy exactly what was printed on the permanent and nothing else"
@@ -142,7 +163,7 @@ fn fractured_identity_copies_only_the_copiable_values() {
 
 #[test]
 fn declaration_in_stone_exiles_only_creatures_sharing_the_targets_name() {
-    cr!("201.2", "708.2", "115.1", "109.2");
+    cr!("201.2a", "708.2", "115.1", "109.2");
     ruling!(
         "Declaration in Stone",
         "Declaration in Stone has only one target. The other creatures with that name aren't targeted. For example, a creature with hexproof will be exiled if it has the same name as the target creature."
@@ -383,7 +404,7 @@ fn awaken_the_erstwhile_gives_each_player_zombies_for_their_own_discards() {
 
 #[test]
 fn countering_a_spell_that_cant_be_countered_still_gives_the_bird() {
-    cr!("101.2", "701.6b");
+    cr!("101.2", "701.6a");
     ruling!(
         "Strix Serenade",
         "Strix Serenade can target a spell that can't be countered. That spell won't be countered when Strix Serenade resolves, but its controller will get a Bird token."

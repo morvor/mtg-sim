@@ -35,7 +35,7 @@ const OBSTACLES: [Obstacle; 5] = [
 
 #[test]
 fn creatures_that_must_attack_dont_when_they_cant_or_it_costs() {
-    cr!("508.1d", "302.6", "506.4");
+    cr!("508.1d", "302.6");
     ruling!(
         "Pursued Whale",
         "If a creature affected by the Pirate token can't attack for any reason (such as being tapped or having come under that player's control that turn), then it doesn't attack."
@@ -163,19 +163,28 @@ fn pursued_whales_tax_is_added_before_cost_reductions() {
     );
     supported("Baral, Chief of Compliance");
     // P1's Lightning Bolt targeting P0's Whale costs {R} + {3} - {1} (Baral, Chief of
-    // Compliance: "Instant and sorcery spells you cast cost {1} less to cast.") = {2}{R}.
-    let mut t = TestGame::new(2);
-    let whale = t.battlefield(P0, "Pursued Whale");
-    t.battlefield(P1, "Baral, Chief of Compliance");
-    t.set_step(P1, Step::PrecombatMain);
-    t.lands(P1, "Mountain", 1);
-    t.lands(P1, "Wastes", 3);
-    let bolt = t.hand(P1, "Lightning Bolt");
-    let spell = t.cast_with(P1, bolt, &[obj(whale)]).expect("cast");
-    let tapped =
-        t.g.permanents()
-            .filter(|o| o.controller == P1 && o.tapped)
-            .count();
-    assert_eq!(tapped, 3);
-    assert_eq!(t.g.mana_value_of(spell), 1);
+    // Compliance: "Instant and sorcery spells you cast cost {1} less to cast.") = {2}{R};
+    // the reduction applied first would find no generic mana to reduce ({3}{R}). Either
+    // permanent may have arrived first.
+    for baral_first in [false, true] {
+        let mut t = TestGame::new(2);
+        if baral_first {
+            t.battlefield(P1, "Baral, Chief of Compliance");
+        }
+        let whale = t.battlefield(P0, "Pursued Whale");
+        if !baral_first {
+            t.battlefield(P1, "Baral, Chief of Compliance");
+        }
+        t.set_step(P1, Step::PrecombatMain);
+        t.lands(P1, "Mountain", 1);
+        t.lands(P1, "Wastes", 3);
+        let bolt = t.hand(P1, "Lightning Bolt");
+        let spell = t.cast_with(P1, bolt, &[obj(whale)]).expect("cast");
+        let tapped =
+            t.g.permanents()
+                .filter(|o| o.controller == P1 && o.tapped)
+                .count();
+        assert_eq!(tapped, 3, "Baral first: {baral_first}");
+        assert_eq!(t.g.mana_value_of(spell), 1);
+    }
 }

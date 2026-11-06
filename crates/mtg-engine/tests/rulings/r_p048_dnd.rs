@@ -1,8 +1,8 @@
 //! Rulings batch P048 — D&D monsters and mechanics: Berserker's Frenzy (ignored rolls,
 //! CR 706.6; choosing blocks for another player, CR 509.1), Ranger Class (CR 401.5, 716),
 //! Radiant Solar, Dissonant Wave (countering abilities, CR 113, 605, 614, 603.7), Green
-//! Dragon (CR 603.7, 702.19c), Explosive Crystal (divided damage, CR 601.2d, 608.2b),
-//! Zariel's emblem (additional combat phases, CR 500.8, 505.1a) and Sculpted Sunburst.
+//! Dragon (CR 603.7, 702.19b), Explosive Crystal (divided damage, CR 601.2d, 608.2b),
+//! Zariel's emblem (additional combat phases, CR 500.8) and Sculpted Sunburst.
 
 use crate::r_p048_common::*;
 use crate::r_s09_common::legal_attack;
@@ -96,7 +96,7 @@ fn to_blocks(t: &mut TestGame) {
 
 #[test]
 fn berserkers_frenzy_blocks_must_be_legal_and_costs_can_be_declined() {
-    cr!("509.1", "509.1a", "509.1b", "509.1d", "706.2");
+    cr!("509.1", "509.1a", "509.1b", "509.1d", "702.9b", "706.3a");
     ruling!(
         "Berserker's Frenzy",
         "When choosing blocks for creatures you don't control, you must still make legal choices. For example, you can't choose to have a creature without flying or reach block a creature with flying."
@@ -192,7 +192,7 @@ fn ranger_class_level_3_lets_you_look_at_the_top_card_any_time() {
 
 #[test]
 fn ranger_class_doesnt_change_when_creatures_can_be_cast() {
-    cr!("601.3", "307.1", "702.8a");
+    cr!("601.3", "302.1", "702.8a");
     ruling!(
         "Ranger Class",
         "Ranger Class doesn't change when you can cast creature spells. Normally, this means during your main phase when the stack is empty, although flash may change this."
@@ -221,7 +221,7 @@ fn castable(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
 
 #[test]
 fn ranger_classs_level_2_ability_triggers_once_per_combat() {
-    cr!("508.3a", "603.2c");
+    cr!("508.3d", "603.2c");
     ruling!(
         "Ranger Class",
         "The triggered ability Ranger Class gets at level 2 can trigger only once per combat, no matter how many creatures you attack with."
@@ -298,7 +298,7 @@ fn wave(t: &mut TestGame, ab: ObjectId) {
 
 #[test]
 fn dissonant_wave_counters_activated_abilities_including_equip_and_cycling() {
-    cr!("602.1", "702.6a", "702.29a", "118.12a");
+    cr!("602.1", "702.6a", "702.29a");
     ruling!(
         "Emerald Dragon // Dissonant Wave",
         "Activated abilities are written in the form “Cost: Effect.” Some keyword abilities, such as equip, are activated abilities"
@@ -359,7 +359,7 @@ fn dissonant_wave_counters_triggered_abilities_of_noncreature_sources_only() {
 
 #[test]
 fn replacement_effects_and_mana_abilities_cant_be_targeted() {
-    cr!("605.3a", "614.1c", "605.1a");
+    cr!("605.3b", "614.1c", "605.1a");
     ruling!(
         "Emerald Dragon // Dissonant Wave",
         "Abilities that create replacement effects, such as a permanent entering the battlefield tapped or with counters on it, can't be targeted."
@@ -384,7 +384,7 @@ fn replacement_effects_and_mana_abilities_cant_be_targeted() {
 
 #[test]
 fn a_countered_next_end_step_trigger_doesnt_trigger_again() {
-    cr!("603.7c", "701.6b");
+    cr!("603.7b", "701.6a");
     ruling!(
         "Emerald Dragon // Dissonant Wave",
         "If you counter a delayed triggered ability that triggers at the beginning of the “next” occurrence of a specified step or phase, that ability won't trigger again the following time that phase or step occurs."
@@ -419,7 +419,7 @@ fn a_countered_next_end_step_trigger_doesnt_trigger_again() {
 
 #[test]
 fn green_dragons_poison_breath_outlasts_it_and_isnt_deathtouch() {
-    cr!("603.7a", "702.19c", "702.2c", "510.1c");
+    cr!("603.7a", "702.19b", "702.2c", "510.1c");
     ruling!(
         "Green Dragon",
         "Green Dragon's Poison Breath ability continues to function until end of turn even if Green Dragon is destroyed or otherwise leaves the battlefield."
@@ -461,7 +461,7 @@ fn green_dragons_poison_breath_outlasts_it_and_isnt_deathtouch() {
 
 #[test]
 fn explosive_crystals_division_is_chosen_on_casting_and_kept() {
-    cr!("601.2d", "608.2b", "115.7");
+    cr!("601.2d", "608.2b");
     ruling!(
         "Amethyst Dragon // Explosive Crystal",
         "You choose how many targets Explosive Crystal has and how the damage is divided as you put the spell on the stack. Each target must receive at least 1 damage."
@@ -471,12 +471,14 @@ fn explosive_crystals_division_is_chosen_on_casting_and_kept() {
         "If some of the targets are illegal as Explosive Crystal tries to resolve, the original division of damage still applies and the damage that would have been dealt to the illegal targets is lost."
     );
     supported("Amethyst Dragon // Explosive Crystal");
+    // 3 to the Bears and 1 to P1, divided as it's cast; the Bears leave in response: P1
+    // is still dealt 1 (not the Bears' 3, nor all 4).
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.lands(P0, "Mountain", 5);
     let card = t.hand(P0, "Amethyst Dragon // Explosive Crystal");
     t.answer_targets(P0, &[obj(bears), Entity::Player(P1)]);
-    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![2, 2]));
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![3, 1]));
     let from = t.asked().len();
     t.cast(P0, card).method(ADVENTURE).go();
     // The division was asked as it was cast, at least 1 each.
@@ -487,7 +489,18 @@ fn explosive_crystals_division_is_chosen_on_casting_and_kept() {
     assert_eq!(min, Some(1));
     bounce(&mut t, bears);
     t.resolve_all();
-    assert_eq!(t.life(P1), 18, "the Bears' 2 damage is lost");
+    assert_eq!(t.life(P1), 19, "the Bears' 3 damage is lost");
+    // A division giving a target nothing isn't accepted: both targets are dealt damage.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Mountain", 5);
+    let card = t.hand(P0, "Amethyst Dragon // Explosive Crystal");
+    t.answer_targets(P0, &[obj(bears), Entity::Player(P1)]);
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![4, 0]));
+    t.cast(P0, card).method(ADVENTURE).go();
+    t.resolve_all();
+    assert!(t.life(P1) < 20);
+    assert!(!t.on_battlefield(bears) || t.obj_now(bears).damage > 0);
 }
 
 /// P0 gets `n` of Zariel's emblems (each from a Zariel at 6 loyalty using its −6).
@@ -516,7 +529,7 @@ fn next_combat_or_main(t: &mut TestGame) -> Step {
 
 #[test]
 fn zariels_emblem_untaps_any_creature_and_adds_a_combat_right_after() {
-    cr!("500.8", "506.1", "505.1a");
+    cr!("500.8");
     ruling!(
         "Zariel, Archduke of Avernus",
         "The ability of the emblem can target any creature you control, not just one that's tapped."

@@ -198,7 +198,7 @@ fn for_as_long_as_durations_ignore_phased_out_objects() {
 
 #[test]
 fn blink_dog_teleported_by_an_opponent_phases_in_at_that_players_untap_step() {
-    cr!("702.26a", "702.26n");
+    cr!("702.26a", "702.26n", "800.4a");
     ruling!(
         "Blink Dog",
         "If an opponent gains control of your Blink Dog, activates its Teleport ability, and the duration of the control-change effect expires before it phases in, Blink Dog phases in under your control as that opponent's next untap step begins."
@@ -237,4 +237,23 @@ fn blink_dog_teleported_by_an_opponent_phases_in_at_that_players_untap_step() {
         assert!(!phased_out(&t, dog), "leaves: {leaves}");
         assert_eq!(controller(&mut t, dog), P0);
     }
+    // P1 gained control of the Dog with no duration and teleported it; P1 leaving the game
+    // ends that control change (CR 800.4a): the Dog, P0's again and not exiled, phases in
+    // during P2's untap step after P1's turn would have begun (after P0's).
+    let mut t = TestGame::new(3);
+    let dog = t.battlefield(P0, "Blink Dog");
+    t.advance_to(P1, Step::PrecombatMain);
+    crate::r_s06_common::give_control(&mut t, dog, P1);
+    teleport(&mut t, P1, dog);
+    next_upkeep(&mut t, P2);
+    assert_eq!(controller(&mut t, dog), P1);
+    concede(&mut t, P1);
+    assert_eq!(t.zone(dog), Zone::Battlefield);
+    assert_eq!(controller(&mut t, dog), P0);
+    assert!(phased_out(&t, dog));
+    next_upkeep(&mut t, P0);
+    assert!(phased_out(&t, dog));
+    next_upkeep(&mut t, P2);
+    assert!(!phased_out(&t, dog));
+    assert_eq!(controller(&mut t, dog), P0);
 }

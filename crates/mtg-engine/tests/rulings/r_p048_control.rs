@@ -87,34 +87,32 @@ fn giving_a_permanent_does_nothing_if_either_target_is_illegal() {
     supported("Zedruu the Greathearted");
     for card in ["Bazaar Trader", "Zedruu the Greathearted"] {
         for player_illegal in [true, false] {
-            let mut t = TestGame::new(2);
+            let mut t = TestGame::new(3);
             let src = t.battlefield(P0, card);
-            let ring = t.battlefield(P0, "Sol Ring");
             let bears = t.battlefield(P0, "Grizzly Bears");
-            let what = if player_illegal { ring } else { bears };
             if card == "Bazaar Trader" {
                 activate_with(
                     &mut t,
                     P0,
                     src,
                     "Target player gains control",
-                    &[Entity::Player(P1), obj(what)],
+                    &[Entity::Player(P1), obj(bears)],
                 );
             } else {
-                zedruu_gives(&mut t, src, P1, what);
+                zedruu_gives(&mut t, src, P1, bears);
             }
             if player_illegal {
-                // P1 gets hexproof (Leyline of Sanctity: "You have hexproof.").
+                // P1 gets hexproof (Leyline of Sanctity: "You have hexproof."): P0 keeps
+                // the Bears.
                 t.battlefield(P1, "Leyline of Sanctity");
+                t.resolve_all();
+                assert_eq!(controller(&mut t, bears), P0, "{card}");
             } else {
-                // The permanent leaves the battlefield (a new object, CR 400.7).
-                bounce(&mut t, bears);
-            }
-            t.resolve_all();
-            if player_illegal {
-                assert_eq!(controller(&mut t, ring), P0, "{card}");
-            } else {
-                assert!(t.in_hand(P0, "Grizzly Bears"), "{card}");
+                // P2 takes the Bears in response: they're no longer a permanent P0
+                // controls, so P1 doesn't get them.
+                give_control(&mut t, bears, P2);
+                t.resolve_all();
+                assert_eq!(controller(&mut t, bears), P2, "{card}");
             }
             assert_eq!(controller(&mut t, src), P0, "{card}");
         }
@@ -357,6 +355,23 @@ fn witch_hunt_targets_an_opponent_at_random_as_its_ability_is_put_on_the_stack()
     }
     assert_eq!(chosen[0], 0);
     assert!(chosen[1] >= 5 && chosen[2] >= 5, "{chosen:?}");
+    // The choice is among the legal targets only: with P1 hexproof (Leyline of Sanctity),
+    // it's always P2.
+    for seed in 0..12u64 {
+        let mut t = TestGame::new(3);
+        use rand::SeedableRng;
+        t.g.rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+        let hunt = t.battlefield(P0, "Witch Hunt");
+        t.battlefield(P1, "Leyline of Sanctity");
+        t.set_step(P0, Step::PostcombatMain);
+        t.advance_to(P0, Step::End);
+        t.settle();
+        assert_eq!(t.stack_len(), 1, "seed {seed}");
+        let top = *t.g.stack.last().unwrap();
+        assert_eq!(targets_of(&t, top), vec![Entity::Player(P2)], "seed {seed}");
+        t.resolve_all();
+        assert_eq!(controller(&mut t, hunt), P2);
+    }
 }
 
 #[test]
@@ -388,7 +403,7 @@ fn bears_hit(t: &mut TestGame, attacker: PlayerId, defender: PlayerId) -> Object
 
 #[test]
 fn gaining_control_of_contested_war_zone_doesnt_tap_or_untap_it() {
-    cr!("613.1b", "510.2");
+    cr!("613.1b");
     ruling!(
         "Contested War Zone",
         "Gaining control of Contested War Zone doesn’t cause it to tap or untap."
@@ -425,7 +440,7 @@ fn you_in_contested_war_zones_trigger_is_its_current_controller() {
 
 #[test]
 fn contested_war_zone_pumps_every_attacking_creature() {
-    cr!("611.2c", "506.4");
+    cr!("611.2c");
     ruling!(
         "Contested War Zone",
         "The last activated ability affects all attacking creatures, not just those you control."
@@ -442,6 +457,11 @@ fn contested_war_zone_pumps_every_attacking_creature() {
     t.resolve_all();
     assert_eq!(t.pt(bears), (3, 2));
     assert_eq!(t.pt(idle), (3, 3));
+    // The set of creatures it affects was fixed as it resolved (CR 611.2c): after combat,
+    // when the Bears aren't attacking any more, they keep the bonus until end of turn.
+    t.advance_to(P1, Step::PostcombatMain);
+    assert!(!crate::r_s10_common::attacking(&t, bears));
+    assert_eq!(t.pt(bears), (3, 2));
 }
 
 #[test]
@@ -500,6 +520,9 @@ fn scrambleverse_changes_control_of_everything_at_once_without_responses() {
     );
     supported("Scrambleverse");
     let mut t = TestGame::new(3);
+    use rand::SeedableRng;
+    t.g.rng = rand_chacha::ChaCha8Rng::seed_from_u64(7);
+    // Two tapped permanents each (they're untapped after the control changes).
     let perms: Vec<ObjectId> = (0..3)
         .flat_map(|p| {
             let p = PlayerId(p);
@@ -509,25 +532,43 @@ fn scrambleverse_changes_control_of_everything_at_once_without_responses() {
             ]
         })
         .collect();
+    for p in &perms {
+        tap(&mut t, *p);
+    }
+    let before: Vec<PlayerId> = perms.iter().map(|p| t.obj(*p).controller).collect();
     cast_new(&mut t, P0, "Scrambleverse", &[]);
     t.settle();
     let from = t.asked().len();
     let ev_from = t.g.turn_events.len();
     t.g.resolve_top();
+    t.g.flush_events();
     // No one was asked anything while it resolved.
     assert!(t.asked()[from..]
         .iter()
         .all(|(_, d)| !matches!(d, Decision::Priority { .. })));
-    // Every control change is reported together, with nothing in between.
+    // Some permanents changed hands (with this random stream)...
+    let after: Vec<PlayerId> = perms.iter().map(|p| controller(&mut t, *p)).collect();
+    let moved = before.iter().zip(&after).filter(|(b, a)| b != a).count();
+    assert!(moved > 0, "{after:?}");
+    // ... all at once: every control change is reported together, before any of the
+    // permanents untaps ("Untap those permanents" comes after all of them).
     let evs = &t.g.turn_events[ev_from..];
-    let idx: Vec<usize> = evs
-        .iter()
-        .enumerate()
-        .filter(|(_, e)| matches!(e, Event::ControlChanged { .. }))
-        .map(|(i, _)| i)
-        .collect();
-    if let (Some(f), Some(l)) = (idx.first(), idx.last()) {
-        assert_eq!(l - f + 1, idx.len(), "control changes interleaved: {evs:?}");
-    }
-    let _ = perms;
+    let idx = |pred: fn(&Event) -> bool| -> Vec<usize> {
+        evs.iter()
+            .enumerate()
+            .filter(|(_, e)| pred(e))
+            .map(|(i, _)| i)
+            .collect()
+    };
+    let changes = idx(|e| matches!(e, Event::ControlChanged { .. }));
+    let untaps = idx(|e| matches!(e, Event::Untapped { .. }));
+    assert_eq!(changes.len(), moved, "{evs:?}");
+    assert_eq!(untaps.len(), perms.len(), "{evs:?}");
+    let (f, l) = (changes[0], changes[changes.len() - 1]);
+    assert_eq!(
+        l - f + 1,
+        changes.len(),
+        "control changes interleaved: {evs:?}"
+    );
+    assert!(untaps.iter().all(|u| *u > l), "{evs:?}");
 }

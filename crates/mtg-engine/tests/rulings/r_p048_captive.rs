@@ -99,20 +99,27 @@ fn captive_audiences_first_two_modes_can_be_chosen_when_they_would_change_nothin
         "Captive Audience",
         "You may choose Captive Audience’s first mode even if your life total is already 4. Similarly, you may choose its second mode even if you have no cards in hand."
     );
+    // In P1's first upkeep, with no cards in hand (P1 hasn't drawn yet): the second mode.
     let (mut t, _) = audience_for(2, P1);
+    let from = t.asked().len();
+    t.answer(P1, DecisionKind::Modes, Answer::Indices(vec![1]));
+    t.advance_to(P1, Step::Upkeep);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    assert_eq!(t.hand_size(P1), 0);
+    t.resolve_all();
+    let offered = offered_modes(&t, P1, from).expect("asked");
+    assert!(offered.contains(&0) && offered.contains(&1), "{offered:?}");
+    assert_eq!(t.life(P1), 20);
+    // In the next one, at 4 life: the first mode.
     set_life(&mut t, P1, 4);
     let from = t.asked().len();
     upkeep_mode(&mut t, P1, 0);
     let offered = offered_modes(&t, P1, from).expect("asked");
-    assert!(offered.contains(&0) && offered.contains(&1), "{offered:?}");
+    assert!(offered.contains(&0), "{offered:?}");
+    assert!(!offered.contains(&1), "{offered:?}");
     assert_eq!(t.life(P1), 4);
-    // With no cards in hand (P1 hasn't drawn yet this turn), the second mode.
-    let from = t.asked().len();
-    assert_eq!(t.hand_size(P1), 0);
-    upkeep_mode(&mut t, P1, 1);
-    let offered = offered_modes(&t, P1, from).expect("asked");
-    assert!(!offered.contains(&0), "{offered:?}");
-    assert!(offered.contains(&1), "{offered:?}");
+    assert_eq!(t.hand_size(P1), 1);
 }
 
 #[test]
@@ -222,7 +229,7 @@ fn brood_slivers_controller_controls_the_trigger_but_the_slivers_controller_deci
 
 #[test]
 fn curse_of_opulences_gold_comes_after_attack_costs_are_paid() {
-    cr!("508.1g", "508.1h", "508.1m");
+    cr!("508.1h", "508.1m");
     ruling!(
         "Curse of Opulence",
         "Curse of Opulence's triggered ability resolves after attackers have been declared. Any costs to attack must have already been paid before the attacking player creates the Gold."
