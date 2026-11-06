@@ -119,11 +119,14 @@ fn arbiter_of_knollridge_in_two_headed_giant_one_member_gains() {
 /// become 8 and Barry and Doug's life totals will each become 11" isn't cited: under CR
 /// 801.10 and 801.11 the ability affects and sees only what is within its controller's
 /// range of influence (see 801.11's Coat of Arms example), so with Alice controlling
-/// Arbiter, Barry and Doug become 8 and Carrie, out of range, keeps 11. See
-/// docs/agents/engine-gaps.md, "Apparent conflicts (Nov 5)".
+/// Arbiter, Barry and Doug become 8 and Carrie, out of range, keeps 11. The user set the
+/// ruling aside on Nov 5 as inconsistent with 801.10, 801.11 and the other range of
+/// influence rulings (register `arbiter-of-knollridge-uses-controllers-range`; exempt in
+/// docs/rulings-exemptions/rulings-P014.tsv, logged in docs/RULING_DISCREPANCIES.md).
 #[test]
 fn arbiter_of_knollridge_with_range_of_influence_uses_its_controllers_range() {
     cr!("801.10", "801.11", "119.5");
+    interp!("arbiter-of-knollridge-uses-controllers-range");
     supported("Arbiter of Knollridge");
     // Alice (P0) 4, Barry (P1) 8, Carrie (P2) 11, Doug (P3) 7, each with a range of one.
     let mut t = TestGame::with_config(

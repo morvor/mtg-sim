@@ -308,12 +308,12 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 
 ## number-guess-range: A player guessing "which number you chose" names one of the numbers of the choice's range
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 608.2c "The controller of the spell or ability follows its instructions in the order written. ..." / The Toymaker's Trap's ruling: "To secretly choose a number, write a number from 1 to 5 down without showing it to anyone else." The CR has no rule for guesses.
 - Question: "An opponent guesses which number you chose, ... If they guessed wrong, they lose life equal to the number they guessed": which numbers may the opponent guess?
-- Decision: One of the numbers of the range the card names (1 to 5), including numbers chosen for it on earlier turns, which the opponent knows (they were revealed) can't be the answer: such a guess is wrong, and the guesser loses that much life.
+- Decision: Decided by the user, Nov 5. One of the numbers of the range the card names (1 to 5), including numbers chosen for it on earlier turns, which the opponent knows (they were revealed) can't be the answer: such a guess is wrong, and the guesser loses that much life.
 - Alternatives: (A) Any number at all (an opponent could guess 0 and lose no life). (B) Only the numbers that haven't been chosen, the ones the answer can be: an opponent couldn't then guess a low number chosen earlier, knowing it's wrong, to lose little life.
-- Why: The card states the range ("a number between 1 and 5"), and the guess is of a number in it; it doesn't say the guess must be one that can still be right. Reading (A) would let the guesser lose no life by guessing 0, outside the card's range. A judge could also rule (B), which is why this is provisional.
+- Why: The card states the range ("a number between 1 and 5"), and the guess is of a number in it; it doesn't say the guess must be one that can still be right. Reading (A) would let the guesser lose no life by guessing 0, outside the card's range. A judge could also rule (B), which is why it was provisional.
 - Affects: The Toymaker's Trap.
 - Code: `crates/mtg-engine/src/oracle/patterns/choices_6.rs` (`guesses_which_number`).
 - Tests: `tests/cards/cards6_per_player_results.rs` (`the_toymakers_trap_wrong_guess_costs_the_guessed_life_and_draws`).

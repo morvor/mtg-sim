@@ -870,7 +870,7 @@ ruling-conflicts-2.
   `tests/rulings/r_p140_tuck.rs`), as for Desynchronize, Unlucky Drop, Aether Gust and
   Sudden Setback, whose rulings say the owner chooses. Resolved by ruling-conflicts-3, case 1: the Streets of
   New Capenna Release Notes (2022-04-20) have the same note with "owner" for "controller" (twice); a
-  transcription error, set aside under `ruling-contradicting-oracle-gives-way` (`rulings-P140.tsv`, logged in
+  copying error, set aside under `ruling-contradicting-oracle-gives-way` (`rulings-P140.tsv`, logged in
   `docs/RULING_DISCREPANCIES.md`); its third sentence is cited.
 - **Caller of the Untamed** (rulings-P025, left uncited). Ruling 2016-08-23: "If you have more than one Caller
   of the Untamed in your deck, you may reveal any number of them and exile that many creature cards you
@@ -903,8 +903,9 @@ ruling-conflicts-2.
   Legends Release Notes as is (2020-11-06), 107.3h dates from the CR effective 2015-01-23 (the Fate Reforged
   Update Bulletin: "Any other time, X is 0."), and no change since explains it; the engine keeps X 0
   (provisional `x-in-a-cost-equal-to-a-cards-mana-cost-is-0`), the second sentence is cited, and the ruling is
-  logged in `docs/RULING_DISCREPANCIES.md` as inconsistent; the user decides whether its first clause is set
-  aside.
+  logged in `docs/RULING_DISCREPANCIES.md` as inconsistent. Decided by the user on Nov 5 (evening): the first
+  clause is set aside as inconsistent (`rulings-P024.tsv`), and `x-in-a-cost-equal-to-a-cards-mana-cost-is-0`
+  is decided.
 - **Arbiter of Knollridge** (rulings-P014, left uncited). Oracle: "When this creature enters, each player's
   life total becomes the highest life total among all players." Ruling 2007-10-01: "In other multiplayer
   formats, each player's life total is set to the highest life total within their range of influence. These
@@ -930,8 +931,9 @@ ruling-conflicts-2.
   in `tests/rulings/r_p014_catch_up.rs`, which cites no ruling). Undecided: for the coordinator. Investigated
   in ruling-conflicts-3, case 7 (D): the CR current as of 2007-10-01 already had 801.10 and 801.11 word for word
   (as 601.10 and 601.11; its Coat of Arms example was then narrower still, the players in range of both), so no
-  rules change explains the ruling; logged in `docs/RULING_DISCREPANCIES.md` as inconsistent, uncited until the
-  user decides (recommended: set aside).
+  rules change explains the ruling; logged in `docs/RULING_DISCREPANCIES.md` as inconsistent. Decided by the user
+  on Nov 5 (evening): set aside as inconsistent, as Gnoll War Band's was (`rulings-P014.tsv`, register
+  `arbiter-of-knollridge-uses-controllers-range`).
 - **Fiery Annihilation** (rulings-P047, left uncited). Oracle: "Fiery Annihilation deals 5 damage to target
   creature. Exile up to one target Equipment attached to that creature. If that creature would die this turn,
   exile it instead." Ruling 2024-11-08: "If the target creature is an illegal target when Fiery Annihilation

@@ -183,9 +183,10 @@ fn caller_of_the_untamed_copy_of_an_x_card_has_x_0() {
 /// stack.", since the CR effective 2015-01-23) and with the rulings of Varolz and Young
 /// Deathclaws on the same wording ("The scavenge cost is equal to its mana cost": "If the
 /// creature card you scavenge has {X} in its mana cost, X is 0."). The engine follows the
-/// CR (provisional register entry `x-in-a-cost-equal-to-a-cards-mana-cost-is-0`, for the
-/// user to decide; work item ruling-conflicts-3, case 6): X is 0 for the encore cost and
-/// for the tokens.
+/// CR (register entry `x-in-a-cost-equal-to-a-cards-mana-cost-is-0`, decided by the user
+/// Nov 5, who set the clause aside as inconsistent: exempt in
+/// docs/rulings-exemptions/rulings-P024.tsv; work item ruling-conflicts-3, case 6): X is 0
+/// for the encore cost and for the tokens.
 #[test]
 fn araumi_encore_cost_and_tokens_have_x_0() {
     cr!("107.3h", "202.3e", "702.141a", "707.2");
