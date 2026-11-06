@@ -170,8 +170,13 @@ impl Renderer<'_> {
         if x != accepted {
             return None;
         }
+        // (The cards drawn this way are recorded afresh for each player: no words.)
+        let fresh = |e: &&Effect| {
+            !matches!(e, Effect::Store { var, sel: Sel::None }
+                if *var == crate::draw_rules::DRAWN_THIS_WAY)
+        };
         let steps: Vec<&Effect> = match step.as_ref() {
-            Effect::Seq(s) => s.iter().collect(),
+            Effect::Seq(s) => s.iter().filter(fresh).collect(),
             e => vec![e],
         };
         let (act, rest) = steps.split_first()?;

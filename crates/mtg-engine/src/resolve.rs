@@ -1705,9 +1705,22 @@ impl Game {
                 let n = players.len() as u32;
                 let total = |g: &Game| g.history.cards_drawn.values().sum::<u32>();
                 let before = total(self);
+                let start = self.history.drawn.len();
+                let times = crate::draw_rules::times_named(self, who, ctx);
                 for p in players {
-                    drawn.extend(self.draw_cards(p, k));
+                    let t = times
+                        .as_ref()
+                        .and_then(|v| v.iter().find(|(q, _)| *q == p))
+                        .map_or(1, |(_, t)| *t);
+                    for _ in 0..t {
+                        drawn.extend(self.draw_cards(p, k));
+                    }
                 }
+                let all = self.history.drawn.get(start..).unwrap_or_default().to_vec();
+                ctx.set_var(
+                    crate::draw_rules::DRAWN_THIS_WAY,
+                    all.into_iter().map(Entity::Object).collect(),
+                );
                 // "Draw four cards. When you do, ...": done only if at least that many cards
                 // were drawn (a draw from an empty library or a draw replaced by something
                 // else isn't one, CR 614.6, 603.12), counting cards drawn by replacement

@@ -841,9 +841,10 @@ fn players_who_counted(who: PlayerRel, x: &str) -> Option<(Value, String)> {
         _ => return None,
     };
     let (amount, k, rest) = if let Some(y) = x.strip_prefix("drew a card this way") {
-        // The cards the latest draw instruction drew, in their owners' hands.
+        // The cards the latest draw instruction drew (also because a replacement effect
+        // replaced one of its draws), in their owners' hands.
         let drawn = Sel::Matching(
-            Box::new(Sel::Var(vars::REVEALED)),
+            Box::new(Sel::Var(crate::draw_rules::DRAWN_THIS_WAY)),
             Filter::OwnedBy(PlayerRel::Iterated),
         );
         (Value::CountSel(Box::new(drawn)), 1, y)

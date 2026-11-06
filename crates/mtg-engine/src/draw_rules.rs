@@ -10,6 +10,14 @@ use crate::object::EventInfo;
 use crate::replacement::ReplKey;
 use crate::types::*;
 
+/// The cards a draw instruction drew, including those drawn because a replacement effect
+/// replaced one of its draws ("draw two cards instead"): "each opponent who drew a card
+/// this way" counts a player whose draw was replaced so (Cut a Deal rulings). A player drew
+/// this way those of the cards they own: a card another player drew instead ("that player
+/// skips that draw and you draw a card") is the other player's. The instruction's own
+/// draws, on which its later instructions act, are `vars::REVEALED` (CR 614.11b).
+pub const DRAWN_THIS_WAY: Var = vars::USER + 6061;
+
 /// How many more cards `p` may draw this turn because of effects that say a player can't
 /// draw more than N cards each turn (or can't draw cards at all). `None`: no limit.
 pub fn draws_left(g: &Game, p: PlayerId) -> Option<u32> {
@@ -51,6 +59,32 @@ pub fn draw_order(g: &Game, mut players: Vec<PlayerId>) -> Vec<PlayerId> {
     });
     players.dedup();
     players
+}
+
+/// How many times each player is named in "you and [player] each draw ..." (a group of
+/// single players): a player named twice draws twice, as two draws ("you and that player
+/// each draw that many cards" when that player is you: Diviner Spirit ruling; interpretation
+/// `player-named-twice-draws-twice`). `None` for any other group of players, each of whom
+/// draws once.
+pub fn times_named(g: &Game, who: &PlayerRef, ctx: &Ctx) -> Option<Vec<(PlayerId, u32)>> {
+    let PlayerRef::Each(PlayerFilter::Or(fs)) = who else {
+        return None;
+    };
+    let mut out: Vec<(PlayerId, u32)> = Vec::new();
+    for f in fs {
+        let r = match f {
+            PlayerFilter::You => PlayerRef::You,
+            PlayerFilter::Ref(r) => (**r).clone(),
+            _ => return None,
+        };
+        for p in g.eval_players(&r, ctx) {
+            match out.iter_mut().find(|(q, _)| *q == p) {
+                Some((_, n)) => *n += 1,
+                None => out.push((p, 1)),
+            }
+        }
+    }
+    Some(out)
 }
 
 /// Whether an effect instructs a player to draw cards.
