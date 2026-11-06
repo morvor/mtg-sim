@@ -84,3 +84,30 @@ pub fn cast(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) -> Ob
 pub fn cast_resolve(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) -> ObjectId {
     crate::r_p044_common::cast_spell(t, p, name, targets)
 }
+
+/// The legal choices for target slot `slot` of the `index`th activated ability of the
+/// permanent `source` (controlled by its controller).
+pub fn ability_target_choices(
+    t: &mut TestGame,
+    source: ObjectId,
+    index: usize,
+    slot: usize,
+) -> Vec<Entity> {
+    use mtg_engine::ability::AbilityKind;
+    t.g.recompute();
+    let s = t.g.current(source);
+    let o = t.g.obj(s);
+    let spec = o
+        .chars
+        .abilities
+        .iter()
+        .filter_map(|a| match &a.kind {
+            AbilityKind::Activated(x) => Some(x),
+            _ => None,
+        })
+        .nth(index)
+        .and_then(|a| a.body.targets.get(slot).cloned())
+        .expect("no such target");
+    let ctx = mtg_engine::eval::Ctx::new(Some(s), o.controller);
+    t.g.legal_target_candidates(&spec, &ctx, s)
+}
