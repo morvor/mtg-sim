@@ -60,6 +60,31 @@ pub fn draw_order(g: &Game, mut players: Vec<PlayerId>) -> Vec<PlayerId> {
     players
 }
 
+/// How many times each player is named in "you and [player] each draw ..." (a group of
+/// single players): a player named twice draws twice, as two draws ("you and that player
+/// each draw that many cards" when that player is you: Diviner Spirit ruling). `None` for
+/// any other group of players, each of whom draws once.
+pub fn times_named(g: &Game, who: &PlayerRef, ctx: &Ctx) -> Option<Vec<(PlayerId, u32)>> {
+    let PlayerRef::Each(PlayerFilter::Or(fs)) = who else {
+        return None;
+    };
+    let mut out: Vec<(PlayerId, u32)> = Vec::new();
+    for f in fs {
+        let r = match f {
+            PlayerFilter::You => PlayerRef::You,
+            PlayerFilter::Ref(r) => (**r).clone(),
+            _ => return None,
+        };
+        for p in g.eval_players(&r, ctx) {
+            match out.iter_mut().find(|(q, _)| *q == p) {
+                Some((_, n)) => *n += 1,
+                None => out.push((p, 1)),
+            }
+        }
+    }
+    Some(out)
+}
+
 /// Whether an effect instructs a player to draw cards.
 pub fn draws_cards(e: &Effect) -> bool {
     match e {

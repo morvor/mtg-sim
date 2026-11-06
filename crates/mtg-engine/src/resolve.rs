@@ -1706,8 +1706,15 @@ impl Game {
                 let total = |g: &Game| g.history.cards_drawn.values().sum::<u32>();
                 let before = total(self);
                 let start = self.history.drawn.len();
+                let times = crate::draw_rules::times_named(self, who, ctx);
                 for p in players {
-                    drawn.extend(self.draw_cards(p, k));
+                    let t = times
+                        .as_ref()
+                        .and_then(|v| v.iter().find(|(q, _)| *q == p))
+                        .map_or(1, |(_, t)| *t);
+                    for _ in 0..t {
+                        drawn.extend(self.draw_cards(p, k));
+                    }
                 }
                 let all = self.history.drawn.get(start..).unwrap_or_default().to_vec();
                 ctx.set_var(
