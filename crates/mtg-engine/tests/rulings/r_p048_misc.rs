@@ -578,7 +578,7 @@ fn farmstead_gleaners_untap_symbol_cost() {
 
 #[test]
 fn removal_whose_target_changes_before_resolution() {
-    cr!("608.2b", "115.1");
+    cr!("608.2b", "115.1", "720.3d");
     ruling!(
         "Molten Frame",
         "Any permanent that's both an artifact and a creature is a legal target for Molten Frame."

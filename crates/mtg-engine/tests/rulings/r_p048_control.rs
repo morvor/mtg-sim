@@ -274,7 +274,7 @@ fn chaos_lords_upkeep_control_change_overrides_earlier_control_effects() {
 
 #[test]
 fn witch_hunt_makes_life_gain_impossible() {
-    cr!("119.7", "119.9");
+    cr!("119.7", "119.9", "614.17c");
     ruling!(
         "Witch Hunt",
         "Abilities that trigger whenever a player gains life"
