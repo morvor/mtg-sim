@@ -238,6 +238,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: an ability that triggers when a creature attacks you or a planeswalker you control triggers on attackers declared that way (CR 508.3a) and not for a creature put onto the battlefield attacking (CR 508.4).
 - Recorded: test `tests/rulings/r_p011_combat.rs` (`creatures_put_onto_the_battlefield_attacking_werent_declared`), with Search the Premises ("Whenever a creature attacks you or a planeswalker you control, investigate.") standing in for the card it describes and Scuttletide on the battlefield, citing it under Scuttletide.
 
+### Will Kenrith: Rowan Kenrith's ruling about his first ability
+- Kind: misattached
+- Status: open for review
+- Ruling, Will Kenrith (2018-06-08): "If a creature affected by Rowan's first ability can't attack for any reason (such as being tapped or having come under that player's control that turn), then it doesn't attack. If there's a cost associated with having it attack, the player isn't forced to pay that cost, so it doesn't have to attack in that case either."
+- Conflicts with: Will Kenrith has no attack requirement: "+2: Until your next turn, up to two target creatures each have base power and toughness 0/3 and lose all abilities. / −2: Target player draws two cards. ... / −8: Target player gets an emblem with ..." The ruling names and describes Rowan Kenrith's first ability: "+2: During target player's next turn, each creature that player controls attacks if able."
+- Evidence: the two partners were released together in Battlebond (2018-06-08), whose release notes covered them as a pair; the data files several of the pair's rulings under both cards (the emblem and "last abilities" rulings), but this one only under Will Kenrith. Rowan Kenrith's 21 rulings don't include it.
+- Engine: as the ruling says, for Rowan Kenrith: a creature that's tapped or came under the player's control that turn doesn't attack, and a cost to attack (Ghostly Prison) isn't one the player must pay (CR 508.1d), unless the creature can attack something else for free.
+- Recorded: test `tests/rulings/r_p060_combat.rs` (`rowans_attack_requirement_doesnt_force_creatures_that_cant_attack_or_costs`), citing it under Will Kenrith, which takes part as a planeswalker the creature may attack free of Ghostly Prison's cost.
+
 ## Outdated rulings
 
 ### Aetherplasm: "This allows it to dodge abilities like Deathgazer's."
