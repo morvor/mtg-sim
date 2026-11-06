@@ -132,11 +132,15 @@ fn may_skip_attack(creature: &str, obstacle: Obstacle, setup: fn(&mut TestGame))
 }
 
 #[test]
-fn iron_golem_blocks_if_able_but_not_while_tapped() {
-    cr!("509.1c");
+fn iron_golem_blocks_if_able_but_not_while_tapped_or_for_a_cost() {
+    cr!("509.1c", "509.1d");
     ruling!(
         "Iron Golem",
         "If the Iron Golem can't attack or block for any reason (such as being tapped), then it doesn't attack or block."
+    );
+    ruling!(
+        "Iron Golem",
+        "If there's a cost associated with having it attack or block, its controller isn't forced to pay that cost, so it doesn't have to attack or block in that case either."
     );
     for tapped in [false, true] {
         let mut t = TestGame::new(2);
@@ -147,6 +151,24 @@ fn iron_golem_blocks_if_able_but_not_while_tapped() {
         }
         to_blockers(&mut t, &[(bears, Entity::Player(P1))], &[]);
         assert_eq!(blocks_now(&t).is_empty(), tapped, "tapped: {tapped}");
+    }
+    // Declaring no blockers: illegal against an attacking Grizzly Bears (the Golem must
+    // block it), legal against an attacking Archangel of Tithes ("As long as this
+    // creature is attacking, creatures can't block unless their controller pays {1} for
+    // each of those creatures."), though P1 could pay.
+    supported("Archangel of Tithes");
+    for (attacker, may_skip) in [("Grizzly Bears", false), ("Archangel of Tithes", true)] {
+        let mut t = TestGame::new(2);
+        let golem = t.battlefield(P1, "Iron Golem");
+        let land = t.lands(P1, "Wastes", 1)[0];
+        let a = t.battlefield(P0, attacker);
+        crate::r_s09_common::declare(&mut t, P0, &[(a, Entity::Player(P1))]);
+        assert_eq!(legal_blocks(&mut t, P1, &[]), may_skip, "{attacker}");
+        // P1 declares no blockers (its scripted default).
+        t.advance_to_step(Step::DeclareBlockers);
+        let expected = if may_skip { vec![] } else { vec![(golem, a)] };
+        assert_eq!(blocks_now(&t), expected, "{attacker}");
+        assert!(!t.obj_now(land).tapped, "{attacker}");
     }
 }
 

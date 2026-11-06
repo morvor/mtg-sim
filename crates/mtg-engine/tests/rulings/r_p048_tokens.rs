@@ -298,7 +298,7 @@ fn cavalier_of_dawns_ability_without_a_target_does_nothing() {
 
 #[test]
 fn for_each_permanent_destroyed_or_put_into_a_graveyard_counts_only_those() {
-    cr!("608.2c", "702.12b", "614.1a");
+    cr!("608.2c", "702.12b", "701.19a", "614.1a");
     ruling!(
         "Descent of the Dragons",
         "If a creature is targeted but not destroyed (for example, if it regenerates or has indestructible), it won’t count toward the number of Dragon tokens put onto the battlefield."
@@ -311,17 +311,23 @@ fn for_each_permanent_destroyed_or_put_into_a_graveyard_counts_only_those() {
         "Terastodon",
         "Similarly, if the targeted permanent is destroyed but a replacement effect moves it to a different zone instead of its owner's graveyard, its controller won't get an Elephant token for it."
     );
-    // Descent of the Dragons: Grizzly Bears and Darksteel Myr — one Dragon.
+    // Descent of the Dragons: Grizzly Bears, Darksteel Myr and a Drudge Skeletons with a
+    // regeneration shield ("{B}: Regenerate this creature.") — one Dragon.
     supported("Descent of the Dragons");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let myr = t.battlefield(P1, "Darksteel Myr");
+    let skeletons = t.battlefield(P1, "Drudge Skeletons");
+    mana(&mut t, P1, mtg_engine::mana::ManaType::B, 1);
+    activate_containing(&mut t, P1, skeletons, "Regenerate").expect("regenerate");
+    t.resolve_all();
     lands_for_cost(&mut t, P0, "Descent of the Dragons");
     let c = t.hand(P0, "Descent of the Dragons");
-    t.answer_targets(P0, &[obj(bears), obj(myr)]);
+    t.answer_targets(P0, &[obj(bears), obj(myr), obj(skeletons)]);
     t.cast(P0, c).go();
     t.resolve_all();
-    assert!(t.on_battlefield(myr));
+    assert!(t.on_battlefield(myr) && t.on_battlefield(skeletons));
+    assert!(t.obj_now(skeletons).tapped, "regenerated");
     assert_eq!(tokens_by_player(&t, "Dragon"), vec![0, 1]);
     // Terastodon: Sol Ring, Darksteel Ingot (indestructible) — one Elephant.
     supported("Terastodon");
