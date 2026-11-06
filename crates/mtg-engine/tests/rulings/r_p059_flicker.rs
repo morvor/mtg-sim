@@ -125,18 +125,29 @@ fn the_returned_permanent_is_a_new_object() {
             assert_new_object(&t, &d);
         }
     }
-    // Daydream returns it at once, with only Daydream's counter.
+    // Daydream returns it at once, with only Daydream's counter, without the damage marked
+    // on it, and as a creature that came under P0's control this turn.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let d = decorate(&mut t, P0, bears);
+    crate::r_s06_common::damage(&mut t, bears, 1, bears);
+    assert_eq!(t.obj_now(bears).damage, 1);
     exile_with(&mut t, "Daydream", bears);
     let now = t.g.current(bears);
     assert_ne!(now, bears);
     assert!(t.on_battlefield(now));
     assert_eq!(t.counters(now, counters::PLUS1), 1, "not 2");
+    assert_eq!(t.obj_now(now).damage, 0, "no damage marked");
     assert!(t.in_graveyard(P0, "Holy Strength"));
     assert!(t.on_battlefield(d.equipment));
     assert_eq!(attached_to(&t, d.equipment), None);
+    let ogre = t.battlefield(P0, "Gray Ogre");
+    t.set_step(P0, Step::BeginningOfCombat);
+    assert!(crate::r_s02_common::can_attack(&mut t, ogre));
+    assert!(
+        !crate::r_s02_common::can_attack(&mut t, now),
+        "summoning sick"
+    );
 }
 
 #[test]
@@ -239,7 +250,7 @@ fn tokens_exiled_this_way_cease_to_exist() {
 
 #[test]
 fn the_card_returns_even_if_its_exiler_is_gone() {
-    cr!("603.7", "603.7e");
+    cr!("603.7");
     ruling!(
         "Flickerwisp",
         "The exiled card will return to the battlefield at the beginning of the end step even if Flickerwisp is no longer on the battlefield."
@@ -276,7 +287,7 @@ fn the_card_returns_even_if_its_exiler_is_gone() {
 
 #[test]
 fn end_step_abilities_of_the_returned_permanent_dont_trigger_that_turn() {
-    cr!("603.7", "603.2b");
+    cr!("603.7", "603.2b", "513.2");
     ruling!(
         "Flickerwisp",
         "If the permanent that returns to the battlefield has any abilities that trigger at the beginning of the end step, those abilities won't trigger that turn."
@@ -301,21 +312,34 @@ fn end_step_abilities_of_the_returned_permanent_dont_trigger_that_turn() {
     ] {
         let mut t = TestGame::new(2);
         let keeper = end_step_keeper(&mut t, P0);
+        // The same ability on a permanent that stays: it triggers at this end step.
+        let stays = crate::r_s01_common::custom_card(
+            "Dawn Keeper",
+            "Artifact Creature — Construct",
+            "{2}",
+            Some((1, 1)),
+            "At the beginning of each end step, you gain 1 life.",
+        );
+        t.custom(P0, stays, Zone::Battlefield);
         exile_with(&mut t, name, keeper);
         assert!(t.in_exile("Dusk Keeper"), "{name}");
         let life = t.life(P0);
         end_step_of(&mut t, P0);
         assert!(t.on_battlefield(keeper), "{name}: returned");
-        assert_eq!(t.life(P0), life, "{name}: didn't trigger this end step");
-        // It does trigger at the next end step.
+        assert_eq!(
+            t.life(P0),
+            life + 1,
+            "{name}: only the Dawn Keeper's triggered this end step"
+        );
+        // Both trigger at the next end step.
         end_step_of(&mut t, P1);
-        assert_eq!(t.life(P0), life + 1, "{name}: next end step");
+        assert_eq!(t.life(P0), life + 3, "{name}: next end step");
     }
 }
 
 #[test]
 fn entering_during_an_end_step_waits_for_the_next_turns_end_step() {
-    cr!("603.7a", "513.1");
+    cr!("603.7a", "513.2");
     ruling!(
         "Blizzard Strix",
         "If Blizzard Strix enters the battlefield during a player’s end step, the exiled permanent will remain exiled until the next turn’s end step."
@@ -327,7 +351,9 @@ fn entering_during_an_end_step_waits_for_the_next_turns_end_step() {
     for name in ["Blizzard Strix", "Glimmerpoint Stag"] {
         let mut t = TestGame::new(2);
         let ogre = t.battlefield(P1, "Gray Ogre");
-        t.set_step(P0, Step::End);
+        // P0's end step, reached through the turn: it has begun (its beginning-of-step
+        // triggers have been checked) before the creature enters.
+        end_step_of(&mut t, P0);
         exile_with(&mut t, name, ogre);
         assert!(t.in_exile("Gray Ogre"), "{name}");
         t.advance_to(P1, Step::Upkeep);
@@ -347,7 +373,7 @@ fn entering_during_an_end_step_waits_for_the_next_turns_end_step() {
 
 #[test]
 fn saltskitter_exiled_during_the_end_step_returns_the_next_turn() {
-    cr!("603.7a", "513.1");
+    cr!("603.7a", "513.2");
     ruling!(
         "Saltskitter",
         "If a creature enters after \"at the beginning of the end step\" abilities have triggered during that turn, Saltskitter won't return to the battlefield until the end of the following turn."
@@ -356,8 +382,18 @@ fn saltskitter_exiled_during_the_end_step_returns_the_next_turn() {
     // battlefield under its owner's control at the beginning of the next end step."
     supported("Saltskitter");
     let mut t = TestGame::new(2);
+    // P0's end step has begun and its "at the beginning of the end step" abilities have
+    // triggered (P1's Dusk Keeper's) when the Bears enter.
+    end_step_keeper(&mut t, P1);
     let skitter = t.battlefield(P0, "Saltskitter");
-    t.set_step(P0, Step::End);
+    let life = t.life(P1);
+    end_step_of(&mut t, P0);
+    assert_eq!(
+        t.life(P1),
+        life + 1,
+        "the end step's abilities have triggered"
+    );
+    assert!(t.on_battlefield(skitter));
     t.enter(P1, "Grizzly Bears");
     t.resolve_all();
     assert!(t.in_exile("Saltskitter"));
@@ -378,7 +414,7 @@ fn saltskitter_exiled_during_the_end_step_returns_the_next_turn() {
 
 #[test]
 fn a_returning_aura_is_attached_by_its_owner_without_targeting() {
-    cr!("303.4f", "303.4g", "702.18a", "702.11a");
+    cr!("303.4f", "303.4g", "702.18a", "702.11b");
     ruling!(
         "Glimmerpoint Stag",
         "If the exiled card is an Aura, that card’s owner chooses what it will enchant as it comes back onto the battlefield. An Aura put onto the battlefield this way doesn’t target anything (so it could be attached to a permanent with shroud, for example), but the Aura’s enchant ability restricts what it can be attached to. If the Aura can’t legally be attached to anything, it remains exiled."
@@ -564,25 +600,43 @@ fn the_eternal_wanderer_returns_the_card_at_its_owners_next_end_step() {
 
 #[test]
 fn phelia_gets_a_counter_only_for_a_card_that_returns_under_your_control() {
-    cr!("603.7", "110.2");
+    cr!("603.7", "110.2", "400.7", "111.8");
     // "Whenever Phelia attacks, exile up to one other target nonland permanent. At the
     // beginning of the next end step, return that card to the battlefield under its
     // owner's control. If it entered under your control, put a +1/+1 counter on Phelia."
-    for mine in [true, false] {
+    // The last sentence is part of the delayed ability: it's about how the card entered
+    // as it returned. (Owner, whether P0 controls it when it's exiled.) P1's Ogre that P0
+    // controls returns under P1's control: no counter.
+    for (owner, stolen) in [(P0, false), (P1, false), (P1, true)] {
         let mut t = TestGame::new(2);
-        let owner = if mine { P0 } else { P1 };
         let ogre = t.battlefield(owner, "Gray Ogre");
+        if stolen {
+            give_control(&mut t, ogre, P0);
+        }
         let phelia = exile_with(&mut t, "Phelia, Exuberant Shepherd", ogre);
         assert!(t.in_exile("Gray Ogre"));
-        end_step_of(&mut t, P0);
-        assert!(t.on_battlefield(ogre));
-        assert_eq!(t.obj_now(ogre).controller, owner);
         assert_eq!(
             t.counters(phelia, counters::PLUS1),
-            u32::from(mine),
-            "mine: {mine}"
+            0,
+            "nothing has entered yet"
+        );
+        end_step_of(&mut t, P0);
+        assert!(t.on_battlefield(ogre));
+        assert_eq!(t.obj_now(ogre).controller, owner, "stolen: {stolen}");
+        assert_eq!(
+            t.counters(phelia, counters::PLUS1),
+            u32::from(owner == P0),
+            "owner {owner:?}, stolen: {stolen}"
         );
     }
+    // A token P0 controls doesn't return (it ceased to exist in exile): nothing entered.
+    let mut t = TestGame::new(2);
+    let soldier = create_token(&mut t, P0, "Soldier");
+    let phelia = exile_with(&mut t, "Phelia, Exuberant Shepherd", soldier);
+    assert!(token_gone(&t, soldier));
+    end_step_of(&mut t, P0);
+    assert!(t.g.permanents().all(|o| !o.is_token()));
+    assert_eq!(t.counters(phelia, counters::PLUS1), 0);
 }
 
 #[test]
@@ -598,6 +652,17 @@ fn teferis_time_twist_adds_a_counter_to_ones_it_would_enter_with() {
     assert!(t.on_battlefield(ballista), "{}", t.dump_log());
     assert_eq!(t.counters(ballista, counters::PLUS1), 1);
     assert_eq!(t.pt(ballista), (1, 1));
+    // Spike Feeder ("This creature enters with two +1/+1 counters on it."): two, plus the
+    // additional one.
+    supported("Spike Feeder");
+    let mut t = TestGame::new(2);
+    let feeder = t.battlefield(P0, "Spike Feeder");
+    put(&mut t, feeder, counters::PLUS1, 2);
+    exile_with(&mut t, "Teferi's Time Twist", feeder);
+    end_step_of(&mut t, P0);
+    assert!(t.on_battlefield(feeder), "{}", t.dump_log());
+    assert_eq!(t.counters(feeder, counters::PLUS1), 3);
+    assert_eq!(t.pt(feeder), (3, 3));
 }
 
 #[test]
