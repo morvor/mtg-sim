@@ -185,13 +185,20 @@ fn marisi_stops_opponents_spells_during_combat_but_not_abilities() {
     // Precombat main phase: P1 may cast the Bears (Orrery) and the Bolt.
     assert!(can_cast(&mut t, P1, bears, CastMethod::Normal));
     assert!(can_cast(&mut t, P1, bolt, CastMethod::Normal));
-    for step in [Step::BeginningOfCombat, Step::DeclareAttackers, Step::EndOfCombat] {
+    for step in [
+        Step::BeginningOfCombat,
+        Step::DeclareAttackers,
+        Step::EndOfCombat,
+    ] {
         t.g.combat = None;
         t.set_step(P0, step);
         assert!(!can_cast(&mut t, P1, bears, CastMethod::Normal), "{step:?}");
         assert!(!can_cast(&mut t, P1, bolt, CastMethod::Normal), "{step:?}");
         assert!(can_activate(&mut t, P1, fanatic), "{step:?}: abilities");
-        assert!(can_cast(&mut t, P0, mine, CastMethod::Normal), "Marisi's controller");
+        assert!(
+            can_cast(&mut t, P0, mine, CastMethod::Normal),
+            "Marisi's controller"
+        );
     }
 }
 
@@ -214,13 +221,23 @@ fn basandra_stops_all_spells_during_combat_but_not_abilities() {
     let viper = t.hand(P1, "Ambush Viper");
     let growth = t.hand(P0, "Giant Growth");
     let bolt = t.hand(P1, "Lightning Bolt");
-    assert!(can_cast(&mut t, P1, viper, CastMethod::Normal), "main phase: flash");
-    for step in [Step::BeginningOfCombat, Step::DeclareBlockers, Step::EndOfCombat] {
+    assert!(
+        can_cast(&mut t, P1, viper, CastMethod::Normal),
+        "main phase: flash"
+    );
+    for step in [
+        Step::BeginningOfCombat,
+        Step::DeclareBlockers,
+        Step::EndOfCombat,
+    ] {
         t.g.combat = None;
         t.set_step(P0, step);
         assert!(!can_cast(&mut t, P1, viper, CastMethod::Normal), "{step:?}");
         assert!(!can_cast(&mut t, P1, bolt, CastMethod::Normal), "{step:?}");
-        assert!(!can_cast(&mut t, P0, growth, CastMethod::Normal), "{step:?}");
+        assert!(
+            !can_cast(&mut t, P0, growth, CastMethod::Normal),
+            "{step:?}"
+        );
         assert!(can_activate(&mut t, P1, fanatic), "{step:?}");
     }
 }
@@ -272,7 +289,9 @@ fn alela_triggers_once_per_damaged_player_per_damage_step() {
     // Three Faerie Miscreants: two attack P1, one attacks P2: two triggers.
     let mut t = TestGame::new(3);
     t.battlefield(P0, "Alela, Cunning Conqueror");
-    let f: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Faerie Miscreant")).collect();
+    let f: Vec<ObjectId> = (0..3)
+        .map(|_| t.battlefield(P0, "Faerie Miscreant"))
+        .collect();
     let b1 = t.battlefield(P1, "Grizzly Bears");
     let b2 = t.battlefield(P2, "Grizzly Bears");
     attack_with(&mut t, &[(f[0], pl(P1)), (f[1], pl(P1)), (f[2], pl(P2))]);
@@ -303,7 +322,11 @@ fn alela_triggers_once_per_damaged_player_per_damage_step() {
     t.advance_to(P0, Step::CombatDamage);
     t.settle();
     assert_eq!(t.life(P1), 17);
-    assert_eq!(t.stack_len(), 1, "regular damage step: one trigger for two Faeries");
+    assert_eq!(
+        t.stack_len(),
+        1,
+        "regular damage step: one trigger for two Faeries"
+    );
 }
 
 // ---------------------------------------------------------------------------------------

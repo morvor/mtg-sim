@@ -331,10 +331,17 @@ fn entering_during_an_end_step_waits_for_the_next_turns_end_step() {
         exile_with(&mut t, name, ogre);
         assert!(t.in_exile("Gray Ogre"), "{name}");
         t.advance_to(P1, Step::Upkeep);
-        assert!(t.in_exile("Gray Ogre"), "{name}: not at this turn's cleanup");
+        assert!(
+            t.in_exile("Gray Ogre"),
+            "{name}: not at this turn's cleanup"
+        );
         end_step_of(&mut t, P1);
         assert!(t.on_battlefield(ogre), "{name}: the next turn's end step");
-        assert_eq!(t.obj_now(ogre).controller, P1, "{name}: its owner's control");
+        assert_eq!(
+            t.obj_now(ogre).controller,
+            P1,
+            "{name}: its owner's control"
+        );
     }
 }
 
@@ -397,10 +404,9 @@ fn a_returning_aura_is_attached_by_its_owner_without_targeting() {
     assert_eq!(t.obj_now(now).controller, P1);
     assert_eq!(attached_to(&t, now), Some(o(enchantress)));
     assert_eq!(t.pt(enchantress), (1, 3), "0/1 +1/+2");
-    let p1_asked = t
-        .asked()
-        .iter()
-        .any(|(p, d)| *p == P1 && matches!(d, mtg_engine::decision::Decision::ChooseEntities { .. }));
+    let p1_asked = t.asked().iter().any(|(p, d)| {
+        *p == P1 && matches!(d, mtg_engine::decision::Decision::ChooseEntities { .. })
+    });
     assert!(p1_asked, "the owner chose");
 
     // Oath of Teferi exiles P0's Holy Strength (on P0's Grizzly Bears); P0 attaches it to
@@ -430,7 +436,10 @@ fn a_returning_aura_is_attached_by_its_owner_without_targeting() {
         if name == "Glimmerpoint Stag" {
             destroy(&mut t, source);
         }
-        assert!(t.g.permanents().all(|o| !o.is_creature()), "{name}: no creatures");
+        assert!(
+            t.g.permanents().all(|o| !o.is_creature()),
+            "{name}: no creatures"
+        );
         end_step_of(&mut t, P0);
         assert!(t.in_exile("Holy Strength"), "{name}: remains exiled");
         assert!(!t.on_battlefield(aura), "{name}");
@@ -531,4 +540,75 @@ fn shifty_doppelganger_may_put_nothing_onto_the_battlefield() {
     assert!(t.named_on_battlefield("Craw Wurm").is_empty());
     end_step_of(&mut t, P0);
     assert!(t.in_exile("Shifty Doppelganger"), "nothing was sacrificed");
+}
+
+// ---------------------------------------------------------------------------------------
+// Interactions of the same abilities (no ruling of their own).
+// ---------------------------------------------------------------------------------------
+
+#[test]
+fn the_eternal_wanderer_returns_the_card_at_its_owners_next_end_step() {
+    cr!("603.7", "603.7b");
+    // "+1: Exile up to one target artifact or creature. Return that card to the
+    // battlefield under its owner's control at the beginning of that player's next end
+    // step."
+    let mut t = TestGame::new(2);
+    let ogre = t.battlefield(P1, "Gray Ogre");
+    exile_with(&mut t, "The Eternal Wanderer", ogre);
+    end_step_of(&mut t, P0);
+    assert!(t.in_exile("Gray Ogre"), "not at P0's end step");
+    end_step_of(&mut t, P1);
+    assert!(t.on_battlefield(ogre));
+    assert_eq!(t.obj_now(ogre).controller, P1);
+}
+
+#[test]
+fn phelia_gets_a_counter_only_for_a_card_that_returns_under_your_control() {
+    cr!("603.7", "110.2");
+    // "Whenever Phelia attacks, exile up to one other target nonland permanent. At the
+    // beginning of the next end step, return that card to the battlefield under its
+    // owner's control. If it entered under your control, put a +1/+1 counter on Phelia."
+    for mine in [true, false] {
+        let mut t = TestGame::new(2);
+        let owner = if mine { P0 } else { P1 };
+        let ogre = t.battlefield(owner, "Gray Ogre");
+        let phelia = exile_with(&mut t, "Phelia, Exuberant Shepherd", ogre);
+        assert!(t.in_exile("Gray Ogre"));
+        end_step_of(&mut t, P0);
+        assert!(t.on_battlefield(ogre));
+        assert_eq!(t.obj_now(ogre).controller, owner);
+        assert_eq!(
+            t.counters(phelia, counters::PLUS1),
+            u32::from(mine),
+            "mine: {mine}"
+        );
+    }
+}
+
+#[test]
+fn teferis_time_twist_adds_a_counter_to_ones_it_would_enter_with() {
+    cr!("614.1c", "122.6");
+    // Walking Ballista ("This creature enters with X +1/+1 counters on it.") isn't cast:
+    // X is 0, so it would enter as a 0/0; with Teferi's Time Twist's counter it's a 1/1.
+    let mut t = TestGame::new(2);
+    let ballista = t.battlefield(P0, "Walking Ballista");
+    put(&mut t, ballista, counters::PLUS1, 2);
+    exile_with(&mut t, "Teferi's Time Twist", ballista);
+    end_step_of(&mut t, P0);
+    assert!(t.on_battlefield(ballista), "{}", t.dump_log());
+    assert_eq!(t.counters(ballista, counters::PLUS1), 1);
+    assert_eq!(t.pt(ballista), (1, 1));
+}
+
+#[test]
+fn a_card_whose_owner_left_the_game_doesnt_return() {
+    cr!("800.4a", "603.7c");
+    let mut t = TestGame::new(3);
+    let ogre = t.battlefield(P2, "Gray Ogre");
+    exile_with(&mut t, "Flickerwisp", ogre);
+    assert!(t.in_exile("Gray Ogre"));
+    crate::r_p079_common::concede(&mut t, P2);
+    end_step_of(&mut t, P0);
+    assert!(!t.on_battlefield(ogre));
+    assert!(t.g.permanents().all(|o| o.chars.name != "Gray Ogre"));
 }

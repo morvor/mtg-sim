@@ -93,7 +93,10 @@ fn blocks(name: &str, why: Unable) -> bool {
 
 fn check(name: &str, cases: &[Unable]) {
     assert!(blocks(name, No), "{name}: blocks when able");
-    assert!(blocks(name, WalkerAttacked), "{name}: its planeswalker attacked");
+    assert!(
+        blocks(name, WalkerAttacked),
+        "{name}: its planeswalker attacked"
+    );
     for why in cases {
         assert!(!blocks(name, *why), "{name}: {why:?}");
     }
@@ -106,7 +109,10 @@ fn forced_blockers_dont_block_when_unable_or_when_it_costs() {
         "Courtly Provocateur",
         "After the second ability resolves, the creature blocks only if it’s able to do so as the declare blockers step begins. If, at that time, the creature is tapped, is affected by a spell or ability that says it can’t block, or no creatures are attacking that player or a planeswalker controlled by that player, then it doesn’t block. If there’s a cost associated with having the creature block, the player isn’t forced to pay that cost, so it doesn’t block in that case either."
     );
-    check("Courtly Provocateur", &[Tapped, CantBlock, NotAttacked, Cost]);
+    check(
+        "Courtly Provocateur",
+        &[Tapped, CantBlock, NotAttacked, Cost],
+    );
     ruling!(
         "Culling Mark",
         "The creature blocks only if it’s able to do so as the declare blockers step begins. If, at that time, the creature is tapped, it’s affected by a spell or ability that says it can’t block, or no creatures are attacking its controller or a planeswalker controlled by that player, then it doesn’t block. If there’s a cost associated with having the creature block, the player isn’t forced to pay that cost. If that cost isn’t paid, the creature won’t block."
@@ -163,7 +169,10 @@ fn predatory_rampage_forces_every_opposing_creature_to_block() {
         "Predatory Rampage",
         "Only creatures you control when Predatory Rampage resolves will get +3/+3. Creatures that enter or that you gain control of later in the turn are unaffected."
     );
-    ruling!("Predatory Rampage", "Predatory Rampage doesn't force any creature to attack.");
+    ruling!(
+        "Predatory Rampage",
+        "Predatory Rampage doesn't force any creature to attack."
+    );
     supported("Predatory Rampage");
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P0, "Hill Giant");

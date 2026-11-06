@@ -180,7 +180,10 @@ fn bloodfire_infusion_on_a_creature_you_dont_control_is_put_into_the_graveyard()
     let bears = t.battlefield(P0, "Grizzly Bears");
     let aura = attach_new(&mut t, P0, "Bloodfire Infusion", bears);
     t.settle();
-    assert!(t.on_battlefield(aura), "on a creature its controller controls");
+    assert!(
+        t.on_battlefield(aura),
+        "on a creature its controller controls"
+    );
     give_control(&mut t, bears, P1);
     assert!(t.in_graveyard(P0, "Bloodfire Infusion"));
     assert!(t.on_battlefield(bears));
@@ -422,12 +425,11 @@ fn dromosaur_doesnt_retrigger_when_its_blockers_change() {
     assert!(t.g.is_attacking(dromo));
     cast(&mut t, P0, "Flash Foliage", &[o(dromo)]);
     t.resolve_all();
-    let saproling = t
-        .g
-        .permanents()
-        .find(|o| o.is_token())
-        .map(|o| o.id)
-        .expect("a Saproling");
+    let saproling =
+        t.g.permanents()
+            .find(|o| o.is_token())
+            .map(|o| o.id)
+            .expect("a Saproling");
     assert!(t.g.is_blocking(saproling), "{}", t.dump_log());
     assert_eq!(t.pt(dromo), (4, 1), "no second bonus");
     assert!(t.on_battlefield(dromo));

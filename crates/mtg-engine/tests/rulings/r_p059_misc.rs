@@ -155,7 +155,11 @@ fn ertai_can_counter_equip_but_not_replacement_effects() {
     assert_eq!(candidates, vec![o(equip)], "{}", t.dump_log());
     let hand = t.hand_size(P1);
     t.resolve_all();
-    assert_eq!(crate::r_s06_common::attached_to(&t, splitter), None, "countered");
+    assert_eq!(
+        crate::r_s06_common::attached_to(&t, splitter),
+        None,
+        "countered"
+    );
     assert_eq!(t.hand_size(P1), hand + 1, "its controller drew");
     // The stun counter's replacement applies in P1's untap step: nothing to counter.
     t.advance_to(P1, Step::Upkeep);
@@ -349,10 +353,30 @@ fn an_object_of_both_colors_triggers_both_abilities() {
     );
     // (Duo, a spell of both its colors, the keyword it gains, its P/T afterwards.)
     for (duo, spell, kw, pt) in [
-        ("Emberstrike Duo", "Terminate", KeywordKind::FirstStrike, (2, 2)),
-        ("Safehold Duo", "Selesnya Charm", KeywordKind::Vigilance, (3, 5)),
-        ("Tattermunge Duo", "Ghor-Clan Rampager", KeywordKind::Landwalk, (3, 4)),
-        ("Thistledown Duo", "Azorius Charm", KeywordKind::Flying, (3, 3)),
+        (
+            "Emberstrike Duo",
+            "Terminate",
+            KeywordKind::FirstStrike,
+            (2, 2),
+        ),
+        (
+            "Safehold Duo",
+            "Selesnya Charm",
+            KeywordKind::Vigilance,
+            (3, 5),
+        ),
+        (
+            "Tattermunge Duo",
+            "Ghor-Clan Rampager",
+            KeywordKind::Landwalk,
+            (3, 4),
+        ),
+        (
+            "Thistledown Duo",
+            "Azorius Charm",
+            KeywordKind::Flying,
+            (3, 3),
+        ),
     ] {
         supported(duo);
         for first in [0usize, 1] {

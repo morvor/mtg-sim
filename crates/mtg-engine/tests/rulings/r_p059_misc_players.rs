@@ -81,12 +81,17 @@ fn the_great_aurora_counts_tokens_and_puts_lands_down_together() {
     let spell = t.hand(P0, "The Great Aurora");
     let p0_count = t.hand_size(P0) - 1 + 9;
     let p1_count = t.hand_size(P1) + 2;
-    // P1 puts no land down.
+    // P1 puts no land down. (Each choice records the order it was made in.)
     let seen = watch(&mut t, P1, is_choice, |g| {
-        g.battlefield
+        let n = g
+            .battlefield
             .iter()
             .filter(|id| g.obj(**id).chars.name == "Botanical Sanctum")
-            .count()
+            .count();
+        (
+            n,
+            AURORA_ORDER.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+        )
     });
     t.answer_choose(P1, &[]);
     t.cast(P0, spell).go();
@@ -95,13 +100,10 @@ fn the_great_aurora_counts_tokens_and_puts_lands_down_together() {
     {
         let lands = p0_lands.clone();
         let mut agents = t.g.agents.0.lock().unwrap();
-        let inner = std::mem::replace(
-            &mut agents[0],
-            Box::new(mtg_engine::decision::PassiveAgent),
-        );
+        let inner = std::mem::replace(&mut agents[0], Box::new(mtg_engine::decision::PassiveAgent));
         struct PickAll {
             inner: Box<dyn mtg_engine::decision::Agent>,
-            lands: std::sync::Arc<std::sync::Mutex<Vec<usize>>>,
+            lands: std::sync::Arc<std::sync::Mutex<Vec<(usize, usize)>>>,
         }
         impl mtg_engine::decision::Agent for PickAll {
             fn decide(
@@ -114,7 +116,8 @@ fn the_great_aurora_counts_tokens_and_puts_lands_down_together() {
                     candidates, max, ..
                 } = d
                 {
-                    self.lands.lock().unwrap().push(candidates.len());
+                    let order = AURORA_ORDER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    self.lands.lock().unwrap().push((candidates.len(), order));
                     let n = (*max as usize).min(candidates.len());
                     return mtg_engine::decision::Answer::Entities(candidates[..n].to_vec());
                 }
@@ -125,25 +128,40 @@ fn the_great_aurora_counts_tokens_and_puts_lands_down_together() {
     }
     t.resolve_all();
     assert!(t.in_exile("The Great Aurora"));
-    assert!(super_token_gone(&t, token));
+    assert!(token_gone_for_good(&t, token));
     // P1 drew one card per card and permanent P1 owned, the token included.
     assert_eq!(t.hand_size(P1), p1_count, "{}", t.dump_log());
     // P0 drew nine (the Sanctums) and put them all onto the battlefield, all untapped:
     // they entered at the same time, so none saw the others.
-    let mine: Vec<&mtg_engine::object::GameObject> = t
-        .g
-        .permanents()
-        .filter(|o| o.chars.name == "Botanical Sanctum")
-        .collect();
+    let mine: Vec<&mtg_engine::object::GameObject> =
+        t.g.permanents()
+            .filter(|o| o.chars.name == "Botanical Sanctum")
+            .collect();
     assert_eq!(mine.len(), p0_count, "{}", t.dump_log());
     assert!(mine.iter().all(|o| !o.tapped), "simultaneously");
     // P0 chose first: when P1 chose, P0's lands weren't on the battlefield yet.
-    assert_eq!(*seen.lock().unwrap(), vec![0]);
-    assert_eq!(*p0_lands.lock().unwrap(), vec![9]);
+    let p1_choice = seen.lock().unwrap().clone();
+    let p0_choice = p0_lands.lock().unwrap().clone();
+    assert_eq!(p0_choice.len(), 1);
+    assert_eq!(p0_choice[0].0, 9, "nine lands to choose from");
+    assert_eq!(p1_choice.len(), 1);
+    assert_eq!(
+        p1_choice[0].0, 0,
+        "P0's lands weren't on the battlefield yet"
+    );
+    assert!(p0_choice[0].1 < p1_choice[0].1, "P0 chose first");
 }
 
-fn super_token_gone(t: &TestGame, token: ObjectId) -> bool {
-    token_gone(t, token) && !t.g.players.iter().any(|p| p.library.contains(&t.g.current(token)))
+/// The order in which The Great Aurora's choices were made (in its test).
+static AURORA_ORDER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+fn token_gone_for_good(t: &TestGame, token: ObjectId) -> bool {
+    token_gone(t, token)
+        && !t
+            .g
+            .players
+            .iter()
+            .any(|p| p.library.contains(&t.g.current(token)))
 }
 
 #[test]
@@ -256,7 +274,11 @@ fn rankle_sacrifices_chosen_in_turn_order_then_all_at_once() {
     t.answer_targets(P0, &[pl(P1)]);
     t.answer_targets(P0, &[pl(P1)]);
     rankle(&mut t, &[2]);
-    assert_eq!(*seen.lock().unwrap(), vec![true], "P0's choice made, not yet sacrificed");
+    assert_eq!(
+        *seen.lock().unwrap(),
+        vec![true],
+        "P0's choice made, not yet sacrificed"
+    );
     let order: Vec<PlayerId> = t.asked()[mark..]
         .iter()
         .filter(|(_, d)| is_choice(d))

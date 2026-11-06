@@ -50,7 +50,10 @@ fn apply(t: &mut TestGame, name: &str, c: ObjectId) {
         "Goblin Rabblemaster" | "Hellraiser Goblin" | "Goblin Assault" => {
             t.battlefield(P0, name);
         }
-        "Alluring Siren" | "Courtly Provocateur" | "Rage Nimbus" | "Basandra, Battle Seraph"
+        "Alluring Siren"
+        | "Courtly Provocateur"
+        | "Rage Nimbus"
+        | "Basandra, Battle Seraph"
         | "Heckling Fiends" => {
             let s = t.battlefield(P0, name);
             t.activate(P0, s, 0, &[o(c)]).unwrap();
@@ -321,7 +324,10 @@ fn creatures_that_cant_attack_are_destroyed_by_the_delayed_trigger() {
 #[test]
 fn instigator_has_no_penalty_for_creatures_that_cant_attack() {
     cr!("508.1d");
-    ruling!("Instigator", "There is no penalty if the creatures are unable to attack.");
+    ruling!(
+        "Instigator",
+        "There is no penalty if the creatures are unable to attack."
+    );
     // "{1}{B}{B}, {T}, Discard a card: Creatures target player controls attack this turn
     // if able."
     let mut t = TestGame::new(2);
@@ -341,7 +347,10 @@ fn instigator_has_no_penalty_for_creatures_that_cant_attack() {
 #[test]
 fn bullwhip_forces_an_attack_only_if_the_creature_can() {
     cr!("508.1d");
-    ruling!("Bullwhip", "If the creature can attack, it must. If it cannot, then nothing happens.");
+    ruling!(
+        "Bullwhip",
+        "If the creature can attack, it must. If it cannot, then nothing happens."
+    );
     // "{2}, {T}: This artifact deals 1 damage to target creature. That creature attacks
     // this turn if able."
     assert!(attacks("Bullwhip", No));
@@ -470,7 +479,10 @@ fn dulcet_sirens_creature_must_attack_the_target_opponent() {
     to_combat(&mut t, P1);
     assert!(!legal_attack(&mut t, &[(bears, o(walker))]));
     assert!(!legal_attack(&mut t, &[(bears, pl(P0))]));
-    assert_eq!(declare(&mut t, P1, &[(bears, o(walker))]), vec![(bears, pl(P2))]);
+    assert_eq!(
+        declare(&mut t, P1, &[(bears, o(walker))]),
+        vec![(bears, pl(P2))]
+    );
 
     ruling!(
         "Dulcet Sirens",
@@ -597,7 +609,10 @@ fn two_goblin_rabblemasters_force_each_other_to_attack() {
     );
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Goblin Rabblemaster");
-    assert!(declare(&mut t, P0, &[]).is_empty(), "one doesn't force itself");
+    assert!(
+        declare(&mut t, P0, &[]).is_empty(),
+        "one doesn't force itself"
+    );
     let mut t = TestGame::new(2);
     let a = t.battlefield(P0, "Goblin Rabblemaster");
     let b = t.battlefield(P0, "Goblin Rabblemaster");
@@ -620,10 +635,7 @@ fn goblin_rabblemasters_bonus_is_locked_in_as_it_resolves() {
     let g1 = t.battlefield(P0, "Goblin Piker");
     let g2 = t.battlefield(P0, "Goblin Piker");
     t.set_step(P0, Step::BeginningOfCombat);
-    crate::r_s01_common::attack_with(
-        &mut t,
-        &[(rabble, pl(P1)), (g1, pl(P1)), (g2, pl(P1))],
-    );
+    crate::r_s01_common::attack_with(&mut t, &[(rabble, pl(P1)), (g1, pl(P1)), (g2, pl(P1))]);
     t.resolve_all();
     assert_eq!(t.pt(rabble), (4, 2));
     crate::r_s02_common::destroy(&mut t, g1);
