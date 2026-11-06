@@ -130,9 +130,12 @@ fn run_wheel(w: &Wheel, p0_lib: usize, p1_lib: usize) -> TestGame {
 #[test]
 fn drawing_from_too_small_a_library_loses_and_all_losing_is_a_draw() {
     cr!("704.5b", "104.4a", "104.3c", "121.4");
+    // (Whispering Madness's first sentence, "Each player draws cards simultaneously.",
+    // disagrees with CR 121.2c, under which the active player draws first, then each other
+    // player in turn order; it isn't cited.)
     ruling!(
         "Whispering Madness",
-        "Each player draws cards simultaneously. If this causes a player to draw more cards than are left in their library, that player will lose the game. If this causes all players to do so, the game is a draw."
+        "If this causes a player to draw more cards than are left in their library, that player will lose the game. If this causes all players to do so, the game is a draw."
     );
     ruling!(
         "Jace, Memory Adept",
@@ -173,7 +176,7 @@ fn drawing_from_too_small_a_library_loses_and_all_losing_is_a_draw() {
 
 #[test]
 fn whispering_madness_multiplayer_losers_leave_and_the_game_goes_on() {
-    cr!("704.5b", "800.4");
+    cr!("704.5b", "800.4", "121.2c");
     ruling!(
         "Whispering Madness",
         "(In multiplayer games, multiple players drawing from an empty library will cause those players to lose although the game may continue.)"
@@ -182,12 +185,18 @@ fn whispering_madness_multiplayer_losers_leave_and_the_game_goes_on() {
     library_of(&mut t, P1, 0);
     library_of(&mut t, P2, 0);
     whispering_madness(&mut t);
+    let from = t.g.turn_events.len();
     t.resolve_all();
     assert!(t.has_lost(P1) && t.has_lost(P2));
     assert!(!t.has_lost(P0) && !t.has_lost(P3));
     assert!(!t.g.is_over(), "the game continues");
-    // P0 and P3 drew three each.
+    // P0 and P3 drew three each: the active player first, then the others in turn order.
     assert_eq!((t.hand_size(P0), t.hand_size(P3)), (3, 3));
+    let drew: Vec<PlayerId> = draws_and_discards(&t, from)
+        .into_iter()
+        .filter_map(|(p, draw)| draw.then_some(p))
+        .collect();
+    assert_eq!(drew, vec![P0, P0, P0, P3, P3, P3]);
 }
 
 /// The draw and discard events since event `from`: (player, is a draw).
