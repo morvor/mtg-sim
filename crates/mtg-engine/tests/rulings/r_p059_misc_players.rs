@@ -51,7 +51,7 @@ fn maximum_hand_size_is_checked_only_in_its_players_cleanup_step() {
 
 #[test]
 fn the_great_aurora_counts_tokens_and_puts_lands_down_together() {
-    cr!("111.8", "111.2", "101.4", "614.12");
+    cr!("111.7", "111.8", "111.2", "101.4", "614.12");
     ruling!(
         "The Great Aurora",
         "A token is owned by the player under whose control it entered the battlefield. Tokens shuffled into a library count toward the number of cards drawn, though they cease to exist upon becoming part of a library. Regardless of what you’re using to represent tokens, you won’t shuffle that physical object into your library."
@@ -211,7 +211,7 @@ fn rankle(t: &mut TestGame, modes: &[usize]) {
 
 #[test]
 fn rankle_discards_chosen_in_turn_order_then_all_at_once() {
-    cr!("101.4", "701.9a");
+    cr!("101.4", "101.4a", "701.9a");
     ruling!(
         "Rankle, Master of Pranks",
         "As the first mode is performed, first the player whose turn it is chooses a card in hand without revealing it, then each other player in turn order does the same. Then all the chosen cards are discarded at the same time."
@@ -225,17 +225,27 @@ fn rankle_discards_chosen_in_turn_order_then_all_at_once() {
     t.hand(P2, "Llanowar Elves");
     t.hand(P2, "Kird Ape");
     t.answer_choose(P0, &[o(a)]);
-    // When P1 and P2 choose, nothing has been discarded yet.
+    // When P1 and P2 choose, nothing has been discarded yet, and they know that the
+    // players before them chose, but not which card (it stays face down, CR 101.4a).
     let seen1 = watch(&mut t, P1, is_choice, |g| {
-        g.players.iter().map(|p| p.graveyard.len()).sum::<usize>()
+        (
+            g.players.iter().map(|p| p.graveyard.len()).sum::<usize>(),
+            g.known_apnap_choices(P1),
+        )
     });
     let seen2 = watch(&mut t, P2, is_choice, |g| {
-        g.players.iter().map(|p| p.graveyard.len()).sum::<usize>()
+        (
+            g.players.iter().map(|p| p.graveyard.len()).sum::<usize>(),
+            g.known_apnap_choices(P2),
+        )
     });
     let mark = t.asked().len();
     rankle(&mut t, &[0]);
-    assert_eq!(*seen1.lock().unwrap(), vec![0]);
-    assert_eq!(*seen2.lock().unwrap(), vec![0]);
+    assert_eq!(*seen1.lock().unwrap(), vec![(0, vec![(P0, None)])]);
+    assert_eq!(
+        *seen2.lock().unwrap(),
+        vec![(0, vec![(P0, None), (P1, None)])]
+    );
     let order: Vec<PlayerId> = t.asked()[mark..]
         .iter()
         .filter(|(_, d)| is_choice(d))
@@ -251,7 +261,7 @@ fn rankle_discards_chosen_in_turn_order_then_all_at_once() {
 
 #[test]
 fn rankle_sacrifices_chosen_in_turn_order_then_all_at_once() {
-    cr!("101.4", "701.21a", "603.10a");
+    cr!("101.4", "101.4b", "701.21a", "603.10a");
     ruling!(
         "Rankle, Master of Pranks",
         "As the third mode is performed, first the player whose turn it chooses a creature they control, then each other player in turn order does the same, knowing the choices made before them. Then all the chosen creatures are sacrificed at the same time."
@@ -265,10 +275,14 @@ fn rankle_sacrifices_chosen_in_turn_order_then_all_at_once() {
     t.battlefield(P1, "Hill Giant");
     t.answer_choose(P0, &[o(artist)]);
     t.answer_choose(P1, &[o(bears)]);
+    // When P1 chooses: P0's Blood Artist isn't sacrificed yet, and P1 knows P0 chose it.
     let seen = watch(&mut t, P1, is_choice, |g| {
-        g.battlefield
-            .iter()
-            .any(|id| g.obj(*id).chars.name == "Blood Artist")
+        (
+            g.battlefield
+                .iter()
+                .any(|id| g.obj(*id).chars.name == "Blood Artist"),
+            g.known_apnap_choices(P1),
+        )
     });
     let mark = t.asked().len();
     t.answer_targets(P0, &[pl(P1)]);
@@ -276,8 +290,8 @@ fn rankle_sacrifices_chosen_in_turn_order_then_all_at_once() {
     rankle(&mut t, &[2]);
     assert_eq!(
         *seen.lock().unwrap(),
-        vec![true],
-        "P0's choice made, not yet sacrificed"
+        vec![(true, vec![(P0, Some(vec![artist]))])],
+        "P0's choice made and known, not yet sacrificed"
     );
     let order: Vec<PlayerId> = t.asked()[mark..]
         .iter()

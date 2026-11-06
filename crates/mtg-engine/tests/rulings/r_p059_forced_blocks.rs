@@ -124,7 +124,11 @@ fn forced_blockers_dont_block_when_unable_or_when_it_costs() {
     );
     check("Predatory Rampage", &[Tapped, CantBlock, NotAttacked, Cost]);
     // Hustle on an opponent's creature during the caster's turn: the block side of the
-    // ruling tested with the attack side in r_p059_forced_attacks.rs.
+    // ruling (its attack side is in r_p059_forced_attacks.rs).
+    ruling!(
+        "Hustle // Bustle",
+        "If the creature targeted by Hustle is tapped or is affected by a spell or ability that says it can't attack or block, then it won't attack or block this turn. If there's a cost associated with having that creature attack or block, its controller isn't forced to pay that cost, so it doesn't have to attack or block in that case either."
+    );
     check("Hustle // Bustle", &[Tapped, CantBlock, Cost]);
     // Provoke untaps the creature as it resolves; tapped again afterwards, it doesn't
     // block.

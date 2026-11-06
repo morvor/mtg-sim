@@ -465,6 +465,30 @@ fn alluring_siren_does_nothing_after_attackers_or_on_your_own_turn() {
 }
 
 #[test]
+fn a_requirement_on_a_creature_doesnt_follow_it_to_a_new_object() {
+    cr!("400.7", "508.1d");
+    // Alluring Siren's target, P1's Raging Goblin (haste), is flickered by P1's Daydream:
+    // the Goblin that returns is a new object, which no requirement affects.
+    for flicker in [false, true] {
+        let mut t = TestGame::new(2);
+        t.set_step(P1, Step::PrecombatMain);
+        let goblin = t.battlefield(P1, "Raging Goblin");
+        apply(&mut t, "Alluring Siren", goblin);
+        if flicker {
+            cast_resolve(&mut t, P1, "Daydream", &[o(goblin)]);
+            assert_ne!(t.g.current(goblin), goblin);
+        }
+        let now = t.g.current(goblin);
+        let attacks = declare(&mut t, P1, &[]);
+        assert_eq!(
+            attacks.iter().any(|(c, _)| *c == now),
+            !flicker,
+            "flickered: {flicker}"
+        );
+    }
+}
+
+#[test]
 fn dulcet_sirens_creature_must_attack_the_target_opponent() {
     cr!("508.1d", "508.1a", "115.1");
     ruling!(

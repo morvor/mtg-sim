@@ -194,7 +194,7 @@ fn vote_trigger_waits(name: &str, start: impl FnOnce(&mut TestGame)) {
 
 #[test]
 fn vote_triggers_wait_for_the_voting_spell_or_ability_to_finish() {
-    cr!("701.38a", "603.3", "701.38d");
+    cr!("701.38a", "603.3");
     ruling!(
         "Trap the Trespassers",
         "Abilities that trigger \"whenever players finish voting\" trigger once all players have voted or once all secret votes are revealed, but they won't go on the stack until the current spell or ability finishes resolving."
@@ -259,7 +259,7 @@ fn vote_triggers_wait_for_the_voting_spell_or_ability_to_finish() {
 
 #[test]
 fn alanias_copy_resolves_first_even_if_the_spell_was_countered() {
-    cr!("707.10", "707.10c", "113.7a");
+    cr!("707.10", "707.10c", "608.2h");
     ruling!(
         "Alania, Divergent Storm",
         "Alania’s ability and the copy it creates both resolve before the spell that caused the ability to trigger. They resolve even if the spell is countered before the copy is created."
@@ -329,7 +329,7 @@ fn cut_a_deal_doesnt_count_an_opponent_whose_draw_was_replaced() {
 
 #[test]
 fn an_object_of_both_colors_triggers_both_abilities() {
-    cr!("603.3b", "603.2c");
+    cr!("603.3b", "603.2");
     use mtg_engine::keywords::KeywordKind;
     ruling!(
         "Emberstrike Duo",
@@ -379,6 +379,8 @@ fn an_object_of_both_colors_triggers_both_abilities() {
         ),
     ] {
         supported(duo);
+        // The texts of the Duo's two triggers on the stack, bottom first, for each order.
+        let mut stacks: Vec<Vec<String>> = Vec::new();
         for first in [0usize, 1] {
             let mut t = TestGame::new(2);
             let d = t.battlefield(P0, duo);
@@ -409,12 +411,28 @@ fn an_object_of_both_colors_triggers_both_abilities() {
                     .any(|(p, d)| *p == P0 && matches!(d, Decision::Order { .. })),
                 "{duo}: the order is P0's choice"
             );
+            stacks.push(
+                abilities_from(&t, d)
+                    .iter()
+                    .map(|id| match t.g.obj(*id).stack.as_deref().map(|s| &s.kind) {
+                        Some(mtg_engine::object::StackKind::Triggered { ability, .. }) => {
+                            ability.text.clone()
+                        }
+                        _ => String::new(),
+                    })
+                    .collect(),
+            );
             while !abilities_from(&t, d).is_empty() {
                 t.resolve();
             }
             assert_eq!(t.pt(d), pt, "{duo}");
             assert!(crate::r_s06_common::has_kw(&t, d, kw), "{duo}");
         }
+        // P0's answer decided the order: the two stacks are each other's reverse.
+        let mut reversed = stacks[1].clone();
+        reversed.reverse();
+        assert_ne!(stacks[0], stacks[1], "{duo}: {stacks:?}");
+        assert_eq!(stacks[0], reversed, "{duo}");
     }
     // Dire Undercurrents: "Whenever a blue creature you control enters, you may have
     // target player draw a card. Whenever a black creature you control enters, you may
@@ -484,7 +502,7 @@ fn a_for_as_long_as_effect_ends_when_its_permanent_phases_out() {
 
 #[test]
 fn days_undoing_delays_next_end_step_triggers_a_turn() {
-    cr!("724.1d", "603.7a");
+    cr!("724.1d", "603.7b");
     ruling!(
         "Day's Undoing",
         "Any “at the beginning of the next end step” triggered abilities won’t get the chance to trigger that turn because the end step is skipped. Those abilities will trigger at the beginning of the end step of the next turn. The same is true of abilities that trigger at the beginning of other phases or steps."

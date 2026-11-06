@@ -75,7 +75,7 @@ fn renegade_silent_phases_in_before_its_controller_untaps_and_can_attack() {
 
 #[test]
 fn a_stolen_renegade_silent_phases_in_under_its_owners_control() {
-    cr!("702.26a", "702.26e", "611.2a", "702.26n");
+    cr!("702.26a", "611.2a", "702.26n");
     ruling!(
         "Renegade Silent",
         "If an opponent gains control of your Renegade Silent until end of turn, it will phase out while they still have control of it. The control-changing effect ends while it is phased out, and it phases in under your control as that opponent's next untap step begins. If they leave the game before their next untap step, Renegade Silent phases in as the next untap step begins after their turn would have begun."
@@ -157,13 +157,44 @@ fn zurgo_checks_its_damage_history_whenever_a_creature_dies() {
     assert_eq!(t.counters(zurgo, counters::PLUS1), 2);
 }
 
+#[test]
+fn zurgos_damage_history_doesnt_follow_a_flickered_creature_or_zurgo() {
+    cr!("400.7", "603.10a");
+    // Daydream ("Exile target creature you control, then return that card to the
+    // battlefield under its owner's control with a +1/+1 counter on it.") makes a new
+    // object, which wasn't dealt damage by Zurgo this turn.
+    let mut t = TestGame::new(2);
+    let zurgo = t.battlefield(P0, "Zurgo Helmsmasher");
+    let giant = t.battlefield(P0, "Hill Giant");
+    damage(&mut t, zurgo, 1, giant);
+    cast_resolve(&mut t, P0, "Daydream", &[o(giant)]);
+    let giant = t.g.current(giant);
+    assert_eq!(t.obj_now(giant).damage, 0);
+    destroy(&mut t, giant);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Hill Giant"));
+    assert_eq!(t.counters(zurgo, counters::PLUS1), 0, "{}", t.dump_log());
+    // Nor did the new Zurgo deal the damage the old one dealt (it has only Daydream's
+    // counter).
+    let mut t = TestGame::new(2);
+    let zurgo = t.battlefield(P0, "Zurgo Helmsmasher");
+    let giant = t.battlefield(P1, "Hill Giant");
+    damage(&mut t, zurgo, 1, giant);
+    cast_resolve(&mut t, P0, "Daydream", &[o(zurgo)]);
+    let zurgo = t.g.current(zurgo);
+    destroy(&mut t, giant);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert_eq!(t.counters(zurgo, counters::PLUS1), 1, "{}", t.dump_log());
+}
+
 // ---------------------------------------------------------------------------------------
 // Marisi, Breaker of the Coil and Basandra, Battle Seraph
 // ---------------------------------------------------------------------------------------
 
 #[test]
 fn marisi_stops_opponents_spells_during_combat_but_not_abilities() {
-    cr!("101.2", "506.1", "602.5");
+    cr!("101.2", "506.1");
     ruling!(
         "Marisi, Breaker of the Coil",
         "If an effect allows or instructs an opponent to cast a spell during a combat phase, they can't do so. Marisi's restriction takes precedence over that permission."
@@ -336,7 +367,7 @@ fn alela_triggers_once_per_damaged_player_per_damage_step() {
 
 #[test]
 fn bloodthirsty_blade_has_no_equip_ability_for_your_creatures() {
-    cr!("702.6a", "115.1");
+    cr!("702.6a", "115.1", "301.5b");
     ruling!(
         "Bloodthirsty Blade",
         "Bloodthirsty Blade has no equip ability. There's normally no way to have it attached to your own creature, although certain combinations of other cards make this possible."
@@ -357,6 +388,15 @@ fn bloodthirsty_blade_has_no_equip_ability_for_your_creatures() {
     let candidates = crate::r_s04_common::ability_targets(&mut t, blade, 0);
     assert!(candidates.contains(&o(theirs)));
     assert!(!candidates.contains(&o(mine)));
+    // One such combination: attached to P1's creature, which P0 then gains control of.
+    // "An opponent controls" restricts only the ability's target, so it stays attached.
+    mana(&mut t, P0, 1);
+    t.activate(P0, blade, 0, &[o(theirs)]).unwrap();
+    t.resolve_all();
+    give_control(&mut t, theirs, P0);
+    t.settle();
+    assert_eq!(attached_to(&t, blade), Some(o(theirs)), "{}", t.dump_log());
+    assert_eq!(t.pt(theirs), (4, 2));
 }
 
 #[test]
