@@ -221,9 +221,13 @@ pub fn group_ok(g: &Game, group: &TargetGroup, targets: &[Entity], ctx: &Ctx) ->
 /// Whether the targets of one instance of the word "target" still have the relationship
 /// as the spell or ability resolves (CR 608.2b). `all` are the targets chosen and
 /// `legal` those of them that are still legal on their own. Targets that must share a
-/// type or be in one graveyard are compared including the ones that left their zone, by
-/// their last known information (Raise the Draugr); the others are compared among the
-/// legal targets only ("the legal targets no longer all have equal toughness", V.A.T.S.).
+/// type, be in one graveyard or be controlled by the same or by different players are
+/// compared including the ones that are now illegal, by their last known information if
+/// they left their zone (Raise the Draugr; Run Away Together: "can still determine its
+/// controller only to check whether the other creature is a legal target"; register
+/// `dependent-target-checked-against-an-illegal-target`); the others are compared among
+/// the legal targets only ("the legal targets no longer all have equal toughness",
+/// V.A.T.S.).
 pub fn holds_on_resolution(
     g: &Game,
     group: &TargetGroup,
@@ -241,9 +245,9 @@ pub fn holds_on_resolution(
         | TargetGroup::SharePermanentType
         | TargetGroup::SameName
         | TargetGroup::ShareColor
-        | TargetGroup::ShareLandType => group_ok(g, group, all, ctx),
-        TargetGroup::DifferentControllers
-        | TargetGroup::DifferentNames
+        | TargetGroup::ShareLandType
+        | TargetGroup::DifferentControllers => group_ok(g, group, all, ctx),
+        TargetGroup::DifferentNames
         | TargetGroup::DifferentManaValues
         | TargetGroup::DifferentPowers
         | TargetGroup::EqualToughness

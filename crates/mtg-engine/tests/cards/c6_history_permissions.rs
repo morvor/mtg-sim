@@ -602,6 +602,7 @@ fn glyph_of_delusion_targets_a_creature_the_target_wall_blocked() {
 fn glyph_of_delusion_still_affects_the_creature_once_the_wall_has_left() {
     cr!("608.2b");
     interp!("anchor-target-chosen-first");
+    interp!("dependent-target-checked-against-an-illegal-target");
     let mut t = TestGame::new(2);
     let wall = t.battlefield(P0, "Wall of Stone");
     let bears = t.battlefield(P1, "Grizzly Bears");

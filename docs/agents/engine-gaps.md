@@ -983,7 +983,16 @@ ruling-conflicts-2.
   `yosei_taps_the_permanents_of_a_player_who_became_an_illegal_target` (`tests/rulings/illegal_anchor_targets.rs`);
   Memory's Journey's, Witness the Future's and Yosei's player rulings cited; Fiery Annihilation's ruling stays
   uncited and unexempted and is logged in `docs/RULING_DISCREPANCIES.md` as inconsistent. Undecided: for the user
-  (set it aside as inconsistent, recommended, or reverse the entry).
+  (set it aside as inconsistent, recommended, or reverse the entry). Found in the item's review and fixed:
+  "controlled by different players" (Run Away Together, Chaos Mutation, Lagrella, Protector of the Wastes,
+  Cloud's Limit Break, Modify Memory, Kitsune) was compared among the legal targets only, so an illegal target
+  never counted against the other: with the illegal creature now controlled by the other's controller (a
+  control change in response), the other was still returned, against Run Away Together's ruling. `holds_on_resolution`
+  in `target_groups.rs` now compares it with every target chosen, by last known information for one that has
+  left, as it already did "controlled by the same player"
+  (`run_away_together_compares_the_other_creature_with_an_illegal_one`). Gaea's Blessing and Witness the Future
+  (`target_player_shuffles_target_cards_does_nothing_if_the_player_is_illegal`) also pin the entry: with the
+  player illegal they still resolve (a draw, a look at four) only because the cards stay legal targets.
 - **Stone Calendar** (rulings-P033). Ruling 2004-10-04: "You may choose not to apply Stone Calendar’s cost
   reduction effect." Oracle: "Spells you cast cost {1} less to cast." Resolved by ruling-conflicts-4, case 2 (B,
   outdated): the ruling glosses an "up to" Oracle wording (Forge's card script, 2011-12-30: "Spells you cast cost

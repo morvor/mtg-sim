@@ -346,6 +346,7 @@ fn cast_slots(t: &mut TestGame, name: &str, modes: &[usize], slots: &[Vec<Entity
 #[test]
 fn target_player_shuffles_target_cards_does_nothing_if_the_player_is_illegal() {
     cr!("608.2b", "701.24a");
+    interp!("dependent-target-checked-against-an-illegal-target");
     ruling!(
         "Memory's Journey",
         "If the player is an illegal target by the time Memory's Journey resolves, the spell will have no effect, even if the cards are still legal targets. This is because a spell can't make an illegal target (the player) perform any actions (such as shuffling their library)."
@@ -355,10 +356,12 @@ fn target_player_shuffles_target_cards_does_nothing_if_the_player_is_illegal() {
         "If the player is an illegal target as Witness the Future resolves, the library won't be shuffled and any targeted cards remain in the graveyard."
     );
     // The other "target player shuffles up to N target cards from their graveyard into
-    // their library" cards: with the player an illegal target, the cards stay put, and
-    // the rest of the spell still happens. (The illegal player is the one who would
-    // shuffle, so the cards stay even though they're still legal targets, under either
-    // reading of `dependent-target-checked-against-an-illegal-target`.)
+    // their library" cards: with the player an illegal target, the cards stay put (the
+    // illegal player is the one who would shuffle, so under either reading of
+    // `dependent-target-checked-against-an-illegal-target`), and the rest of the spell
+    // still happens: the cards "from their graveyard" are checked against the illegal
+    // player and stay legal targets, so the spell resolves (were they illegal too, every
+    // target would be, and Gaea's Blessing wouldn't draw nor Witness the Future look).
     for name in [
         "Dwell on the Past",
         "Memory's Journey",
