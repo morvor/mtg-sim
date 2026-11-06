@@ -170,6 +170,18 @@ The user resumed normal work, at the normal pace.
 
 mutation, cards-1 and cards-2 stay held. After the round, everyone waits for the user's go.
 
+### Standard updates (user, Nov 5, late evening)
+
+After each round, or when the user asks, give the user a "standard update":
+1. **Cards that compile:** fully supported paper cards / all counted paper cards, as a %. Use docs/CARD_COVERAGE.md, or the round's result note if newer.
+2. **Rules covered:**
+   - CR rules covered (cited, covered via subrules, or exempt), as a %, from docs/CR_COVERAGE.md; regenerate it if stale;
+   - rulings cited, as a %, from `scripts/rulings_batches.py summary`.
+3. **Cards that reverse compile:** round-trip passes / fully supported cards, as a %, from docs/ROUNDTRIP.md.
+4. **Engine bugs fixed in the round:** a count, with a one-line list taken from the landed items' reports and commits.
+5. **Open decisions:** each with enough to decide it, the CR rules and rulings quoted verbatim with dates. Print each open only once; after that, refer to it by number and name.
+6. **Status:** a short overview in plain, simple language: where we are and what's next.
+
 ### Presenting decisions (user, Nov 5, evening)
 
 "When you print opens that reference a CR section or a ruling, print that CR section or ruling as well, so I can make a reasoned judgement." Every decision taken to the user quotes, verbatim from `data/`, the CR rules, rulings (with dates) and Oracle texts it turns on. The script `scratchpad/opens/src.py` (coordinator scratchpad) prints them.
