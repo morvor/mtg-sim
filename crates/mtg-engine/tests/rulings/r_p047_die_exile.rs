@@ -363,8 +363,9 @@ fn fiery_annihilation_equipment_target() {
     // attached to now, not as its host last existed), and with both targets illegal the
     // spell doesn't resolve. (Fiery Annihilation's ruling that the Equipment isn't exiled
     // whenever the creature is an illegal target, even one still on the battlefield with
-    // protection from red, disagrees with Searing Blaze's on a dependent target and isn't
-    // cited here; see "Not yet investigated" in docs/RULING_DISCREPANCIES.md.)
+    // protection from red, disagrees with Yosei's and Searing Blaze's on a dependent target
+    // and isn't cited: it is logged as inconsistent in docs/RULING_DISCREPANCIES.md for the
+    // user to decide, and the protection case is pinned in `illegal_anchor_targets.rs`.)
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let sword = t.battlefield(P1, "Bonesplitter");

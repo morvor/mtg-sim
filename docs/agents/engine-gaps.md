@@ -941,9 +941,11 @@ ruling-conflicts-2.
   same structure (a second target described by the first: "target creature that player or that planeswalker's
   controller controls") goes the other way: "If either target is illegal by the time Searing Blaze resolves, it
   still deals damage to the other target." (cited in `tests/rulings/r_p007_targets.rs` with the player given
-  hexproof). So does Memory's Journey's (2011-09-22, "Target player shuffles up to three target cards from their
-  graveyard into their library", uncited): "If the player is an illegal target by the time Memory's Journey
-  resolves, the spell will have no effect, even if the cards are still legal targets." CR 608.2b ends: "If part of
+  hexproof). (Memory's Journey's, 2011-09-22, "Target player shuffles up to three target cards from their
+  graveyard into their library", was listed here as going the other way too: "If the player is an illegal target
+  by the time Memory's Journey resolves, the spell will have no effect, even if the cards are still legal
+  targets." It doesn't: its cards stay put, as Fiery Annihilation's Equipment does, because the illegal player is
+  the one who would shuffle; it agrees under every reading. Corrected by ruling-conflicts-4.) CR 608.2b ends: "If part of
   the effect requires information about an illegal target, it fails to determine any such information. Any part
   of the effect that requires that information won't happen." Read as being about the effect's instructions, it
   doesn't touch a later target's requirement, which is checked in its first part ("it checks whether the targets
@@ -951,17 +953,42 @@ ruling-conflicts-2.
   to that creature" (Searing Blaze's ruling; the engine). Read as covering what a target's requirement needs
   ("that creature", "that player", "that planeswalker's controller"), the Equipment's legality needs information
   about the illegal creature and the exile doesn't happen (Fiery Annihilation's ruling); that reading would also
-  reverse Searing Blaze's and Memory's Journey's rulings and the engine's `anchor-target-chosen-first` decision
+  reverse Searing Blaze's ruling and the engine's `anchor-target-chosen-first` decision
   (Glyph of Delusion: a creature that a Wall which has left the battlefield blocked stays a legal target). A lead
   for the conflict case, not checked here (the archive at https://github.com/pit142857/mtg-cr wasn't reachable
   from this session): as recalled, not verified, the 608.2b of the Comprehensive Rules of Searing Blaze's time said
   the opposite of the present sentence ("The effect may still determine information about illegal targets, though,
   and other parts of the effect for which those targets are not illegal may still affect them."). If the archive
   confirms it and dates the change,
-  Searing Blaze's and Memory's Journey's rulings would be outdated on this point and Fiery Annihilation's would
+  Searing Blaze's ruling would be outdated on this point and Fiery Annihilation's would
   follow the present rule. The engine agrees with Fiery Annihilation's ruling when the creature has left the
   battlefield (the Equipment is no longer attached to it, so it's no longer a legal target: fixed in rulings-P047,
   `target_legality` in `eval.rs`, set by `Game::is_legal_target` for every way a target is chosen or checked;
   `fiery_annihilation_equipment_target` and `a_trigger_finds_no_equipment_attached_to_its_dead_source` in
   `tests/rulings/r_p047_die_exile.rs`), and with Searing Blaze's when the creature is still there but illegal
   (protection from red): the Equipment, still attached to it, is still a legal target and is exiled.
+  Investigated in ruling-conflicts-4, case 1 (D, unresolved). The lead holds: 608.2b had "The effect may still
+  determine information about illegal targets, though, ..." until the CR effective 2015-03-27, and today's
+  sentence from the CR effective 2015-07-17; "or a target that's become illegal" left 608.2g in the CR effective
+  2016-07-22. But later rulings show the change wasn't read as reaching the check of a target whose requirement
+  names an illegal target: on the same structure Yosei, the Morning Star (2017-11-17): "If the player becomes an
+  illegal target, the target permanents are tapped, but the player doesn't skip their untap step."; and Run Away
+  Together (republished 2025-11-17, after Fiery Annihilation's): "... can still determine its controller only to
+  check whether the other creature is a legal target. ..."; so Searing Blaze's ruling isn't outdated. On the exact
+  structure the post-2015 count is one each way (Yosei vs Fiery Annihilation); the literal CR, Run Away Together
+  and the analogy of 115.9b (an illegal target's "current information is used, even if it's not currently legal")
+  support the engine's reading. Engine unchanged; new provisional register entry
+  `dependent-target-checked-against-an-illegal-target`, pinned by
+  `fiery_annihilation_exiles_equipment_still_attached_to_an_illegal_creature` and
+  `yosei_taps_the_permanents_of_a_player_who_became_an_illegal_target` (`tests/rulings/illegal_anchor_targets.rs`);
+  Memory's Journey's, Witness the Future's and Yosei's player rulings cited; Fiery Annihilation's ruling stays
+  uncited and unexempted and is logged in `docs/RULING_DISCREPANCIES.md` as inconsistent. Undecided: for the user
+  (set it aside as inconsistent, recommended, or reverse the entry).
+- **Stone Calendar** (rulings-P033). Ruling 2004-10-04: "You may choose not to apply Stone Calendar’s cost
+  reduction effect." Oracle: "Spells you cast cost {1} less to cast." Resolved by ruling-conflicts-4, case 2 (B,
+  outdated): the ruling glosses an "up to" Oracle wording (Forge's card script, 2011-12-30: "Spells you cast cost
+  up to {1} less to cast."), which the Oracle update that went with Bloomburrow removed from it and six other cost
+  reductions (MTGJSON data in taw/magic-search-engine: commit e2b33f13, 2024-07-24, still "up to"; the next,
+  1e5a15c7, 2024-07-29, not). The cost rules didn't change (CR 601.2f "minus all cost reductions"). Exempt in
+  `docs/rulings-exemptions/rulings-P033.tsv` and logged as outdated; the engine always applies the reduction
+  (`stone_calendar_reduces_what_you_pay_not_the_mana_cost` in `tests/rulings/r_p033_generic_only.rs`).
