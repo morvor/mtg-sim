@@ -1,0 +1,285 @@
+//! Permanents entering with counters (CR 614.1c, 614.12, 122.6): other permanents
+//! entering with counters counted "for each [permanent] you already control", with a
+//! number from the source's power and a creature type, face-down creatures entering with
+//! a keyword counter, and a spell modified by a cast trigger entering with counters.
+
+use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
+use mtg_engine::*;
+
+fn supported(name: &str) {
+    let c = card(name);
+    assert!(
+        c.unsupported_text().is_empty(),
+        "{name} has unsupported text: {:?}",
+        c.unsupported_text()
+    );
+}
+
+#[test]
+fn giada_counts_the_angels_you_already_control() {
+    cr!("614.1c", "614.12");
+    ruling!(
+        "Giada, Font of Hope",
+        "\"Each Angel you already control\" means each Angel you control other than the Angel entering, including Giada."
+    );
+    supported("Giada, Font of Hope");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Giada, Font of Hope");
+    t.battlefield(P0, "Serra Angel");
+    let angel = t.enter(P0, "Serra Angel");
+    assert_eq!(t.counters(angel, "+1/+1"), 2);
+    // Not an Angel: no counters.
+    let bears = t.enter(P0, "Grizzly Bears");
+    assert_eq!(t.counters(bears, "+1/+1"), 0);
+}
+
+#[test]
+fn master_biomancer_gives_counters_equal_to_its_power_and_the_mutant_type() {
+    cr!("614.1c", "614.12", "205.1b");
+    ruling!(
+        "Master Biomancer",
+        "use Master Biomancer's power as that creature is entering"
+    );
+    supported("Master Biomancer");
+    let mut t = TestGame::new(2);
+    let bio = t.battlefield(P0, "Master Biomancer");
+    t.g.add_counters(Entity::Object(bio), "+1/+1", 1, None);
+    let bears = t.enter(P0, "Grizzly Bears");
+    assert_eq!(t.counters(bears, "+1/+1"), 3);
+    assert!(t.obj_now(bears).chars.has_subtype("Mutant"));
+    assert!(t.obj_now(bears).chars.has_subtype("Bear"));
+    // Not Master Biomancer itself, nor an opponent's creature.
+    assert!(!t.obj_now(bio).chars.has_subtype("Mutant"));
+    let theirs = t.enter(P1, "Grizzly Bears");
+    assert_eq!(t.counters(theirs, "+1/+1"), 0);
+    assert!(!t.obj_now(theirs).chars.has_subtype("Mutant"));
+}
+
+#[test]
+fn veiled_ascension_cloaked_creatures_enter_with_a_flying_counter() {
+    cr!("614.1c", "701.58a");
+    supported("Veiled Ascension");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Veiled Ascension");
+    t.library_top(P0, "Grizzly Bears");
+    t.answer_yes(P0, true);
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    let face_down: Vec<ObjectId> =
+        t.g.permanents_controlled_by(P0)
+            .into_iter()
+            .filter(|o| t.g.obj(*o).face_down)
+            .collect();
+    assert_eq!(face_down.len(), 1);
+    assert_eq!(t.counters(face_down[0], "flying"), 1);
+    // A face-up creature doesn't.
+    let bears = t.enter(P0, "Grizzly Bears");
+    assert_eq!(t.counters(bears, "flying"), 0);
+}
+
+#[test]
+fn torgal_counts_dogs_and_wolves_for_the_first_human_spell() {
+    cr!("614.1c", "603.2");
+    supported("Torgal, A Fine Hound");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Torgal, A Fine Hound");
+    t.battlefield(P0, "Timber Wolves");
+    t.lands(P0, "Plains", 4);
+    let a = t.hand(P0, "Elite Vanguard");
+    t.cast(P0, a).go();
+    t.resolve_all();
+    let first = t.named_on_battlefield("Elite Vanguard")[0];
+    // Torgal (a Wolf) and Timber Wolves.
+    assert_eq!(t.counters(first, "+1/+1"), 2);
+    // Only the first Human creature spell each turn.
+    let b = t.hand(P0, "Elite Vanguard");
+    t.cast(P0, b).go();
+    t.resolve_all();
+    let all = t.named_on_battlefield("Elite Vanguard");
+    let second = all.into_iter().find(|o| *o != t.g.current(first)).unwrap();
+    assert_eq!(t.counters(second, "+1/+1"), 0);
+}
+
+#[test]
+fn gluttonous_hellkite_enters_with_two_counters_per_creature_sacrificed() {
+    cr!("614.1c", "608.2h", "603.2");
+    supported("Gluttonous Hellkite");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Swamp", 1);
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Forest", 1);
+    t.lands(P0, "Wastes", 2);
+    let h = t.hand(P0, "Gluttonous Hellkite");
+    t.cast(P0, h).x(1).go();
+    t.resolve_all();
+    // One creature from each player: four counters.
+    let hk = t.named_on_battlefield("Gluttonous Hellkite")[0];
+    assert_eq!(t.counters(hk, "+1/+1"), 4);
+    assert_eq!(t.g.permanents_controlled_by(P1).len(), 1);
+}
+
+#[test]
+fn dark_intimations_gives_the_bolas_planeswalker_an_additional_loyalty_counter() {
+    cr!("614.1c", "306.5b");
+    supported("Dark Intimations");
+    let mut t = TestGame::new(2);
+    let di = t.graveyard(P0, "Dark Intimations");
+    t.lands(P0, "Island", 2);
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Mountain", 2);
+    t.lands(P0, "Wastes", 2);
+    let nb = t.hand(P0, "Nicol Bolas, the Deceiver");
+    t.cast(P0, nb).go();
+    t.resolve_all();
+    let pw = t.named_on_battlefield("Nicol Bolas, the Deceiver")[0];
+    assert_eq!(t.counters(pw, "loyalty"), 6);
+    assert!(t.in_exile("Dark Intimations"));
+    let _ = di;
+}
+
+#[test]
+fn blue_loyal_raptor_gives_entering_dinosaurs_one_counter_of_each_kind_it_has() {
+    cr!("614.1c", "122.6");
+    supported("Blue, Loyal Raptor");
+    let mut t = TestGame::new(2);
+    let blue = t.battlefield(P0, "Blue, Loyal Raptor");
+    t.g.add_counters(Entity::Object(blue), "+1/+1", 2, None);
+    t.g.add_counters(Entity::Object(blue), "flying", 1, None);
+    let dino = t.enter(P0, "Ripjaw Raptor");
+    assert_eq!(t.counters(dino, "+1/+1"), 1);
+    assert_eq!(t.counters(dino, "flying"), 1);
+    // Not a Dinosaur: nothing.
+    let bears = t.enter(P0, "Grizzly Bears");
+    assert_eq!(t.counters(bears, "+1/+1"), 0);
+}
+
+#[test]
+fn naya_soulbeast_enters_with_the_total_mana_value_revealed() {
+    cr!("614.1c", "608.2h", "701.20a");
+    supported("Naya Soulbeast");
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Hill Giant");
+    t.library_top(P1, "Grizzly Bears");
+    t.lands(P0, "Forest", 8);
+    let s = t.hand(P0, "Naya Soulbeast");
+    t.cast(P0, s).go();
+    t.resolve_all();
+    let nb = t.named_on_battlefield("Naya Soulbeast")[0];
+    assert_eq!(t.counters(nb, "+1/+1"), 4 + 2);
+}
+
+#[test]
+fn dralnus_pet_kicked_enters_with_flying_and_the_discarded_cards_mana_value() {
+    cr!("614.1c", "702.33d");
+    supported("Dralnu's Pet");
+    let mut t = TestGame::new(2);
+    let wurm = t.hand(P0, "Craw Wurm");
+    t.lands(P0, "Island", 2);
+    t.lands(P0, "Swamp", 4);
+    let pet = t.hand(P0, "Dralnu's Pet");
+    t.answer_choose(P0, &[Entity::Object(wurm)]);
+    t.cast(P0, pet).kicked(true).go();
+    t.resolve_all();
+    let p = t.named_on_battlefield("Dralnu's Pet")[0];
+    assert_eq!(t.counters(p, "+1/+1"), 6);
+    assert!(t
+        .obj_now(p)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+    assert!(t.in_graveyard(P0, "Craw Wurm"));
+    // Not kicked: neither.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Island", 3);
+    let pet = t.hand(P0, "Dralnu's Pet");
+    t.cast(P0, pet).kicked(false).go();
+    t.resolve_all();
+    let p = t.named_on_battlefield("Dralnu's Pet")[0];
+    assert_eq!(t.counters(p, "+1/+1"), 0);
+    assert!(!t
+        .obj_now(p)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+}
+
+#[test]
+fn sin_removes_counters_from_chosen_permanents_and_enters_with_twice_that_many() {
+    cr!("614.12", "614.1c", "122.6", "122.8");
+    ruling!(
+        "Sin, Unending Cataclysm",
+        "Sin's last ability puts all counters that were on Sin onto the target creature, not just its +1/+1 counters."
+    );
+    supported("Sin, Unending Cataclysm");
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    t.g.add_counters(Entity::Object(mine), "+1/+1", 3, None);
+    let theirs = t.battlefield(P1, "Craw Wurm");
+    t.g.add_counters(Entity::Object(theirs), "-1/-1", 2, None);
+    let skipped = t.battlefield(P1, "Hill Giant");
+    t.g.add_counters(Entity::Object(skipped), "+1/+1", 1, None);
+    t.lands(P0, "Forest", 4);
+    t.lands(P0, "Island", 3);
+    let sin = t.hand(P0, "Sin, Unending Cataclysm");
+    t.cast(P0, sin).go();
+    t.answer(
+        P0,
+        DecisionKind::Entities,
+        mtg_engine::decision::Answer::Entities(vec![Entity::Object(mine), Entity::Object(theirs)]),
+    );
+    t.resolve_all();
+    let s = t.named_on_battlefield("Sin, Unending Cataclysm")[0];
+    assert_eq!(t.counters(s, "+1/+1"), 10);
+    assert_eq!(t.counters(mine, "+1/+1"), 0);
+    assert_eq!(t.counters(theirs, "-1/-1"), 0);
+    assert_eq!(t.counters(skipped, "+1/+1"), 1);
+    // When it dies, all its counters go on target creature you control.
+    t.g.add_counters(Entity::Object(s), "oil", 1, None);
+    t.lands(P0, "Swamp", 3);
+    let kill = t.hand(P0, "Murder");
+    t.cast(P0, kill).target(s).go();
+    t.answer_targets(P0, &[Entity::Object(mine)]);
+    t.resolve_all();
+    let s_now = t.g.current(s);
+    assert_eq!(t.g.obj(s_now).zone, mtg_engine::object::Zone::Library(P0));
+    assert_eq!(t.counters(mine, "+1/+1"), 10);
+    assert_eq!(t.counters(mine, "oil"), 1);
+}
+
+#[test]
+fn indominus_rex_enters_with_a_counter_per_keyword_among_discarded_cards() {
+    cr!("614.12", "614.1c", "122.1b");
+    ruling!(
+        "Indominus Rex, Alpha",
+        "Indominus Rex's first ability will give it only one of each kind of counter, even if you discard more than one creature card with the relevant ability."
+    );
+    supported("Indominus Rex, Alpha");
+    let mut t = TestGame::new(2);
+    let angel = t.hand(P0, "Serra Angel");
+    let drake = t.hand(P0, "Wind Drake");
+    let rats = t.hand(P0, "Typhoid Rats");
+    t.hand(P0, "Grizzly Bears");
+    t.lands(P0, "Forest", 3);
+    t.lands(P0, "Island", 2);
+    let rex = t.hand(P0, "Indominus Rex, Alpha");
+    let hand = t.hand_size(P0);
+    t.cast(P0, rex).go();
+    t.answer_choose(
+        P0,
+        &[
+            Entity::Object(angel),
+            Entity::Object(drake),
+            Entity::Object(rats),
+        ],
+    );
+    t.resolve_all();
+    let r = t.named_on_battlefield("Indominus Rex, Alpha")[0];
+    assert_eq!(t.counters(r, "flying"), 1);
+    assert_eq!(t.counters(r, "vigilance"), 1);
+    assert_eq!(t.counters(r, "deathtouch"), 1);
+    assert_eq!(t.counters(r, "trample"), 0);
+    // Cast it (-1), discarded three (-3), drew a card for each of its three counters.
+    assert_eq!(t.hand_size(P0), hand - 1 - 3 + 3);
+    assert!(t.in_graveyard(P0, "Serra Angel"));
+}
