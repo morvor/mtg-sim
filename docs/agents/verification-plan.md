@@ -170,6 +170,14 @@ The user resumed normal work, at the normal pace.
 
 mutation, cards-1 and cards-2 stay held. After the round, everyone waits for the user's go.
 
+### Second API-billed run (user, Nov 7)
+
+The user: "Our API credits have been refreshed, and we used a very appropriate $183 last time — let's repeat that process again, using the API credits to run a few rounds at the new, lower effort levels."
+
+- A launcher session runs each item as a headless child billed to `MTG_SIM_KEY`, with the same wrapper, trial check and $190 cap as Nov 1. Each child follows worker.md's effort rule: implementers at effort high, reviewers and investigations at max.
+- **Queue:** user-questions-nov7 first, then rulings batches in id order: P061 P067 P068 P069 P070 P071 P077 P078 P081 P083 P084 P086 P088 P090 P093 P095 P099 P100 P101 P103 P105 P106 ...
+- The subscription workers stay held until the user says go. When they resume, they take the pool after the last batch the launcher starts.
+
 ### Standard updates (user, Nov 5, late evening)
 
 After each round, or when the user asks, give the user a "standard update":
