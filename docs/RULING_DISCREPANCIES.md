@@ -108,6 +108,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: the destroyed artifact's controller draws a card, also when Rest in Peace exiles the artifact instead; no card is drawn for an indestructible artifact; Acolyte Hybrid's controller draws nothing for an opponent's artifact.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P060.tsv` (its "you"; the rest stays cited); register `ruling-contradicting-oracle-gives-way`; test `tests/rulings/r_p060_misc.rs` (`acolyte_hybrid_draws_only_if_the_artifact_was_destroyed`).
 
+### Sakashima's Protege: "only a creature" for "any permanent"
+- Kind: template error
+- Status: open for review
+- Ruling, Sakashima's Protege (2020-11-10): "If Sakashima's Protege somehow enters the battlefield at the same time as another creature, it can't become a copy of that creature. You may choose only a creature that's already on the battlefield and entered the battlefield this turn."
+- Conflicts with: the card's Oracle text, "You may have this creature enter as a copy of any permanent that entered this turn." (printed in Commander Legends, 2020-11-20: "You may have Sakashima's Protege enter the battlefield as a copy of any permanent that entered the battlefield this turn."), and its own ruling of the same day: "If Sakashima's Protege enters the battlefield as a copy of a planeswalker, it will enter with a number of loyalty counters on it equal to the loyalty printed in the lower right corner of the planeswalker. It won't copy the number of counters currently on that planeswalker." (2020-11-10).
+- Evidence: the ruling is the template of the Clone-like cards, which copy creatures: "If Progenitor Mimic somehow enters the battlefield at the same time as another creature, it can't become a copy of that creature. You may choose only a creature that's already on the battlefield." (2013-04-15), with 24 more cards worded so in the data (Mercurial Pretender 2014-07-18, Glasspool Mimic 2020-09-25, Sakashima of a Thousand Faces the same day as this one, 2020-11-10, ...), with "and entered the battlefield this turn" added. The Commander Legends release notes (2020-11-06; ormos mirror) print the same words under the card, so the data copied its source faithfully. Its first sentence agrees with the card: an object entering at the same time hasn't entered yet as the choice is made (CR 614.12, 707.5).
+- Engine: Sakashima's Protege may copy any permanent that entered this turn and is already on the battlefield, a noncreature one too (Glorious Anthem in the test), but not one entering with it.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P067.tsv` (its "You may choose only a creature" sentence; the first sentence stays cited); register `ruling-contradicting-oracle-gives-way`; test `tests/rulings/r_p067_misc.rs` (`sakashimas_protege_cant_copy_a_permanent_entering_with_it`).
+
 ## Copying errors
 
 ### Run Out of Town: "controller" for "owner"
@@ -524,6 +533,17 @@ decides whether they become a conflict case.
   `spatial_contortion_cant_be_played_in_pauper`). The notes are tournament policy and exempt
   (`docs/rulings-exemptions/rulings-P059.tsv`, `rulings-P079.tsv`, `rulings-P183.tsv`); a
   report would go to Scryfall.
+- **The Dragon-Kami Reborn // Dragon-Kami's Egg** (rulings-P067): "If Dragon-Kami's Egg and
+  one or more Dragons you control die at the same time, the ability of Dragon-Kami's Egg will
+  trigger once for each of them. Each time one of those abilities resolves, you'll be able to
+  cast a creature spell from among cards you own in exile with hatchling counters on them."
+  (2022-02-18) names "hatchling counters", where the card has hatching counters ("Exile one
+  of them face down with a hatching counter on it", "... from among cards you own in exile
+  with hatching counters on them"). The Kamigawa: Neon Dynasty release notes (2022-02-09;
+  ormos mirror) have the same word, so it's Wizards' typo, not a copying error; no kind fits
+  a misspelled counter name, and nothing in the ruling depends on it. It stays cited, tested
+  with hatching counters (`tests/rulings/r_p067_triggers.rs`,
+  `dragon_kamis_egg_triggers_for_each_and_casts_once_per_resolution`).
 - **Geier Reach Sanitarium and Kami of the Crescent Moon** (rulings-P061 review): two
   rulings whose words put an event at another moment than the CR does, while what they
   evidently mean is what the CR and the engine do, so both stay cited. Geier Reach
