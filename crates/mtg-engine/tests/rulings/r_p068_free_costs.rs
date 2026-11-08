@@ -146,7 +146,6 @@ impl Via {
                 let c = t.library_top(p0, spell);
                 t.answer_choose(p0, &[o(c)]);
                 t.answer_choose(p0, &[]);
-                t.answer_choose_moved(p0, &[o(c)]);
                 t.answer_yes(p0, true);
                 c
             }
