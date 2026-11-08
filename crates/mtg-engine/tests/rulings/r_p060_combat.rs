@@ -170,7 +170,7 @@ fn diviner_spirit_damage_redirected_to_its_controller_draws_twice() {
 
 #[test]
 fn a_player_named_twice_draws_twice_as_one_instruction() {
-    cr!("121.2", "121.2a", "614.9", "119.9");
+    cr!("121.2", "121.2a", "614.9", "119.9", "119.10");
     ruling!(
         "Diviner Spirit",
         "If Diviner Spirit deals combat damage to its controller (perhaps because damage was redirected), that player will draw twice that number of cards."
@@ -220,10 +220,13 @@ fn a_player_named_twice_draws_twice_as_one_instruction() {
     // damage to a player, you and that player each gain that much life.") with P0's
     // Leyline of Hope ("If you would gain life, you gain that much life plus 1 instead."):
     // Grizzly Bears' 2 combat damage redirected to P0 has P0 gain 4 life as one event,
-    // replaced once: 5 (two gains of 2 would be 3 each).
+    // replaced once: 5 (two gains of 2 would be 3 each), and Ajani's Pridemate ("Whenever
+    // you gain life, put a +1/+1 counter on this creature.") triggers once.
+    supported("Ajani's Pridemate");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Angel of Destiny");
     t.battlefield(P0, "Leyline of Hope");
+    let pridemate = t.battlefield(P0, "Ajani's Pridemate");
     let bears = t.battlefield(P0, "Grizzly Bears");
     attack_with(&mut t, &[(bears, pl(P1))]);
     t.lands(P1, "Plains", 1);
@@ -234,6 +237,53 @@ fn a_player_named_twice_draws_twice_as_one_instruction() {
     t.advance_to(P0, Step::EndOfCombat);
     t.resolve_all();
     assert_eq!((t.life(P0), t.life(P1)), (20 - 2 + 5, 20));
+    assert_eq!(t.counters(pridemate, "+1/+1"), 1);
+}
+
+#[test]
+fn a_player_named_twice_in_any_group_of_single_players_gets_one_instruction() {
+    cr!("121.2a", "119.10");
+    interp!("player-named-twice-draws-twice");
+    // Not tied to one wording: "you and the controller of those creatures each ..." (Nelly
+    // Borca's wording, compiled as a group of players) names P0 twice when those creatures
+    // are P0's. P0 draws four cards as one instruction (P1's Alms Collector replaces it
+    // once: each player draws one) and gains 4 life as one event (Leyline of Hope adds 1
+    // once).
+    let each = |verb: &str| {
+        crate::r_s01_common::custom_card(
+            "Shared Spoils",
+            "Creature — Spirit",
+            "{2}",
+            Some((2, 2)),
+            &format!(
+                "Whenever one or more creatures you control deal combat damage to a player, \
+                 you and the controller of those creatures each {verb}."
+            ),
+        )
+    };
+    // (instruction, P1's Alms Collector, P0's Leyline of Hope, cards drawn, P0's life)
+    for (verb, alms, leyline, drawn, life) in [
+        ("draw two cards", false, false, vec![4, 0], 20),
+        ("draw two cards", true, false, vec![1, 1], 20),
+        ("gain 2 life", false, false, vec![0, 0], 24),
+        ("gain 2 life", false, true, vec![0, 0], 25),
+    ] {
+        let mut t = TestGame::new(2);
+        let spirit = t.custom(P0, each(verb), mtg_engine::object::Zone::Battlefield);
+        if alms {
+            t.battlefield(P1, "Alms Collector");
+        }
+        if leyline {
+            t.battlefield(P0, "Leyline of Hope");
+        }
+        attack_with(&mut t, &[(spirit, pl(P1))]);
+        let before = libraries(&t);
+        t.advance_to(P0, Step::EndOfCombat);
+        t.resolve_all();
+        assert_eq!(t.life(P1), 18, "{verb}");
+        assert_eq!(drawn_since(&t, &before), drawn, "{verb} {alms}");
+        assert_eq!(t.life(P0), life, "{verb} {leyline}");
+    }
 }
 
 #[test]

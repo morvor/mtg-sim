@@ -62,11 +62,12 @@ pub fn draw_order(g: &Game, mut players: Vec<PlayerId>) -> Vec<PlayerId> {
 }
 
 /// How many times each player is named in "you and [player] each draw ..." (a group of
-/// single players). A player named twice is given one instruction to do it twice over: to
-/// draw twice that many cards ("you and that player each draw that many cards" when that
-/// player is you: Diviner Spirit ruling), or to gain twice that much life as one event
-/// (Angel of Destiny ruling); interpretation `player-named-twice-draws-twice`. `None` for
-/// any other group of players, each of whom is named once.
+/// players each named by "you" or by a reference: "you and that player", "you and the
+/// controller of those creatures"). A player named twice is given one instruction to do it
+/// twice over: to draw twice that many cards ("you and that player each draw that many
+/// cards" when that player is you: Diviner Spirit ruling), or to gain twice that much life
+/// as one event (Angel of Destiny ruling); interpretation `player-named-twice-draws-twice`.
+/// `None` for any other group of players ("each player"), each of whom is named once.
 pub fn times_named(g: &Game, who: &PlayerRef, ctx: &Ctx) -> Option<Vec<(PlayerId, u32)>> {
     let PlayerRef::Each(PlayerFilter::Or(fs)) = who else {
         return None;

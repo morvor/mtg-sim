@@ -121,19 +121,33 @@ fn yosei_taps_the_permanents_of_a_player_who_became_an_illegal_target() {
 }
 
 /// P1 has a Drop Tower (an Attraction) and a Grizzly Bears card in hand; P0 casts Down for
-/// Repairs targeting P1 and the Drop Tower, and `respond` happens before it resolves.
-/// Returns (game, Drop Tower, Bears card).
-fn down_for_repairs(respond: impl FnOnce(&mut TestGame, ObjectId)) -> (TestGame, ObjectId, ObjectId) {
+/// Repairs targeting P1 and (if `tower_too`) the Drop Tower, and `respond` happens before
+/// it resolves. Returns (game, Drop Tower, Bears card, whether the spell resolved).
+fn down_for_repairs(
+    tower_too: bool,
+    respond: impl FnOnce(&mut TestGame, ObjectId),
+) -> (TestGame, ObjectId, ObjectId, bool) {
     let mut t = TestGame::new(2);
     let tower = t.battlefield(P1, "Drop Tower");
     let bears = t.hand(P1, "Grizzly Bears");
     let card = t.hand(P0, "Down for Repairs");
     give_mana_for(&mut t, P0, "Down for Repairs");
     t.answer_choose(P0, &[obj(bears)]);
-    t.cast(P0, card).target(pl(P1)).target(tower).go();
+    let cast = t.cast(P0, card).target(pl(P1));
+    if tower_too {
+        cast.target(tower).go();
+    } else {
+        cast.go();
+    }
     respond(&mut t, tower);
     t.resolve_all();
-    (t, tower, bears)
+    assert!(t.in_graveyard(P0, "Down for Repairs"));
+    let resolved = t
+        .g
+        .turn_events
+        .iter()
+        .any(|e| matches!(e, events::Event::SpellResolved { .. }));
+    (t, tower, bears, resolved)
 }
 
 #[test]
@@ -150,19 +164,36 @@ fn down_for_repairs_destroys_the_attraction_of_a_player_who_became_an_illegal_ta
     // P1 gains hexproof (Leyline of Sanctity) in response: the Attraction is still one
     // "that player controls", a legal target, and is destroyed (put into the junkyard);
     // P1, illegal, discards nothing.
-    let (t, tower, bears) = down_for_repairs(|t, _| player_hexproof(t, P1));
+    let (t, tower, bears, resolved) = down_for_repairs(true, |t, _| player_hexproof(t, P1));
+    assert!(resolved);
     assert!(!t.on_battlefield(tower));
     assert_eq!(attraction_cards::junkyard(&t.g, P1).len(), 1);
     assert_eq!(t.zone(bears), Zone::Hand(P1));
     // The Attraction leaves first: P1, still legal, discards the chosen card.
-    let (t, _, bears) = down_for_repairs(|t, tower| {
+    let leaves = |t: &mut TestGame, tower: ObjectId| {
         t.g.destroy(tower, None);
         t.settle();
-    });
+    };
+    let (t, _, bears, resolved) = down_for_repairs(true, leaves);
+    assert!(resolved);
     assert_eq!(t.zone(bears), Zone::Graveyard(P1));
     // Both legal: both are affected.
-    let (t, tower, bears) = down_for_repairs(|_, _| {});
+    let (t, tower, bears, _) = down_for_repairs(true, |_, _| {});
     assert!(!t.on_battlefield(tower));
+    assert_eq!(t.zone(bears), Zone::Graveyard(P1));
+    // "If both targets become illegal, the spell won’t resolve and none of its effects
+    // will happen.": P1 gains hexproof and the Attraction leaves.
+    let (t, _, bears, resolved) = down_for_repairs(true, |t, tower| {
+        player_hexproof(t, P1);
+        leaves(t, tower);
+    });
+    assert!(!resolved);
+    assert_eq!(t.zone(bears), Zone::Hand(P1));
+    // "the Attraction, if any": cast with no Attraction targeted, P1 still discards and
+    // the Drop Tower stays.
+    let (t, tower, bears, resolved) = down_for_repairs(false, |_, _| {});
+    assert!(resolved);
+    assert!(t.on_battlefield(tower));
     assert_eq!(t.zone(bears), Zone::Graveyard(P1));
 }
 
