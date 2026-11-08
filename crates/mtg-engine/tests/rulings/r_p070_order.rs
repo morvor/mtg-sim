@@ -159,6 +159,34 @@ fn kefka_casts_one_at_a_time_last_resolves_first() {
 }
 
 #[test]
+fn kefka_exiles_one_card_at_random_from_each_opponents_graveyard() {
+    cr!("701.13a");
+    ruling!(
+        "Kefka, Dancing Mad",
+        "Cards you choose not to cast this way (or can't cast this way) remain in exile."
+    );
+    supported("Kefka, Dancing Mad");
+    // Three opponents with three lands each in their graveyards (cards that can't be
+    // cast); P0's own graveyard isn't touched.
+    let mut t = TestGame::new(4);
+    t.battlefield(P0, "Kefka, Dancing Mad");
+    let own = t.graveyard(P0, "Forest");
+    for p in [P1, P2, P3] {
+        for _ in 0..3 {
+            t.graveyard(p, "Island");
+        }
+    }
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    for p in [P1, P2, P3] {
+        let in_exile = t.g.exile.iter().filter(|c| t.g.obj(**c).owner == p).count();
+        assert_eq!(in_exile, 1, "{p:?}: {}", t.dump_log());
+        assert_eq!(t.g.player(p).graveyard.len(), 2, "{p:?}");
+    }
+    assert_eq!(t.zone(own), Zone::Graveyard(P0));
+}
+
+#[test]
 fn izzet_chemister_casts_in_any_order_later_spells_target_earlier_ones() {
     cr!("608.2g", "601.2c", "115.1");
     ruling!(
@@ -376,7 +404,7 @@ fn forgers_foundry_casts_during_its_resolution_only() {
 
 #[test]
 fn forgers_foundry_trigger_uses_the_chosen_x() {
-    cr!("202.3e", "107.3c", "603.2");
+    cr!("202.3e", "107.3a", "603.2");
     ruling!(
         "Forger's Foundry",
         "When casting an instant or sorcery spell with {X} in its mana cost using the mana added by Forger's Foundry, use the value of X chosen when you cast that spell to determine whether or not the delayed triggered ability triggers."

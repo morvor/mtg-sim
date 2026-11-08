@@ -178,7 +178,7 @@ fn elite_arcanist_copy_pays_additional_costs_but_no_alternative_cost() {
 
 #[test]
 fn elite_arcanist_x_is_the_exiled_cards_mana_value() {
-    cr!("107.3e", "601.2f");
+    cr!("107.3c", "602.2b");
     ruling!(
         "Elite Arcanist",
         "You don't choose the value of {X} in the activation cost of Elite Arcanist's ability. It's defined by the mana value of the exiled instant card."

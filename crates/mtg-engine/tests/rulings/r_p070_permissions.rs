@@ -713,7 +713,7 @@ fn discover_the_impossible_casts_an_instant_half_of_a_card_that_isnt() {
 
 #[test]
 fn codie_lets_you_cast_an_instant_face_of_a_permanent_mdfc() {
-    cr!("712.11b", "712.11c", "101.2");
+    cr!("712.11b", "712.11c", "601.3");
     ruling!(
         "Codie, Vociferous Codex",
         "While you control Codie (as much as anyone can really “control” Codie), you may cast any face of a modal double-faced card that’s an instant or sorcery face, even if the other face is a permanent face."

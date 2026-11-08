@@ -393,7 +393,7 @@ fn tibalts_trickery_on_an_uncounterable_spell_does_the_rest() {
 
 #[test]
 fn spelljack_works_on_a_spell_cast_with_flashback() {
-    cr!("702.34a", "614.1a", "616.1");
+    cr!("702.34a", "614.1a");
     ruling!(
         "Spelljack",
         "This spell can be used on a spell cast using Flashback."
@@ -647,32 +647,44 @@ fn opposition_agent_cant_find_cards_the_search_doesnt_ask_for() {
 #[test]
 fn opposition_agent_controller_cant_make_the_player_concede() {
     cr!("723.5", "723.6");
-    ruling!(
-        "Opposition Agent",
-        "While controlling an opponent, you can't make any choices or decisions for that player related to tournament rules. You can't make them concede or have them agree to an intentional draw."
-    );
+    // The ruling's other parts (decisions called for by the tournament rules, an
+    // intentional draw) are tournament policy, exempted in rulings-P070.tsv.
+    ruling!("Opposition Agent", "You can't make them concede");
     supported("Opposition Agent");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Opposition Agent");
     let lib = stack_library(&mut t, P1, &["Forest", "Forest"]);
     t.set_step(P1, Step::PrecombatMain);
     let rg = t.hand(P1, "Rampant Growth");
-    let from = t.asked().len();
     // P0 makes P1's choice during the search (the second Forest; P1 would take the
-    // first); P0 also tries to concede for P1.
+    // first).
     t.answer_choose(P0, &[o(lib[1])]);
     t.answer_choose(P1, &[o(lib[0])]);
-    t.answer(P0, DecisionKind::Priority, Answer::Action(Action::Concede));
     cast_paid(&mut t, P1, rg, &[]);
     t.resolve();
     assert!(exiled(&t, lib[1]), "P0 chose: {}", t.dump_log());
     assert_eq!(t.zone(lib[0]), Zone::Library(P1));
-    // No decision made for P1 offered a concession, and P1 is still in the game.
-    assert!(t.asked()[from..].iter().all(|(_, d)| match d {
-        Decision::Priority { actions } => !actions.contains(&Action::Concede),
-        _ => true,
-    }));
-    assert!(!t.has_lost(P1));
+    // While P1 is searching, a decision for P1 that would offer a concession reaches P0
+    // without it, and P0's concession for P1 is ignored.
+    t.g.player_control.searching.push(P1);
+    let from = t.asked().len();
+    t.answer(P0, DecisionKind::Priority, Answer::Action(Action::Concede));
+    let answer = t.g.ask(
+        P1,
+        Decision::Priority {
+            actions: vec![Action::Pass, Action::Concede],
+        },
+    );
+    t.g.player_control.searching.retain(|p| *p != P1);
+    match &t.asked()[from..] {
+        [(p, Decision::Priority { actions })] => {
+            assert_eq!(*p, P1);
+            assert!(!actions.contains(&Action::Concede), "{actions:?}");
+        }
+        other => panic!("{other:?}"),
+    }
+    assert_ne!(answer, Answer::Action(Action::Concede));
+    assert!(!t.has_lost(P1) && !t.has_lost(P0));
     // P1 itself may concede.
     t.g.turn.priority = Some(P1);
     let _ = t.g.perform_action(P1, Action::Concede);
@@ -851,7 +863,7 @@ fn brass_tunnel_grinder_discards_any_number_even_none() {
 
 #[test]
 fn kheru_spellsnatcher_can_counter_your_own_spell_and_cast_it_later() {
-    cr!("702.37e", "608.2b");
+    cr!("702.37e", "115.1d");
     ruling!(
         "Kheru Spellsnatcher",
         "You can target a spell you control with Kheru Spellsnatcher's triggered ability. This will give you the ability to cast the card later without paying its mana cost."
