@@ -993,6 +993,11 @@ ruling-conflicts-2.
   (`run_away_together_compares_the_other_creature_with_an_illegal_one`). Gaea's Blessing and Witness the Future
   (`target_player_shuffles_target_cards_does_nothing_if_the_player_is_illegal`) also pin the entry: with the
   player illegal they still resolve (a draw, a look at four) only because the cards stay legal targets.
+  Decided by the user Nov 7 (work item user-questions-nov7, Part A): asked whether attachment differs from
+  control, the investigation found nothing in the CR that makes the kind of relationship matter, so the entry is
+  decided as recommended and Fiery Annihilation's ruling is set aside as inconsistent (exempt in
+  `docs/rulings-exemptions/rulings-P047.tsv`; Down for Repairs' ruling now cited too, by
+  `down_for_repairs_destroys_the_attraction_of_a_player_who_became_an_illegal_target`).
 - **Stone Calendar** (rulings-P033). Ruling 2004-10-04: "You may choose not to apply Stone Calendar’s cost
   reduction effect." Oracle: "Spells you cast cost {1} less to cast." Resolved by ruling-conflicts-4, case 2 (B,
   outdated): the ruling glosses an "up to" Oracle wording (Forge's card script, 2011-12-30: "Spells you cast cost
