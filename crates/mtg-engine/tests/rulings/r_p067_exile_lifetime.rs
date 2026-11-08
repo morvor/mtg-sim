@@ -47,7 +47,7 @@ fn ornate_kanzashi_exiles_face_up_and_the_card_stays_after_it_leaves() {
 
 #[test]
 fn plargg_and_nassari_cards_not_cast_including_lands_remain_exiled() {
-    cr!("608.2g", "305.9");
+    cr!("608.2g", "305.1");
     ruling!(
         "Plargg and Nassari",
         "Cards not cast this way, including any land cards, remain in exile."
@@ -153,7 +153,7 @@ fn mindleecher_casting_the_card_makes_it_leave_exile_once() {
 
 #[test]
 fn crabomination_cant_play_lands_and_uncast_cards_remain_exiled() {
-    cr!("305.9", "608.2g");
+    cr!("305.1", "608.2g");
     ruling!(
         "Crabomination",
         "Crabomination's triggered ability doesn't allow you to play land cards, and as such, any land cards exiled with Crabomination's triggered ability will remain in exile. If you choose not to cast any of the exiled nonland cards (either because you can't or don't want to), those cards will remain in exile as well."

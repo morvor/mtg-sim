@@ -121,9 +121,12 @@ fn free_casts_pay_kicker_and_mandatory_additional_costs_but_no_alternative_costs
         t.resolve_all();
         assert!(t.in_graveyard(P1, "Llanowar Elves"), "{which}: {}", t.dump_log());
         assert_eq!(t.hand_size(P1), hand + 2, "{which}");
-        // Invigorate: its alternative cost isn't offered.
+        // Invigorate: its alternative cost ("If you control a Forest, rather than pay this
+        // spell's mana cost, you may have an opponent gain 3 life"), available to P1 with a
+        // Forest, isn't offered.
         let mut t = TestGame::new(2);
         let elf = t.battlefield(P1, "Llanowar Elves");
+        t.battlefield(P1, "Forest");
         t.answer_yes(P1, true);
         t.answer_targets(P1, &[o(elf)]);
         let from = t.asked().len();
@@ -131,7 +134,7 @@ fn free_casts_pay_kicker_and_mandatory_additional_costs_but_no_alternative_costs
         t.resolve_all();
         assert!(!asked_method(&t, from), "{which}");
         assert_eq!(t.pt(elf), (5, 5), "{which}: {}", t.dump_log());
-        assert_eq!(t.life(P0), if which == "tibalt" { 20 } else { 20 }, "{which}");
+        assert_eq!(t.life(P0), 20, "{which}: no opponent gained 3 life");
     }
 }
 

@@ -262,7 +262,7 @@ fn extraordinary_journey_draws_for_any_creature_cast_from_exile() {
 
 #[test]
 fn jace_architect_of_thought_searches_each_library_separately() {
-    cr!("701.23a", "701.23b");
+    cr!("701.23a", "701.23e");
     ruling!(
         "Jace, Architect of Thought",
         "For each library, the search is complete only when you explicitly say it is. For example, you can look through one player's library, set that library down, look at another player's library, choose a nonland card in the first library, then choose a nonland card in the second library. Don't reveal any cards from those libraries to any other player until you exile them."

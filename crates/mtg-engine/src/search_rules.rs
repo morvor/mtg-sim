@@ -138,11 +138,13 @@ struct Found {
 }
 
 /// The context of one searcher's search: "their library" in "each player searches their
-/// library" is each searcher's (the iterated player). A single searcher inside an outer
-/// "for each player" ("For each player, search that player's library for a nonland card",
-/// Jace, Architect of Thought) keeps the outer iterated player.
+/// library" or "any number of target players may each search their library" is each
+/// searcher's (the iterated player). A single searcher inside an outer "for each player"
+/// ("For each player, search that player's library for a nonland card", Jace, Architect of
+/// Thought) keeps the outer iterated player.
 fn searcher_ctx(spec: &SearchSpec, ctx: &Ctx, p: PlayerId) -> Ctx {
     let mut c = ctx.clone();
+    // Searchers that can be several players: each searches as the iterated player.
     let each = matches!(
         spec.who,
         PlayerRef::EachPlayer
@@ -150,6 +152,8 @@ fn searcher_ctx(spec: &SearchSpec, ctx: &Ctx, p: PlayerId) -> Ctx {
             | PlayerRef::EachOtherPlayer
             | PlayerRef::Each(_)
             | PlayerRef::TriggerPlayers
+            | PlayerRef::Target(_)
+            | PlayerRef::Var(_)
     );
     if each || ctx.iter_player.is_none() {
         c.iter_player = Some(p);
