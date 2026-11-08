@@ -231,7 +231,7 @@ fn the_infamous_cruelclaw_casts_while_its_ability_resolves() {
 
 #[test]
 fn duelists_flame_trigger_casts_while_it_resolves() {
-    cr!("608.2g", "302.1", "702.19c");
+    cr!("608.2g", "302.1", "702.19b");
     ruling!(
         "Duelist's Flame",
         "You cast the exiled card while the triggered ability ability is resolving and still on the stack. You can't wait to cast it later in the turn. Timing restrictions based on the card's type are ignored."

@@ -72,7 +72,7 @@ fn connect(t: &mut TestGame, attacker: ObjectId) {
 
 #[test]
 fn thief_of_sanity_card_stays_castable_by_you_only() {
-    cr!("611.2a", "406.3", "108.4");
+    cr!("611.2a", "406.3");
     ruling!(
         "Thief of Sanity",
         "You can still cast the exiled card if Thief of Sanity leaves the battlefield or leaves your control. If another player gains control of Thief of Sanity, that player can't cast the exiled card."
@@ -395,7 +395,7 @@ fn hedonists_trove_lands_need_a_land_play() {
 
 #[test]
 fn ornate_kanzashi_cards_from_previous_turns_cant_be_played() {
-    cr!("611.2a", "500.1");
+    cr!("611.2a");
     ruling!(
         "Ornate Kanzashi",
         "You can’t play cards you exiled with Ornate Kanzashi on previous turns."
@@ -417,7 +417,7 @@ fn ornate_kanzashi_cards_from_previous_turns_cant_be_played() {
 
 #[test]
 fn robber_of_the_rich_card_castable_whatever_became_of_the_rogue() {
-    cr!("611.2b", "506.4", "608.2h");
+    cr!("601.3", "506.4");
     ruling!(
         "Robber of the Rich",
         "You can cast the exiled card if the Rogue that attacked is still in combat, if it's left combat, if it's left the battlefield, or even if combat is over."
@@ -450,7 +450,7 @@ fn robber_of_the_rich_card_castable_whatever_became_of_the_rogue() {
 
 #[test]
 fn tinybones_plays_cards_a_previous_tinybones_stashed() {
-    cr!("400.7", "611.2c");
+    cr!("604.1", "122.1");
     ruling!(
         "Tinybones, Bauble Burglar",
         "Tinybones's second ability allows you to play all exiled cards you don't own with stash counters on them  , regardless of whether they were put there by the Tinybones you currently control or a Tinybones that was previously on the battlefield."
@@ -475,7 +475,7 @@ fn tinybones_plays_cards_a_previous_tinybones_stashed() {
 
 #[test]
 fn fiend_of_the_shadows_card_can_only_be_played() {
-    cr!("305.1", "400.1", "702.29a");
+    cr!("702.29a", "305.1");
     ruling!(
         "Fiend of the Shadows",
         "You may only play the card, meaning play it as a land or cast it as a spell. It's not in your hand. You can't discard it, activate its cycling abilities, and so on."
@@ -687,7 +687,7 @@ fn knowledge_pool_card_can_be_kicked() {
 
 #[test]
 fn discover_the_impossible_casts_an_instant_half_of_a_card_that_isnt() {
-    cr!("715.3", "601.3e", "608.2g");
+    cr!("715.3a", "406.3b", "608.2g");
     ruling!(
         "Discover the Impossible",
         "You may cast the card you exile with Discover the Impossible as long as the resulting spell is an instant spell with mana value 2 or less, even if the card you exiled doesn't match that criteria. This may happen if you exile a split card, a modal double-faced card, an adventurer card, or similar."
@@ -713,7 +713,7 @@ fn discover_the_impossible_casts_an_instant_half_of_a_card_that_isnt() {
 
 #[test]
 fn codie_lets_you_cast_an_instant_face_of_a_permanent_mdfc() {
-    cr!("712.11", "101.2", "601.3");
+    cr!("712.11b", "712.11c", "101.2");
     ruling!(
         "Codie, Vociferous Codex",
         "While you control Codie (as much as anyone can really “control” Codie), you may cast any face of a modal double-faced card that’s an instant or sorcery face, even if the other face is a permanent face."

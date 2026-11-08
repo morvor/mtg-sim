@@ -151,7 +151,7 @@ fn laughing_jasper_flint_counts_outlaws_as_its_ability_resolves() {
 
 #[test]
 fn evolving_door_counts_the_colors_the_creature_last_had() {
-    cr!("113.7a", "707.2", "701.23a");
+    cr!("608.2h", "707.2", "701.23a");
     ruling!(
         "Evolving Door",
         "You count the colors of the sacrificed creature as it last existed on the battlefield. Notably, if it was a double-faced card or a copy of another creature, that may be different from what its colors are in the graveyard."
@@ -192,7 +192,7 @@ fn evolving_door_counts_the_colors_the_creature_last_had() {
 
 #[test]
 fn maestros_gift_token_copies_only_the_copiable_values() {
-    cr!("707.2", "111.4", "707.4");
+    cr!("707.2", "110.5", "702.122a");
     ruling!(
         "Inspired Skypainter // Maestro's Gift",
         "The token created by Maestro's Gift copies exactly what was printed on the original creature and nothing else (unless that permanent is copying something else or is a token; see below). It doesn't copy whether that permanent is tapped or untapped, whether it has any counters on it or Auras and Equipment attached to it, or any non-copy effects that have changed its power, toughness, types, color, or so on. If it is a Vehicle, it is not crewed."
@@ -248,7 +248,7 @@ fn maestros_gift_token_copies_only_the_copiable_values() {
 
 #[test]
 fn restore_relic_token_copies_the_card_not_the_permanent_it_was() {
-    cr!("707.2", "400.7", "111.4");
+    cr!("707.2", "400.7");
     ruling!(
         "Lorehold Archivist // Restore Relic",
         "The token created by Restore Relic copies exactly what was printed on the original card and nothing else. It doesn't copy any information about the object the card was before it was put into your graveyard."
@@ -359,7 +359,7 @@ fn throes_of_chaos_does_nothing_as_it_resolves() {
 
 #[test]
 fn tibalts_trickery_on_an_uncounterable_spell_does_the_rest() {
-    cr!("101.2", "608.2b", "701.6b");
+    cr!("101.2", "701.6a", "608.2c");
     ruling!(
         "Tibalt's Trickery",
         "Tibalt's Trickery can target a spell that can't be countered. If Tibalt's Trickery resolves, the target spell won't be countered, but all of the other effects will still happen."
@@ -622,7 +622,7 @@ fn thada_adel_searches_and_shuffles_even_finding_nothing() {
 
 #[test]
 fn opposition_agent_cant_find_cards_the_search_doesnt_ask_for() {
-    cr!("723.5", "701.23a", "701.23d");
+    cr!("723.5", "701.23a");
     ruling!(
         "Opposition Agent",
         "You can't have the player find cards in their library that aren't asked for by the search instruction. For example, if the opponent is searching their library for a basic land card, you can't have them find a different card, such as a creature card."
@@ -645,8 +645,8 @@ fn opposition_agent_cant_find_cards_the_search_doesnt_ask_for() {
 }
 
 #[test]
-fn opposition_agent_controller_cant_make_tournament_or_concession_decisions() {
-    cr!("723.5b", "723.6");
+fn opposition_agent_controller_cant_make_the_player_concede() {
+    cr!("723.5", "723.6");
     ruling!(
         "Opposition Agent",
         "While controlling an opponent, you can't make any choices or decisions for that player related to tournament rules. You can't make them concede or have them agree to an intentional draw."
@@ -654,21 +654,29 @@ fn opposition_agent_controller_cant_make_tournament_or_concession_decisions() {
     supported("Opposition Agent");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Opposition Agent");
-    t.g.search_finds_by_default = true;
-    let forest = t.library_top(P1, "Forest");
+    let lib = stack_library(&mut t, P1, &["Forest", "Forest"]);
     t.set_step(P1, Step::PrecombatMain);
     let rg = t.hand(P1, "Rampant Growth");
     let from = t.asked().len();
-    // P0 controls P1 during the search: the only decisions are the search's own.
+    // P0 makes P1's choice during the search (the second Forest; P1 would take the
+    // first); P0 also tries to concede for P1.
+    t.answer_choose(P0, &[o(lib[1])]);
+    t.answer_choose(P1, &[o(lib[0])]);
     t.answer(P0, DecisionKind::Priority, Answer::Action(Action::Concede));
     cast_paid(&mut t, P1, rg, &[]);
     t.resolve();
-    assert!(exiled(&t, forest), "{}", t.dump_log());
-    assert!(!t.has_lost(P1));
+    assert!(exiled(&t, lib[1]), "P0 chose: {}", t.dump_log());
+    assert_eq!(t.zone(lib[0]), Zone::Library(P1));
+    // No decision made for P1 offered a concession, and P1 is still in the game.
     assert!(t.asked()[from..].iter().all(|(_, d)| match d {
         Decision::Priority { actions } => !actions.contains(&Action::Concede),
         _ => true,
     }));
+    assert!(!t.has_lost(P1));
+    // P1 itself may concede.
+    t.g.turn.priority = Some(P1);
+    let _ = t.g.perform_action(P1, Action::Concede);
+    assert!(t.has_lost(P1));
 }
 
 #[test]
@@ -797,7 +805,7 @@ fn grinning_totem_finds_any_card_and_must_find_one() {
 
 #[test]
 fn kotose_may_leave_cards_with_the_same_name() {
-    cr!("701.23b", "701.23d");
+    cr!("701.23b");
     ruling!(
         "Kotose, the Silent Spider",
         "You may leave any cards with the same name as the target card in the zones they're in if you want."
