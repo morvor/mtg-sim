@@ -6,7 +6,7 @@
 //! double-faced card. A card is a choice if any face or half it could be cast as has
 //! them, and it's then cast as one of those.
 
-use crate::ability::{Filter, Sel, ZoneKind};
+use crate::ability::{Filter, Sel, TargetGroup, TotalStat, ZoneKind};
 use crate::eval::Ctx;
 use crate::game::Game;
 use crate::object::FaceState;
@@ -115,7 +115,69 @@ pub fn choose_cards_to_cast(
     // 608.2g; interpretation casting.cast-order-as-chosen).
     faces.retain(|(o, _)| picked.contains(o));
     faces.sort_by_key(|(o, _)| picked.iter().position(|x| x == o));
+    // "Any number of spells with total mana value 10 or less" (Primeval Spawn): the cards
+    // chosen must fit within the total as the spells they'd be cast as, the cheapest of
+    // each (CR 601.3e); those that don't, in choice order, aren't cast.
+    if let Some(limit) = total_mana_value_limit(g, what, ctx) {
+        let mut total = 0;
+        faces.retain(|c| {
+            let m = cheapest(g, c);
+            (total + m <= limit).then(|| total += m).is_some()
+        });
+    }
     Some(faces)
+}
+
+/// The limit of a choice of "spells with total mana value N or less" (`what`), if it is
+/// one.
+pub fn total_mana_value_limit(g: &Game, what: &Sel, ctx: &Ctx) -> Option<i64> {
+    let Sel::Choose { filter, .. } = what else {
+        return None;
+    };
+    crate::relational::groups_of(filter)
+        .iter()
+        .find_map(|grp| match grp {
+            TargetGroup::TotalAtMost(TotalStat::ManaValue, v) => Some(g.eval_value(v, ctx)),
+            _ => None,
+        })
+}
+
+/// The mana value of `card` cast as `face` (X is 0: these spells are cast without paying
+/// their mana costs, CR 107.3b).
+fn face_mana_value(g: &Game, card: ObjectId, face: FaceState) -> i64 {
+    g.face_characteristics(card, face)
+        .mana_cost
+        .as_ref()
+        .map_or(0, |m| m.mana_value_with_x(0) as i64)
+}
+
+/// The smallest mana value of the spells a card could be cast as.
+fn cheapest(g: &Game, (card, faces): &(ObjectId, Vec<FaceState>)) -> i64 {
+    faces
+        .iter()
+        .map(|f| face_mana_value(g, *card, *f))
+        .min()
+        .unwrap_or(0)
+}
+
+/// The faces `card` may be cast as within a total mana value `limit` of which `spent` is
+/// used by the spells cast so far, leaving room for the cheapest spells of the cards
+/// still to be cast (`later`): "you may cast the back face of a modal double-faced card
+/// or either face of a split card as long as the spells you are casting together have a
+/// total mana value of 10 or less" (Primeval Spawn rulings, CR 601.3e).
+pub fn faces_within_total(
+    g: &Game,
+    limit: i64,
+    spent: i64,
+    card: ObjectId,
+    faces: Vec<FaceState>,
+    later: &[(ObjectId, Vec<FaceState>)],
+) -> Vec<FaceState> {
+    let rest: i64 = later.iter().map(|c| cheapest(g, c)).sum();
+    faces
+        .into_iter()
+        .filter(|f| spent + face_mana_value(g, card, *f) + rest <= limit)
+        .collect()
 }
 
 /// The zones (other than the battlefield) a choice of cards to cast is made from: one

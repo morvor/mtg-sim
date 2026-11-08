@@ -2383,7 +2383,11 @@ impl Game {
                         self.ask_order(p, "Order the spells to cast (first cast first)", names);
                     objs = order.into_iter().map(|i| objs[i]).collect();
                 }
-                for o in objs {
+                // "Spells with total mana value N or less": each is cast as a spell that
+                // keeps the total within it (CR 601.3e).
+                let limit = crate::spell_choice::total_mana_value_limit(self, what, ctx);
+                let mut spent = 0i64;
+                for (k, o) in objs.clone().into_iter().enumerate() {
                     if *optional && !self.ask_yes_no(p, Some(o), "Cast this card?", true) {
                         continue;
                     }
@@ -2397,10 +2401,31 @@ impl Game {
                     } else {
                         CastMethod::Normal
                     };
-                    let only = chosen
-                        .as_ref()
-                        .and_then(|v| v.iter().find(|(x, _)| *x == o))
-                        .map(|(_, f)| f.clone());
+                    let faces_of = |x: ObjectId| {
+                        chosen
+                            .as_ref()
+                            .and_then(|v| v.iter().find(|(y, _)| *y == x))
+                            .map(|(_, f)| f.clone())
+                    };
+                    let mut only = faces_of(o);
+                    if let (Some(limit), Some(f)) = (limit, only.as_ref()) {
+                        let later: Vec<_> = objs[k + 1..]
+                            .iter()
+                            .filter_map(|x| faces_of(*x).map(|f| (*x, f)))
+                            .collect();
+                        let f = crate::spell_choice::faces_within_total(
+                            self,
+                            limit,
+                            spent,
+                            o,
+                            f.clone(),
+                            &later,
+                        );
+                        if f.is_empty() {
+                            continue;
+                        }
+                        only = Some(f);
+                    }
                     if let Ok(spell) = crate::casting::cast_during_resolution_as(
                         self,
                         p,
@@ -2408,6 +2433,7 @@ impl Game {
                         method,
                         only.as_deref(),
                     ) {
+                        spent += self.mana_value_of(spell) as i64;
                         cast.push(Entity::Object(spell));
                     }
                 }
