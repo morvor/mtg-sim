@@ -2408,13 +2408,18 @@ impl Game {
                             .map(|(_, f)| f.clone())
                     };
                     let mut only = faces_of(o);
-                    if let (Some(limit), Some(f)) = (limit, only.take()) {
+                    if let (Some(limit), Some(f)) = (limit, only.as_ref()) {
                         let later: Vec<_> = objs[k + 1..]
                             .iter()
                             .filter_map(|x| faces_of(*x).map(|f| (*x, f)))
                             .collect();
                         let f = crate::spell_choice::faces_within_total(
-                            self, limit, spent, o, f, &later,
+                            self,
+                            limit,
+                            spent,
+                            o,
+                            f.clone(),
+                            &later,
                         );
                         if f.is_empty() {
                             continue;
