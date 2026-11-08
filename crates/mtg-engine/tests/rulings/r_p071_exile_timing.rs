@@ -135,7 +135,7 @@ fn savvy_trader_land_is_a_land_play() {
 
 #[test]
 fn savvy_trader_card_stays_playable_by_you_after_it_leaves_or_changes_control() {
-    cr!("610.3", "611.2a", "601.3");
+    cr!("601.3", "109.5", "611.2a");
     ruling!(
         "Savvy Trader",
         "You may play the card exiled with Savvy Trader’s first ability even if Savvy Trader leaves the battlefield. If another player gains control of Savvy Trader, that player can’t play the card, and you still can."
@@ -360,7 +360,7 @@ fn durnan_card_pays_its_cost_reduced_by_undaunted_with_normal_timing() {
 
 #[test]
 fn shared_fate_cards_need_the_right_colors_of_mana() {
-    cr!("601.2f", "601.2h", "121.6");
+    cr!("601.2f", "601.2h");
     ruling!(
         "Shared Fate",
         "You need to pay the costs of any cards you play from the Exile zone. This could be a problem if you don't have the right colors of mana available."

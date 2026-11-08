@@ -35,7 +35,7 @@ fn activatable(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
 
 #[test]
 fn abandoned_sarcophagus_tokens_and_permanents_without_cycling_go_to_the_graveyard() {
-    cr!("614.1a", "614.12", "111.7", "702.29b");
+    cr!("614.1a", "111.7", "702.29b");
     ruling!(
         "Abandoned Sarcophagus",
         "A token permanent with cycling will go to your graveyard before ceasing to exist. It won't be exiled. Similarly, a nontoken permanent that lost cycling while it was on the battlefield will also go to your graveyard."

@@ -443,7 +443,7 @@ fn gix_plays_cards_as_it_resolves_and_lands_only_with_a_land_play_in_your_turn()
 
 #[test]
 fn etrata_exiles_a_creature_that_cant_be_turned_face_up_and_casts_it() {
-    cr!("702.168d", "708.2a", "608.2g");
+    cr!("701.58g", "608.2g");
     ruling!(
         "Etrata, Deadly Fugitive",
         "You might be unable to turn a face-down creature face up because it's an instant or sorcery. Alternatively, abilities such as that of Karlov Watchdog might prevent you from turning face-down creatures face up altogether. In those cases, you'll exile that creature, and then you'll choose whether or not to cast that card without paying its mana cost."

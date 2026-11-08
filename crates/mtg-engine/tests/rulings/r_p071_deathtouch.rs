@@ -59,7 +59,7 @@ fn loyalty(t: &mut TestGame, pw: ObjectId, n: u32) {
 
 #[test]
 fn wrens_run_packmaster_gives_all_your_wolves_deathtouch() {
-    cr!("611.3a", "109.4");
+    cr!("611.3a");
     ruling!(
         "Wren's Run Packmaster",
         "Wren's Run Packmaster gives deathtouch to all Wolf permanents you control, not just the tokens it creates."
@@ -109,7 +109,7 @@ fn wrens_run_packmaster_wolf_damage_destroys_even_if_packmaster_leaves_at_the_sa
 
 #[test]
 fn death_baron_bonus_applies_once_and_to_itself_only_as_a_skeleton() {
-    cr!("613.4c", "702.2f");
+    cr!("613.4c", "702.73a");
     ruling!(
         "Death Baron",
         "A creature that's both a Skeleton and a Zombie will get the bonus only once."
@@ -177,7 +177,7 @@ fn totentanz_dying_with_other_creatures_triggers_for_each() {
 
 #[test]
 fn tyvar_the_bellicose_new_tyvar_grants_a_new_ability_that_can_trigger_again() {
-    cr!("400.7", "603.4", "704.5j");
+    cr!("400.7", "704.5j");
     ruling!(
         "Tyvar the Bellicose",
         "If Tyvar leaves the battlefield and returns to the battlefield in the same turn, or if Tyvar leaves and another Tyvar appears, the triggered ability granted by the new one is different than the triggered ability granted by the old one. The one granted by the new Tyvar may trigger for each creature you control, even if the ability granted by the old Tyvar triggered for those creatures that turn. (Note that creatures you control won't have the ability granted by the old one anymore, and if you control multiple Tyvars, you won't have the opportunity to activate mana abilities before the \"legend rule\" gets you down to one Tyvar.)"
@@ -442,7 +442,7 @@ fn deadly_allure_attacker_must_be_blocked_by_at_least_one_able_creature() {
 
 #[test]
 fn ruthless_instincts_first_mode_needs_a_nonattacking_creature_that_can_attack_later() {
-    cr!("115.1", "508.1a", "702.17b");
+    cr!("601.2c", "508.1a");
     ruling!(
         "Ruthless Instincts",
         "If you choose the first mode, the target creature must not be attacking. However, it can attack later in the turn."
@@ -498,7 +498,7 @@ fn touch_of_moonglove_life_loss_is_by_the_dead_creatures_controller() {
 
 #[test]
 fn onyx_mage_twice_still_destroys_once() {
-    cr!("702.2d", "704.5h", "701.19a");
+    cr!("702.2f", "704.5h", "701.19a");
     ruling!(
         "Onyx Mage",
         "Multiple instances of deathtouch on the same creature provide no additional benefit. A creature dealt damage by a creature with multiple instances of deathtouch is destroyed only once."
@@ -591,7 +591,7 @@ fn vedalken_infuser_puts_a_charge_counter_on_any_artifact() {
 
 #[test]
 fn ghirapur_guide_doesnt_undo_a_block() {
-    cr!("509.1b", "506.4");
+    cr!("509.1b");
     ruling!(
         "Ghirapur Guide",
         "Once a creature with power 2 or less has blocked a creature, activating Ghirapur Guide's ability won't change or undo that block."
@@ -834,7 +834,7 @@ fn kaya_doubled_tokens_are_exact_copies_of_the_created_ones() {
 
 #[test]
 fn vraska_granted_trigger_counts_any_damage_and_ends_the_game_when_opponents_are_gone() {
-    cr!("104.2a", "603.3b", "120.3");
+    cr!("104.2a", "603.3b");
     ruling!(
         "Vraska, Scheming Gorgon",
         "The triggered ability Vraska grants to creatures with her third ability triggers on any damage those creatures deal, including noncombat damage. If multiple players are dealt damage simultaneously by affected creatures, you choose the order in which those triggers resolve. If all your opponents have lost the game, you’ll win the game before any more of the triggers resolve."
@@ -971,7 +971,7 @@ fn embercleave_cant_cost_less_than_rr() {
 
 #[test]
 fn blade_historian_leaving_after_first_strike_damage_stops_regular_damage() {
-    cr!("702.4c", "702.4d", "510.4");
+    cr!("702.4c", "510.4");
     ruling!(
         "Blade Historian",
         "If Blade Historian leaves the battlefield after first-strike combat damage has been dealt but before regular combat damage (perhaps because it attacked and was destroyed by first-strike combat damage), attacking creatures you control will lose double strike. A creature without double strike won’t deal regular combat damage if it already dealt first-strike damage that turn."
