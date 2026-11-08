@@ -8,18 +8,13 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 
 | Kind | Decided | Provisional |
 |---|---:|---:|
-| interpretation | 82 | 2 |
+| interpretation | 84 | 0 |
 | deviation | 9 | 0 |
 | policy | 33 | 0 |
 
 ## Provisional entries
 
-- **player-named-twice-draws-twice** (interpretation, [players-multiplayer](interpretations/players-multiplayer.md)): A player named twice in "you and that player each draw" is instructed twice, and draws in two instructions
-  - Question: When "you" and "that player" of "you and that player each draw that many cards" are the same player, that player draws twice that many cards (Diviner Spirit ruling). Is that one instruction to draw twice that many cards, or two instructions to draw that many? The rulings give only the total. It matters to replacement effects that refer to the number of cards an instruction draws (121.2a), such as Alms Collector's "If an opponent would draw two or more cards, instead you and that player each draw a card."
-  - Decision: Two instructions: the player is instructed to draw that many cards as "you" and again as "that player", and performs them one after the other; a replacement effect that refers to the number of cards drawn applies to each (with an opponent's Alms Collector, Diviner Spirit's 2 combat damage redirected to its controller has that player and Alms Collector's controller each draw two cards). A player counts twice only in a group of players each named by "you" or by a reference to one player ("you and that player"); "each player" and other groups name each player once.
-- **dependent-target-checked-against-an-illegal-target** (interpretation, [stack-casting-costs](interpretations/stack-casting-costs.md)): A target whose requirement names another target is checked against that target even when it's illegal
-  - Question: A target's requirement names another target of the same spell or ability ("Exile up to one target Equipment attached to that creature", Fiery Annihilation; "target creature that player or that planeswalker's controller controls", Searing Blaze; "Tap up to five target permanents that player controls", Yosei; "two target creatures controlled by different players", Run Away Together). On resolution the other target is illegal but still there (hexproof, shroud or protection gained in response). When 608.2b checks the dependent target, does its requirement still see the illegal target, or does the last sentence of 608.2b (an effect "fails to determine" information about an illegal target) make the requirement fail, so the dependent target isn't affected?
-  - Decision: The requirement is checked against the other target as it is (as it last existed if it has left its zone): the dependent target stays legal while the relationship holds, and is affected; the illegal target isn't. Fiery Annihilation's Equipment still attached to a creature that gained hexproof or protection from red is exiled; Searing Blaze still deals damage to the creature when the player gained hexproof; Yosei still taps the permanents; Run Away Together still compares the other creature with the illegal one's controller. Relationships of value among the targets of one "target" (equal toughness, different names, mana values or powers, totals) are compared among the targets still legal on their own (V.A.T.S.'s ruling, 2024-03-08: "In the rare case where the legal targets no longer all have equal toughness ... it won’t resolve."); no ruling found addresses an illegal target there. Provisional (work item ruling-conflicts-4, case 1, conclusion D): Fiery Annihilation's ruling reads the other way; the user decides whether it is set aside as inconsistent (recommended) or this entry is reversed.
+None.
 
 ## All entries
 
@@ -83,7 +78,7 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | `conspiracy-draft-needs-three-players` | A Conspiracy Draft game (like every multiplayer variant) needs more than two players | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
 | `greatest-card-unique-player` | "The player who exiled the card with the greatest mana value" is one player; with a tie, no player is | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
 | `history-counts-players-who-left` | "For each opponent who [did something] this turn" counts opponents who have since left the game | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
-| `player-named-twice-draws-twice` | A player named twice in "you and that player each draw" is instructed twice, and draws in two instructions | interpretation | provisional | [players-multiplayer](interpretations/players-multiplayer.md) |
+| `player-named-twice-draws-twice` | A player named twice in "you and that player each draw" is given one instruction to draw twice that many | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
 | `range-combat-trigger-events` | The trigger event of "attacks", "blocks" and "blocks or becomes blocked" is the creature alone (CR 801.7) | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
 | `venture-limit-looks-at-whole-turn` | "Can't venture into the dungeon more than once each turn" counts ventures earlier in the turn | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
 | `enter-sacrifice-instead-partial` | "Sacrifice two untapped lands instead. If you do, ..." with fewer than two sacrifices those it can, and ~ doesn't enter | interpretation | decided | [replacement-prevention](interpretations/replacement-prevention.md) |
@@ -103,7 +98,7 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | `castability-is-optimistic` | The engine's list of castable spells assumes favorable choices | policy | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
 | `choose-type-and-behold-payable-type` | A creature type chosen as part of a behold cost is one the player can then behold | interpretation | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
 | `cost-paid-reflexive-trigger` | "When you do" after an optional additional cost is a cast trigger | interpretation | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
-| `dependent-target-checked-against-an-illegal-target` | A target whose requirement names another target is checked against that target even when it's illegal | interpretation | provisional | [stack-casting-costs](interpretations/stack-casting-costs.md) |
+| `dependent-target-checked-against-an-illegal-target` | A target whose requirement names another target is checked against that target even when it's illegal | interpretation | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
 | `division-after-cost-amount` | An amount to divide that a cost sets is divided right after the costs are paid | deviation | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
 | `hybrid-half-for-a-reduction` | A cost reduction that can reduce a hybrid symbol of the cost reduces it, as though the player had announced the half it reduces | deviation | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |
 | `if-you-do-any-number-removed` | "You may remove any number of counters. If you do, ..." happens only if one or more were removed | interpretation | decided | [stack-casting-costs](interpretations/stack-casting-costs.md) |

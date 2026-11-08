@@ -1702,19 +1702,18 @@ impl Game {
                 let mut drawn = Vec::new();
                 // CR 121.2c: the active player draws first, then the others in turn order.
                 let players = crate::draw_rules::draw_order(self, self.eval_players(who, ctx));
-                let n = players.len() as u32;
                 let total = |g: &Game| g.history.cards_drawn.values().sum::<u32>();
                 let before = total(self);
                 let start = self.history.drawn.len();
+                // A player named twice ("you and that player each draw that many cards" when
+                // that player is you) is given one instruction to draw twice that many
+                // (interpretation `player-named-twice-draws-twice`).
                 let times = crate::draw_rules::times_named(self, who, ctx);
+                let mut expected = 0;
                 for p in players {
-                    let t = times
-                        .as_ref()
-                        .and_then(|v| v.iter().find(|(q, _)| *q == p))
-                        .map_or(1, |(_, t)| *t);
-                    for _ in 0..t {
-                        drawn.extend(self.draw_cards(p, k));
-                    }
+                    let t = crate::draw_rules::times_of(&times, p);
+                    expected += k * t;
+                    drawn.extend(self.draw_cards(p, k * t));
                 }
                 let all = self.history.drawn.get(start..).unwrap_or_default().to_vec();
                 ctx.set_var(
@@ -1726,7 +1725,7 @@ impl Game {
                 // else isn't one, CR 614.6, 603.12), counting cards drawn by replacement
                 // effects ("draw two cards instead"). See The Royal Scions rulings. ("You
                 // may draw ... If you do" is about the choice: see `Effect::May`.)
-                ctx.prev_happened = k > 0 && total(self).saturating_sub(before) >= k * n;
+                ctx.prev_happened = k > 0 && total(self).saturating_sub(before) >= expected;
                 ctx.prev_value = drawn.len() as i64;
                 ctx.set_var(
                     vars::REVEALED,
@@ -1831,8 +1830,12 @@ impl Game {
             }
             Effect::GainLife { who, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
+                // A player named twice ("you and that player each gain that much life" when
+                // that player is you) gains twice that much as one event (Angel of Destiny
+                // ruling; interpretation `player-named-twice-draws-twice`).
+                let times = crate::draw_rules::times_named(self, who, ctx);
                 for p in self.eval_players(who, ctx) {
-                    self.gain_life(p, k);
+                    self.gain_life(p, k * crate::draw_rules::times_of(&times, p));
                 }
             }
             Effect::LoseLife { who, n } => {

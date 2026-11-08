@@ -142,7 +142,8 @@ fn diviner_spirit_damage_redirected_to_its_controller_draws_twice() {
     supported("Harm's Way");
     // P1's Harm's Way: the next 2 damage Diviner Spirit (2/4) would deal to P1 is dealt to
     // P0 instead. All its combat damage is dealt to P0, its controller: "you and that
-    // player each draw that many cards" has P0 draw 2 twice.
+    // player each draw that many cards" has P0 draw 4 (one instruction, interpretation
+    // `player-named-twice-draws-twice`).
     let mut t = TestGame::new(2);
     let ds = t.battlefield(P0, "Diviner Spirit");
     attack_with(&mut t, &[(ds, pl(P1))]);
@@ -168,14 +169,29 @@ fn diviner_spirit_damage_redirected_to_its_controller_draws_twice() {
 }
 
 #[test]
-fn a_player_named_twice_draws_twice_as_two_instructions() {
-    cr!("121.2", "121.2a", "614.9");
+fn a_player_named_twice_draws_twice_as_one_instruction() {
+    cr!("121.2", "121.2a", "614.9", "119.9");
+    ruling!(
+        "Diviner Spirit",
+        "If Diviner Spirit deals combat damage to its controller (perhaps because damage was redirected), that player will draw twice that number of cards."
+    );
+    ruling!(
+        "Angel of Destiny",
+        "If a creature you control somehow deals combat damage to you (most likely because its combat damage was redirected), you gain twice that much life as a single life-gaining event."
+    );
+    ruling!(
+        "Alms Collector",
+        "To determine whether a player is instructed to draw multiple once or instructed multiple times to draw one card, count how many times the word “draw” is used."
+    );
     interp!("player-named-twice-draws-twice");
     supported("Alms Collector");
+    supported("Angel of Destiny");
+    supported("Leyline of Hope");
     // P1's Alms Collector: "If an opponent would draw two or more cards, instead you and
-    // that player each draw a card." Diviner Spirit's 2 combat damage, redirected to P0,
-    // has P0 draw two cards twice: each instruction is replaced, so P0 and P1 each draw
-    // two cards (one instruction to draw four would have them each draw one).
+    // that player each draw a card." Diviner Spirit's 2 combat damage, redirected to P0
+    // (P1's Harm's Way), has P0, both "you" and "that player", draw four cards as one
+    // instruction (one word "draw"): it's replaced once, so P0 and P1 each draw one card
+    // (two instructions to draw two would have them each draw two).
     let mut t = TestGame::new(2);
     let ds = t.battlefield(P0, "Diviner Spirit");
     t.battlefield(P1, "Alms Collector");
@@ -189,7 +205,7 @@ fn a_player_named_twice_draws_twice_as_two_instructions() {
     t.advance_to(P0, Step::EndOfCombat);
     t.resolve_all();
     assert_eq!(t.life(P0), 18);
-    assert_eq!(drawn_since(&t, &before), vec![2, 2]);
+    assert_eq!(drawn_since(&t, &before), vec![1, 1]);
     // Not redirected: P1 draws its two cards, and P0's are replaced (one each).
     let mut t = TestGame::new(2);
     let ds = t.battlefield(P0, "Diviner Spirit");
@@ -200,6 +216,24 @@ fn a_player_named_twice_draws_twice_as_two_instructions() {
     t.resolve_all();
     assert_eq!(t.life(P1), 18);
     assert_eq!(drawn_since(&t, &before), vec![1, 3]);
+    // Life, the same way: Angel of Destiny ("Whenever a creature you control deals combat
+    // damage to a player, you and that player each gain that much life.") with P0's
+    // Leyline of Hope ("If you would gain life, you gain that much life plus 1 instead."):
+    // Grizzly Bears' 2 combat damage redirected to P0 has P0 gain 4 life as one event,
+    // replaced once: 5 (two gains of 2 would be 3 each).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Angel of Destiny");
+    t.battlefield(P0, "Leyline of Hope");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attack_with(&mut t, &[(bears, pl(P1))]);
+    t.lands(P1, "Plains", 1);
+    let hw = t.hand(P1, "Harm's Way");
+    t.answer_choose(P1, &[obj(bears)]);
+    t.cast(P1, hw).target(pl(P0)).go();
+    t.resolve();
+    t.advance_to(P0, Step::EndOfCombat);
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1)), (20 - 2 + 5, 20));
 }
 
 #[test]
