@@ -4,10 +4,11 @@
 //! requirement is still checked against it, as it is if it's still there (as it last
 //! existed if it has left), so the dependent target stays legal while the relationship
 //! holds and is affected (register `dependent-target-checked-against-an-illegal-target`,
-//! provisional; work item ruling-conflicts-4, case 1). Fiery Annihilation's ruling that its
-//! Equipment "won't be exiled" whenever the creature is an illegal target goes the other way
-//! and isn't cited (logged as inconsistent in docs/RULING_DISCREPANCIES.md, for the user to
-//! decide).
+//! decided by the user Nov 7; work items ruling-conflicts-4, case 1, and
+//! user-questions-nov7, Part A). Fiery Annihilation's ruling that its Equipment "won't be
+//! exiled" whenever the creature is an illegal target goes the other way: it is set aside
+//! as inconsistent (exempt in docs/rulings-exemptions/rulings-P047.tsv, logged in
+//! docs/RULING_DISCREPANCIES.md).
 
 use crate::r_p007_common::{pl, player_hexproof};
 use crate::r_p047_common::obj;
@@ -15,6 +16,7 @@ use crate::r_p113_common::{spoil, Spoil};
 use crate::r_p133_common::{fizzles, kill};
 use crate::r_s01_common::{give_mana_for, supported};
 use crate::r_s06_common::give_control;
+use mtg_engine::attraction_cards;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -116,6 +118,52 @@ fn yosei_taps_the_permanents_of_a_player_who_became_an_illegal_target() {
         assert_eq!(t.obj_now(bears).tapped, !hexproof, "hexproof {hexproof}");
         assert_eq!(t.obj_now(giant).tapped, !hexproof, "hexproof {hexproof}");
     }
+}
+
+/// P1 has a Drop Tower (an Attraction) and a Grizzly Bears card in hand; P0 casts Down for
+/// Repairs targeting P1 and the Drop Tower, and `respond` happens before it resolves.
+/// Returns (game, Drop Tower, Bears card).
+fn down_for_repairs(respond: impl FnOnce(&mut TestGame, ObjectId)) -> (TestGame, ObjectId, ObjectId) {
+    let mut t = TestGame::new(2);
+    let tower = t.battlefield(P1, "Drop Tower");
+    let bears = t.hand(P1, "Grizzly Bears");
+    let card = t.hand(P0, "Down for Repairs");
+    give_mana_for(&mut t, P0, "Down for Repairs");
+    t.answer_choose(P0, &[obj(bears)]);
+    t.cast(P0, card).target(pl(P1)).target(tower).go();
+    respond(&mut t, tower);
+    t.resolve_all();
+    (t, tower, bears)
+}
+
+#[test]
+fn down_for_repairs_destroys_the_attraction_of_a_player_who_became_an_illegal_target() {
+    cr!("608.2b", "702.11c", "717.6");
+    ruling!(
+        "Down for Repairs",
+        "If only one of those targets is legal as the spell resolves, you’ll still do as much as you can to the remaining legal target. The illegal target will be unaffected."
+    );
+    interp!("dependent-target-checked-against-an-illegal-target");
+    supported("Down for Repairs");
+    // "Target opponent reveals their hand. You choose a nonland card from it. That player
+    // discards that card. Destroy up to one target Attraction that player controls."
+    // P1 gains hexproof (Leyline of Sanctity) in response: the Attraction is still one
+    // "that player controls", a legal target, and is destroyed (put into the junkyard);
+    // P1, illegal, discards nothing.
+    let (t, tower, bears) = down_for_repairs(|t, _| player_hexproof(t, P1));
+    assert!(!t.on_battlefield(tower));
+    assert_eq!(attraction_cards::junkyard(&t.g, P1).len(), 1);
+    assert_eq!(t.zone(bears), Zone::Hand(P1));
+    // The Attraction leaves first: P1, still legal, discards the chosen card.
+    let (t, _, bears) = down_for_repairs(|t, tower| {
+        t.g.destroy(tower, None);
+        t.settle();
+    });
+    assert_eq!(t.zone(bears), Zone::Graveyard(P1));
+    // Both legal: both are affected.
+    let (t, tower, bears) = down_for_repairs(|_, _| {});
+    assert!(!t.on_battlefield(tower));
+    assert_eq!(t.zone(bears), Zone::Graveyard(P1));
 }
 
 /// P0's Grizzly Bears and P1's Hill Giant, and P0's Run Away Together on the stack

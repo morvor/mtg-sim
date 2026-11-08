@@ -17,8 +17,10 @@ cited. A ruling inconsistent with the other rulings, or with the CR with no date
 explain it, is exempt only by a register decision about that question (Gnoll War Band's, by
 `history-counts-players-who-left`; Araumi of the Dead Tide's "you can choose any value for
 X", by `x-in-a-cost-equal-to-a-cards-mana-cost-is-0`; Arbiter of Knollridge's, by
-`arbiter-of-knollridge-uses-controllers-range`). A ruling the data attaches to the wrong
-card is never exempt: it is tested on the card it describes and cited under the card it is
+`arbiter-of-knollridge-uses-controllers-range`; Fiery Annihilation's "is an illegal target
+when Fiery Annihilation begins to resolve", by
+`dependent-target-checked-against-an-illegal-target`). A ruling the data attaches to the
+wrong card is never exempt: it is tested on the card it describes and cited under the card it is
 attached to.
 Every exemption whose reason calls the ruling outdated, superseded, overridden,
 inconsistent, misattached, a template error or a copying error, or cites
