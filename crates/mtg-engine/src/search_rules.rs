@@ -137,6 +137,30 @@ struct Found {
     library_searched: bool,
 }
 
+/// The context of one searcher's search: "their library" in "each player searches their
+/// library" or "any number of target players may each search their library" is each
+/// searcher's (the iterated player). A single searcher inside an outer "for each player"
+/// ("For each player, search that player's library for a nonland card", Jace, Architect of
+/// Thought) keeps the outer iterated player.
+fn searcher_ctx(spec: &SearchSpec, ctx: &Ctx, p: PlayerId) -> Ctx {
+    let mut c = ctx.clone();
+    // Searchers that can be several players: each searches as the iterated player.
+    let each = matches!(
+        spec.who,
+        PlayerRef::EachPlayer
+            | PlayerRef::EachOpponent
+            | PlayerRef::EachOtherPlayer
+            | PlayerRef::Each(_)
+            | PlayerRef::TriggerPlayers
+            | PlayerRef::Target(_)
+            | PlayerRef::Var(_)
+    );
+    if each || ctx.iter_player.is_none() {
+        c.iter_player = Some(p);
+    }
+    c
+}
+
 /// Performs [`Effect::SearchCards`] (CR 701.23).
 pub fn perform(g: &mut Game, spec: &SearchSpec, ctx: &mut Ctx) {
     let mut searchers = g.eval_players(&spec.who, ctx);
@@ -149,8 +173,7 @@ pub fn perform(g: &mut Game, spec: &SearchSpec, ctx: &mut Ctx) {
     // choose in APNAP order (the order players are listed in); then the found cards move.
     let mut founds: Vec<Found> = Vec::new();
     for p in searchers {
-        let mut c = ctx.clone();
-        c.iter_player = Some(p);
+        let c = searcher_ctx(spec, ctx, p);
         let owner = g.eval_player(&spec.whose, &c).unwrap_or(p);
         if let Some(f) = search_one(g, spec, p, owner, &c) {
             founds.push(f);
@@ -164,8 +187,7 @@ pub fn perform(g: &mut Game, spec: &SearchSpec, ctx: &mut Ctx) {
     // they aren't part of it (CR 701.24b), so they don't become new objects (CR 701.20d).
     let mut late_reveals: Vec<(PlayerId, Vec<ObjectId>, Ctx)> = Vec::new();
     for f in &founds {
-        let mut c = ctx.clone();
-        c.iter_player = Some(f.searcher);
+        let mut c = searcher_ctx(spec, ctx, f.searcher);
         let mut cards = f.cards.clone();
         let stays = spec.shuffle == SearchShuffle::Before
             || (spec.dests.is_empty() && spec.shuffle != SearchShuffle::No);
@@ -177,17 +199,21 @@ pub fn perform(g: &mut Game, spec: &SearchSpec, ctx: &mut Ctx) {
                 crate::reveal::reveal_in(g, f.searcher, &cards, Some(&c));
             }
         }
-        // A rule that deals with cards found in a library instead ("they exile each card
-        // they find"): the rest of the effect still applies.
-        let from_library: Vec<ObjectId> = cards
-            .iter()
-            .copied()
-            .filter(|o| g.obj(*o).zone == Zone::Library(f.owner))
-            .collect();
-        if !from_library.is_empty()
-            && crate::kw::search_found(g, f.searcher, f.owner, &from_library)
-        {
-            cards.retain(|o| !from_library.contains(o));
+        // A rule that deals with the cards found in a search of a library instead ("they
+        // exile each card they find"): the rest of the effect still applies. A search of
+        // several zones including the library is one search: every card it found, in any
+        // of those zones (Opposition Agent ruling).
+        let found_here: Vec<ObjectId> = if f.library_searched {
+            cards
+                .iter()
+                .copied()
+                .filter(|o| g.obj(*o).owner == f.owner)
+                .collect()
+        } else {
+            Vec::new()
+        };
+        if !found_here.is_empty() && crate::kw::search_found(g, f.searcher, f.owner, &found_here) {
+            cards.retain(|o| !found_here.contains(o));
         }
         let shuffle = f.library_searched && spec.shuffle != SearchShuffle::No;
         if spec.shuffle == SearchShuffle::Before {

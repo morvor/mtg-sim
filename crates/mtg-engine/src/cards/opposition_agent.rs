@@ -3,8 +3,10 @@
 //! spend mana as though it were mana of any color to cast them."
 //!
 //! The found cards are exiled instead of being put where the effect says; the rest of the
-//! effect still happens (ruling). With several Opposition Agents, the one that most
-//! recently entered applies (its controller controls the searching player, CR 723).
+//! effect still happens (ruling). With several Opposition Agents controlled by different
+//! players, the controller of the one that most recently entered controls the searching
+//! player (CR 723) and, for them, chooses whose Agent's effect applies to each found card
+//! (CR 616.1; ruling): by default their own.
 //! Mana may be spent as though it were mana of any color (CR 609.4b), not of any type:
 //! colorless symbols still need colorless mana.
 
@@ -45,16 +47,44 @@ impl KeywordRules for Rules {
         if searcher != owner {
             return false;
         }
-        let Some((src, you)) = active(g, EXILE_FOUND)
+        // The Agents whose effect would apply, the most recently entered first.
+        let mut agents: Vec<(ObjectId, PlayerId)> = active(g, EXILE_FOUND)
             .into_iter()
             .filter(|(_, c)| g.are_opponents(*c, searcher))
-            .max_by_key(|(s, _)| g.obj(*s).timestamp)
-        else {
+            .collect();
+        if agents.is_empty() {
             return false;
-        };
-        let mut exiled = Vec::new();
+        }
+        agents.sort_by_key(|(s, _)| std::cmp::Reverse(g.obj(*s).timestamp));
+        // One Agent per controller (the latest): which player gets the permissions.
+        let mut options: Vec<(ObjectId, PlayerId)> = Vec::new();
+        for a in &agents {
+            if !options.iter().any(|(_, c)| *c == a.1) {
+                options.push(*a);
+            }
+        }
+        // Each found card's owner chooses which of the Agents' replacement effects applies
+        // to it (CR 616.1); the owner is the searcher, controlled during the search by the
+        // latest Agent's controller, who makes that choice (ruling, CR 723.5). Default: the
+        // latest Agent's (the first listed).
+        let chooser = options[0].1;
         for &card in found {
-            if let Some(n) = g.move_object_ev(MoveEv {
+            let i = if options.len() > 1 {
+                let names = options
+                    .iter()
+                    .map(|(_, c)| format!("P{}'s Opposition Agent", c.idx()))
+                    .collect();
+                g.ask_option(
+                    chooser,
+                    Some(options[0].0),
+                    "Which Opposition Agent's effect applies to the found card?",
+                    names,
+                )
+            } else {
+                0
+            };
+            let (src, you) = options[i.min(options.len() - 1)];
+            let Some(n) = g.move_object_ev(MoveEv {
                 obj: card,
                 to: Zone::Exile,
                 pos: crate::ability::LibraryPosition::Top,
@@ -62,24 +92,23 @@ impl KeywordRules for Rules {
                 by: Some(searcher),
                 etb: EtbInfo::default(),
                 source: Some(src),
-            }) {
-                if g.obj(n).zone == Zone::Exile {
-                    exiled.push(n);
-                }
+            }) else {
+                continue;
+            };
+            if g.obj(n).zone != Zone::Exile {
+                continue;
             }
-        }
-        // "For as long as they remain exiled": each permission ends when its card leaves
-        // exile, as it becomes a new object.
-        crate::casting::grant_play_permission(
-            g,
-            you,
-            exiled.clone(),
-            Duration::Permanent,
-            false,
-            Some(src),
-        );
-        let turn = g.turn.number;
-        for n in exiled {
+            // "For as long as they remain exiled": each permission ends when its card
+            // leaves exile, as it becomes a new object.
+            crate::casting::grant_play_permission(
+                g,
+                you,
+                vec![n],
+                Duration::Permanent,
+                false,
+                Some(src),
+            );
+            let turn = g.turn.number;
             g.special
                 .any_color_mana
                 .push((you, n, Duration::Permanent, Some(src), turn));
