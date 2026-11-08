@@ -94,7 +94,7 @@ fn vivien_exiled_card_cast_once_follows_timing_without_vivien() {
 
 #[test]
 fn shield_of_the_righteous_follows_the_blocked_creature_to_its_new_controller() {
-    cr!("502.3", "509.1", "108.4");
+    cr!("502.3", "509.1");
     ruling!(
         "Shield of the Righteous",
         "Shield of the Righteous’s second ability doesn’t track the blocked creature’s controller. If that creature changes controllers before its old controller’s next untap step, this ability will prevent it from untapping during its new controller’s next untap step."
@@ -133,12 +133,11 @@ fn soul_strike_technique_manifest_is_a_plain_2_2_that_effects_can_change() {
     attach_new(&mut t, P0, "Soul-Strike Technique", bears);
     destroy(&mut t, bears);
     t.resolve_all();
-    let fd: Vec<ObjectId> = t
-        .g
-        .permanents()
-        .filter(|o| o.face_down)
-        .map(|o| o.id)
-        .collect();
+    let fd: Vec<ObjectId> =
+        t.g.permanents()
+            .filter(|o| o.face_down)
+            .map(|o| o.id)
+            .collect();
     assert_eq!(fd.len(), 1);
     assert!(crate::r_s11_common::is_plain_face_down_2_2(&t, fd[0]));
     // Glorious Anthem: "Creatures you control get +1/+1."
@@ -172,7 +171,8 @@ fn wrenn_emblem_follows_timing_and_costs() {
     assert!(!can_play_land(&mut t, P0, f1));
     // One land per turn, as usual.
     t.set_step(P0, Step::PrecombatMain);
-    t.play_land(P0, f1).expect("plays a land from the graveyard");
+    t.play_land(P0, f1)
+        .expect("plays a land from the graveyard");
     assert!(!can_play_land(&mut t, P0, f2));
 }
 
@@ -370,7 +370,7 @@ fn thranduils_company_is_cumulative_with_exploration() {
 
 #[test]
 fn choose_a_creature_type_offers_single_existing_creature_types() {
-    cr!("205.3m", "700.2");
+    cr!("205.3m");
     ruling!(
         "And They Shall Know No Fear",
         "To choose a creature type, you must choose an existing creature type, such as Vampire or Knight."
@@ -527,7 +527,7 @@ fn extricator_of_sin_sacrifices_only_one_permanent() {
 
 #[test]
 fn fangorn_keeps_unspent_green_mana_only() {
-    cr!("106.4", "106.4a");
+    cr!("106.4");
     ruling!(
         "Fangorn, Tree Shepherd",
         "You can keep unspent green mana indefinitely while Fangorn, Tree Shepherd is on the battlefield."
@@ -565,7 +565,10 @@ fn distributing_counters_chooses_targets_and_division_on_casting() {
         "You choose how many targets Undercity Upheaval has and how the counters will be distributed as you cast the spell. Each target must receive at least one counter."
     );
     // (card, creature cards in the graveyard, division)
-    for (name, yard, split) in [("Storm the Seedcore", 0, [3, 1]), ("Undercity Upheaval", 3, [2, 1])] {
+    for (name, yard, split) in [
+        ("Storm the Seedcore", 0, [3, 1]),
+        ("Undercity Upheaval", 3, [2, 1]),
+    ] {
         supported(name);
         let mut t = TestGame::new(2);
         for _ in 0..yard {
@@ -594,7 +597,11 @@ fn distributing_counters_chooses_targets_and_division_on_casting() {
                 _ => None,
             })
             .collect();
-        assert_eq!(divides, vec![((split[0] + split[1]) as u32, 1, 2)], "{name}");
+        assert_eq!(
+            divides,
+            vec![((split[0] + split[1]) as u32, 1, 2)],
+            "{name}"
+        );
         assert_eq!(t.zone(id), Zone::Stack);
         t.resolve_all();
         assert_eq!(t.counters(a, "+1/+1"), split[0] as u32, "{name}");
@@ -660,5 +667,3 @@ fn knightly_valor_needs_a_target_and_doesnt_enchant_its_token() {
     );
     assert_eq!(t.pt(bears), (4, 4));
 }
-
-

@@ -4,8 +4,8 @@
 
 use crate::r_s01_common::supported;
 use crate::r_s02_common::destroy;
-use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::keywords::KeywordKind;
+use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
@@ -119,7 +119,7 @@ fn anafenza_targets_any_tapped_creature_you_control() {
 
 #[test]
 fn anafenza_cares_what_the_card_is_where_it_leaves_from() {
-    cr!("614.1a", "614.6", "702.103f");
+    cr!("614.1a", "614.6", "702.103b");
     ruling!(
         "Anafenza, the Foremost",
         "Anafenza's last ability cares only what the card would be in the zone it's moving from, not what it would be in the graveyard. For example, if a land card you control becomes a creature due to an effect and then dies, the land card will be exiled. But if a creature card with bestow is an Aura when it would be put into the graveyard, it ends up in the graveyard."

@@ -55,7 +55,12 @@ fn exiled_cards_power_and_toughness_as_they_last_existed_in_the_graveyard() {
     // Ritual of the Returned: a 2/3 Zombie.
     let mut t = TestGame::new(2);
     let goyf = goyf_in_graveyard(&mut t);
-    crate::r_s25_common::cast_new(&mut t, P0, "Ritual of the Returned", &[Entity::Object(goyf)]);
+    crate::r_s25_common::cast_new(
+        &mut t,
+        P0,
+        "Ritual of the Returned",
+        &[Entity::Object(goyf)],
+    );
     t.resolve_all();
     let z = with_subtype(&t, P0, "Zombie");
     assert_eq!(t.pt(z[0]), (2, 3));
@@ -108,7 +113,10 @@ fn back_from_the_brink_isnt_casting() {
     t.battlefield(P0, "Heartless Summoning");
     t.graveyard(P0, "Hill Giant");
     t.lands(P0, "Mountain", 2);
-    assert!(t.activate(P0, brink, 0, &[]).is_err(), "{{3}}{{R}} isn't reduced");
+    assert!(
+        t.activate(P0, brink, 0, &[]).is_err(),
+        "{{3}}{{R}} isn't reduced"
+    );
     t.lands(P0, "Mountain", 2);
     t.activate(P0, brink, 0, &[]).unwrap();
     t.resolve_all();
@@ -218,7 +226,10 @@ fn young_deathclaws_scavenge_costs_and_two_instances() {
         .iter()
         .filter_map(|a| match &a.kind {
             mtg_engine::ability::AbilityKind::Activated(act) if a.text.starts_with("Scavenge") => {
-                Some((a.uid, format!("{}", act.cost.mana.clone().unwrap_or_default())))
+                Some((
+                    a.uid,
+                    format!("{}", act.cost.mana.clone().unwrap_or_default()),
+                ))
             }
             _ => None,
         })
@@ -231,9 +242,15 @@ fn young_deathclaws_scavenge_costs_and_two_instances() {
         t.g.flush_events();
         r
     };
-    let own = scavenges.iter().find(|s| s.1 == "{3}{B}{G}").expect("its own scavenge");
+    let own = scavenges
+        .iter()
+        .find(|s| s.1 == "{3}{B}{G}")
+        .expect("its own scavenge");
     // The granted one: "the scavenge cost is equal to its mana cost" ({1}{B}{G}).
-    let granted = scavenges.iter().find(|s| s.0 != own.0).expect("the granted one");
+    let granted = scavenges
+        .iter()
+        .find(|s| s.0 != own.0)
+        .expect("the granted one");
     // Its own scavenge ({3}{B}{G}) can't be paid with three lands.
     assert!(activate(&mut t, own.0).is_err());
     t.clear_answers();
@@ -253,7 +270,12 @@ fn ritual_of_the_returned_with_its_target_gone_does_nothing() {
     );
     let mut t = TestGame::new(2);
     let giant = t.graveyard(P0, "Hill Giant");
-    crate::r_s25_common::cast_new(&mut t, P0, "Ritual of the Returned", &[Entity::Object(giant)]);
+    crate::r_s25_common::cast_new(
+        &mut t,
+        P0,
+        "Ritual of the Returned",
+        &[Entity::Object(giant)],
+    );
     crate::r_s05_common::move_to(&mut t, giant, Zone::Hand(P0));
     t.resolve_all();
     assert!(with_subtype(&t, P0, "Zombie").is_empty());
@@ -366,7 +388,11 @@ fn rank_officer_in_two_headed_giant_and_one_discard() {
     t.enter(P0, "Rank Officer");
     t.resolve_all();
     assert_eq!(t.hand_size(P0), 1);
-    assert_eq!(with_subtype(&t, P0, "Zombie").len(), 2, "Rank Officer and one token");
+    assert_eq!(
+        with_subtype(&t, P0, "Zombie").len(),
+        2,
+        "Rank Officer and one token"
+    );
 }
 
 #[test]
@@ -492,10 +518,7 @@ fn waste_management_makes_rogues_kicked_or_not() {
     t.graveyard(P1, "Forest");
     t.lands(P0, "Swamp", 7);
     let wm = t.hand(P0, "Waste Management");
-    t.cast(P0, wm)
-        .kicked(true)
-        .target(Entity::Player(P1))
-        .go();
+    t.cast(P0, wm).kicked(true).target(Entity::Player(P1)).go();
     t.resolve_all();
     assert_eq!(t.graveyard_size(P1), 0);
     assert_eq!(with_subtype(&t, P0, "Rogue").len(), 3);
@@ -530,6 +553,3 @@ fn scholar_of_combustion_card_follows_timing_and_costs() {
     assert_eq!(t.life(P1), 15);
     let _ = Answer::Default;
 }
-
-
-

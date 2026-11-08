@@ -49,7 +49,11 @@ fn mairsil_gains_activated_abilities_not_triggered_ones() {
     let act = texts(&mut t, m, true);
     assert!(act.iter().any(|a| a.starts_with("Crew")), "{act:?}");
     assert!(act.iter().any(|a| a.starts_with("Equip")), "{act:?}");
-    assert_eq!(texts(&mut t, m, false).len(), own, "no triggered ability gained");
+    assert_eq!(
+        texts(&mut t, m, false).len(),
+        own,
+        "no triggered ability gained"
+    );
     let hand = t.hand_size(P0);
     t.attack(&[(m, Entity::Player(P1))], &[]);
     t.resolve_all();
@@ -147,7 +151,10 @@ fn mairsil_with_izzet_chemister_links_its_two_gained_abilities() {
     t.resolve_all();
     assert_eq!(t.life(P1), 15, "the Lava Axe exiled with Mairsil was cast");
     assert!(!t.on_battlefield(m));
-    assert!(t.in_exile("Izzet Chemister"), "Chemister itself stays in exile");
+    assert!(
+        t.in_exile("Izzet Chemister"),
+        "Chemister itself stays in exile"
+    );
 }
 
 #[test]
@@ -237,5 +244,7 @@ fn caged_cards_stay_caged_when_mairsil_leaves() {
     t.answer_yes(P0, false);
     let back = t.enter(P0, "Mairsil, the Pretender");
     t.resolve_all();
-    assert!(texts(&mut t, back, true).iter().any(|a| a.contains("damage")));
+    assert!(texts(&mut t, back, true)
+        .iter()
+        .any(|a| a.contains("damage")));
 }

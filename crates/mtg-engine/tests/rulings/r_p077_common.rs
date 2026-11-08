@@ -19,8 +19,7 @@ pub fn vig(t: &TestGame, id: ObjectId) -> bool {
 pub fn animate_mutavault(t: &mut TestGame, p: PlayerId) -> ObjectId {
     let vault = t.battlefield(p, "Mutavault");
     t.lands(p, "Wastes", 1);
-    crate::r_s06_common::activate_containing(t, p, vault, "becomes")
-        .expect("Mutavault's ability");
+    crate::r_s06_common::activate_containing(t, p, vault, "becomes").expect("Mutavault's ability");
     t.resolve_all();
     assert!(crate::r_s04_common::is_creature(t, vault));
     vault

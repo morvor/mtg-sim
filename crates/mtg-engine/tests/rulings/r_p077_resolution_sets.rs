@@ -130,9 +130,12 @@ fn angelic_skirmisher_grants_to_creatures_present_and_chooses_before_attacks() {
     t.advance_to(P0, Step::BeginningOfCombat);
     t.resolve_all();
     // The choice was made as the ability resolved, in the beginning of combat step.
-    assert!(t.asked()[from..]
-        .iter()
-        .any(|(p, d)| *p == P0 && matches!(d, mtg_engine::decision::Decision::ChooseOption { .. })));
+    assert!(
+        t.asked()[from..]
+            .iter()
+            .any(|(p, d)| *p == P0
+                && matches!(d, mtg_engine::decision::Decision::ChooseOption { .. }))
+    );
     assert_eq!(t.g.turn.step, Step::BeginningOfCombat);
     assert!(vig(&t, bears));
     let late = t.battlefield(P0, "Hill Giant");
@@ -220,7 +223,7 @@ fn treeguard_duo_counts_creatures_as_it_resolves() {
 
 #[test]
 fn murmuration_counts_spells_as_its_ability_resolves() {
-    cr!("608.2h", "513.1a");
+    cr!("608.2h");
     ruling!(
         "Murmuration",
         "The number of spells you've cast is counted only as Murmuration's last ability resolves. For example, say you've cast two spells this turn, and with Murmuration's last ability on the stack, you cast a Blizzard Strix"

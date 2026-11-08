@@ -75,8 +75,7 @@ fn graveyard_exile_costs_are_paid_before_anyone_can_respond() {
             t.answer_targets(P0, &[target]);
         }
         let from = t.asked().len();
-        activate_containing(&mut t, P0, src, needle)
-            .unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        activate_containing(&mut t, P0, src, needle).unwrap_or_else(|e| panic!("{name}: {e:?}"));
         // The ability is on the stack with its costs paid; no one had priority meanwhile.
         assert_eq!(t.stack_len(), 1, "{name}");
         assert_eq!(yard_named(&t, P0, "Grizzly Bears"), 0, "{name}");
@@ -170,10 +169,7 @@ fn weigh_down_exiles_exactly_one_creature_card() {
     assert!(!castable(&mut t, P0, wd), "no creature card to exile");
     let cards = graveyard_n(&mut t, P0, "Grizzly Bears", 3);
     // Trying to exile two: only one is exiled.
-    t.answer_choose(
-        P0,
-        &[Entity::Object(cards[0]), Entity::Object(cards[1])],
-    );
+    t.answer_choose(P0, &[Entity::Object(cards[0]), Entity::Object(cards[1])]);
     t.cast(P0, wd).target(Entity::Object(target)).go();
     assert_eq!(t.g.exile.len(), 1);
     assert_eq!(yard_named(&t, P0, "Grizzly Bears"), 2);
@@ -349,7 +345,8 @@ fn spare_lichs_mastery(g: &mtg_engine::game::Game, d: &Decision) -> Option<Answe
     else {
         return None;
     };
-    let mastery = |e: &Entity| matches!(e, Entity::Object(o) if g.obj(*o).chars.name == "Lich's Mastery");
+    let mastery =
+        |e: &Entity| matches!(e, Entity::Object(o) if g.obj(*o).chars.name == "Lich's Mastery");
     let mut pick: Vec<Entity> = candidates.iter().filter(|e| !mastery(e)).copied().collect();
     pick.extend(candidates.iter().filter(|e| mastery(e)).copied());
     pick.truncate((*max).max(*min) as usize);
@@ -452,5 +449,3 @@ fn taigam_legend_rule_needs_the_exact_name() {
     assert_eq!(t.named_on_battlefield("Taigam, Sidisi's Hand").len(), 1);
     assert!(t.on_battlefield(b));
 }
-
-
