@@ -1009,6 +1009,12 @@ fn p_for_each_this_way(l: &str, b: &mut Builder) -> Option<Effect> {
     if !thing.ends_with(" this way") {
         return None;
     }
+    // "Put an ingredient counter on ~, then put an ingredient counter on it for each card
+    // drawn this way" (Communal Brewing): a trailing "for each" belongs to the last
+    // instruction only; the sentence is split first.
+    if !l.starts_with("for each ") && clause.contains(", then ") {
+        return None;
+    }
     let saved = (b.targets.len(), b.it.clone(), b.it_player.clone());
     let (count, tail) = this_way_count(thing, b)?;
     if !tail.trim().is_empty() {

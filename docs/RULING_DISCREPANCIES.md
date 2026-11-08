@@ -544,6 +544,26 @@ decides whether they become a conflict case.
   a misspelled counter name, and nothing in the ruling depends on it. It stays cited, tested
   with hatching counters (`tests/rulings/r_p067_triggers.rs`,
   `dragon_kamis_egg_triggers_for_each_and_casts_once_per_resolution`).
+- **Geier Reach Sanitarium and Kami of the Crescent Moon** (rulings-P061 review): two
+  rulings whose words put an event at another moment than the CR does, while what they
+  evidently mean is what the CR and the engine do, so both stay cited. Geier Reach
+  Sanitarium (2016-07-13): "When you activate Geier Reach Sanitarium's last ability, first
+  each player draws a card. ..." puts the draws at activation; 602.2: "To activate an
+  ability is to put it onto the stack and pay its costs, so that it will eventually resolve
+  and have its effect." The same procedure's rulings on other cards say "As the triggered
+  ability resolves" (Elderfang Disciple, 2021-02-05) or "As the chapter II ability resolves"
+  (Kardur's Vicious Return, 2021-02-05). The engine draws and discards as the ability
+  resolves (`tests/rulings/r_p061_draw_spells.rs`,
+  `geier_reach_sanitarium_discards_in_turn_order`). Kami of the Crescent Moon (2005-06-01):
+  "The additional draw triggers just after the normal draw for the turn happens." By 603.2b
+  ("When a phase or step begins, all abilities that trigger “at the beginning of” that phase
+  or step trigger.") it triggers as the draw step begins, before the turn-based draw (504.1
+  "First, the active player draws a card."), and is put on the stack after it, as Howling
+  Mine's ruling says ("The triggered ability is put onto the stack after you have already
+  drawn your card for the turn."); for Kami, which has no condition, the two moments can't
+  be told apart (`tests/rulings/r_p061_draw_steps.rs`,
+  `additional_draws_happen_after_the_draw_step_draw_when_the_trigger_resolves`). Whether
+  either is worth reporting, or Kami's matches an older draw step rule, wasn't checked.
 - Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (copying errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the
