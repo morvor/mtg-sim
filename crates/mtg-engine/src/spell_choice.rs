@@ -76,15 +76,25 @@ pub fn choose_cards_to_cast(
     else {
         return None;
     };
-    let zone = filter.zone().filter(|z| *z != ZoneKind::Battlefield)?;
+    let zones = choice_zones(filter);
+    if zones.is_empty() {
+        return None;
+    }
     let p = g.eval_player(chooser, ctx).unwrap_or(ctx.controller);
     let n = g.eval_value(count, ctx).max(0) as u32;
     // CR 601.3: only the faces the player could begin to cast now are choices; the
     // spell's own timing restrictions ("Cast this spell only during combat") still apply
     // while the effect resolves (CR 608.2g).
-    let mut faces: Vec<(ObjectId, Vec<FaceState>)> = g
-        .objects_in_zone_kind(zone)
+    let mut faces: Vec<(ObjectId, Vec<FaceState>)> = zones
         .into_iter()
+        .flat_map(|z| g.objects_in_zone_kind(z))
+        // CR 406.3b: a face-down card in exile is a choice only for a player allowed to
+        // look at it (and then judged as the spell it would become).
+        .filter(|o| {
+            let ob = g.obj(*o);
+            !(ob.face_down && ob.zone == crate::object::Zone::Exile)
+                || crate::zones::may_look(g, p, *o)
+        })
         .map(|o| {
             let mut f = matching_faces(g, o, filter, ctx);
             f.retain(|face| g.resolution_cast_allowed(p, o, &g.face_characteristics(o, *face)));
@@ -168,4 +178,38 @@ pub fn faces_within_total(
         .into_iter()
         .filter(|f| spent + face_mana_value(g, card, *f) + rest <= limit)
         .collect()
+}
+
+/// The zones (other than the battlefield) a choice of cards to cast is made from: one
+/// zone, or several ("from your hand, from your graveyard, or from among cards you own in
+/// exile"). Empty when the filter names none, or names the battlefield.
+fn choice_zones(f: &Filter) -> Vec<ZoneKind> {
+    fn zones(f: &Filter) -> Vec<ZoneKind> {
+        match f {
+            Filter::Or(v) => {
+                let each: Vec<Vec<ZoneKind>> = v.iter().map(zones).collect();
+                if each.iter().any(|z| z.is_empty()) {
+                    return vec![];
+                }
+                let mut out: Vec<ZoneKind> = Vec::new();
+                for z in each.into_iter().flatten() {
+                    if !out.contains(&z) {
+                        out.push(z);
+                    }
+                }
+                out
+            }
+            Filter::And(v) => v
+                .iter()
+                .map(zones)
+                .find(|z| !z.is_empty())
+                .unwrap_or_default(),
+            _ => f.zone().into_iter().collect(),
+        }
+    }
+    let z = zones(f);
+    if z.contains(&ZoneKind::Battlefield) {
+        return vec![];
+    }
+    z
 }
