@@ -1982,6 +1982,61 @@ pub fn with_granted_spell_keywords(
     out
 }
 
+/// `chars` with the keywords a permission's rider gives the spell cast with it ("That
+/// spell has undaunted.", "If you cast a creature spell this way, it has affinity for
+/// artifacts."): the spell has them as its total cost is determined (CR 601.2f), so
+/// whether it could be cast counts them, as [`with_granted_spell_keywords`] does for
+/// static abilities.
+pub fn with_permission_rider_keywords(
+    g: &Game,
+    p: PlayerId,
+    card: ObjectId,
+    chars: &Characteristics,
+    perm: Option<&crate::permissions::CastPermission>,
+) -> Characteristics {
+    let mut out = chars.clone();
+    let Some(e) = perm.and_then(|c| c.terms.on_cast.as_deref()) else {
+        return out;
+    };
+    let ctx = crate::eval::Ctx::new(perm.and_then(|c| c.source), p);
+    let view = AsSpell {
+        id: card,
+        chars,
+        caster: p,
+    };
+    let mut todo = vec![e];
+    while let Some(e) = todo.pop() {
+        match e {
+            Effect::Seq(v) => todo.extend(v.iter()),
+            Effect::If {
+                cond: Condition::SelMatches(Sel::Var(v), f),
+                then,
+                ..
+            } if *v == vars::IT => {
+                if g.matches_view(&view, card, &crate::casting::as_spell_filter(f), &ctx) {
+                    todo.push(then);
+                }
+            }
+            Effect::Modify {
+                what: Sel::Var(v),
+                mods,
+                ..
+            } if *v == vars::IT => {
+                for m in mods {
+                    if let Modification::AddKeyword(k) = m {
+                        out.abilities.push(AbilityDef::new(
+                            AbilityKind::Keyword(k.clone()),
+                            k.kind.name(),
+                        ));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
 /// What of `cost` the keywords of `chars` could pay other than with mana.
 pub fn payable_otherwise(
     g: &Game,

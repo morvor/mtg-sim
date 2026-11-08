@@ -1011,6 +1011,13 @@ impl Game {
         }
         // Optimistic cost check, with the keywords the spell would be given as it's cast.
         let chars = crate::kw::with_granted_spell_keywords(self, p, card, &chars);
+        let chars = crate::kw::with_permission_rider_keywords(
+            self,
+            p,
+            card,
+            &chars,
+            opt.permission.as_ref(),
+        );
         let mut cost = self.base_total_cost(p, card, &chars, opt, 0);
         crate::cost_rules::spend_any_type(self, p, card, &mut cost);
         crate::permissions::spend_terms(opt.permission.as_ref(), &mut cost);
