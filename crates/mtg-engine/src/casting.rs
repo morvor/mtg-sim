@@ -2885,6 +2885,13 @@ impl Game {
             let min = (0..=max)
                 .find(|x| holds(self, *x))
                 .ok_or_else(|| Illegal("no legal value of X".into()))?;
+            // CR 107.3c: when the ability's text defines X ("X is the mana value of the
+            // exiled card"), the one value that holds is the only one offered.
+            let max = if act.condition.is_some() && !(min + 1..=max).any(|x| holds(self, x)) {
+                min
+            } else {
+                max
+            };
             x = match self.ask(
                 p,
                 Decision::ChooseX {
