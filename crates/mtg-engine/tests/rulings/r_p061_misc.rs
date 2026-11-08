@@ -121,7 +121,7 @@ fn gandalf_copies_the_spell_once_and_the_token_isnt_created() {
 
 #[test]
 fn gandalf_uses_x_for_the_mana_value_on_the_stack() {
-    cr!("107.3f", "202.3e", "603.2");
+    cr!("202.3e", "603.2");
     ruling!(
         "Gandalf, Westward Voyager",
         "While a spell with {X} in its mana cost is on the stack, use the value of X that was chosen when it was cast to determine its mana value."
@@ -204,7 +204,7 @@ fn cast_triggers_resolve_even_if_the_spell_is_countered() {
 
 #[test]
 fn communal_brewing_values_on_resolution_and_illegal_targets() {
-    cr!("608.2h", "608.2b", "115.10a");
+    cr!("608.2h", "608.2b", "608.2c", "107.1c");
     ruling!(
         "Communal Brewing",
         "The value of X is calculated as Communal Brewing's last ability resolves."
@@ -324,7 +324,7 @@ fn stone_brain(t: &mut TestGame, name: &str, chosen: &[ObjectId]) -> usize {
 
 #[test]
 fn the_stone_brain_names_as_it_resolves() {
-    cr!("701.23a", "201.3", "608.2c");
+    cr!("701.23a", "201.4", "608.2d");
     ruling!(
         "The Stone Brain",
         "You target a player as The Stone Brain's activated ability is put on the stack, but you don't name a card until it resolves. Notably, this means that players don't get to respond to the ability knowing what card you will name."
@@ -362,7 +362,7 @@ fn the_stone_brain_names_as_it_resolves() {
 
 #[test]
 fn the_stone_brain_basic_land_names_up_to_four() {
-    cr!("701.23a", "701.23d");
+    cr!("701.23a", "701.23b");
     ruling!(
         "The Stone Brain",
         "Unlike most effects of this kind, The Stone Brain's ability allows its controller to choose the name of a basic land. Note that you may only search for up to four copies of that card, even if you find more of them."
@@ -440,7 +440,7 @@ fn garland_stolen_creatures_cant_be_sacrificed() {
 
 #[test]
 fn garland_gains_nothing_if_the_opponent_is_no_longer_the_monarch() {
-    cr!("724.1", "611.2b");
+    cr!("725.3", "611.2b");
     ruling!(
         "Garland, Royal Kidnapper",
         "While Garland's second ability is on the stack, if that opponent stops being the monarch before it resolves, you won't gain control of the target creature at all."

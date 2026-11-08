@@ -22,22 +22,6 @@ fn decisions_since(t: &TestGame, from: usize) -> Vec<(PlayerId, Decision)> {
         .collect()
 }
 
-/// Whether any player got priority among the decisions asked since `from`, before the
-/// first priority decision after them (i.e. during the resolution that followed `from`).
-fn priority_before(t: &TestGame, from: usize, pred: fn(&Decision) -> bool) -> bool {
-    let asked = t.asked();
-    let mut seen_priority = false;
-    for (_, d) in &asked[from..] {
-        if pred(d) {
-            return seen_priority;
-        }
-        if matches!(d, Decision::Priority { .. }) {
-            seen_priority = true;
-        }
-    }
-    panic!("no such decision");
-}
-
 #[test]
 fn nin_draws_x_cards_regardless_of_toughness_and_not_optionally() {
     cr!("608.2c", "107.3");
@@ -152,7 +136,7 @@ fn peer_into_the_abyss_draws_can_be_replaced() {
 
 #[test]
 fn folio_of_fancies_pays_twice_x() {
-    cr!("107.3b", "107.3a");
+    cr!("107.3a", "107.3i");
     ruling!(
         "Folio of Fancies",
         "To pay {X}{X}, choose a value for X, and pay twice that much mana."
@@ -258,13 +242,20 @@ fn cephalid_broker_draws_and_discards_in_one_resolution() {
     let broker = t.battlefield(P0, "Cephalid Broker");
     stack_library(&mut t, P0, &["Lightning Bolt", "Shock"]);
     t.lands(P0, "Mountain", 1);
-    let from = t.asked().len();
+    // P0's hand each time P0 gets priority, everything passing through the priority loop
+    // (`resolve_all` gives no one priority): with a drawn card in hand and the untapped
+    // Mountain, P0 could cast it.
+    let hands = crate::r_s01_common::watch(
+        &mut t,
+        P0,
+        |d| matches!(d, Decision::Priority { .. }),
+        |g| g.player(PlayerId(0)).hand.len(),
+    );
     t.activate(P0, broker, 0, &[pl(P0)]).unwrap();
-    t.resolve_all();
-    assert!(!priority_before(&t, from + 1, |d| matches!(
-        d,
-        Decision::ChooseEntities { .. }
-    )));
+    t.advance_to(P0, Step::BeginningOfCombat);
+    let hands = hands.lock().unwrap().clone();
+    assert!(hands.len() >= 2, "priority before and after: {hands:?}");
+    assert!(hands.iter().all(|n| *n == 0), "{hands:?}");
     assert_eq!(t.hand_size(P0), 0);
     assert!(t.in_graveyard(P0, "Lightning Bolt") && t.in_graveyard(P0, "Shock"));
     assert_eq!(t.life(P1), 20, "nothing was cast in between");
@@ -284,8 +275,21 @@ fn dakra_mystic_decides_after_seeing_the_cards() {
         let b = stack_library(&mut t, P1, &["Shock"])[0];
         t.lands(P0, "Island", 1);
         t.answer_yes(P0, mill);
+        // As P0 decides, both cards have been revealed.
+        let revealed = crate::r_s01_common::watch(
+            &mut t,
+            P0,
+            |d| matches!(d, Decision::YesNo { .. }),
+            |g| {
+                ["Lightning Bolt", "Shock"]
+                    .iter()
+                    .filter(|c| g.log.iter().any(|l| l.text.contains(&format!("reveals {c}"))))
+                    .count()
+            },
+        );
         t.activate(P0, dakra, 0, &[]).unwrap();
         t.resolve_all();
+        assert_eq!(*revealed.lock().unwrap(), vec![2], "{mill}");
         if mill {
             assert!(t.in_graveyard(P0, "Lightning Bolt") && t.in_graveyard(P1, "Shock"));
             assert_eq!(t.hand_size(P0) + t.hand_size(P1), 0);
@@ -333,7 +337,7 @@ fn mind_spiral_stuns_an_already_tapped_creature() {
 
 #[test]
 fn drown_in_dreams_both_modes_in_order() {
-    cr!("700.2", "700.2d", "608.2c");
+    cr!("700.2", "115.3", "608.2c");
     ruling!(
         "Drown in Dreams",
         "You may target the same player with both modes or target different players. The effects happen in the order they're listed on the card."
@@ -476,7 +480,7 @@ fn metamorphic_blast_turns_a_creature_into_a_white_rabbit() {
 
 #[test]
 fn will_kenrith_overwrites_earlier_base_pt_and_is_overwritten_by_later() {
-    cr!("613.4b", "613.7a");
+    cr!("613.4b", "613.7b");
     ruling!(
         "Will Kenrith",
         "Will's first ability overwrites all previous effects that set a creature's base power and toughness to specific values. Any power- or toughness-setting effects that start to apply after that ability resolves will overwrite this effect."

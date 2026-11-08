@@ -328,7 +328,7 @@ fn koma_isnt_countered_but_the_rest_of_the_counterspell_happens() {
 
 #[test]
 fn komas_tap_mode_stops_every_activated_ability() {
-    cr!("602.1", "602.1b", "606.3", "702.6a");
+    cr!("602.1", "606.2", "702.6a");
     ruling!(
         "Koma, Cosmos Serpent",
         "Activated abilities contain a colon and appear in the form \"[Cost]: [Effect].\" Some keywords such as equip are activated abilities and will have colons in their reminder texts. Loyalty abilities of planeswalkers are also activated abilities."
@@ -413,24 +413,20 @@ fn draw_then_discard_leaves_no_window_to_act() {
         t.battlefield(P0, outlet);
         stack_library(&mut t, P0, &["Mountain", "Forest"]);
         assert_eq!(t.hand_size(P0), 0);
-        let s = cast(&mut t, P0, spell, &[]);
-        let _ = s;
-        let from = t.asked().len();
-        t.resolve_all();
-        let priority_during = t.asked()[from..]
-            .iter()
-            .take_while(|(_, d)| !matches!(d, Decision::Priority { .. }))
-            .count();
-        // Every decision before the next priority: no priority between the draw and the
-        // discard, and both lands are discarded by then.
-        let asked = t.asked();
-        let decisions: Vec<_> = asked[from..from + priority_during].to_vec();
-        assert!(
-            decisions
-                .iter()
-                .any(|(_, d)| matches!(d, Decision::ChooseEntities { .. })),
-            "{spell}: a discard choice"
+        // P0's hand each time P0 gets priority, everything passing through the priority
+        // loop (`resolve_all` gives no one priority): with a drawn land in hand, P0 could
+        // activate the outlet.
+        let hands = crate::r_s01_common::watch(
+            &mut t,
+            P0,
+            |d| matches!(d, Decision::Priority { .. }),
+            |g| g.player(PlayerId(0)).hand.len(),
         );
+        cast(&mut t, P0, spell, &[]);
+        t.advance_to(P0, Step::BeginningOfCombat);
+        let hands = hands.lock().unwrap().clone();
+        assert!(hands.len() >= 2, "{spell}: priority before and after: {hands:?}");
+        assert!(hands.iter().all(|n| *n == 0), "{spell}: {hands:?}");
         assert_eq!(t.hand_size(P0), 0, "{spell}");
         assert!(t.in_graveyard(P0, "Mountain") && t.in_graveyard(P0, "Forest"));
         // The outlet's ability was never activated.

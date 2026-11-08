@@ -5,7 +5,7 @@
 
 use crate::r_p061_common::*;
 use crate::r_s02_common::{can_cast, destroy};
-use mtg_engine::decision::Decision;
+use mtg_engine::decision::{Action, Decision};
 use mtg_engine::object::CastMethod;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -211,18 +211,35 @@ fn innocuous_researchers_restriction_outlasts_it() {
     let bolt = t.hand(P0, "Lightning Bolt");
     t.answer_yes(P0, true);
     t.advance_to(P0, Step::End);
-    t.settle();
+    // The end step through the priority loop (`resolve_all` gives no one priority): the
+    // untapped Mountains P0 has each time P0 gets priority, and whether P0 could cast the
+    // Bolt then.
+    let untapped = crate::r_s01_common::watch(
+        &mut t,
+        P0,
+        |d| matches!(d, Decision::Priority { .. }),
+        |g| {
+            g.permanents()
+                .filter(|o| o.controller == PlayerId(0) && o.chars.is_land() && !o.tapped)
+                .count()
+        },
+    );
     let from = t.asked().len();
-    t.resolve();
-    assert!(lands.iter().all(|l| !t.obj_now(*l).tapped), "untapped");
-    // No priority during the resolution.
-    assert!(!t.asked()[from..]
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::Priority { .. })));
-    assert!(!can_cast(&mut t, P0, bolt, CastMethod::Normal));
-    destroy(&mut t, researcher);
-    assert!(!can_cast(&mut t, P0, bolt, CastMethod::Normal));
     t.advance_to(P1, Step::Upkeep);
+    assert!(lands.iter().all(|l| !t.obj_now(*l).tapped), "untapped");
+    let untapped = untapped.lock().unwrap().clone();
+    assert!(
+        untapped.first() == Some(&0) && untapped.contains(&2),
+        "P0 had priority with the trigger on the stack and after it resolved: {untapped:?}"
+    );
+    let bolt_offered = t.asked()[from..].iter().any(|(p, d)| {
+        *p == P0
+            && matches!(d, Decision::Priority { actions }
+                if actions.iter().any(|a| matches!(a, Action::Cast { card, .. } if *card == bolt)))
+    });
+    assert!(!bolt_offered, "no window to cast the Bolt");
+    // The Researcher leaving doesn't end the restriction.
+    destroy(&mut t, researcher);
     assert!(
         !can_cast(&mut t, P0, bolt, CastMethod::Normal),
         "on P1's turn"

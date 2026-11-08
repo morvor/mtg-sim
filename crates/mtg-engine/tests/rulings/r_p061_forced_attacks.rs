@@ -366,7 +366,7 @@ fn when_the_chosen_player_cant_be_attacked_it_may_attack_elsewhere() {
 
 #[test]
 fn each_combat_phase_has_its_own_random_choice() {
-    cr!("508.1d", "505.1a", "603.2");
+    cr!("508.1d", "500.8", "603.2");
     ruling!(
         "Raving Dead",
         "If your turn has multiple combat phases, Raving Dead's ability triggers at the beginning of each of them. Ignore any choices made during previous combat phases that turn."
@@ -455,7 +455,7 @@ fn relentless_raptor_blocks_for_a_defending_player_who_gains_control_of_it() {
 
 #[test]
 fn haktos_protection_from_mana_values() {
-    cr!("702.16a", "702.16b", "702.16c", "202.3e", "202.3b");
+    cr!("702.16a", "702.16b", "702.16c", "202.3e", "107.3g");
     ruling!(
         "Haktos the Unscarred",
         "If Haktos somehow has no choice made for its ability, its last ability grants it no protection abilities."
