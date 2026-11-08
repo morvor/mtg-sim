@@ -137,6 +137,26 @@ struct Found {
     library_searched: bool,
 }
 
+/// The context of one searcher's search: "their library" in "each player searches their
+/// library" is each searcher's (the iterated player). A single searcher inside an outer
+/// "for each player" ("For each player, search that player's library for a nonland card",
+/// Jace, Architect of Thought) keeps the outer iterated player.
+fn searcher_ctx(spec: &SearchSpec, ctx: &Ctx, p: PlayerId) -> Ctx {
+    let mut c = ctx.clone();
+    let each = matches!(
+        spec.who,
+        PlayerRef::EachPlayer
+            | PlayerRef::EachOpponent
+            | PlayerRef::EachOtherPlayer
+            | PlayerRef::Each(_)
+            | PlayerRef::TriggerPlayers
+    );
+    if each || ctx.iter_player.is_none() {
+        c.iter_player = Some(p);
+    }
+    c
+}
+
 /// Performs [`Effect::SearchCards`] (CR 701.23).
 pub fn perform(g: &mut Game, spec: &SearchSpec, ctx: &mut Ctx) {
     let mut searchers = g.eval_players(&spec.who, ctx);
@@ -149,8 +169,7 @@ pub fn perform(g: &mut Game, spec: &SearchSpec, ctx: &mut Ctx) {
     // choose in APNAP order (the order players are listed in); then the found cards move.
     let mut founds: Vec<Found> = Vec::new();
     for p in searchers {
-        let mut c = ctx.clone();
-        c.iter_player = Some(p);
+        let c = searcher_ctx(spec, ctx, p);
         let owner = g.eval_player(&spec.whose, &c).unwrap_or(p);
         if let Some(f) = search_one(g, spec, p, owner, &c) {
             founds.push(f);
@@ -164,8 +183,7 @@ pub fn perform(g: &mut Game, spec: &SearchSpec, ctx: &mut Ctx) {
     // they aren't part of it (CR 701.24b), so they don't become new objects (CR 701.20d).
     let mut late_reveals: Vec<(PlayerId, Vec<ObjectId>, Ctx)> = Vec::new();
     for f in &founds {
-        let mut c = ctx.clone();
-        c.iter_player = Some(f.searcher);
+        let mut c = searcher_ctx(spec, ctx, f.searcher);
         let mut cards = f.cards.clone();
         let stays = spec.shuffle == SearchShuffle::Before
             || (spec.dests.is_empty() && spec.shuffle != SearchShuffle::No);
