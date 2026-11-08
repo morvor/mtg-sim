@@ -149,8 +149,9 @@ pub trait KeywordRules: Sync + Send {
     ) {
     }
     /// Cards `searcher` found in a search that included `owner`'s library (in any of the
-    /// zones searched), before the searching effect puts them anywhere: returns true if this implementation's rule dealt with them
-    /// instead (e.g. "they exile each card they find"), so the effect doesn't move them.
+    /// zones searched), before the searching effect puts them anywhere: returns true if
+    /// this implementation's rule dealt with them instead (e.g. "they exile each card they
+    /// find"), so the effect doesn't move them.
     fn search_found(
         &self,
         g: &mut Game,
