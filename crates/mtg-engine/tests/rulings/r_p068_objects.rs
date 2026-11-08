@@ -71,7 +71,7 @@ fn smirking_spelljacker_card_back_in_exile_isnt_exiled_with_it() {
 
 #[test]
 fn mnemonic_betrayal_card_exiled_again_is_a_new_object_and_stays() {
-    cr!("400.7", "610.3");
+    cr!("400.7", "603.7");
     ruling!(
         "Mnemonic Betrayal",
         "If you cast a spell this way and that card is exiled, it’s considered a new object. Mnemonic Betrayal no longer allows you to cast it. It remains in exile when Mnemonic Betrayal’s delayed triggered ability resolves."

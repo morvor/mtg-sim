@@ -1,12 +1,14 @@
-//! Rulings batch P068 — owners, controllers and players: leaving the game (CR 800.4a),
-//! face-down cards in exile no one may look at (CR 406.3), "your graveyard" (CR 404.2),
-//! a player controlling another's search (CR 723.5, 701.23b), discards replaced by exile
-//! (CR 614.6, 701.9), the drafted-card pregame action (CR 607.2n) and two Classes each
-//! tracking their own exiled cards (CR 607.2a).
+//! Rulings batch P068 — owners, controllers and players: leaving the game (CR 800.4a) and
+//! "loses the game" triggers looking back (CR 603.10f), face-down cards in exile no one may
+//! look at and a choice of a spell from several zones (CR 406.3, 406.3b, 601.3e), cards put
+//! into "your graveyard" (CR 400.3), a player controlling another's search (CR 723.5,
+//! 701.23b), discards replaced by exile (CR 614.6, 701.9), the drafted-card pregame action
+//! (CR 607.2n) and two Classes each tracking their own exiled cards (CR 607.2a).
 
 use crate::r_p068_common::*;
 use crate::r_s01_common::{attack_with, block_and_finish, stack_library, supported};
 use mtg_engine::card::card;
+use mtg_engine::decision::Answer;
 use mtg_engine::facedown::can_look_at;
 use mtg_engine::mana::ManaType::*;
 use mtg_engine::object::Zone;
@@ -42,7 +44,7 @@ fn face_down_unseen(t: &TestGame, card: ObjectId, what: &str) {
 
 #[test]
 fn enigma_sphinx_owned_by_another_player_doesnt_trigger() {
-    cr!("404.2", "603.6c");
+    cr!("400.3", "603.6c");
     ruling!(
         "Enigma Sphinx",
         "If you control an Enigma Sphinx that's owned by another player, it's put into that player's graveyard from the battlefield, so Enigma Sphinx's middle ability won't trigger."
@@ -60,7 +62,7 @@ fn enigma_sphinx_owned_by_another_player_doesnt_trigger() {
 
 #[test]
 fn enigma_sphinx_with_a_short_library_goes_to_the_bottom() {
-    cr!("401.4", "609.3");
+    cr!("401.7");
     ruling!(
         "Enigma Sphinx",
         "If you have zero or one card left in your library when Enigma Sphinx's middle ability resolves, Enigma Sphinx is put on the bottom of your library."
@@ -85,7 +87,7 @@ fn enigma_sphinx_with_a_short_library_goes_to_the_bottom() {
 
 #[test]
 fn hostage_taker_owner_leaving_returns_the_card_to_its_owner() {
-    cr!("800.4a", "610.3a");
+    cr!("800.4a", "610.3", "610.3c");
     ruling!(
         "Hostage Taker",
         "In a multiplayer game, if Hostage Taker's owner leaves the game while the card is still exiled and another player owns that card, the exiled card will return to the battlefield under its owner's control. Because the one-shot effect that returns the card isn't an ability that goes on the stack, it won't cease to exist along with the leaving player's spells and abilities on the stack."
@@ -187,8 +189,53 @@ fn apple_of_eden_cards_stay_exiled_if_you_leave_before_the_end_step() {
 }
 
 #[test]
+fn share_the_spoils_borrowed_from_a_player_who_loses_still_triggers() {
+    cr!("603.10f", "603.3a", "800.4a", "611.3b");
+    // Pins the CR, not the card's ruling of 2021-07-23 ("If you control an opponent's Share
+    // the Spoils and that player loses the game, Share the Spoils leaves the game with them
+    // and the first ability won't trigger."), which contradicts CR 603.10f: it is left
+    // uncited, pending the coordinator's conflict decision (docs/RULING_DISCREPANCIES.md).
+    supported("Share the Spoils");
+    // P0 controls P2's Share the Spoils; P2 loses. It leaves the game with P2, but its
+    // "whenever an opponent loses the game" ability looks back in time and triggers, under
+    // P0's control.
+    let mut t = TestGame::new(3);
+    let sts = t.battlefield(P2, "Share the Spoils");
+    give_control(&mut t, sts, P0);
+    let bears = t.library_top(P0, "Grizzly Bears");
+    let forest = t.library_top(P1, "Forest");
+    t.g.lose_game(P2);
+    assert!(!t.on_battlefield(sts), "{}", t.dump_log());
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "{}", t.dump_log());
+    let trigger = *t.g.stack.last().unwrap();
+    assert_eq!(t.obj_now(trigger).controller, P0);
+    t.resolve_all();
+    // The top card of each library still in the game is exiled.
+    assert!(exiled(&t, bears) && exiled(&t, forest), "{}", t.dump_log());
+    assert_eq!(t.g.exile.len(), 2, "{}", t.dump_log());
+    // No one may play them: the enchantment that let players do so is gone.
+    for p in [P0, P1] {
+        t.set_step(p, Step::PrecombatMain);
+        mana(&mut t, p, G, 2);
+        assert!(!castable(&mut t, p, bears), "{p:?}: {}", t.dump_log());
+        assert!(!playable_land(&mut t, p, forest), "{p:?}");
+    }
+    // Had its owner stayed (P1's Share the Spoils, P2 losing), P0 could cast the Bears.
+    let mut t = TestGame::new(3);
+    let sts = t.battlefield(P1, "Share the Spoils");
+    give_control(&mut t, sts, P0);
+    let bears = t.library_top(P0, "Grizzly Bears");
+    t.g.lose_game(P2);
+    t.resolve_all();
+    assert!(t.on_battlefield(sts) && exiled(&t, bears), "{}", t.dump_log());
+    mana(&mut t, P0, G, 2);
+    assert!(castable(&mut t, P0, bears), "{}", t.dump_log());
+}
+
+#[test]
 fn kaya_emblem_casts_a_face_down_exiled_card_only_if_you_may_look_at_it() {
-    cr!("406.3", "708.5");
+    cr!("406.3", "406.3b");
     ruling!(
         "Kaya the Inexorable",
         "If you own a face-down card in exile, Kaya’s emblem will let you cast it only if you can look at the card (and only if it’s legendary). If you aren’t allowed to look at the card, you can’t cast it, even if you know it’s legendary."
@@ -222,6 +269,36 @@ fn kaya_emblem_casts_a_face_down_exiled_card_only_if_you_may_look_at_it() {
         let on_bf = t.g.current(isamaru);
         assert_eq!(t.on_battlefield(on_bf), allowed, "{}", t.dump_log());
     }
+}
+
+#[test]
+fn kaya_emblem_judges_each_face_as_the_spell_it_would_be() {
+    cr!("601.3e", "712.11c");
+    // Extus, Oriq Overlord (a legendary creature) // Awaken the Blood Avatar (a sorcery that
+    // isn't legendary), in P0's graveyard: the emblem casts only the legendary face.
+    supported("Kaya the Inexorable");
+    let mut t = TestGame::new(2);
+    let kaya = t.battlefield(P0, "Kaya the Inexorable");
+    t.g.obj_mut(kaya).counters.insert("loyalty".into(), 7);
+    t.activate(P0, kaya, 2, &[]).unwrap();
+    t.resolve_all();
+    let extus = t.graveyard(P0, "Extus, Oriq Overlord // Awaken the Blood Avatar");
+    let from = t.asked().len();
+    t.answer_choose(P0, &[o(extus)]);
+    t.answer_yes(P0, true);
+    // The back face, were P0 asked which face to cast.
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.advance_to(P1, Step::Upkeep);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert!(was_offered(&t, from, extus), "{}", t.dump_log());
+    assert!(t.named_on_battlefield("Avatar Token").is_empty(), "{}", t.dump_log());
+    assert_eq!(
+        t.named_on_battlefield("Extus, Oriq Overlord").len(),
+        1,
+        "{}",
+        t.dump_log()
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -262,7 +339,8 @@ fn opposition_agent_may_find_nothing_only_for_a_stated_quality() {
         "Opposition Agent",
         "If the search instruction states a quality of the card to find, such as a color or card type, you may have the opponent not find any cards. If the search is simply for a number of cards without stating a quality, you must have them find that many cards (or as many as possible, if their library doesn't contain that many cards)."
     );
-    // Rampant Growth ("a basic land card"): P0 has P1 find nothing.
+    // Rampant Growth ("a basic land card"): P0 has P1 find nothing (P1 would have found the
+    // Forest: P0 makes the choice).
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Opposition Agent");
     let forest = t.library_top(P1, "Forest");
@@ -270,7 +348,7 @@ fn opposition_agent_may_find_nothing_only_for_a_stated_quality() {
     let rg = t.hand(P1, "Rampant Growth");
     pool(&mut t, P1, &[G, C]);
     t.answer_choose(P0, &[]);
-    t.answer_choose(P1, &[]);
+    t.answer_choose(P1, &[o(forest)]);
     t.cast(P1, rg).go();
     t.resolve_all();
     assert!(in_library(&t, forest, P1), "{}", t.dump_log());

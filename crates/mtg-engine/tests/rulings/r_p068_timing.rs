@@ -49,7 +49,7 @@ fn cast_jeleva(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn jeleva_casts_only_while_its_attack_trigger_resolves() {
-    cr!("608.2g", "603.2");
+    cr!("608.2g", "603.2", "307.1");
     ruling!(
         "Jeleva, Nephalia's Scourge",
         "If you cast an instant or sorcery card using Jeleva's last ability, you do so while that ability is resolving. If you choose not to (or you can't), you won't get a chance to cast it later unless the ability triggers again."
@@ -85,7 +85,7 @@ fn jeleva_casts_only_while_its_attack_trigger_resolves() {
 
 #[test]
 fn dance_with_calamity_casts_during_its_resolution_ignoring_type_timing() {
-    cr!("608.2g", "307.1");
+    cr!("608.2g", "302.1");
     ruling!(
         "Dance with Calamity",
         "If you cast any of the exiled cards, you do so as part of the resolution of the spell. You can't wait to cast them later in the turn. Timing restrictions based on a card's type are ignored."
@@ -119,7 +119,7 @@ fn dance_with_calamity_casts_during_its_resolution_ignoring_type_timing() {
 
 #[test]
 fn etali_primal_storm_spells_are_cast_and_resolve_before_blockers() {
-    cr!("608.2g", "307.1", "509.1");
+    cr!("608.2g", "302.1", "509.1");
     ruling!(
         "Etali, Primal Storm",
         "If you cast any of the exiled cards, you do so as part of the resolution of the triggered ability. You can't wait to cast them later in the turn. Timing permissions based on a card's type are ignored, and the spells resolve before blockers are declared."
@@ -142,7 +142,7 @@ fn etali_primal_storm_spells_are_cast_and_resolve_before_blockers() {
 
 #[test]
 fn hazorets_undying_fury_casts_during_its_resolution_only() {
-    cr!("608.2g", "307.1");
+    cr!("608.2g", "302.1");
     ruling!(
         "Hazoret's Undying Fury",
         "If you cast any of those cards, you do so as part of the resolution of Hazoret's Undying Fury. You can't wait to cast them later in the turn."
@@ -169,7 +169,7 @@ fn hazorets_undying_fury_casts_during_its_resolution_only() {
 
 #[test]
 fn ashiok_casts_during_its_ultimate_only_ignoring_type_timing() {
-    cr!("608.2g", "307.1", "302.1");
+    cr!("608.2g", "302.1");
     ruling!(
         "Ashiok, Nightmare Muse",
         "If you wish to cast any exiled cards, you do so as part of the resolution of Ashiok's last ability. You can't wait to cast them later. Timing permissions based on a card's type are ignored."
@@ -214,7 +214,7 @@ fn dilation(t: &mut TestGame, step: Step, top: &str, yes: bool) -> (ObjectId, Ob
 
 #[test]
 fn minds_dilation_spell_resolves_first_ignoring_type_timing_but_not_other_restrictions() {
-    cr!("608.2g", "307.1", "302.1", "405.5", "601.3");
+    cr!("608.2g", "302.1", "405.5", "601.3");
     ruling!(
         "Mind's Dilation",
         "If you cast the card this way, it will resolve before the spell that caused Mind's Dilation's ability to trigger."
@@ -267,7 +267,7 @@ fn minds_dilation_spell_resolves_first_ignoring_type_timing_but_not_other_restri
 
 #[test]
 fn rashmi_and_ragavan_spell_is_cast_during_the_trigger_and_resolves_first() {
-    cr!("608.2g", "307.1", "405.5");
+    cr!("608.2g", "302.1", "405.5");
     ruling!(
         "Rashmi and Ragavan",
         "If you cast the spell without paying its mana cost, you do so during the resolution of the triggered ability. Timing restrictions of that spell based on card type are ignored. It will resolve before the spell that caused the ability to trigger."
@@ -313,7 +313,7 @@ fn bring_to_light(t: &mut TestGame, card: &str, yes: bool) -> ObjectId {
 
 #[test]
 fn bring_to_light_casts_during_its_resolution_with_other_restrictions() {
-    cr!("608.2g", "307.1", "302.1", "601.3", "608.2n");
+    cr!("608.2g", "302.1", "601.3", "608.2n");
     ruling!(
         "Bring to Light",
         "If you cast the exiled card, you do so as part of the resolution of Bring to Light. You can't wait to cast it later in the turn. Timing restrictions based on the card's type are ignored, but other restrictions (such as \"Cast [this card] only during combat\") are not."
@@ -367,7 +367,7 @@ fn solstice(t: &mut TestGame, active: PlayerId, step: Step, card: &str, yes: boo
 
 #[test]
 fn solstice_revelations_casts_during_its_resolution_with_other_restrictions() {
-    cr!("608.2g", "307.1", "302.1", "601.3");
+    cr!("608.2g", "302.1", "601.3");
     ruling!(
         "Solstice Revelations",
         "If you wish to cast the exiled card without paying its mana cost, you must cast it while Solstice Revelations is resolving. You can't cast it that way later in the turn. A spell cast this way may be cast at a time you normally wouldn't be able to cast a spell of that type, but other restrictions (such as \"Cast this spell only during combat\") are enforced."
@@ -456,7 +456,7 @@ fn chaos_wand_casts_during_its_resolution_with_other_restrictions() {
 
 #[test]
 fn synthesis_pod_casts_during_its_resolution_ignoring_type_timing() {
-    cr!("608.2g", "307.1", "302.1");
+    cr!("608.2g", "302.1");
     ruling!(
         "Synthesis Pod",
         "If you wish to cast the card, you do so as part of the resolution of Synthesis Pod's ability. You can't wait to cast it later. Timing rules based on a card's type are ignored."
@@ -491,7 +491,7 @@ fn synthesis_pod_casts_during_its_resolution_ignoring_type_timing() {
 
 #[test]
 fn bre_casts_during_its_end_step_trigger_or_puts_the_card_into_hand() {
-    cr!("608.2g", "307.1", "302.1");
+    cr!("608.2g", "302.1");
     ruling!(
         "Bre of Clan Stoutarm",
         "If you choose to cast the exiled card, you do so while Bre's last ability is resolving and still on the stack. You can't wait to cast it later in the turn. Timing restrictions based on the card's type are ignored."
@@ -583,7 +583,7 @@ fn evolving_door_colorless_finds_one_color_five_colors_finds_nothing() {
     let mut t = TestGame::new(2);
     let (lib, from) = evolving_door(&mut t, "Child of Alara");
     t.resolve_all();
-    for c in &lib[..2] {
+    for c in &lib {
         assert!(!was_offered(&t, from, *c), "{}", t.dump_log());
         assert!(in_library(&t, *c, P0));
     }

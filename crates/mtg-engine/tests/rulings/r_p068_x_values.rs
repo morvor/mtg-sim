@@ -154,23 +154,32 @@ fn gales_redirection_counts_the_exiled_spells_x() {
     );
     supported("Gale's Redirection");
     // P1 casts Blaze with X = 14 (mana value 15): any roll is 16 or more, so P0 may cast
-    // it without paying its mana cost.
-    let mut t = TestGame::new(2);
-    let blaze = t.hand(P1, "Blaze");
-    t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
-    mana(&mut t, P1, R, 15);
-    t.g.turn.priority = Some(P1);
-    let spell = t.cast(P1, blaze).x(14).target(P0).go();
-    pool(&mut t, P0, &[U, U, C, C, C]);
-    let gr = t.hand(P0, "Gale's Redirection");
-    t.g.turn.priority = Some(P0);
-    t.cast(P0, gr).target(spell).go();
-    t.resolve();
-    assert!(exiled(&t, blaze), "{}", t.dump_log());
-    assert_eq!(t.life(P0), 20);
-    // In P0's main phase: only without paying its mana cost (the 15+ result).
-    t.set_step(P0, mtg_engine::turn::Step::PostcombatMain);
-    assert_eq!(methods(&mut t, P0, blaze), vec![CastMethod::Free], "{}", t.dump_log());
+    // it without paying its mana cost. Over several rolls: with the mana value 1 Blaze has
+    // off the stack, a roll under 14 would give the 1-14 result.
+    for seed in 0..8 {
+        let mut t = TestGame::new(2);
+        t.g.rng = <rand_chacha::ChaCha8Rng as rand::SeedableRng>::seed_from_u64(seed);
+        let blaze = t.hand(P1, "Blaze");
+        t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
+        mana(&mut t, P1, R, 15);
+        t.g.turn.priority = Some(P1);
+        let spell = t.cast(P1, blaze).x(14).target(P0).go();
+        pool(&mut t, P0, &[U, U, C, C, C]);
+        let gr = t.hand(P0, "Gale's Redirection");
+        t.g.turn.priority = Some(P0);
+        t.cast(P0, gr).target(spell).go();
+        t.resolve();
+        assert!(exiled(&t, blaze), "{}", t.dump_log());
+        assert_eq!(t.life(P0), 20);
+        // In P0's main phase: only without paying its mana cost (the 15+ result).
+        t.set_step(P0, mtg_engine::turn::Step::PostcombatMain);
+        assert_eq!(
+            methods(&mut t, P0, blaze),
+            vec![CastMethod::Free],
+            "seed {seed}: {}",
+            t.dump_log()
+        );
+    }
 }
 
 #[test]

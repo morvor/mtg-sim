@@ -45,7 +45,7 @@ fn hit(t: &mut TestGame, attacker: ObjectId) {
 
 #[test]
 fn breeches_thada_adel_and_knacksaw_clique_cards_not_played_stay_exiled() {
-    cr!("611.2a", "400.7");
+    cr!("611.2a");
     ruling!(
         "Breeches, Brazen Plunderer",
         "If you don't play one of the exiled cards, it remains exiled. It won't be available to be played on future turns."
@@ -237,7 +237,7 @@ fn epic_experiment_cards_not_cast_go_to_the_graveyard() {
 
 #[test]
 fn grima_card_not_cast_goes_to_the_bottom_with_the_others() {
-    cr!("608.2c", "401.4");
+    cr!("608.2c");
     ruling!(
         "Gríma, Saruman's Footman",
         "If you choose not to cast the card, it is put on the bottom of its owner's library in a random order along with the other exiled cards."
@@ -334,7 +334,7 @@ fn primordial_mist_can_exile_a_face_down_token_which_cant_be_cast() {
 
 #[test]
 fn chaos_wand_without_an_instant_or_sorcery_puts_the_library_back() {
-    cr!("609.3", "401.4");
+    cr!("609.3");
     ruling!(
         "Chaos Wand",
         "If the opponent exiles their entire library without exiling an instant or sorcery card, that player stops exiling cards, and the exiled cards are put into their library in a random order."
@@ -354,7 +354,7 @@ fn chaos_wand_without_an_instant_or_sorcery_puts_the_library_back() {
 
 #[test]
 fn tibalts_trickery_without_a_different_nonland_card_puts_them_on_the_bottom() {
-    cr!("609.3", "701.17a", "701.20a");
+    cr!("609.3", "701.17a");
     ruling!(
         "Tibalt's Trickery",
         "If there aren't any nonland cards in that library with a different name than the countered spell, the player will exile all cards from their library, revealing all of them, and then they'll put those cards on the bottom of their library in a random order."
