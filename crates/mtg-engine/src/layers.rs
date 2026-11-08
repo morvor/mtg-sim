@@ -2088,15 +2088,20 @@ pub fn apply_mod(
                     k.filter = Some(f);
                 }
             }
-            if let (Some(f), Some(ch)) = (k.filter.as_ref(), g.source_choices(ctx)) {
+            if let Some(f) = k.filter.as_ref() {
                 if crate::choices::filter_mentions_choice(f) {
-                    k.filter = Some(crate::choices::bind_choices(f, ch));
-                    // "Protection from the [last] chosen color" with no color chosen
-                    // grants no protection ability at all (CR 607.5a; Sanctuary Blade).
+                    let ch = g.source_choices(ctx);
+                    // "Protection from the [last] chosen color" with no color chosen, or
+                    // "from each mana value other than the chosen number" with no number,
+                    // grants no protection ability at all (CR 607.5a; Sanctuary Blade,
+                    // Haktos the Unscarred's rulings).
                     if k.kind == KeywordKind::Protection
-                        && matches!(&k.filter, Some(Filter::Not(x)) if matches!(**x, Filter::Any))
+                        && crate::choices::filter_refers_to_undefined_choice(f, ch)
                     {
                         return;
+                    }
+                    if let Some(ch) = ch {
+                        k.filter = Some(crate::choices::bind_choices(f, ch));
                     }
                 }
             }
