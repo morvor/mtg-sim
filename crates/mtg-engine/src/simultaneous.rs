@@ -550,11 +550,16 @@ impl Frames {
         // Likewise the cards each player discarded and the permanents each sacrificed
         // ("Each player may discard a card. If a creature card was discarded this way,
         // ...").
+        // And the cards each player drew ("Any number of target opponents each draw a
+        // card. Put an ingredient counter on ~, then put an ingredient counter on it for
+        // each card drawn this way.", Communal Brewing).
         for var in [
             vars::IT,
             vars::CREATED,
             crate::discard_rules::DISCARDED,
             vars::SACRIFICED,
+            vars::REVEALED,
+            crate::draw_rules::DRAWN_THIS_WAY,
         ] {
             if !matches!(self.frames.first().map(|f| f.item), Some(Item::Player(_)))
                 || !self.local_vars.contains(&var)

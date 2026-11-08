@@ -204,7 +204,11 @@ fn geier_reach_sanitarium_discards_in_turn_order() {
         .collect();
     assert_eq!(order, vec![P1, P2, P0]);
     assert_eq!(
-        (t.graveyard_size(P0), t.graveyard_size(P1), t.graveyard_size(P2)),
+        (
+            t.graveyard_size(P0),
+            t.graveyard_size(P1),
+            t.graveyard_size(P2)
+        ),
         (1, 1, 1)
     );
     // Set aside, then discarded at once: as P0 (the last) chooses, nobody has discarded.
@@ -354,7 +358,10 @@ fn drown_in_dreams_both_modes_in_order() {
         t.cast(P0, s).go();
         t.resolve_all();
         // The draw happened first: the top two are in hand.
-        assert!(t.in_hand(P0, "Shock") && t.in_hand(P0, "Lightning Bolt"), "{same}");
+        assert!(
+            t.in_hand(P0, "Shock") && t.in_hand(P0, "Lightning Bolt"),
+            "{same}"
+        );
         let milled = t.graveyard_size(mill_target) - gy - usize::from(same);
         assert_eq!(milled, 4, "{same}");
         if same {
@@ -411,8 +418,7 @@ fn pact_of_the_serpent_choices_and_count() {
     let from = t.asked().len();
     let pact = cast(&mut t, P0, "Pact of the Serpent", &[pl(P1)]);
     // Cast: the target was chosen, the type wasn't.
-    assert!(!t
-        .asked()[from..]
+    assert!(!t.asked()[from..]
         .iter()
         .any(|(_, d)| matches!(d, Decision::ChooseOption { .. })));
     // In response, a second Elf arrives.
@@ -573,11 +579,9 @@ fn gluntchs_first_chosen_player_chooses_the_creature() {
     let first = t.asked()[from..]
         .iter()
         .find_map(|(_, d)| match d {
-            Decision::ChooseEntities { candidates, prompt, .. }
-                if prompt.contains("two +1/+1 counters") =>
-            {
-                Some(candidates.clone())
-            }
+            Decision::ChooseEntities {
+                candidates, prompt, ..
+            } if prompt.contains("two +1/+1 counters") => Some(candidates.clone()),
             _ => None,
         })
         .unwrap();

@@ -36,7 +36,11 @@ fn additional_draws_happen_after_the_draw_step_draw_when_the_trigger_resolves() 
         assert_eq!(t.hand_size(P0), 1, "{name}");
         t.resolve();
         assert_eq!(t.hand_size(P0), 2, "{name}");
-        assert_eq!(crate::r_p051_common::drawn_this_turn(&t, P0), 2, "{name}: two separate draws");
+        assert_eq!(
+            crate::r_p051_common::drawn_this_turn(&t, P0),
+            2,
+            "{name}: two separate draws"
+        );
     }
 }
 
@@ -90,7 +94,12 @@ fn curse_of_surveillances_controller_chooses_the_targets() {
 fn happily_setup(t: &mut TestGame, kindred: bool, battle: bool) {
     t.battlefield(P0, "Happily Ever After");
     t.battlefield(P0, "Forest");
-    for c in ["Wind Drake", "Typhoid Rats", "Goblin Piker", "Grizzly Bears"] {
+    for c in [
+        "Wind Drake",
+        "Typhoid Rats",
+        "Goblin Piker",
+        "Grizzly Bears",
+    ] {
         t.battlefield(P0, c);
     }
     t.graveyard(P0, "Lightning Bolt");
@@ -124,7 +133,11 @@ fn happily_ever_after_counts_kindred_and_battle() {
     ] {
         let mut t = TestGame::new(2);
         happily_setup(&mut t, kindred, battle);
-        assert_eq!(upkeep_wins(&mut t), wins, "kindred {kindred}, battle {battle}");
+        assert_eq!(
+            upkeep_wins(&mut t),
+            wins,
+            "kindred {kindred}, battle {battle}"
+        );
     }
     // Supertypes don't count: a legendary basic snow land adds nothing (Snow-Covered
     // Forest and a legendary creature instead of the battle).
@@ -210,7 +223,13 @@ fn innocuous_researchers_restriction_outlasts_it() {
     destroy(&mut t, researcher);
     assert!(!can_cast(&mut t, P0, bolt, CastMethod::Normal));
     t.advance_to(P1, Step::Upkeep);
-    assert!(!can_cast(&mut t, P0, bolt, CastMethod::Normal), "on P1's turn");
+    assert!(
+        !can_cast(&mut t, P0, bolt, CastMethod::Normal),
+        "on P1's turn"
+    );
     t.advance_to(P0, Step::Upkeep);
-    assert!(can_cast(&mut t, P0, bolt, CastMethod::Normal), "P0's next turn");
+    assert!(
+        can_cast(&mut t, P0, bolt, CastMethod::Normal),
+        "P0's next turn"
+    );
 }
