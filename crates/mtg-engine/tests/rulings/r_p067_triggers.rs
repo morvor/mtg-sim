@@ -53,7 +53,7 @@ fn counter(t: &mut TestGame, spell: ObjectId) {
 
 #[test]
 fn defacing_duskmage_triggers_on_the_second_draw_even_if_it_arrived_after_the_first() {
-    cr!("603.2", "603.2h");
+    cr!("603.2");
     ruling!(
         "Defacing Duskmage // Vandal's Edit",
         "Defacing Duskmage doesn't need to have been under your control when the first card is drawn for its ability to trigger. As long as you control it when an opponent draws their second card in a turn, that ability will trigger."
@@ -72,7 +72,7 @@ fn defacing_duskmage_triggers_on_the_second_draw_even_if_it_arrived_after_the_fi
 
 #[test]
 fn ian_malcolm_triggers_once_each_turn_for_each_player_on_their_second_draw() {
-    cr!("603.2", "603.2h");
+    cr!("603.2");
     ruling!(
         "Ian Malcolm, Chaotician",
         "Ian Malcolm, Chaotician's first ability can trigger only once each turn for each player. It doesn't matter if Ian was on the battlefield when the first card was drawn. If you control it when a player draws their second card in a turn, that ability will trigger."
@@ -384,7 +384,7 @@ fn caparocti_sunborn_untapped_as_its_ability_resolves_can_tap_itself() {
 
 #[test]
 fn daxos_stays_blocked_when_the_blockers_power_rises_to_3() {
-    cr!("509.1h", "506.4");
+    cr!("509.1h");
     ruling!(
         "Daxos of Meletis",
         "If Daxos is blocked by a creature, raising that creature's power to 3 or greater won't change or undo the block."
@@ -530,7 +530,7 @@ fn primeval_spawn_exiled_by_its_own_replacement_never_leaves_the_battlefield() {
 
 #[test]
 fn primeval_spawn_entering_as_a_copy_of_another_permanent_isnt_exiled() {
-    cr!("614.12", "707.9", "614.6");
+    cr!("614.12", "707.5", "614.6");
     ruling!(
         "Primeval Spawn",
         "Conversely, if an effect would cause Primeval Spawn to enter the battlefield as a copy of another permanent, it will enter the battlefield as a copy of that permanent whether or not it was cast or mana was spent to cast it."
@@ -546,7 +546,7 @@ fn primeval_spawn_entering_as_a_copy_of_another_permanent_isnt_exiled() {
 
 #[test]
 fn sanwell_as_an_attacking_artifact_creature_prevents_damage_to_itself() {
-    cr!("615.1", "506.4");
+    cr!("615.1");
     ruling!(
         "Sanwell, Avenger Ace",
         "If Sanwell, Avenger Ace is somehow an artifact creature, its first ability will see itself while it is attacking."

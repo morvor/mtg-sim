@@ -368,7 +368,7 @@ fn hazorets_undying_fury_triggers_wait_until_casting_is_done_and_resolve_first()
 
 #[test]
 fn two_hazorets_undying_fury_untap_effects_both_wear_off_in_the_next_untap_step() {
-    cr!("502.3", "611.2b");
+    cr!("502.3");
     ruling!(
         "Hazoret's Undying Fury",
         "If more than one spell says that lands you control don't untap during your next untap step, the effects will all wear off during that untap step. You'll untap lands you control during your untap step after that one."

@@ -457,7 +457,7 @@ fn release_to_the_wind_token_cant_be_cast() {
 
 #[test]
 fn a_token_exiled_by_hostage_taker_or_abstruse_appropriation_ceases_to_exist() {
-    cr!("111.7", "704.5d", "610.3c");
+    cr!("111.7", "111.8", "704.5d", "610.3c");
     ruling!(
         "Hostage Taker",
         "If a token is exiled this way, it will cease to exist and won't return to the battlefield. You can't cast it."
@@ -527,7 +527,7 @@ fn kaho_cant_cast_a_card_an_effect_took_out_of_exile() {
 
 #[test]
 fn kaho_new_controller_may_cast_the_exiled_cards() {
-    cr!("607.2a", "108.4");
+    cr!("607.2a", "602.2");
     ruling!(
         "Kaho, Minamo Historian",
         "If another player gains control of Kaho, that player may cast any of the cards exiled with Kaho's ability."

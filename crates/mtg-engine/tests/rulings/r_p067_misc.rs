@@ -1,7 +1,7 @@
 //! Rulings batch P067 — the rest: statics that apply only on the battlefield (CR 112.6),
 //! mana abilities (CR 605), exiling a spell isn't countering it (CR 701.6), Auras put onto
 //! the battlefield without being cast (CR 303.4f), copy effects as a permanent enters (CR
-//! 707.5, 707.9), searches (CR 701.23), controlled searches (CR 723), and others.
+//! 707.5), searches (CR 701.23), controlled searches (CR 723), and others.
 
 use crate::r_p067_common::*;
 use crate::r_s01_common::{attack_with, block_and_finish, stack_library, supported, triggers_on_stack};
@@ -182,7 +182,7 @@ fn evolving_door_counts_the_colors_but_not_which() {
 
 #[test]
 fn panoptic_mirror_exiling_is_optional_and_needs_mana_value_x() {
-    cr!("702.66a", "107.3a");
+    cr!("608.2d", "107.3a");
     ruling!(
         "Panoptic Mirror",
         "Exiling a card when the activated ability resolves is optional. If you choose to exile a card, you can exile only a card with mana value equal to X."
@@ -206,7 +206,7 @@ fn panoptic_mirror_exiling_is_optional_and_needs_mana_value_x() {
 
 #[test]
 fn exiling_an_uncounterable_spell_works() {
-    cr!("701.6a", "608.2b", "702.190a");
+    cr!("701.6a", "608.2b", "701.65a");
     ruling!(
         "Shell of the Last Kappa",
         "Exiling a spell prevents that spell from resolving, but it doesn’t technically “counter” anything. This means that Shell of the Last Kappa can exile spells which “can’t be countered.”"
@@ -296,7 +296,7 @@ fn jace_architect_of_thought_searches_each_library_separately() {
 
 #[test]
 fn hostage_taker_cant_target_itself() {
-    cr!("115.1", "109.1");
+    cr!("115.1", "603.3d");
     ruling!(
         "Hostage Taker",
         "Hostage Taker has received errata to prevent it from targeting itself. The correct Oracle wording appears above."
@@ -746,4 +746,90 @@ fn knowledge_pools_each_track_their_own_cards() {
     t.resolve_all();
     assert_eq!(offered_since(&t, from).len(), n, "the other trigger offers nothing");
     assert_eq!(t.hand_size(P0), 0);
+    // Pools of two players: the active player's trigger goes on the stack first, so the
+    // other player's resolves first, and its cards are the ones offered.
+    let mut t = TestGame::new(2);
+    let bolt = t.library_top(P1, "Lightning Bolt");
+    t.enter(P0, "Knowledge Pool");
+    t.resolve_all();
+    let shock = t.library_top(P1, "Shock");
+    t.enter(P1, "Knowledge Pool");
+    t.resolve_all();
+    let from = t.asked().len();
+    t.answer_choose_moved(P0, &[o(shock)]);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    cast_named(&mut t, P0, "Divination", ManaType::U, 3, &[]);
+    t.resolve_all();
+    assert!(was_offered(&t, from, shock), "{}", t.dump_log());
+    assert!(!was_offered(&t, from, bolt));
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn opposition_agent_decides_what_is_found_in_every_zone_and_it_is_all_exiled() {
+    cr!("723.2", "723.5", "701.23a");
+    ruling!(
+        "Opposition Agent",
+        "If a spell or ability instructs an opponent you control to search multiple zones including the library, you decide what cards they find in all zones. They'll exile all cards they find in any of the zones."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Opposition Agent");
+    t.set_step(P1, Step::PrecombatMain);
+    let gy = t.graveyard(P1, "Grizzly Bears");
+    t.library_top(P1, "Llanowar Elves");
+    t.answer_choose(P0, &[o(gy)]);
+    let finale = t.hand(P1, "Finale of Devastation");
+    mana(&mut t, P1, ManaType::G, 2);
+    mana(&mut t, P1, ManaType::C, 2);
+    t.cast(P1, finale).x(2).go();
+    t.resolve_all();
+    assert!(exiled(&t, gy), "{:?}\n{}", t.asked(), t.dump_log());
+    assert!(crate::r_s01_common::creatures(&t, P1).is_empty());
+    // P0 may play it.
+    t.set_step(P0, Step::PrecombatMain);
+    mana(&mut t, P0, ManaType::B, 2);
+    assert!(castable(&mut t, P0, gy));
+}
+
+#[test]
+fn with_two_opposition_agents_the_latest_ones_controller_chooses_whose_effect_applies() {
+    cr!("723.2", "723.5", "616.1");
+    ruling!(
+        "Opposition Agent",
+        "If more than one player controls an Opposition Agent, and another player searches their library, the controller of the Opposition Agent that most recently entered the battlefield controls that player during the search."
+    );
+    interp!("default-first-listed-choice");
+    for generous in [false, true] {
+        let mut t = TestGame::new(3);
+        t.enter(P0, "Opposition Agent");
+        t.enter(P2, "Opposition Agent");
+        t.set_step(P1, Step::PrecombatMain);
+        let bolt = t.library_top(P1, "Lightning Bolt");
+        t.library_top(P1, "Forest");
+        let from = t.asked().len();
+        // P2 controls P1 during the search: P2 makes P1 find Lightning Bolt.
+        t.answer_choose(P2, &[o(bolt)]);
+        if generous {
+            t.answer(P2, DecisionKind::Option, Answer::Index(1));
+        }
+        let tutor = t.hand(P1, "Demonic Tutor");
+        mana(&mut t, P1, ManaType::B, 2);
+        t.cast(P1, tutor).go();
+        t.resolve_all();
+        assert!(exiled(&t, bolt), "{}", t.dump_log());
+        let asked: Vec<PlayerId> = t.asked()[from..]
+            .iter()
+            .filter(|(_, d)| matches!(d, Decision::ChooseEntities { .. } | Decision::ChooseOption { .. }))
+            .map(|(p, _)| *p)
+            .collect();
+        // The search's choice is P1's (made by P2's agent, which found the Lightning Bolt
+        // rather than the default first card, the Forest on top); then P2 chooses.
+        assert_eq!(asked, vec![P1, P2], "{generous}");
+        let (gets, not) = if generous { (P0, P2) } else { (P2, P0) };
+        mana(&mut t, gets, ManaType::R, 1);
+        mana(&mut t, not, ManaType::R, 1);
+        assert!(castable(&mut t, gets, bolt), "{generous}");
+        assert!(!castable(&mut t, not, bolt), "{generous}");
+    }
 }

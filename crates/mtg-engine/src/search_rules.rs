@@ -195,17 +195,21 @@ pub fn perform(g: &mut Game, spec: &SearchSpec, ctx: &mut Ctx) {
                 crate::reveal::reveal_in(g, f.searcher, &cards, Some(&c));
             }
         }
-        // A rule that deals with cards found in a library instead ("they exile each card
-        // they find"): the rest of the effect still applies.
-        let from_library: Vec<ObjectId> = cards
-            .iter()
-            .copied()
-            .filter(|o| g.obj(*o).zone == Zone::Library(f.owner))
-            .collect();
-        if !from_library.is_empty()
-            && crate::kw::search_found(g, f.searcher, f.owner, &from_library)
-        {
-            cards.retain(|o| !from_library.contains(o));
+        // A rule that deals with the cards found in a search of a library instead ("they
+        // exile each card they find"): the rest of the effect still applies. A search of
+        // several zones including the library is one search: every card it found, in any
+        // of those zones (Opposition Agent ruling).
+        let found_here: Vec<ObjectId> = if f.library_searched {
+            cards
+                .iter()
+                .copied()
+                .filter(|o| g.obj(*o).owner == f.owner)
+                .collect()
+        } else {
+            Vec::new()
+        };
+        if !found_here.is_empty() && crate::kw::search_found(g, f.searcher, f.owner, &found_here) {
+            cards.retain(|o| !found_here.contains(o));
         }
         let shuffle = f.library_searched && spec.shuffle != SearchShuffle::No;
         if spec.shuffle == SearchShuffle::Before {
