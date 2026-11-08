@@ -1564,14 +1564,20 @@ impl Game {
             Value::PowerOf(s) => self
                 .eval_sel_objects(s, ctx)
                 .iter()
-                .map(|o| self.obj(*o).power() as i64)
+                .map(|o| {
+                    self.obj(crate::zones::exiled_card_lki(self, s, *o, ctx))
+                        .power() as i64
+                })
                 .sum(),
             // CR 607.3: several objects ("the total toughness of creatures you control")
             // give several answers, which are summed.
             Value::ToughnessOf(s) => self
                 .eval_sel_objects(s, ctx)
                 .iter()
-                .map(|o| self.obj(*o).toughness() as i64)
+                .map(|o| {
+                    self.obj(crate::zones::exiled_card_lki(self, s, *o, ctx))
+                        .toughness() as i64
+                })
                 .sum(),
             // CR 607.3: several objects give several answers, which are summed.
             Value::ManaValueOf(s) => self

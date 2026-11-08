@@ -51,6 +51,7 @@ pub mod copy;
 pub mod copy_rules;
 pub mod cost_choices;
 pub mod cost_effects;
+pub mod cost_order;
 pub mod cost_rules;
 pub mod cost_sets;
 pub mod counter_rules;

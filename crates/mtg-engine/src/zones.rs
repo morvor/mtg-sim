@@ -216,6 +216,42 @@ pub const COST_MOVED_SELF: Var = vars::USER + 133;
 /// objects they became in exile ("the exiled card", CR 400.7j). Other objects the cost
 /// moved (sacrificed permanents, discarded cards) aren't among them.
 pub const COST_EXILED: Var = vars::USER + 131;
+/// "The exiled card" exiled from a graveyard, for its power or toughness: the card as it
+/// last existed in the graveyard (CR 608.2h, 113.7a; the rulings of Dread Defiler, Scour
+/// the Desert, Young Deathclaws and Ritual of the Returned; interpretation
+/// `exiled-card-power-as-it-last-existed-in-the-graveyard`). Applies to a selection that
+/// names the card a cost exiled ([`COST_EXILED`], "the exiled card"), for an object in
+/// exile that the cost or the effect itself exiled (in [`COST_EXILED`] or the effect's
+/// `vars::IT`) from a graveyard. Any other object is itself.
+pub fn exiled_card_lki(g: &Game, sel: &Sel, o: ObjectId, ctx: &Ctx) -> ObjectId {
+    let names_exiled = match sel {
+        Sel::Var(v) => *v == COST_EXILED,
+        Sel::Union(v) => v
+            .iter()
+            .any(|s| matches!(s, Sel::Var(v) if *v == COST_EXILED)),
+        _ => false,
+    };
+    if !names_exiled {
+        return o;
+    }
+    let ob = g.obj(o);
+    let just_exiled = [COST_EXILED, vars::IT].iter().any(|v| {
+        ctx.vars
+            .get(v)
+            .is_some_and(|es| es.contains(&Entity::Object(o)))
+    });
+    match ob.prev {
+        Some(prev)
+            if ob.zone == Zone::Exile
+                && just_exiled
+                && matches!(g.obj(prev).zone, Zone::Graveyard(_)) =>
+        {
+            prev
+        }
+        _ => o,
+    }
+}
+
 /// The cards revealed from a hand to pay the cost of the spell or ability being resolved
 /// ("the revealed card"): as they are in the hand, or as they last existed there.
 pub const COST_REVEALED: Var = vars::USER + 7522;
@@ -357,10 +393,25 @@ pub const COST_RETURNED: Var = vars::USER + 132;
 /// return ~ when it was one of the targets (CR 400.7, 608.2b).
 pub const SOURCE_MOVED: Var = vars::USER + 18301;
 
+/// The objects an instruction choosing them as it resolves (`Sel::Choose`: "you may exile
+/// a creature card from your graveyard") moved, as the new objects they became. A target
+/// isn't found as such an object either: Master Skald's "you may exile a creature card
+/// from your graveyard. If you do, return target artifact or enchantment card from your
+/// graveyard to your hand" doesn't return its target when the exiled card was the target
+/// (its ruling; CR 400.7, 608.2b).
+pub const CHOSEN_MOVED: Var = vars::USER + 18302;
+
 /// Records that the instruction about `what` moved `moved` (see [`SOURCE_MOVED`]): `~`,
 /// or the card itself by the filter for its own card ("return this card from your
-/// graveyard to the battlefield").
+/// graveyard to the battlefield"); and what an instruction choosing objects moved
+/// ([`CHOSEN_MOVED`]).
 pub fn note_source_moved(ctx: &mut Ctx, what: &Sel, moved: &[ObjectId]) {
+    if matches!(what, Sel::Choose { .. }) && !moved.is_empty() {
+        ctx.vars
+            .entry(CHOSEN_MOVED)
+            .or_default()
+            .extend(moved.iter().map(|o| Entity::Object(*o)));
+    }
     fn own_card(f: &Filter) -> bool {
         match f {
             Filter::Custom(n) => n == crate::kw::hand_graveyard_actions::SOURCE_OR_NEXT,
@@ -382,13 +433,13 @@ pub fn note_source_moved(ctx: &mut Ctx, what: &Sel, moved: &[ObjectId]) {
 }
 
 /// `found` (what [`Game::found_after_move`] found for an object `what` selected) unless
-/// `what` is a target and `found` is what an instruction about the source moved: then
-/// the target is the object that moved, which is gone (CR 400.7).
+/// `what` is a target and `found` is what an instruction about the source, or one
+/// choosing objects, moved: then the target is the object that moved, which is gone
+/// (CR 400.7).
 pub fn target_not_source_moved(ctx: &Ctx, what: &Sel, e: Entity, found: Entity) -> Entity {
-    let moved_source = ctx
-        .vars
-        .get(&SOURCE_MOVED)
-        .is_some_and(|v| v.contains(&found));
+    let moved_source = [SOURCE_MOVED, CHOSEN_MOVED]
+        .iter()
+        .any(|var| ctx.vars.get(var).is_some_and(|v| v.contains(&found)));
     if found != e && moved_source && matches!(what, Sel::Target(_)) {
         e
     } else {

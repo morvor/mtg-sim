@@ -520,6 +520,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: a creature blocked by several creatures divides its combat damage among them as its controller chooses (CR 510.1c): with Poison Breath, the Grizzly Bears' 1 damage to each of two blocking Hill Giants destroys both; with trample, lethal damage to a blocker is its toughness.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P048.tsv`; tests `tests/rulings/r_p048_dnd.rs` (`green_dragons_poison_breath_outlasts_it_and_isnt_deathtouch`, `green_dragons_poison_breath_with_damage_divided_among_blockers`).
 
+### Back from the Brink: "it won't be able to transform"
+- Kind: outdated
+- Status: open for review
+- Ruling, Back from the Brink (2011-09-22): "If you exile a double-faced creature card this way, you'll pay the mana cost of the front face. The token will be a copy of the front face and it won't be able to transform."
+- Conflicts with: CR 707.8a: "If an effect creates a token that is a copy of a double-faced permanent or a double-faced card not on the battlefield, the resulting token is a double-faced token that has both a front face and a back face. ..." and CR 701.27a: "... Only permanents represented by double-faced tokens and double-faced cards can transform."
+- Evidence: the ruling (Innistrad, 2011-09-22) followed the CR of its day: a copy of a double-faced card copied only the face that was up, and only permanents represented by transforming double-faced cards could transform (the CR effective 2023-02-03 still had 707.8 "When copying a double-faced card, a face-up meld card, or a melded permanent, only the copiable values of the face that’s currently up are copied." and 701.28a "... Only permanents represented by transforming double-faced cards can transform."). The CR effective 2023-04-14 (March of the Machine) added 707.8a: "If an effect creates a token that is a copy of a transforming permanent or a transforming double-faced card not on the battlefield, the resulting token is a transforming token that has both a front face and a back face. ..." (archived CR texts). The first two sentences of the ruling (the front face's mana cost is paid; the token is a copy of the front face) still hold and are cited. Found in work item rulings-P077 (Nov 8).
+- Engine: the token copy of Delver of Secrets // Insectile Aberration is a double-faced token with its front face up, and it transforms into Insectile Aberration.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P077.tsv`; tests `tests/rulings/r_p077_graveyard_cards.rs` (`back_from_the_brink_copies_a_double_faced_cards_front_face`).
+
 ## Not yet investigated
 
 Possible further instances found while compiling this log. They haven't been through the

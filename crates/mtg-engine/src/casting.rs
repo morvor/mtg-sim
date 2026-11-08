@@ -3350,6 +3350,7 @@ impl Game {
         for part in &cost.parts {
             if !crate::x_cost_filters::part_has_x_filter(part)
                 && !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), ctx)
+                && !crate::cost_order::payable_with_fed_cards(self, p, cost, part, src, ctx)
                 && !(cost.mana.is_some()
                     && crate::cost_rules::untap_part_payable_with_mana(
                         self,
@@ -3933,17 +3934,22 @@ impl Game {
         // activated above may have changed what's available, CR 121.8; callers roll back
         // a failed payment.)
         for part in cost.parts.iter().filter(|c| !first(c)) {
-            if !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), ctx) {
+            if !self.cost_part_payable(p, part, src, cost.has_tap(), cost.has_untap(), ctx)
+                && !crate::cost_order::payable_with_fed_cards(self, p, cost, part, src, ctx)
+            {
                 return Err(Illegal(format!("can't pay {part:?}")));
             }
         }
         // CR 601.2h: costs that involve random elements or moving objects from a library
         // to a public zone are paid after all other costs.
-        let (late, early): (Vec<&CostPart>, Vec<&CostPart>) = cost
+        let (late, mut early): (Vec<&CostPart>, Vec<&CostPart>) = cost
             .parts
             .iter()
             .filter(|c| !first(c))
             .partition(|c| cost_part_pays_last(c));
+        // Discarding and sacrificing before exiling from the graveyard: the cards they put
+        // there may be exiled too.
+        crate::cost_order::order_parts(&mut early);
         let untaps_src = cost.has_untap();
         for part in early.into_iter().chain(late) {
             self.pay_cost_part(p, part, src, untaps_src, ctx, &mut paid)?;
