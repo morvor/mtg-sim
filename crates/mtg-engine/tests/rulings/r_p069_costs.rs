@@ -492,3 +492,24 @@ fn reanimate_card_life_loss_uses_the_card_in_the_graveyard() {
     assert_eq!(t.g.mana_value_of(t.g.current(clone)), 2);
     assert_eq!(t.life(P0), 16);
 }
+
+#[test]
+fn phyrexian_delver_life_loss_uses_the_card_in_the_graveyard() {
+    cr!("608.2h");
+    // The same wording as Reanimate's ("You lose life equal to that card's mana value.")
+    // after a triggered ability's return to the battlefield: Clone ({3}{U}) enters as a
+    // copy of Grizzly Bears (mana value 2), and P0 loses 4 life, the mana value of the
+    // card in the graveyard.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let clone = t.graveyard(P0, "Clone");
+    t.answer_targets(P0, &[o(clone)]);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[o(bears)]);
+    t.enter(P0, "Phyrexian Delver");
+    t.resolve_all();
+    assert!(t.on_battlefield(clone), "{}", t.dump_log());
+    assert_eq!(t.obj_now(clone).chars.name, "Grizzly Bears");
+    assert_eq!(t.g.mana_value_of(t.g.current(clone)), 2);
+    assert_eq!(t.life(P0), 16, "{}", t.dump_log());
+}

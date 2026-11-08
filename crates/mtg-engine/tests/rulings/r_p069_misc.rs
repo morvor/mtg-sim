@@ -22,7 +22,7 @@ use mtg_engine::*;
 
 #[test]
 fn plargg_and_nassari_you_choose_the_opponent_who_chooses() {
-    cr!("101.4", "608.2d");
+    cr!("608.2d");
     ruling!(
         "Plargg and Nassari",
         "In a multiplayer game, you choose an opponent to choose a nonland card exiled with Plargg and Nassari."
@@ -209,7 +209,8 @@ fn apple_of_eden_cards_drawn_later_go_to_hand() {
 
 #[test]
 fn primeval_spawn_uses_the_mana_values_of_the_spells_cast() {
-    cr!("601.3e", "712.8c", "202.3");
+    cr!("601.3e", "712.8f", "712.11c", "202.3");
+    interp!("total-mana-value-choice-fitted");
     ruling!(
         "Primeval Spawn",
         "Primeval Spawn’s last ability checks the mana values and types of the spells on the stack, not the mana values and types of the cards in exile. Notably, this means that you may cast the back face of a modal double-faced card or either face of a split card as long as the spells you are casting together have a total mana value of 10 or less."
@@ -236,8 +237,54 @@ fn primeval_spawn_uses_the_mana_values_of_the_spells_cast() {
 }
 
 #[test]
+fn primeval_spawn_fits_an_answer_over_the_total_in_the_order_listed() {
+    cr!("601.3e", "712.11c", "608.2g");
+    interp!("total-mana-value-choice-fitted");
+    // Each case: the cards exiled (and chosen, in this order), and which of them are cast
+    // (as which spell). Serra Angel (5), Craw Wurm (6), Grizzly Bears (2): the Wurm doesn't
+    // fit after the Angel, but the Bears still do. Halvar, God of Battle (4) cast first,
+    // before Serra Angel and Grizzly Bears: only as Sword of the Realms (2), so that the
+    // other two still fit.
+    let cases: [(&[&str], &[Option<&str>]); 2] = [
+        (
+            &["Serra Angel", "Craw Wurm", "Grizzly Bears"],
+            &[Some("Serra Angel"), None, Some("Grizzly Bears")],
+        ),
+        (
+            &[
+                "Halvar, God of Battle // Sword of the Realms",
+                "Serra Angel",
+                "Grizzly Bears",
+            ],
+            &[
+                Some("Sword of the Realms"),
+                Some("Serra Angel"),
+                Some("Grizzly Bears"),
+            ],
+        ),
+    ];
+    for (names, cast) in cases {
+        let mut t = TestGame::new(2);
+        let spawn = t.battlefield(P0, "Primeval Spawn");
+        let cards = stack_library(&mut t, P0, names);
+        t.answer_choose_moved(P0, &cards.iter().map(|c| o(*c)).collect::<Vec<_>>());
+        t.g.destroy(spawn, None);
+        t.resolve_all();
+        for (c, name) in cards.iter().zip(cast) {
+            match name {
+                Some(n) => {
+                    assert!(t.on_battlefield(*c), "{n}: {}", t.dump_log());
+                    assert_eq!(t.obj_now(*c).chars.name, *n);
+                }
+                None => assert!(exiled(&t, *c), "{}", t.dump_log()),
+            }
+        }
+    }
+}
+
+#[test]
 fn sakashimas_protege_copies_only_copiable_values() {
-    cr!("707.2", "706.2");
+    cr!("707.2");
     ruling!(
         "Sakashima's Protege",
         "Sakashima's Protege copies exactly what was printed on the original permanent (unless that permanent is copying something else or is a token; see below). It doesn't copy whether that permanent is tapped or untapped, whether it has any counters on it or any Auras and Equipment attached to it, or any non-copy effects that have changed its power, toughness, types, color, or so on."
@@ -486,7 +533,7 @@ fn hedonists_trove_once_a_turn_limit_is_only_for_nonland_cards() {
 
 #[test]
 fn ensnared_by_the_mara_the_opponent_chooses_only_the_option() {
-    cr!("701.56a", "608.2d");
+    cr!("701.55a", "608.2d");
     ruling!(
         "Ensnared by the Mara",
         "The opponent chooses whether to exile cards from the top of their library until they exile a nonland card or to exile the top four cards of their library. They don't choose whether you cast the cards exiled by the first option."
