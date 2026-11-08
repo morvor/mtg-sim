@@ -28,6 +28,9 @@ const RANDOM_OBJECTS: Var = vars::USER + 4421;
 pub const RANDOM_NUMBER: Var = vars::USER + 4422;
 /// The object an instruction describes as "chosen at random" (not targeted).
 const RANDOM_OBJECT: Var = vars::USER + 4423;
+/// The cards chosen at random from each player's zone in turn ("exile a card at random
+/// from each opponent's graveyard").
+const RANDOM_EACH: Var = vars::USER + 4424;
 
 /// "choose an opponent at random", "choose a player at random", "choose another player
 /// at random".
@@ -87,6 +90,39 @@ fn exile_at_random(l: &str, b: &mut Builder) -> Option<Effect> {
         let (who, rest) = player_ref(l, b)?;
         (who, rest.trim_start().strip_prefix("exiles ")?.to_string())
     };
+    // "exile a card at random from each opponent's graveyard": that many from each of
+    // them (chosen in turn, then all exiled at once), not that many in all.
+    for (each, players) in [
+        ("from each opponent's ", PlayerRef::EachOpponent),
+        ("from each player's ", PlayerRef::EachPlayer),
+    ] {
+        if r.contains(each) && matches!(who, PlayerRef::You) {
+            let r = r.replacen(each, "from their ", 1);
+            let (what, rest) = random_cards(&r, b, &players)?;
+            if !end(&rest).is_empty() {
+                return None;
+            }
+            b.it = Sel::Var(vars::IT);
+            return Some(Effect::seq(vec![
+                Effect::Store {
+                    var: RANDOM_EACH,
+                    sel: Sel::Union(vec![]),
+                },
+                Effect::ForEachPlayer {
+                    who: players,
+                    effect: Box::new(Effect::Store {
+                        var: RANDOM_EACH,
+                        sel: Sel::Union(vec![Sel::Var(RANDOM_EACH), what]),
+                    }),
+                },
+                Effect::Exile {
+                    what: Sel::Var(RANDOM_EACH),
+                    face_down: false,
+                    link: false,
+                },
+            ]));
+        }
+    }
     let (what, rest) = random_cards(&r, b, &who)?;
     if !end(&rest).is_empty() {
         return None;
@@ -124,7 +160,12 @@ fn choose_objects_at_random(l: &str, b: &mut Builder) -> Option<Effect> {
         store: Some(RANDOM_OBJECTS),
     };
     b.it = Sel::Var(RANDOM_OBJECTS);
-    for p in ["that card", "that creature", "the chosen card", "the chosen creature"] {
+    for p in [
+        "that card",
+        "that creature",
+        "the chosen card",
+        "the chosen creature",
+    ] {
         b.named.push((p.into(), Sel::Var(RANDOM_OBJECTS)));
     }
     Some(Effect::Store {
@@ -161,7 +202,9 @@ fn all_others_than_random(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
                 *f = Filter::not(Filter::In(Box::new(Sel::Var(RANDOM_OBJECTS))));
                 true
             }
-            Filter::And(v) => v.iter_mut().fold(false, |any, x| other_than_chosen(x) | any),
+            Filter::And(v) => v
+                .iter_mut()
+                .fold(false, |any, x| other_than_chosen(x) | any),
             _ => false,
         }
     }
@@ -241,8 +284,7 @@ fn chosen_at_random(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let (f, plural, tail) = parse_object_phrase(r2)?;
-    if plural || !end(tail).is_empty() || f.zone().is_some_and(|z| z != ZoneKind::Battlefield)
-    {
+    if plural || !end(tail).is_empty() || f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
         return None;
     }
     let placeholder = "the object chosen at random";
@@ -288,7 +330,9 @@ fn one_of_them_at_random(l: &str, b: &mut Builder) -> Option<Effect> {
     if verb == "destroy" && r == "one of them chosen at random" {
         let destructible = Filter::and(vec![
             Filter::In(Box::new(them)),
-            Filter::not(Filter::HasKeyword(crate::keywords::KeywordKind::Indestructible)),
+            Filter::not(Filter::HasKeyword(
+                crate::keywords::KeywordKind::Indestructible,
+            )),
         ]);
         return Some(Effect::If {
             cond: Condition::SelNonEmpty(Sel::All(destructible.clone())),
@@ -335,10 +379,7 @@ fn choose_number_at_random(l: &str, b: &mut Builder) -> Option<Effect> {
         .iter()
         .map(|w| w.parse::<i32>().ok())
         .collect::<Option<Vec<_>>>()?;
-    b.named.push((
-        "\u{1}random number".into(),
-        Sel::None,
-    ));
+    b.named.push(("\u{1}random number".into(), Sel::None));
     random_number_effect(RANDOM_NUMBER, &nums)
 }
 
@@ -396,7 +437,11 @@ fn choose_keyword(l: &str, b: &mut Builder) -> Option<Effect> {
         None => (r, false),
     };
     let words = keyword_options(r)?;
-    let marker = if random { "\u{1}random ability:" } else { "\u{1}ability:" };
+    let marker = if random {
+        "\u{1}random ability:"
+    } else {
+        "\u{1}ability:"
+    };
     b.named
         .push((format!("{marker}{}", words.join("|")), Sel::None));
     Some(Effect::Noop)
@@ -513,7 +558,10 @@ fn after_random_exile(l: &str, prev: &mut Effect, _b: &mut Builder) -> bool {
             named: None,
         },
         _ => {
-            let (cast_only, r) = match (l.strip_prefix("you may play "), l.strip_prefix("you may cast ")) {
+            let (cast_only, r) = match (
+                l.strip_prefix("you may play "),
+                l.strip_prefix("you may cast "),
+            ) {
                 (Some(r), _) => (false, r),
                 (None, Some(r)) => (true, r),
                 _ => return false,
