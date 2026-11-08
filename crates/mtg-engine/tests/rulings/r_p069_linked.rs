@@ -3,7 +3,7 @@
 //! memory of the old one's cards (CR 400.7); a cast card leaves exile once (CR 601.2a); and
 //! whether the exiled cards are face up (CR 406.3).
 
-use crate::r_p067_common::{activate_x, was_offered};
+use crate::r_p067_common::{activate_x, move_to, was_offered};
 use crate::r_p069_common::*;
 use crate::r_s01_common::{attack_with, block_and_finish, stack_library, supported, watch};
 use mtg_engine::decision::{Answer, Decision};
@@ -65,7 +65,7 @@ fn kaho_casts_only_cards_its_triggered_ability_exiled() {
 
 #[test]
 fn nightveil_specter_cards_belong_to_that_specific_specter() {
-    cr!("607.2a", "400.7");
+    cr!("607.2a");
     ruling!(
         "Nightveil Specter",
         "Nightveil Specter’s last ability applies to cards exiled with that specific Nightveil Specter, not any other creature named Nightveil Specter. You should keep cards exiled by different Nightveil Specters separate."
@@ -117,7 +117,7 @@ fn muse_vessel_plays_only_cards_its_first_ability_exiled() {
 
 #[test]
 fn quintorius_targets_only_cards_its_trigger_exiled_not_a_sacrificed_spirit() {
-    cr!("607.2a", "614.1a", "601.2h");
+    cr!("607.2a", "614.1a", "602.2b", "601.2h");
     ruling!(
         "Quintorius, Loremaster",
         "Quintorius's last two abilities are linked. The last ability can target only cards exiled by the triggered ability. If a Spirit you sacrifice to activate the last ability ends up being exiled because of a replacement effect, that card can't be targeted by the last ability."
@@ -159,7 +159,7 @@ fn quintorius_targets_only_cards_its_trigger_exiled_not_a_sacrificed_spirit() {
 
 #[test]
 fn izzet_chemister_casts_only_its_own_cards_and_they_are_lost_if_it_leaves() {
-    cr!("607.2a", "400.7");
+    cr!("607.2a");
     ruling!(
         "Izzet Chemister",
         "The last ability of Izzet Chemister only lets you cast cards exiled by that card. If Izzet Chemister leaves the battlefield before you activate that ability, the exiled cards are lost forever."
@@ -204,7 +204,7 @@ fn izzet_chemister_casts_only_its_own_cards_and_they_are_lost_if_it_leaves() {
 
 #[test]
 fn kheru_mind_eater_casts_only_its_own_cards_and_they_are_lost_if_it_leaves() {
-    cr!("607.2a", "400.7");
+    cr!("607.2a");
     ruling!(
         "Kheru Mind-Eater",
         "The last ability of Kheru Mind-Eater only lets you cast cards exiled by that card. If Kheru Mind-Eater leaves the battlefield, the exiled cards are lost forever."
@@ -268,7 +268,7 @@ fn share_the_spoils_cards_cant_be_played_after_it_leaves_and_a_new_one_has_no_me
 
 #[test]
 fn idol_of_endurance_cards_return_when_it_leaves_but_cast_ones_stay() {
-    cr!("610.3a", "610.3c");
+    cr!("610.3", "400.7");
     ruling!(
         "Idol of Endurance",
         "The exiled cards return to your graveyard immediately after Idol of Endurance leaves the battlefield. Any cards that had left exile before then (most likely because they were cast with Idol of Endurance's second ability) remain in their current zone."
@@ -313,6 +313,9 @@ fn gonti_canny_acquisitor_card_can_be_played_only_once() {
     assert!(t.in_graveyard(P1, "Lightning Bolt"));
     mana(&mut t, P0, ManaType::B, 1);
     assert!(!castable(&mut t, P0, bolt));
+    // Put back into exile, it's a new object the permission doesn't cover.
+    move_to(&mut t, bolt, Zone::Exile);
+    assert!(!castable(&mut t, P0, bolt));
 }
 
 /// P0 casts Psychic Theft on P1, exiling P1's Lightning Bolt.
@@ -330,7 +333,7 @@ fn psychic_theft(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn psychic_theft_card_is_cast_once_and_the_effect_ends() {
-    cr!("601.2a", "603.7");
+    cr!("601.2a", "603.7", "400.7");
     ruling!(
         "Psychic Theft",
         "The card may only be cast once. Once it is announced and put on the stack, the card is no longer exiled and the effect of Psychic Theft ends."
@@ -350,11 +353,15 @@ fn psychic_theft_card_is_cast_once_and_the_effect_ends() {
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Lightning Bolt"));
     assert!(!t.in_hand(P1, "Lightning Bolt"));
+    // Put back into exile, it's a new object the permission doesn't cover.
+    move_to(&mut t, bolt, Zone::Exile);
+    mana(&mut t, P0, ManaType::R, 1);
+    assert!(!castable(&mut t, P0, bolt));
 }
 
 #[test]
 fn psychic_theft_card_is_revealed_while_exiled() {
-    cr!("406.3", "701.20a");
+    cr!("406.3");
     ruling!(
         "Psychic Theft",
         "The card is revealed to all players while it is exiled."
@@ -483,7 +490,7 @@ fn grima_exiles_the_cards_face_up() {
 
 #[test]
 fn expensive_taste_and_siphon_insight_only_you_look_at_the_cards() {
-    cr!("406.3", "708.2");
+    cr!("406.3", "406.3a");
     ruling!(
         "Decadent Dragon // Expensive Taste",
         "Only you get to look at the cards exiled with Expensive Taste. Their owner doesn't get to know what they are while they're in exile until you play them."

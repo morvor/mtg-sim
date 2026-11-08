@@ -18,7 +18,7 @@ use mtg_engine::*;
 
 #[test]
 fn savvy_trader_reduces_only_generic_mana() {
-    cr!("601.2f", "118.7d");
+    cr!("601.2f", "118.7a");
     ruling!(
         "Savvy Trader",
         "Savvy Trader’s last ability can’t reduce the amount of colored mana you pay for a spell. It reduces only the generic mana component of that spell’s cost."
@@ -224,7 +224,7 @@ fn emerge(t: &mut TestGame, artifact: ObjectId, pool: &[(ManaType, u32)]) -> boo
 
 #[test]
 fn crabomination_sacrificed_artifact_can_make_mana_but_misses_cast_triggers() {
-    cr!("601.2g", "601.2h", "601.2i", "702.119a");
+    cr!("601.2g", "601.2h", "601.2i", "702.119b", "702.119c");
     ruling!(
         "Crabomination",
         "The artifact chosen to be sacrificed is still on the battlefield up through the time that you activate mana abilities. Its abilities may affect the spell's cost, be activated to generate mana, and so on. However, if it has an ability that triggers when a spell is cast, it will have been sacrificed before that ability can trigger."
@@ -239,6 +239,18 @@ fn crabomination_sacrificed_artifact_can_make_mana_but_misses_cast_triggers() {
         t.dump_log()
     );
     assert!(t.in_graveyard(P0, "Mind Stone"));
+    assert!(t.g.player(P0).mana_pool.is_empty());
+    // Jet Medallion (mana value 2, "Black spells you cast cost {1} less to cast."): its
+    // reduction applies too, the total cost being locked in before it's sacrificed:
+    // {2}{B}{B}.
+    let mut t = TestGame::new(2);
+    let med = t.battlefield(P0, "Jet Medallion");
+    assert!(
+        emerge(&mut t, med, &[(ManaType::B, 2), (ManaType::C, 2)]),
+        "{}",
+        t.dump_log()
+    );
+    assert!(t.in_graveyard(P0, "Jet Medallion"));
     assert!(t.g.player(P0).mana_pool.is_empty());
     // Oketra's Monument ("Whenever you cast a creature spell, create a 1/1 white Warrior
     // creature token with vigilance."): sacrificed before it could trigger.
@@ -256,7 +268,7 @@ fn crabomination_sacrificed_artifact_can_make_mana_but_misses_cast_triggers() {
 
 #[test]
 fn crabomination_mana_value_of_back_faces_melded_permanents_and_copies() {
-    cr!("712.8g", "712.4c", "202.3", "707.2");
+    cr!("712.8g", "712.8e", "202.3", "707.2");
     ruling!(
         "Crabomination",
         "The mana value of the back face of a double-faced card is the mana value of its front face. The mana value of a melded permanent is the sum of the mana values of its front faces. An artifact that's a copy of either has a mana value of 0."
@@ -316,7 +328,7 @@ fn crabomination_mana_value_of_back_faces_melded_permanents_and_copies() {
 
 #[test]
 fn urianger_reduces_only_generic_mana() {
-    cr!("601.2f", "118.7d");
+    cr!("601.2f", "118.7a");
     ruling!(
         "Urianger Augurelt",
         "The cost reduction applies only to generic mana in the total cost of spells you cast with the permission granted by Urianger Augurelt's last ability."
@@ -343,7 +355,7 @@ fn urianger_reduces_only_generic_mana() {
 
 #[test]
 fn uvilda_reduction_doesnt_reduce_colored_mana() {
-    cr!("601.2f", "118.7d");
+    cr!("601.2f", "118.7a");
     ruling!(
         "Uvilda, Dean of Perfection // Nassari, Dean of Expression",
         "The cost reduction given by Uvilda, Dean of Perfection won’t reduce any colored mana requirements in the spell’s cost."
@@ -378,7 +390,7 @@ fn uvilda_reduction_doesnt_reduce_colored_mana() {
 
 #[test]
 fn forgers_foundry_delayed_trigger_works_after_it_leaves() {
-    cr!("603.7a", "603.7c");
+    cr!("603.7a");
     ruling!(
         "Forger's Foundry",
         "The delayed triggered ability will trigger whether Forger's Foundry is still on the battlefield or not."

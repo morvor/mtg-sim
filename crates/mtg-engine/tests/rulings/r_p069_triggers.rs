@@ -76,7 +76,7 @@ fn checks_twice(
 
 #[test]
 fn joined_researchers_checks_hands_as_the_end_step_starts_and_on_resolution() {
-    cr!("603.4", "513.1a");
+    cr!("603.4");
     ruling!(
         "Joined Researchers // Secret Rendezvous",
         "Joined Researchers's last ability will check as each end step starts to see if an opponent has more cards in hand than you. If none do, the ability won't trigger at all. It's not possible to discard cards or cause an opponent to draw cards during an end step in time to have the ability trigger. If it does trigger, the ability will check again as it tries to resolve. If no opponent has more cards in hand than you at that time, the ability won't resolve and none of its effects will happen."
@@ -149,7 +149,7 @@ fn naktamun_lorespinner_checks_hand_sizes_as_it_triggers_and_on_resolution() {
 
 #[test]
 fn scheming_silvertongue_checks_life_gained_as_the_second_main_phase_starts() {
-    cr!("603.4", "505.1");
+    cr!("603.4", "505.1b");
     ruling!(
         "Scheming Silvertongue // Sign in Blood",
         "Scheming Silvertongue's last ability will check as your second main phase starts to see if you gained 2 or more life this turn. If you didn't, the ability won't trigger at all. It's not possible to gain life during your second main phase in time to have the ability trigger."
@@ -169,7 +169,7 @@ fn scheming_silvertongue_checks_life_gained_as_the_second_main_phase_starts() {
 
 #[test]
 fn jace_architect_of_thought_affects_creatures_attacking_anyone() {
-    cr!("603.7c", "508.1");
+    cr!("603.7a", "508.1");
     ruling!(
         "Jace, Architect of Thought",
         "Jace's first ability creates a delayed triggered ability that triggers whenever a creature an opponent controls attacks. It doesn't matter which player or planeswalker that creature is attacking."
@@ -259,7 +259,7 @@ fn long_range_sensor_triggers_once_per_player_attacked() {
 
 #[test]
 fn etali_primal_sickness_poison_doesnt_need_etali_to_stay() {
-    cr!("704.5c", "603.10", "113.7a");
+    cr!("704.5c", "113.7a");
     ruling!(
         "Etali, Primal Conqueror // Etali, Primal Sickness",
         "Losing the game because a player (preferably an opponent) has ten or more poison counters is a rule of the game. Etali, Primal Sickness doesn’t have to still be on the battlefield when someone (preferably an opponent) gets their tenth poison counter."
@@ -504,6 +504,13 @@ fn codie_trigger_resolves_first_even_if_the_spell_is_countered() {
         "Codie, Vociferous Codex",
         "The delayed triggered ability created by Codie’s second ability will resolve before the spell that caused it to trigger. That ability will resolve even if the spell is countered or otherwise doesn’t resolve."
     );
+    // The trigger resolves first: the Bolt is exiled while Divination is on the stack.
+    let mut t = TestGame::new(2);
+    let (cards, div) = codie(&mut t, &["Hill Giant", "Lightning Bolt"], false);
+    t.resolve();
+    assert!(exiled(&t, cards[1]), "{}", t.dump_log());
+    assert_eq!(t.zone(div), Zone::Stack);
+    // Countered in response, it still happens.
     let mut t = TestGame::new(2);
     let (cards, div) = codie(&mut t, &["Hill Giant", "Lightning Bolt"], false);
     let cs = t.hand(P1, "Counterspell");
@@ -543,21 +550,27 @@ fn jodah_includes_x_in_the_mana_value() {
         "The mana value of the spell that caused the ability to trigger is determined only by its mana cost, no matter what the total cost to cast the spell was. If that spell had an {X} in its cost, include the chosen value for X when determining its mana value."
     );
     supported("Jodah, the Unifier");
-    // Big Bertha ({X}{G}) with X = 3 has mana value 4: Oketra's Monument (3) is lesser.
+    // Big Bertha ({X}{G}) with X = 3 has mana value 4, though Helm of Awakening ("Spells
+    // cost {1} less to cast.") makes its total cost 3: Jace, Architect of Thought (4) isn't
+    // lesser; Oketra's Monument (3) is.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Jodah, the Unifier");
+    t.battlefield(P0, "Helm of Awakening");
     let mon = t.library_top(P0, "Oketra's Monument");
+    let jace = t.library_top(P0, "Jace, Architect of Thought");
     let bb = t.hand(P0, "Big Bertha");
-    mana(&mut t, P0, ManaType::G, 4);
+    mana(&mut t, P0, ManaType::G, 3);
     t.answer_yes(P0, true);
     t.cast(P0, bb).x(3).go();
+    assert!(t.g.player(P0).mana_pool.is_empty());
     t.resolve_all();
     assert!(t.on_battlefield(mon), "{}", t.dump_log());
+    assert!(!t.on_battlefield(jace));
 }
 
 #[test]
 fn hidetsugu_and_kairi_does_nothing_if_the_opponent_becomes_an_illegal_target() {
-    cr!("608.2b", "702.11d");
+    cr!("608.2b", "702.11c");
     ruling!(
         "Hidetsugu and Kairi",
         "The last triggered ability targets the opponent. If that player is an illegal target as the ability tries to resolve, the ability won’t resolve and none of its effects will happen. You won’t exile a card."
@@ -578,7 +591,7 @@ fn hidetsugu_and_kairi_does_nothing_if_the_opponent_becomes_an_illegal_target() 
 
 #[test]
 fn smirking_spelljacker_exiles_a_spell_that_cant_be_countered() {
-    cr!("101.2", "701.6b");
+    cr!("701.6a");
     ruling!(
         "Smirking Spelljacker",
         "Spells that can’t be countered can still be exiled by Smirking Spelljacker’s triggered ability. They won’t resolve."
@@ -599,7 +612,7 @@ fn smirking_spelljacker_exiles_a_spell_that_cant_be_countered() {
 
 #[test]
 fn shell_of_the_last_kappa_targets_only_spells_that_target_you() {
-    cr!("115.1a", "115.2");
+    cr!("115.9b", "115.2");
     ruling!(
         "Shell of the Last Kappa",
         "Shell of the Last Kappa’s first ability can only target a spell that targets you."

@@ -8,6 +8,7 @@ use crate::r_p069_common::*;
 use crate::r_s01_common::{attack_with, block_and_finish, stack_library, supported};
 use mtg_engine::types::counters;
 use mtg_engine::mana::ManaType;
+use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -35,6 +36,7 @@ fn ixhel_doesnt_change_when_you_can_cast_the_card() {
     t.resolve_all();
     assert!(exiled(&t, bears), "{}", t.dump_log());
     assert!(t.obj_now(bears).face_down);
+    mana(&mut t, P0, ManaType::B, 2);
     assert!(!castable(&mut t, P0, bears), "end step");
     // Mana as though it were mana of any color.
     sorcery_timing_only(&mut t, P0, bears, ManaType::B, 2);
@@ -107,6 +109,12 @@ fn ornate_kanzashi_normal_restrictions_apply() {
         assert!(exiled(&t, card));
         if instant {
             t.set_step(P0, Step::DeclareAttackers);
+            // Not while another player has priority.
+            mana(&mut t, P0, ManaType::R, 1);
+            t.g.turn.priority = Some(P1);
+            let c = t.g.current(card);
+            assert!(t.g.cast_spell(P0, c, CastMethod::Normal).is_err());
+            assert_eq!(t.zone(card), Zone::Exile);
             must_pay(&mut t, P0, card, ManaType::R, 1);
         } else {
             sorcery_timing_only(&mut t, P0, card, ManaType::U, 3);
@@ -131,7 +139,9 @@ fn extraordinary_journey_owner_pays_costs_and_follows_timing() {
     t.answer_targets(P0, &[o(bears)]);
     t.resolve_all();
     assert!(exiled(&t, bears), "{}", t.dump_log());
-    // Its owner, P1, may cast it: only in P1's main phase, for {1}{G}.
+    // Its owner, P1, may cast it: only in P1's main phase, for {1}{G}. Not P0, even with
+    // the mana in its own main phase.
+    mana(&mut t, P0, ManaType::G, 2);
     assert!(!castable(&mut t, P0, bears));
     t.set_step(P1, Step::PrecombatMain);
     must_pay(&mut t, P1, bears, ManaType::G, 2);
@@ -179,7 +189,12 @@ fn fiend_nightveil_and_praetors_grasp_follow_the_normal_rules() {
             }
         };
         assert!(exiled(&t, bears), "{name}: {}", t.dump_log());
-        assert!(!castable(&mut t, P0, bears), "{name}: end of combat");
+        // Praetor's Grasp resolved in P0's main phase; the others' cards were exiled in
+        // combat.
+        if name != "Praetor's Grasp" {
+            mana(&mut t, P0, ManaType::G, 2);
+            assert!(!castable(&mut t, P0, bears), "{name}: end of combat");
+        }
         sorcery_timing_only(&mut t, P0, bears, ManaType::G, 2);
         must_pay(&mut t, P0, bears, ManaType::G, 2);
     }
@@ -335,7 +350,7 @@ fn idol_of_endurance_doesnt_change_when_you_may_cast_creature_spells() {
     t.activate(P0, idol, 0, &[]).unwrap();
     t.resolve_all();
     sorcery_timing_only(&mut t, P0, bears, ManaType::C, 0);
-    // Ambush Viper has flash: castable in combat, and with a spell on the stack.
+    // Ambush Viper has flash: castable in combat, and in another player's turn.
     t.set_step(P0, Step::DeclareAttackers);
     assert!(castable(&mut t, P0, viper));
     t.set_step(P1, Step::End);
