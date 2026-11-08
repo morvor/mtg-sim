@@ -251,7 +251,7 @@ fn uprising(t: &mut TestGame, mine: ObjectId, theirs: ObjectId) -> ObjectId {
 
 #[test]
 fn undercity_uprising_with_both_targets_illegal_does_nothing() {
-    cr!("608.2b", "701.14b");
+    cr!("608.2b");
     ruling!(
         "Undercity Uprising",
         "If both target creatures are illegal targets by the time Undercity Uprising tries to resolve, the spell doesn’t resolve. No creatures deal damage or gain deathtouch."
@@ -276,19 +276,24 @@ fn undercity_uprising_with_one_target_illegal_gives_deathtouch_without_a_fight()
         "Undercity Uprising",
         "If one of the two target creatures is an illegal target by the time Undercity Uprising tries to resolve, no creature deals or is dealt damage. Creatures you control still gain deathtouch."
     );
-    // P1's creature gains hexproof (an illegal target): P0's Hill Giant gets deathtouch
-    // and deals no damage.
+    // P1's creature gains hexproof in response (Ranger's Guile): an illegal target still
+    // on the battlefield. P0's Hill Giant gets deathtouch; neither creature deals damage.
     let mut t = TestGame::new(2);
     let mine = t.battlefield(P0, "Hill Giant");
     let theirs = t.battlefield(P1, "Craw Wurm");
     uprising(&mut t, mine, theirs);
-    t.g.destroy(theirs, None);
-    t.settle();
-    let theirs2 = t.battlefield(P1, "Craw Wurm");
+    let guile = t.hand(P1, "Ranger's Guile");
+    mana(&mut t, P1, ManaType::G, 1);
+    t.g.turn.priority = Some(P1);
+    t.cast(P1, guile).target(theirs).go();
+    t.resolve();
+    assert!(t.obj_now(theirs).has_keyword(KeywordKind::Hexproof), "{}", t.dump_log());
     t.resolve_all();
+    assert!(t.in_graveyard(P0, "Undercity Uprising"), "{}", t.dump_log());
     assert!(deathtouch(&t, mine));
-    assert_eq!(t.obj_now(mine).damage, 0);
-    assert_eq!(t.obj_now(theirs2).damage, 0);
+    assert!(t.on_battlefield(mine) && t.on_battlefield(theirs));
+    assert_eq!(t.obj_now(mine).damage, 0, "{}", t.dump_log());
+    assert_eq!(t.obj_now(theirs).damage, 0);
     // P0's creature leaves instead: the other gets no damage either.
     let mut t = TestGame::new(2);
     let other = t.battlefield(P0, "Grizzly Bears");
@@ -419,7 +424,7 @@ fn pain_101_token_triggers_but_isnt_returned() {
 
 #[test]
 fn deadly_allure_attacker_must_be_blocked_by_at_least_one_able_creature() {
-    cr!("509.1c", "702.2b");
+    cr!("509.1c");
     ruling!(
         "Deadly Allure",
         "If the target creature is attacking, the defending player must assign at least one blocker to it during the declare blockers step if that player controls any creatures that could block it."
@@ -766,7 +771,7 @@ fn tyvar_kell_emblem_haste_carries_from_the_elf_spell_to_the_permanent() {
 
 #[test]
 fn tyvar_kell_targets_elves_tapped_or_not_but_not_himself() {
-    cr!("115.1", "205.3j", "306.1");
+    cr!("115.1", "205.3j");
     ruling!(
         "Tyvar Kell",
         "The first loyalty ability can target an Elf that's already untapped."
@@ -897,7 +902,7 @@ fn vraska_granted_trigger_counts_any_damage_and_ends_the_game_when_opponents_are
 
 #[test]
 fn paladin_class_cost_increases_are_cumulative() {
-    cr!("601.2f", "613.1");
+    cr!("601.2f");
     ruling!(
         "Paladin Class",
         "Additional costs from Paladin Class cards are cumulative. For example, if you control two Paladin Class cards, spells your opponents cast cost {2} more to cast."
@@ -944,7 +949,7 @@ fn dangerous_forces_only_creatures_able_to_block() {
 
 #[test]
 fn embercleave_cant_cost_less_than_rr() {
-    cr!("601.2f", "118.7d");
+    cr!("601.2f", "118.7a");
     ruling!(
         "Embercleave",
         "Embercleave's second ability can't reduce its cost below {R}{R}."

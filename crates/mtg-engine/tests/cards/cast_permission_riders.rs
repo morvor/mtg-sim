@@ -159,7 +159,7 @@ fn chiss_goria_artifact_cast_from_among_them_has_affinity() {
     let cg = t.battlefield(P0, "Chiss-Goria, Forge Tyrant");
     t.battlefield(P0, "Ornithopter");
     t.battlefield(P0, "Ornithopter");
-    // Five cards; Steel Wall ({3}, artifact creature) on top.
+    // Five cards; Steel Wall ({1}, artifact creature) on top.
     for _ in 0..4 {
         t.library_top(P0, "Island");
     }
@@ -169,7 +169,20 @@ fn chiss_goria_artifact_cast_from_among_them_has_affinity() {
     t.advance_to(P0, Step::PostcombatMain);
     let wall = t.g.current(wall);
     assert_eq!(t.zone(wall), Zone::Exile);
-    // Two artifacts: {3} costs {1}.
+    // Two artifacts: Steel Wall's {1} costs {0}, so it's offered with the Mountain tapped
+    // (the rider's affinity counts as the castable cards are listed, CR 601.2f).
+    for m in t.named_on_battlefield("Mountain") {
+        t.g.objects[m.0 as usize].tapped = true;
+    }
+    t.g.turn.priority = Some(P0);
+    t.g.recompute();
+    assert!(
+        t.g.legal_actions(P0).iter().any(
+            |a| matches!(a, mtg_engine::decision::Action::Cast { card, .. } if *card == wall)
+        ),
+        "{}",
+        t.dump_log()
+    );
     let spell = t.cast(P0, wall).go();
     t.g.recompute();
     assert!(t.g.obj(spell).has_keyword(KeywordKind::Affinity));

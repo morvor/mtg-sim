@@ -107,7 +107,7 @@ fn urianger_cards_are_paid_for_less_two_with_normal_timing() {
 
 #[test]
 fn ryan_sinclair_free_cast_pays_kicker_and_mandatory_additional_costs() {
-    cr!("118.9a", "601.2b", "601.2f", "702.33a");
+    cr!("118.9", "118.9d", "601.2b", "601.2f", "702.33a");
     ruling!(
         "Ryan Sinclair",
         "You may pay optional additional costs to cast that spell, such as kicker costs. If it has any mandatory additional costs, you must pay those."

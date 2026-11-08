@@ -51,6 +51,10 @@ fn abandoned_sarcophagus_tokens_and_permanents_without_cycling_go_to_the_graveya
     t.g.destroy(token, None);
     t.resolve_all();
     assert_eq!(t.life(P1), 19, "{}", t.dump_log());
+    // It wasn't exiled; it ceased to exist in the graveyard (the card stays in hand).
+    assert!(!t.in_exile("Desert Cerodon"), "{}", t.dump_log());
+    assert!(!t.in_graveyard(P0, "Desert Cerodon"));
+    assert_eq!(t.zone(cerodon), Zone::Hand(P0));
     // Desert Cerodon under Humility (no abilities) dies: put into the graveyard.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Abandoned Sarcophagus");
@@ -130,7 +134,7 @@ fn abandoned_sarcophagus_casts_typecycling_cards_and_exiles_them_unless_typecycl
 
 #[test]
 fn abandoned_sarcophagus_cycled_instant_can_be_cast_before_the_cycling_ability_resolves() {
-    cr!("117.3c", "405.5", "307.1");
+    cr!("117.3c", "405.5", "302.1");
     ruling!(
         "Abandoned Sarcophagus",
         "If you cycle an instant card, you may cast it from your graveyard right away before any player may take any other action. If you do, that spell will resolve before the cycling ability. If you cycle a noninstant card without flash, you can't cast it until after the cycling ability has resolved."
@@ -242,7 +246,7 @@ fn harness_the_storm_allows_alternative_and_additional_costs_and_requires_mandat
 
 #[test]
 fn harness_the_storm_card_can_still_be_cast_if_the_hand_spell_is_countered() {
-    cr!("603.3d", "608.2b");
+    cr!("113.7a", "608.2b");
     ruling!(
         "Harness the Storm",
         "If the spell you cast from your hand is countered in response to Harness the Storm’s triggered ability, you can still cast the target card while the ability is resolving."
@@ -458,7 +462,7 @@ fn kess_isnt_used_up_by_flashback_and_a_new_kess_gives_a_new_cast() {
 
 #[test]
 fn kess_spell_is_exiled_even_if_kess_changes_control_after_its_cast() {
-    cr!("601.2i", "614.1a");
+    cr!("614.1a");
     ruling!(
         "Kess, Dissident Mage",
         "Once you begin to cast the card, losing control of Kess won't affect the spell. You can finish casting it as normal and it will be exiled if it would be put into your graveyard."
@@ -576,7 +580,7 @@ fn dawning_archaic_free_cast_has_x_0() {
 
 #[test]
 fn dawning_archaic_total_cost_applies_increases_then_reductions_and_keeps_mana_value() {
-    cr!("601.2f", "202.3", "118.7d");
+    cr!("601.2f", "202.3", "118.7");
     ruling!(
         "The Dawning Archaic",
         "To determine the total cost of a spell, start with the mana cost or alternative cost you're paying, add any cost increases, then apply any cost reductions (such as that of The Dawning Archaic's first ability). The mana value of the spell is determined by only its mana cost, no matter what the total cost to cast that spell was."
@@ -750,7 +754,7 @@ fn sins_of_the_past_card_is_exiled_even_if_countered_and_cast_once() {
 
 #[test]
 fn maestros_ascendancy_adventure_is_exiled_by_the_adventure_rule_and_castable_later() {
-    cr!("715.3d", "616.1", "616.1e");
+    cr!("715.3d");
     ruling!(
         "Maestros Ascendancy",
         "If you cast an Adventure spell from your graveyard this way, it's exiled as it resolves with the replacement effect created by the Adventure rules and you may cast the creature card from exile later."

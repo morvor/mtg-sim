@@ -435,18 +435,32 @@ fn exiled_by_combat_damage_with(t: &mut TestGame, attacker: ObjectId, top: &str)
 
 #[test]
 fn breeches_exiles_only_from_opponents_dealt_damage() {
-    cr!("603.2c", "120.1");
+    cr!("603.2c");
     ruling!(
         "Breeches, Brazen Plunderer",
         "You'll exile a card from each opponent who was dealt damage, not from all of your opponents."
     );
-    let mut t = TestGame::new(3);
+    // Four players: Breeches attacks P1 and another Pirate (Changeling Outcast) attacks
+    // P2; P3 isn't dealt damage. The ability triggers once for the combat damage and
+    // exiles the top card of P1's and P2's libraries, one card each.
+    let mut t = TestGame::new(4);
     let b = t.battlefield(P0, "Breeches, Brazen Plunderer");
-    let c1 = t.library_top(P1, "Divination");
-    let c2 = t.library_top(P2, "Divination");
-    connect(&mut t, &[b]);
-    assert!(exiled(&t, c1), "{}", t.dump_log());
-    assert_eq!(t.zone(c2), Zone::Library(P2));
+    let pirate = t.battlefield(P0, "Changeling Outcast");
+    let l1 = stack_library(&mut t, P1, &["Divination", "Opt"]);
+    let l2 = stack_library(&mut t, P2, &["Divination", "Opt"]);
+    let l3 = stack_library(&mut t, P3, &["Divination", "Opt"]);
+    attack_with(
+        &mut t,
+        &[(b, Entity::Player(P1)), (pirate, Entity::Player(P2))],
+    );
+    block_and_finish(&mut t, P1, &[]);
+    t.resolve_all();
+    assert_eq!((t.life(P1), t.life(P2)), (17, 19), "{}", t.dump_log());
+    assert!(exiled(&t, l1[0]) && exiled(&t, l2[0]), "{}", t.dump_log());
+    assert_eq!(t.zone(l1[1]), Zone::Library(P1), "one card from each");
+    assert_eq!(t.zone(l2[1]), Zone::Library(P2), "one card from each");
+    assert_eq!(t.zone(l3[0]), Zone::Library(P3), "not dealt damage");
+    assert_eq!(t.zone(l3[1]), Zone::Library(P3));
 }
 
 // ---------------------------------------------------------------------------
