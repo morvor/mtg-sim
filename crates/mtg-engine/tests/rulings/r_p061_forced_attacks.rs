@@ -518,7 +518,15 @@ fn haktos_protection_from_mana_values() {
             let blaze = t2.hand(P0, "Blaze");
             t2.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(x));
             t2.answer_targets(P0, &[o(haktos)]);
+            let from = t2.asked().len();
             let r = t2.cast(P0, blaze).try_go();
+            // Haktos is offered as a target only when the spell's mana value is 2.
+            let cands = crate::r_s02_common::target_candidates(&t2, P0, from);
+            assert_eq!(
+                cands.first().map(|c| c.contains(&o(haktos))),
+                Some(legal),
+                "X = {x}: {cands:?}"
+            );
             if legal {
                 assert!(r.is_ok(), "{r:?} {}", t2.dump_log());
                 t2.resolve_all();
