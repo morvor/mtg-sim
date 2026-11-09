@@ -178,11 +178,14 @@ All old worker sessions are archived; every item they were given has landed, exc
 
 | Role | Session | Queue |
 |---|---|---|
-| planner | session_019p6spxhpVg7uo8FiyED8ai | finish-line-plan (defines "done", the remaining risks and the ordered items; summarizes the discrepancy log for human review) |
-| auditor | session_019p6spyBuwnV522bkiqsNty | engine-audit-1, area by area: layers, replacement, triggers, zones-lki, combat, casting-costs, sba-copy |
-| roundtrip | session_019p6spxs4s8RXyT9mkADZuC | roundtrip-pairs-6, then the items the plan names |
-| rulings-1 | session_019p6spyC29FswmnWN3vJ38n | P049 P078 P083 P086 P090 P095 P100 P103 P106 P115 |
-| rulings-2 | session_019p6sq2W1TEG1vYtZZ2PycZ | P081 P084 P088 P093 P099 P101 P105 P114 P135 P138 |
+| planner (archived Nov 9, 295k context) | session_019p6spxhpVg7uo8FiyED8ai | finish-line-plan: landed |
+| verification | session_019p6spxbaCwCcy1CdSExmiM | register-sweep-1 (B4), then property-tests-3 (B2) |
+| auditor | session_019p6spyBuwnV522bkiqsNty | engine-audit-1 (A1): layers (in progress), then casting-costs, triggers, zones-lki, replacement, sba-copy, combat |
+| roundtrip | session_019p6spxs4s8RXyT9mkADZuC | roundtrip-pairs-6, roundtrip-probe-1 (A5, at max), then roundtrip-pairs with the probe's hits first (A4) |
+| rulings-1 | session_019p6spyC29FswmnWN3vJ38n | P049, then A2: P154 P155 P101 P157 P090 P197 P139 P181 P114 P115 |
+| rulings-2 | session_019p6sq2W1TEG1vYtZZ2PycZ | P081, then A2: P153 P100 P158 P144 P196 P138 P182 P175 P200 P135 |
+
+Re-planned from finish-line-plan §3 on Nov 9 (23:45 UTC). Later: a mutation session for B1 (mutation-2) once an audit area lands; the rest of A2's order (P093 P095 P049 P081 P083 P084 P086 P164 P167 P168 P170 P173 P103 P105 P106 P191 P149 P088 P078) after these queues.
 
 **Usage check (user, Nov 9):** "We should also check usage after these batches land, to make sure it's an efficient use."
 - At every check-in, log each Fable session's `usage.cost_usd` (the API-equivalent cost that get_session reports), its context size and its rate-limit status. Do this in RECOVERY.md, next to the items it landed.
