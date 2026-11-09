@@ -28,6 +28,14 @@ pub fn blocked_by_p0(t: &mut TestGame, attackers: &[ObjectId], blocks: &[(Object
     crate::r_s03_common::to_blockers(t, &at, blocks);
 }
 
+/// P1 attacks P0 with each of `attackers` (no blocks yet): stops in the declare attackers
+/// step of P1's turn with the attack triggers on the stack.
+pub fn attacked_by_p1(t: &mut TestGame, attackers: &[ObjectId]) {
+    t.set_step(P1, Step::BeginningOfCombat);
+    let at: Vec<(ObjectId, Entity)> = attackers.iter().map(|a| (*a, pl(P0))).collect();
+    attack_with(t, &at);
+}
+
 /// Whether the permanent (followed across zone changes) is tapped now.
 pub fn tapped(t: &TestGame, id: ObjectId) -> bool {
     t.obj_now(id).tapped
