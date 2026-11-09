@@ -8,15 +8,13 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 
 | Kind | Decided | Provisional |
 |---|---:|---:|
-| interpretation | 84 | 1 |
+| interpretation | 85 | 0 |
 | deviation | 9 | 0 |
 | policy | 34 | 0 |
 
 ## Provisional entries
 
-- **exiled-card-power-as-it-last-existed-in-the-graveyard** (interpretation, [zones-objects](interpretations/zones-objects.md)): "The exiled card's" power and toughness, for a card exiled from a graveyard, are as it last existed there
-  - Question: "{3}{C}, Exile a creature card from your graveyard: Target opponent loses life equal to the exiled card's power" (Dread Defiler), "Exile target creature card from your graveyard. Create X 1/1 ... Bird creature tokens ..., where X is the exiled card's toughness" (Scour the Desert): the effect finds the card in exile (400.7j), where it's a public object in the zone the instruction put it in, so 608.2h could read its current power there. Its power can differ between the zones (Tarmogoyf counts the card types in all graveyards, itself included).
-  - Decision: Following the rulings, "the exiled card" (the card a cost or the effect itself exiled from a graveyard) has its power and toughness as it last existed in the graveyard.
+None.
 
 ## All entries
 
@@ -138,7 +136,7 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | `cost-moved-source-found-only-by-own-cost` | An ability's instructions about its own source follow the source to where the cost moved it only when a cost part about the source itself moved it | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |
 | `cyclopean-tomb-land-choice` | Cyclopean Tomb's controller chooses which of its lands loses its mire counters, among those with mire counters | policy | decided | [zones-objects](interpretations/zones-objects.md) |
 | `each-player-exiled-this-way` | "Cards you own exiled this way" after "Each player may exile their hand" are all the cards the players exiled, of those the ones you own | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |
-| `exiled-card-power-as-it-last-existed-in-the-graveyard` | "The exiled card's" power and toughness, for a card exiled from a graveyard, are as it last existed there | interpretation | provisional | [zones-objects](interpretations/zones-objects.md) |
+| `exiled-card-power-as-it-last-existed-in-the-graveyard` | "The exiled card's" power and toughness, for a card exiled from a graveyard, are as it last existed there | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |
 | `face-down-instant-or-sorcery-stays-face-down` | A face-down permanent represented by an instant or sorcery card stays face down when an effect would turn it face up | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |
 | `guff-players-who-controlled` | "Each player who controlled one of those permanents" are the last known controllers of the targets the spell moved | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |
 | `ice-cauldron-last-exiled` | Ice Cauldron's "last card exiled with ~" is the last card its first ability exiled with a permission to cast it | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |
