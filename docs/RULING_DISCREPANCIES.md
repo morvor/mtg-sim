@@ -295,6 +295,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 
 ## Outdated rulings
 
+### Souls of the Faultless: "you may choose either member of the attacking team"
+- Kind: outdated
+- Status: open for review
+- Ruling, Souls of the Faultless (2006-02-01): "If Souls of the Faultless is dealt combat damage in a Two-Headed Giant game, you may choose either member of the attacking team as the player who will lose life. The player you choose doesn't have to be the controller of a creature that dealt damage to Souls of the Faultless."
+- Conflicts with: CR 805.10c: "Any rule, object, or effect that refers to an “attacking player” refers to one specific attacking player, not to all attacking players. If an ability of a blocking creature refers to an attacking player, or a spell or ability refers to both a blocking creature and an attacking player, then unless otherwise specified, the attacking player it’s referring to is the player who controls the attacking creature that blocking creature is blocking. ..." and CR 810.7: "The Two-Headed Giant variant uses the combat rules for the shared team turns option (see rule 805.10). This is a change from previous rules." Souls of the Faultless: "Whenever this creature is dealt combat damage, you gain that much life and attacking player loses that much life." — the ability of a blocking creature.
+- Evidence: the ruling stated the Two-Headed Giant rule of its time: CR 606.7b of the CR effective 2006-02-01 (Guildpact), still 810.7b in the CR effective 2018-01-19: "Any one-shot effect that refers to the 'defending player' refers to one specific defending player, not to both of the defending players. The controller of the effect chooses which one the spell or ability refers to at the time the effect is applied. The same is true for any one-shot effect that refers to the 'attacking player.'" The CR effective 2017-08-25 (Commander 2017) added 805.10c for the shared team turns option (absent from the CR effective 2017-04-28), and the CR effective 2018-04-27 (Dominaria) replaced Two-Headed Giant's own combat rules with it (810.7 as quoted; the CR effective 2018-01-19 still had the old 810.7b). All from the archived CR texts (github.com/pit142857/mtg-cr). Work item rulings-P049.
+- Engine: in a Two-Headed Giant game, Souls of the Faultless's ability makes the controller of the attacking creature it blocked lose the life (no choice).
+- Recorded: exemption `docs/rulings-exemptions/rulings-P049.tsv`; test `tests/rulings/r_p049_combat.rs` (`souls_of_the_faultless_in_two_headed_giant_drains_the_controller_of_the_creature_it_blocks`).
+
 ### Aetherplasm: "This allows it to dodge abilities like Deathgazer's."
 - Kind: outdated
 - Status: open for review
