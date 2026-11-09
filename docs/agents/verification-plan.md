@@ -186,6 +186,8 @@ All old worker sessions are archived; every item they were given has landed, exc
 
 Pace: one item at a time per session. Once finish-line-plan lands, the coordinator re-plans the queues from it.
 
+**finish-line-plan landed (Nov 9):** docs/agents/finish-line-plan.md defines the done criteria (§1), the remaining risks (§2), the ordered items in three phases (§3), the discrepancy-log summary for the user (§4) and the six decisions for the user (§5). New briefs: items/rulings-residue.md, roundtrip-probe-1.md, mutation-2.md, property-tests-3.md, judge-audit-2.md, register-sweep-1.md, gaps-residual-2.md, verified-refresh-final.md, data-refresh.md; the hand-written-card plan is docs/agents/compile-manual-plan.md; the evidence reports are in docs/agents/reports/finish-line-*.md and ruling-discrepancies-review.md.
+
 ### Second API-billed run (user, Nov 7)
 
 The user: "Our API credits have been refreshed, and we used a very appropriate $183 last time — let's repeat that process again, using the API credits to run a few rounds at the new, lower effort levels."
