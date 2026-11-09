@@ -184,6 +184,14 @@ All old worker sessions are archived; every item they were given has landed, exc
 | rulings-1 | session_019p6spyC29FswmnWN3vJ38n | P049 P078 P083 P086 P090 P095 P100 P103 P106 P115 |
 | rulings-2 | session_019p6sq2W1TEG1vYtZZ2PycZ | P081 P084 P088 P093 P099 P101 P105 P114 P135 P138 |
 
+**Usage check (user, Nov 9):** "We should also check usage after these batches land, to make sure it's an efficient use."
+- At every check-in, log each Fable session's `usage.cost_usd` (the API-equivalent cost that get_session reports), its context size and its rate-limit status. Do this in RECOVERY.md, next to the items it landed.
+- When each session's first item lands, report to the user:
+  - the cost per item, against the Opus baselines: rulings batches about $11.50 at default effort (API run, Nov 1) and $15–28 at max (subscription workers, Nov 4–5);
+  - what the item produced: rulings cited, bugs fixed, round-trip passes gained;
+  - how fast the Fable limit is going;
+  - a recommendation: keep the pace, change it, or move work between Fable and Opus.
+
 Pace: one item at a time per session. Once finish-line-plan lands, the coordinator re-plans the queues from it.
 
 ### Second API-billed run (user, Nov 7)
