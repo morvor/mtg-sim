@@ -124,16 +124,12 @@ fn a_clone_copies_the_printed_values_of_an_ovinized_creature_and_humility_applie
 }
 
 #[test]
-fn a_clone_entering_under_humility_has_no_copy_ability_and_dies_as_a_0_0() {
+fn a_clone_entering_under_humility_has_no_copy_ability_and_is_a_1_1_clone() {
     // CR 614.12: which replacement effects modify how a permanent enters is determined
     // from the permanent as it would exist on the battlefield, continuous effects that
     // already exist included. Under Humility the Clone would have no abilities, so its
     // "enter as a copy" doesn't apply and nobody is asked; it enters as a 0/0 Clone.
-    cr!("614.12", "613.1f", "613.4b", "704.5f");
-    ruling!(
-        "Primeval Spawn",
-        "If an effect from a static ability would remove all abilities from Primeval Spawn if it were on the battlefield (such as that of Humility)"
-    );
+    cr!("614.12", "613.1f", "613.4b");
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Humility");
     t.battlefield(P1, "Serra Angel");
@@ -186,7 +182,7 @@ fn vesuvan_doppelganger_keeps_its_own_color_and_doesnt_copy_a_color_defining_abi
     // color (CR 707.9c) and the copied object's color-defining ability isn't copied
     // (CR 707.9d). The final color is part of its copiable values (CR 707.9b), so a Clone
     // of it is blue too, with the Doppelganger's triggered ability.
-    cr!("707.9b", "707.9c", "707.9d", "613.2a", "613.2c", "613.3");
+    cr!("707.9b", "707.9c", "707.9d", "613.2a", "613.2c");
     ruling!(
         "Vesuvan Doppelganger",
         "copies the mana cost of the creature it's copying but doesn't copy its color"
@@ -369,7 +365,7 @@ fn a_clone_of_a_transformed_permanent_copies_the_back_face_and_cant_transform() 
 
 #[test]
 fn phyrexian_metamorph_copying_a_noncreature_artifact_is_not_a_creature() {
-    cr!("707.9b", "613.2a", "208.3", "704.5f");
+    cr!("707.9b", "613.2a", "208.3");
     ruling!(
         "Phyrexian Metamorph",
         "If Phyrexian Metamorph copies a noncreature artifact, it is no longer a creature"

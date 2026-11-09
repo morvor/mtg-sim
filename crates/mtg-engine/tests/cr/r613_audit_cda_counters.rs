@@ -66,7 +66,8 @@ fn a_setting_effect_overrides_tarmogoyfs_defining_ability_but_counters_still_app
 fn losing_all_abilities_removes_a_defining_ability_so_a_star_counts_as_zero() {
     // Dress Down removes the defining ability in layer 6, so it doesn't apply in layer
     // 7a: Tarmogoyf's */1+* is 0/1 (CR 208.5) and Nightmare's */* is 0/0 and dies.
-    cr!("613.1f", "613.4a", "604.3", "208.5", "704.5f");
+    cr!("613.1f", "613.4a", "604.3", "208.2a", "208.5", "704.5f");
+    interp!("star-without-defining-ability-is-zero");
     let mut t = TestGame::new(2);
     let goyf = t.battlefield(P0, "Tarmogoyf");
     let nightmare = t.battlefield(P0, "Nightmare");
@@ -178,7 +179,7 @@ fn darksteel_mutation_against_counters_a_pump_and_a_later_transformation() {
 
 #[test]
 fn mirror_entity_with_x_zero_leaves_only_creatures_with_counters_alive() {
-    cr!("613.4b", "613.4c", "613.1d", "704.5f", "608.2h");
+    cr!("613.4b", "613.4c", "613.1d", "704.5f");
     ruling!(
         "Mirror Entity",
         "Activating the ability with X = 0 will cause all creatures you control to become 0/0"

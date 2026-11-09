@@ -6,6 +6,8 @@
 #                                                # mutants, into <stem>-rerun
 #   RERUN=1 ONLY='mana.rs:1019' scripts/mutants.sh mana   # only the survivors matching
 #   SAMPLE=1 scripts/mutants.sh trigger_timing   # every mutant instead of a 1-in-N sample
+#   TIMEOUT=900 scripts/mutants.sh layers        # a longer test timeout per mutant (default 600 s;
+#                                                # the unmutated mtg-engine suite takes ~290 s)
 #
 # Each file stem names crates/mtg-engine/src/<stem>.rs. Mutants run in a persistent copy of
 # the committed tree (target/mutsrc, `--in-place` there) so every file reuses one incremental build;
@@ -20,6 +22,7 @@ WT=$(git rev-parse --show-toplevel)
 MS=$WT/target/mutsrc
 OUT=$WT/target/mutants
 SAMPLE=${SAMPLE:-10}
+TIMEOUT=${TIMEOUT:-600}
 LOCK=${LOCK:-/tmp/cargo-heavy.lock}
 mkdir -p "$MS" "$OUT"
 
@@ -34,7 +37,7 @@ for stem in "$@"; do
   k=$SAMPLE
   ((n < 60)) && k=1
   dest=$OUT/$stem
-  args=(mutants --in-place -d "$MS" -f "$file" --timeout 300 --build-timeout 900
+  args=(mutants --in-place -d "$MS" -f "$file" --timeout "$TIMEOUT" --build-timeout 900
     --cap-lints true --test-package mtg-engine)
   if [[ -n "${RERUN:-}" ]]; then
     prev=$OUT/$stem/mutants.out
@@ -87,7 +90,7 @@ PY
     # cargo-mutants 27.1 applies neither -F nor -E to "delete field" mutants (it would
     # test every one of them), so each survivor is applied and tested here, the way
     # cargo-mutants does it: build (unviable if that fails), then the mtg-engine tests
-    # (missed if they pass, timeout after 300 s, caught otherwise).
+    # (missed if they pass, timeout after TIMEOUT seconds, caught otherwise).
     mo=$dest/mutants.out
     # A full re-run starts afresh; with ONLY, the other survivors' results are kept.
     [[ -z "${ONLY:-}" ]] && rm -rf "$dest"
@@ -109,8 +112,8 @@ PY
       outcome=$(flock "$LOCK" env CARGO_PROFILE_DEV_DEBUG=false bash -c '
         cd "$1" || exit
         timeout -k 10 900 cargo test -p mtg-engine --no-run >/dev/null 2>&1 || { echo unviable; exit; }
-        timeout -k 10 300 cargo test -p mtg-engine >/dev/null 2>&1
-        case $? in 0) echo missed ;; 124 | 137) echo timeout ;; *) echo caught ;; esac' _ "$MS")
+        timeout -k 10 "$2" cargo test -p mtg-engine >/dev/null 2>&1
+        case $? in 0) echo missed ;; 124 | 137) echo timeout ;; *) echo caught ;; esac' _ "$MS" "$TIMEOUT")
       cp "$OUT/cur.orig" "$MS/$file"
       for o in caught missed timeout unviable; do
         grep -vxF -- "$name" "$mo/$o.txt" >"$mo/$o.tmp" || true

@@ -393,10 +393,6 @@ fn humility_then_an_animated_land_keeps_the_abilities_its_animation_granted() {
     // flying and infect the later animating effect grants apply after it (CR 613.7b);
     // both effects set base 1/1 in layer 7b, and the +1/+1 counter applies on top (7c).
     cr!("613.1d", "613.1f", "613.4b", "613.4c", "613.7", "613.7b");
-    ruling!(
-        "Dress Down",
-        "if a land becomes a creature while Dress Down is on the battlefield, it will still gain any abilities given to it by the effect that animated it"
-    );
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Humility");
     let nexus = t.battlefield(P0, "Inkmoth Nexus");

@@ -72,7 +72,7 @@ fn a_static_copy_effect_and_a_resolved_one_apply_in_timestamp_order_in_layer_1()
 fn a_text_change_in_layer_3_feeds_type_changes_in_layer_4() {
     // Mind Bend replaces "Mountain" with "Forest" in Blood Moon's text (layer 3, CR 612),
     // so nonbasic lands become Forests (layer 4) with the Forest's mana ability.
-    cr!("613.1c", "613.1d", "612.1", "305.7", "613.5");
+    cr!("613.1c", "613.1d", "612.1", "305.7");
     ruling!(
         "Blood Moon",
         "Nonbasic lands will lose any other land types and abilities they had"
@@ -109,10 +109,6 @@ fn a_text_change_in_layer_3_feeds_color_conditions_in_layer_7() {
     // Aura Aspect of Wolf counts Islands instead of Forests after its text changes
     // (an Aura's own characteristics changing what it does to the enchanted creature).
     cr!("613.1c", "613.4c", "612.1", "613.9", "611.3a");
-    ruling!(
-        "Mind Bend",
-        "You can’t change proper nouns (i.e. card names) such as “Island Fish Jasconius”."
-    );
     let mut t = TestGame::new(2);
     let crusade = t.battlefield(P0, "Crusade");
     let knight = t.battlefield(P0, "White Knight");
