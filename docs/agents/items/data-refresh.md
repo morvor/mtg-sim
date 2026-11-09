@@ -3,8 +3,10 @@
 WHY: docs/agents/finish-line-plan.md, phase C item C3 and decision D6. The data files are the
 source of truth (CLAUDE.md): Scryfall bulk data of 2026-09-24 and the CR effective 2026-09-25.
 Only the user updates them (Nov 4: "No new card data for now"). When they do, two things
-follow: the CR may have changed under the engine, and new cards need support. Start this item
-only when the user says the data is refreshed.
+follow: the CR may have changed under the engine, and new cards need support (189 cards of sets
+unreleased on 2026-09-24 are in the data already, deferred as legal in no format; the refresh
+makes them legal and adds the sets since). Start this item only when the user says the data is
+refreshed.
 
 ## Part 1: `cr-diff-1` (judgment, effort max)
 

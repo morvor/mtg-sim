@@ -81,7 +81,7 @@ tiers: `open_rulings.json`; the 60-ruling sample: `sample60.txt`.
   P043 P047 P048 P050 P055 P059 P060 P061 P067 P068 P069 P070 P071 P077 P087 (23). Everything before Nov 5 12:53
   is outside the shallow clone; the test-file census (187 worked batches) is the reliable "landed" signal.
 - The Nov 7 API launcher queue (P061 P067 P068 P069 P070 P071 P077 P078 P081 ...) landed through P077; P078 onward
-  is untouched. The Nov 9 Fable push lists rulings-1 = odd positions, rulings-2 = even positions of the pool in
+  is untouched. The Nov 9 re-plan (verification-plan.md) lists rulings-1 = odd positions, rulings-2 = even positions of the pool in
   id order (its examples P049, P078, P081 ... match the never-worked list exactly). verification-plan.md line 50's
   older ordered pool is superseded (every batch it names before P049 has landed).
 - **OPEN batches not yet landed, in pool order (id order of never-worked batches):**
@@ -153,7 +153,7 @@ replacement, tutor and impulsive-draw batches were all interaction.
   leftovers P217/P211/P214/P205/P226/P222/P215; P009 burn; P062 freeze; P161/P160 shapechange; P184 typal;
   small residues swept in two "residue-misc" items). **≈54 implementer sessions** (each with its review pass).
 - Throughput at the measured rate (1–2 h per batch per worker; 7 batches per 8 h from 2 API children; 16 per
-  ~6 h from 6 workers): two Fable rulings sessions ≈ 10–14 batches/day if they loop continuously → **4–5 days**;
+  ~6 h from 6 workers): two rulings sessions ≈ 10–14 batches/day if they loop continuously → **4–5 days**;
   adding the API launcher's 2 children brings it to ~2–3 days; the Nov 5 configuration (6 workers) ≈ 2 days.
   Residue items are slower per ruling (what earlier rounds left was the harder or then-unsupported part).
 - Bugs: 0.7–1.0 core engine bugs per 100 processed (measured on batches that also contained restatements), and the

@@ -33,7 +33,9 @@ payment 200,000 boards; damage 20,000 combats; the property-tests-3 properties a
 sizes), and `--random-decks --games 10000`. Every failure the sweep or a property reports is a
 bug: fix it (a regression test citing the rule), then re-run the affected chunk or property.
 
-Record the results in docs/EVERY_CARD.md ("Latest full sweep"), docs/PROPERTIES.md
+Record the results in docs/EVERY_CARD.md ("Latest full sweep": pool, games, failures, cards cast,
+abilities used, and the `--random-decks` result, which no document records today; the Nov 5
+sweep of 32,656 cards was never written up there, so this one must be), docs/PROPERTIES.md
 ("Results") and the standard update, with the commit measured and the date.
 
 DONE when the five reports and the tier file are regenerated from one commit, every property

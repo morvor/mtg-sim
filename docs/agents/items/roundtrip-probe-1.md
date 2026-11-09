@@ -12,8 +12,15 @@ Run it at effort max for the probe's design; the sweep itself is routine.
 
 ## The probe (`mtg-tools roundtrip --probe`, or a new subcommand)
 
-For every mismatching card, compare the compiled AST (`roundtrip --ast`, add it if missing) with
-the normalized Oracle text and flag:
+Start with the cheap version: the round trip already has both texts (the card's normalized
+Oracle text and the rendered one), so classify each mismatch by what the word-level difference
+touches: a referent word ("it", "that player", "that card", "another", "other"), a dropped
+qualifier or clause ("unless", "instead", "may", "can't", "reveal", "you own", a zone word, a
+duration), a number, X or "that many", or only wording. Measure its recall on the 69 known bugs
+first (below); build the AST-level probe only for the classes the text-level one misses.
+
+For the AST level, for every mismatching card compare the compiled AST (`roundtrip --ast`
+prints it for one `--card`; add a listing form) with the normalized Oracle text and flag:
 1. **Referents**: a pronoun or "that <noun>" in the text whose AST `Sel`/`PlayerRef` resolves to
    something other than the text's nearest matching antecedent (object vs player, source vs
    target vs triggering object, "you" vs "that player").
@@ -34,8 +41,11 @@ ranked list to `docs/agents/items/roundtrip-probe-1.hits.tsv` and commit it; the
 ## Checks on the probe itself
 
 - Run it on the cards the earlier roundtrip items fixed (the bug table in docs/ROUNDTRIP.md names
-  them; check out the commit before each fix or reproduce the old AST from the item notes): the
-  probe must flag most of them. Report the recall on that set.
+  them and describes each misreading; the clones are shallow, with history from Nov 5 only, so
+  reproduce the old mismatch from the table's description or the item notes rather than by
+  checking out the commit before the fix): the probe must flag most of them. Report the recall
+  on that set; it is part of the plan's stopping signal for the round trip (finish-line-plan
+  §1.1).
 - Run it on 100 random passing cards: hits there are false positives; report the rate and tune.
 
 DONE when the probe runs from `mtg-tools`, its recall on the known bugs and false-positive rate

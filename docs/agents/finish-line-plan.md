@@ -6,9 +6,11 @@ user: simulate Magic **precisely** by the Comprehensive Rules, be as sure of tha
 and make adding cards simple.
 
 Everything measured here was measured on commit ad23a7a (the branch head on Nov 9); the
-inputs were read by six subagents and the plan was challenged by an independent reviewer
-before landing. Where a number comes from a committed report rather than a fresh run, the
-report's date is given.
+inputs were read by six subagents, the tool reports were re-run on that commit and compared
+with the committed docs (docs/agents/reports/finish-line-measurements.md: every number in
+§1.2 matches the committed doc unless its cell says otherwise), and the plan was challenged by
+an independent reviewer before landing (its changes are the Nov 9 review commits). Where a
+number comes from a committed report rather than a fresh run, the report's date is given.
 
 ## 1. Done criteria
 
@@ -20,7 +22,8 @@ bugs**. We have five oracles that are independent of the implementer's reading o
 
 1. **Wizards' rulings** (34,000 texts): someone else wrote down the outcome.
 2. **The Oracle text through the round trip**: the compiled ability must render back to the
-   card's words, by a renderer written independently of the parser.
+   card's words, by a renderer written separately from the parser (in this project, by the
+   same kind of agent, so a misreading both share would pass).
 3. **The CR's own worked examples** (277): done, 100% covered.
 4. **Brute-force oracles written from the rules** (payment, damage assignment) and
    **metamorphic properties** (seat symmetry, snapshots, rollback, determinism, copies, hidden
@@ -29,6 +32,20 @@ bugs**. We have five oracles that are independent of the implementer's reading o
 
 Plus one method that does not need an oracle: **mutation testing**, which measures whether the
 tests would notice a change in the core files at all.
+
+What this cannot show, said plainly:
+
+- a rule applied wrongly but consistently on cards no ruling discusses: the metamorphic
+  properties and the fuzz see only inconsistency and crashes, so such a bug stays until a
+  ruling, the audit or a human reader finds it;
+- a misreading the parser and the renderer share, or a difference one of the renderer's
+  equivalence rules normalizes away (B4 reads that list);
+- a misreading the blind judge shares with a test's author: the judge is the same kind of
+  agent, and its agreement bounds the error rate only for errors it can detect;
+- a hand-written card whose definition and test follow the same wrong reading, until the card
+  is compiled and round-tripped (C7);
+- that any 100% figure means "right": every coverage number counts paths touched, not outcomes
+  checked, except the three correctness criteria.
 
 The criteria below are of two kinds. **Correctness criteria** compare the engine with one of
 those oracles; reaching them is evidence the engine is right. **Bookkeeping criteria** measure
@@ -39,31 +56,64 @@ The **stopping signal** is the measured bug yield. Today the rulings batches fin
 engine bug per 100 rulings processed (0.7–1.0 core engine bugs and about 0.5 compiler fixes per
 batch of 100–140 in the 23 batches landed Nov 5–8) and the round trip finds a parser bug in
 about 3% of the mismatching cards it triages. "Done" is when the oracles are exhausted **and**
-the last several items of each kind found nothing: five consecutive rulings batches with no
-engine fix, two consecutive round-trip items with no parser bug, an audit area whose tests all
+the yield has fallen: five consecutive rulings items with no engine fix (at today's rate of
+about 0.9 a batch, five zero-fix batches in a row would happen by chance about 1% of the time),
+two consecutive round-trip items with no parser bug, and an audit area whose new tests all
 passed first time. Until the yield drops, the engine is not done however good the coverage
-numbers look.
+numbers look. If the oracles are exhausted and the yield has not fallen, the next oracle to
+consider is the one method not chosen on Oct 14, a comparison with Forge or XMage (the last
+paragraph of §5); the plan does not need it yet.
+
+Three conditions make the signal honest:
+
+- **It must be measurable.** Today it is not: item reports go to the coordinator, commit bodies
+  carry no counts, and the yields above were reconstructed from commit subjects
+  (docs/agents/reports/finish-line-rulings-pool.md §3). From now on the reviewer of every
+  rulings, round-trip, audit, mutation and property item appends one row to
+  docs/agents/yield.tsv before landing (date, item, kind, units processed, engine bugs, compiler
+  fixes, test errors, commit) and puts the same counts in the landing commit's message as a
+  `Yield:` line (worker.md's reviewer brief says so). The signal is read from that file; the
+  23 reconstructed batches are its first, approximate row.
+- **It must be read on comparable items.** Phase A works the interaction-heavy batches first and
+  the restatement-heavy ones last, so the yield falls along the queue partly by construction.
+  The rulings signal counts only on the residue items (A3, the hardest, worked last) and on
+  batches whose report says most of their rulings were interactions; a zero yield on a
+  restatement batch is not evidence. Likewise the round-trip probe (A5) puts the likely
+  behavioral mismatches first, so the signal there is two clean items on cards the probe did
+  not flag, read together with the probe's measured recall on the known bugs: a clean tail
+  behind a probe with low recall means little.
+- **A bug counts whatever found it.** A parser bug a rulings batch finds counts as a compiler
+  fix; a reading a reviewer or the user reverses counts as an engine bug; a test rewritten
+  because it asserted a wrong outcome counts as a test error for C3.
 
 ### 1.2 The criteria, with today's values and targets
 
 | # | Criterion | Kind | Today (Nov 9) | Target | How it is measured |
 |---|---|---|---|---|---|
-| C1 | **Rulings**: every in-scope ruling text is CITED by a test, EXEMPT with a reason, or UNCOVERED for a named reason (an unsupported card, a deferred mechanic) | correctness | CITED 25,777 of 33,955 (75.9%); EXEMPT 189; OPEN 6,125; DEFERRED 1,864; out of scope 662 | OPEN 0; UNCOVERED only for the 35 unsupported paper cards; and the last 5 batches found no engine bug | `python3 scripts/rulings_batches.py summary` |
-| C2 | **Round trip**: every fully supported card's compiled abilities render back to its Oracle text, or the card is listed with a reason (a renderer gap, or a CR-justified equivalence) | correctness | 28,460 of 32,076 pass (88.7%); 3,464 mismatch, about 3,100 of them never triaged; 152 hand-written cards unchecked | 0 untriaged mismatches; every remaining mismatch listed under a reason; the last 2 items found no parser bug | `mtg-tools roundtrip`, docs/ROUNDTRIP.md |
-| C3 | **Independent audit**: the seven core areas of `engine-audit-1` (layers, replacement, triggers, zones/LKI, combat, casting/costs, SBA/copies) audited adversarially, each with reviewer sign-off; and a second blind judge audit with 0 confirmed wrong tests | correctness | audit: 0 of 7 areas (the item was issued Nov 9). Judge audit 1 (Oct 14): 58 tests, 225/225 questions agreed, so the wrong-test rate is below about 5% | 7 of 7 areas landed; judge audit 2 over 200 tests including every hand-written card's test, 0 confirmed wrong | the areas' reports; docs/agents/reports/judge-audit-2.md |
-| C4 | **Properties**: all metamorphic and exhaustive properties hold on the final code | correctness (consistency) | 8 properties, all held on their last runs (2,000 games each for 1–4; every card for copies; 1.2M boards; 200k combats; 2,400 hidden-information games), but on code from Oct–early Nov | the 8 plus the new ones in §3 (legal-action exactness, layer order-independence, ability copies, multiplayer kinds) hold on the final code at the same sizes | `mtg-sim --properties`, docs/PROPERTIES.md |
-| C5 | **Mutation score**: the tests notice changes to the core files | test strength | 88.3% of 520 sampled mutants killed across the 15 core files (1 in 10 sampled; simultaneous.rs 55.6%, triggers.rs 75.0%, permissions.rs 78.6%, mana.rs 81.0%, replacement.rs 82.4%); several files rewritten since | every file ≥ 90% on a fresh sample, every survivor classified (equivalent, or killed); full runs, not samples, of simultaneous.rs, triggers.rs and trigger_timing.rs, permissions.rs and replacement.rs | `scripts/mutants.sh`, docs/MUTATION.md |
-| C6 | **Fuzz**: every-card sweep and random-deck fuzz on the final code with no panic, hang or invariant violation | crash and invariant check | last full sweep Nov 5: 32,656 cards, 0 panics or hangs, 95% of abilities used; 1 fuzz-unclean card | a final sweep with 0 failures, and 10,000 random-deck games with 0 panics | `mtg-sim --every-card`, `--random-decks` |
-| C7 | **Hand-written cards**: no card depends on a `ManualAbility` | correctness (removes the only unaudited path) | 153 cards hand-written, all tested, none round-trip checked | 0 (the user's standing "later" item; see §3 phase C) | `rg -o 'card: *"[^"]+"' crates/mtg-engine/src/cards \| sort -u \| wc -l` |
-| C8 | **Register and discrepancy log**: every judgment call registered and decided; every erroneous ruling logged and reviewed by a human | bookkeeping of judgment | 128 register entries, 0 provisional; 48 discrepancy entries, all "open for review", 0 reported | 0 provisional; every behavioral deviation named in an item's "Remaining" section has an entry (at least one is missing today: Inquisitor Eisenhorn, CR 121.8); the user has read the 9 deviations; the log's statuses set by the user | `mtg-tools interpretations --check`, docs/RULING_DISCREPANCIES.md |
-| C9 | **Engine gaps**: no confirmed rules gap open for a supported card | bookkeeping | the 33-gap inventory is closed as a feature list; open: two unverified bits of G32 (graveyard counts of tokens, meld on a copy), the Eisenhorn 121.8 deviation, hashed ability links that could collide (CR 607.5) | 0 | docs/agents/engine-gaps.md |
-| C10 | **CR coverage**: every numbered rule cited, covered via subrules or exempt; every worked example covered | bookkeeping | 3,036 cited (95.9%) + 78 via subrules + 52 exempt, 0 uncovered; 277/277 examples | stays at 0 uncovered (a regression gate, nothing to do) | `mtg-tools cr-coverage` |
+| C1 | **Rulings**: every in-scope ruling text is CITED by a test, EXEMPT with a reason, or UNCOVERED for a named reason (an unsupported card, a deferred mechanic) | correctness | CITED 25,777 of 33,955 (75.9%); EXEMPT 189; OPEN 6,125; DEFERRED 1,864; out of scope 662 | OPEN 0, except texts named in docs/rulings-uncovered.tsv with their reason (the script has no UNCOVERED status; today that file holds the one text whose only card is unsupported for a digital mechanic, Tenacious Pup's); and the last 5 comparable items found no engine bug (§1.1) | `python3 scripts/rulings_batches.py summary` (OPEN) against the lines of docs/rulings-uncovered.tsv |
+| C2 | **Round trip**: every fully supported card's compiled abilities render back to its Oracle text, or the card is listed with a reason (a renderer gap, or a CR-justified equivalence) | correctness | 28,460 of 32,076 pass (88.7%); 3,464 mismatch, about 3,100 of them never triaged; 152 hand-written cards unchecked | 0 untriaged mismatches: every mismatching card either passes or is named in a roundtrip item's "Remaining" section with its reason (a renderer gap, or an equivalence a CR rule justifies); the last 2 items on cards the probe did not flag found no parser bug (§1.1) | `mtg-tools roundtrip --write`; untriaged = the mismatching cards not named in any docs/agents/items/roundtrip-*.md "Remaining" section (`grep`) |
+| C3 | **Independent audit**: the seven core areas of `engine-audit-1` (layers, replacement, triggers, zones/LKI, combat, casting/costs, SBA/copies) audited adversarially, each with reviewer sign-off; and a second blind judge audit with 0 confirmed wrong tests | correctness | audit: 0 of 7 areas (the item was issued Nov 9). Judge audit 1 (Oct 14): 58 tests, 225/225 questions agreed, so the wrong-test rate is below about 5% | 7 of 7 areas landed, each report giving its yield (tests added, bugs found); judge audit 2 over 200 tests including every hand-written card's test, 0 confirmed wrong | the areas' reports and docs/agents/yield.tsv; docs/agents/reports/judge-audit-2.md |
+| C4 | **Properties**: all metamorphic and exhaustive properties hold on the final code | correctness (consistency) | 8 properties, all held on their last runs (2,000 games each for 1–4; every card for copies; 1.2M boards; 200k combats; 2,400 hidden-information games), but on code of Oct 22–28, about 2,000 commits ago | the 8 plus the new ones in §3 (legal-action exactness, layer order-independence, ability copies, multiplayer kinds) hold on the final code at the same sizes | `mtg-sim --properties`, docs/PROPERTIES.md |
+| C5 | **Mutation score**: the tests notice changes to the core files | test strength | 459 of 520 viable sampled mutants killed (88.3%; 551 sampled, 1 in 10 of 5,281, Oct 14–21) across the 15 core files, now 33,113 lines (simultaneous.rs 55.6%, triggers.rs 75.0%, permissions.rs 78.6%, mana.rs 81.0%, replacement.rs 82.4%); several files rewritten since | every file ≥ 90% on a fresh sample, every survivor classified (equivalent, or killed); full runs, not samples, of simultaneous.rs, triggers.rs and trigger_timing.rs, permissions.rs and replacement.rs | `scripts/mutants.sh`, docs/MUTATION.md |
+| C6 | **Fuzz**: every-card sweep and random-deck fuzz on the final code with no panic, hang or invariant violation | crash and invariant check | last full sweep Nov 5: 32,656 cards, 1 fuzz-unclean card (recorded only in the tier file and docs/CARD_COVERAGE.md's sweep list; docs/EVERY_CARD.md has no write-up of that sweep, its latest is an older one: 0 panics or hangs, 95% of abilities used); no document records any `--random-decks` result | a final sweep with 0 failures, written up in docs/EVERY_CARD.md, and 10,000 random-deck games with 0 panics, recorded there too | `mtg-sim --every-card`, `--random-decks` |
+| C7 | **Hand-written cards**: no card depends on a `ManualAbility` | correctness (removes the only unaudited path) | 153 cards (154 registrations, 156 ability texts), all tested; the round trip skips their hand-written abilities (152 of the cards have nothing else it checks) | 0 (the user's standing "later" item; see §3 phase C) | `rg -o 'card: *"[^"]+"' crates/mtg-engine/src/cards \| sort -u \| wc -l` |
+| C8 | **Register and discrepancy log**: every judgment call registered and decided; every erroneous ruling logged and reviewed by a human | bookkeeping of judgment | 128 register entries, 0 provisional; 48 discrepancy entries, all "open for review", 0 reported | 0 provisional; every behavioral difference named in an item's "Remaining" section has a register entry or, where the CR is plain, a fix (B4 sweeps for them); the user has read the 9 deviations; the log's statuses set by the user | `mtg-tools interpretations --check`, docs/RULING_DISCREPANCIES.md |
+| C9 | **Engine gaps**: no confirmed rules gap open for a supported card | bookkeeping | the 33-gap inventory is closed as a feature list; open: two unverified bits of G32 (graveyard counts of tokens, meld on a copy), Inquisitor Eisenhorn's "this way" trigger never firing for a card drawn while casting (CR 121.8 reveals the card when the spell becomes cast, so the trigger should fire then; noted only in roundtrip-tail-5's "Remaining", a bug to fix, not a reading to register), hashed ability links that could collide (CR 607.5) | 0 | docs/agents/engine-gaps.md |
+| C10 | **CR coverage**: every numbered rule cited, covered via subrules or exempt; every worked example covered | bookkeeping | 3,038 cited + 76 via subrules + 52 exempt, 0 uncovered of 3,166 (measured Nov 9; the committed doc of Nov 5 says 3,036 + 78); 277/277 examples | stays at 0 uncovered (a regression gate, nothing to do) | `mtg-tools cr-coverage` |
 | C11 | **Verified cards**: cards passing every check | bookkeeping | 18,113 of 32,111 paper cards (56.4%); round-trip or better 28,570 (89.0%); compiled 32,076 (99.9%); 11,522 cards blocked only by an unexercised structure | report it; raising it is decision D3 below (not a correctness gate: "exercised" is not "asserted") | `mtg-tools card-coverage` |
 
-Housekeeping found while measuring: docs/RULINGS_COVERAGE.md is stale and uses a different
-count (1,558 unique texts, 4.6%) from the batches script (25,777, 75.9%); the tool's
-`--write` output and the script disagree on what a cited text is. Item `register-sweep-1`
-reconciles them so the standard update has one number.
+Housekeeping found while measuring: the committed docs/RULINGS_COVERAGE.md (1,558 unique
+texts cited, 4.6%) was never regenerated and is stale; `mtg-tools rulings-coverage --check`
+itself agrees with the batches script on the cited count (25,777) and differs only in the
+denominator (34,000 texts against the script's 33,955 in-scope ones) and the exempt count (166
+against 189). Item `register-sweep-1` regenerates the doc, reconciles the two denominators and
+adds a check that keeps them in step, so the standard update has one number.
+
+Today's baseline (measured Nov 9, details in docs/agents/reports/finish-line-measurements.md):
+`cargo test --workspace` passes, 28,659 tests, 0 failed, 6 ignored, 14 minutes of wall clock
+including a cold debug build (about 6.5 minutes of test execution); citations `cr!` 28,155,
+`ruling!` 27,008, `interp!` 340, `cr_example!` 290; 5,776 commits since Sep 24, about 108 a
+day over the last 14 days.
 
 ### 1.3 Which criteria measure correctness
 
@@ -101,7 +151,7 @@ checked the numbers).
 | 8 | **Layers with copy, type and ability changes; the dependency shortcut** (layers.rs) | well tested where sampled (87.5%, no killable survivor; eval.rs 100%); zero rulings fixes. But nobody has looked at dependency loops, 613.7 timestamps after control changes, or the cubic-to-linear shortcut's ordering. | a property: recompute characteristics with the active statics shuffled before dependency analysis (`property-tests-3`); audit area 1 |
 | 9 | **Multiplayer variants the fuzz never plays** (2HG, Emperor, Grand Melee, range of influence) | the sweep's kinds are standard, commander, planechase, archenemy, vanguard, conspiracy, attractions, dungeon; properties 1–4 play 2–4 player free-for-all; seat symmetry's seven bugs were all multiplayer edge paths; range.rs was rewritten this round. | `--kind` for those variants in the properties fuzz, a few hundred games each (`property-tests-3`) |
 | 10 | **The 153 hand-written cards and the renderer's EQUIVALENCES list** | no oracle checks the hand-written definitions beyond their author's test; the equivalence list (~150 rewrite rules) is where a real difference could be normalized away. | judge audit 2 over every manual-card test; one session reading EQUIVALENCES against the CR (`judge-audit-2`, `register-sweep-1`) |
-| 11 | **Judgment calls decided by workers** | of the two tested behaviors the user has been asked about so far, one was reversed ("you and that player each draw" is one instruction, Nov 7). 128 entries are decided; at least one behavioral deviation (Eisenhorn, 121.8) was never registered. | the user reads the 9 deviations (D5); sweep every "unless noted" remainder into the register (`register-sweep-1`) |
+| 11 | **Judgment calls decided by workers** | of the two tested behaviors the user has been asked about so far, one was reversed ("you and that player each draw" is one instruction, Nov 7). 128 entries are decided; one behavioral difference (Eisenhorn, 121.8) lives only in an item's "Remaining" section (a bug, not a reading: B5 fixes it). | the user reads the 9 deviations (D5); sweep every "unless noted" remainder into the register (`register-sweep-1`) |
 | 12 | **The 95% of rulings never tested by name** | the only method with a measured, repeatable yield on semantics; the open pool is 75% interactions (sample of 60) against 25% restatements. Expect 45–60 core engine bugs and about 30 compiler fixes from the 6,125 open texts. | it is the check (phase A) |
 | 13 | Loop detection, hidden information in the protocol, structure-blocked cards | each has had one or two bugs and a fix; low card impact or already covered by a property | report; `property-tests-3` adds a library-entitlement check to the hidden-information property |
 
@@ -124,31 +174,32 @@ Ordered, in three phases. Phase A runs now, in parallel across the sessions the 
 Phase B starts as sessions free up; its items are the new verification work this plan adds.
 Phase C is the user's standing "later" work and the final measurement. Effort is in
 worker sessions (one implementer plus one reviewer pass, 1–3 hours of wall clock each on the
-Fable model at the measured rate). "Judgment" items need the strongest model throughout;
+current model at the measured rate). "Judgment" items need the strongest model throughout;
 "routine" items run implementers at high and reviewers at max, per worker.md.
 
 ### Phase A: exhaust the two oracles that keep finding bugs (now)
 
 | # | Item | Fixes or proves | Effort | Judgment |
 |---|---|---|---|---|
-| A1 | `engine-audit-1` (running): layers, replacement, triggers, zones-LKI, combat, casting-costs, SBA-copy | the direct check on risks 2, 4, 5, 6, 7, 8; each area lands with tests and a mutation run of its main file | 7–10 sessions, one per area, serial | **judgment, max** |
+| A1 | `engine-audit-1` (issued Nov 9, nothing landed yet): layers, replacement, triggers, zones-LKI, combat, casting-costs, SBA-copy. Its brief lists layers first; the risk table says to take the areas in the order casting-costs, triggers, zones-LKI, replacement, SBA-copy, combat, layers, so that if the budget runs out the riskiest areas were audited (re-order the auditor's queue unless it has already begun layers) | the direct check on risks 2, 4, 5, 6, 7, 8; each area lands with tests and a mutation run of its main file | 7–10 sessions, one per area, serial | **judgment, max** |
 | A2 | Rulings: the 40 never-worked batches (4,526 open texts), interaction-heavy first: P154 P153 P155 P100 P101 (mana value, X, costs), P158 P157 (self-replacement, "without paying"), P144 P090 (impulse exile permissions and costs: the family that found ~10 bugs in P067–P071), P196 P197 (indefinite effects, 611.2), P138 P139 (removal-sacrifice: triggers, LKI, 2HG), P182 P181 (tutor to battlefield: Auras, simultaneous entry), P175 P114 P200 P115 P135; then the cheaper ones (P093 P095 P049 P081 P083 P084 P086 P164 P167 P168 P170 P173 P103 P105 P106 P191 P149 P088 P078) | risk 12; expect 35–45 engine bugs here | 40 sessions | routine |
-| A3 | Rulings residue: the 1,599 open texts left in 114 worked batches, regrouped into themed items (docs/agents/items/rulings-residue.md): copy-creature (P020 P021 P023), Enchant/Equip keywords (P207–P213), counters (P035 P120 P119 P121), reflexive and refund (P129 P130), type change (P187 P188), hate-attacker/blocker (P079 P080 P082), copy-instant (P028 P030 P032), keyword leftovers (P217 P211 P214 P205 P226 P222 P215), burn P009, freeze P062, shapechange (P160 P161), typal P184, and two misc sweeps | risks 3, 6, 7 (what earlier rounds left was the harder part) | ~14 sessions | routine |
+| A3 | Rulings residue: the 1,599 open texts left in 114 worked batches, regrouped into themed items (docs/agents/items/rulings-residue.md): copy-creature (P020 P021 P023), Enchant/Equip keywords (P207–P213), counters (P035 P120 P119 P121), reflexive and refund (P129 P130), type change (P187 P188), hate-attacker/blocker (P079 P080 P082), copy-instant (P028 P030 P032), keyword leftovers (P217 P214 P205 P226 P222 P215), burn P009, freeze P062, shapechange (P160 P161), typal P184, and two misc sweeps (about 770 texts) | risks 3, 6, 7 (what earlier rounds left was the harder part) | ~14 sessions | routine |
 | A4 | Round trip: `roundtrip-pairs-6` (running) and its successors over the ~3,100 untriaged mismatches, behaviour-first, ~150 cards an item | risk 1; expect 75–100 parser bugs | ~20 sessions | routine, with the parser-bug triage at max |
 | A5 | `roundtrip-probe-1` (docs/agents/items/roundtrip-probe-1.md): an automated probe over every mismatching card's AST that lists referents bound to something other than the text's nearest antecedent, dropped qualifiers ("other", "another", "you own", zone words) and dropped clauses; its hits are triaged first by A4 | makes A4 find the behavioral mismatches before the wording ones | 2 sessions | judgment to design, routine to run |
 
-Pace: at the measured 10–14 batches per day from two rulings sessions, A2+A3 is 4–5 days;
-with the API launcher's two children alongside, 2–3 days. A4 at one session is about three
-weeks; at two, ten days. A1 is serial by design.
+Pace: at an estimated 10–14 batches a day from two rulings sessions (the measured rate is
+1.1–1.7 hours per batch per session, and the Nov 8 run landed 7 batches in 8 hours from two
+sessions), A2+A3 is 4–5 days; with the API launcher's two children alongside, 2–3 days. A4 at
+one session is about three weeks; at two, ten days. A1 is serial by design.
 
 ### Phase B: the verification this plan adds (as sessions free up; B1–B3 can run in parallel)
 
 | # | Item | Fixes or proves | Effort | Judgment |
 |---|---|---|---|---|
 | B1 | `mutation-2` (docs/agents/items/mutation-2.md): full runs (not 1 in 10) of simultaneous.rs, triggers.rs with trigger_timing.rs, permissions.rs and replacement.rs; fresh 1-in-10 samples of the other 11 core files on current code; every survivor classified, the real ones killed | C5; risks 3, 4, 6 | 4–5 sessions, machine-heavy (6–12 h a file; one at a time, nothing else heavy alongside) | survivor classification needs judgment; the rest routine |
-| B2 | `property-tests-3` (docs/agents/items/property-tests-3.md): (a) legal-action exactness inside the every-card fuzz: every offered cast or activation succeeds with the engine's own payment, and sampled non-offered ones fail for a CR reason; (b) layer order-independence: characteristics agree when the active statics are shuffled before dependency analysis; (c) copies of activated and triggered abilities and of non-permanent spells resolve like the original; (d) `--kind 2hg|emperor|grand-melee|range` in the properties fuzz; (e) the hidden-information check compares library cards a decision shows with what the effect entitles (701.20, 701.23); (f) cost reductions and one alternative cost in the payment oracle | C4; risks 2, 7, 8, 9, 13 | 4–5 sessions | **judgment** to design each oracle from the rules; routine to run |
+| B2 | `property-tests-3` (docs/agents/items/property-tests-3.md): (a) legal-action exactness inside the every-card fuzz: every offered cast or activation succeeds with the engine's own payment, and sampled non-offered ones fail for a CR reason; (b) layer order-independence: characteristics agree when the active statics are shuffled before dependency analysis; (c) copies of activated and triggered abilities and of non-permanent spells resolve like the original; (d) `--kind 2hg\|emperor\|grand-melee\|range` in the properties fuzz; (e) the hidden-information check compares library cards a decision shows with what the effect entitles (701.20, 701.23); (f) cost reductions and one alternative cost in the payment oracle | C4; risks 2, 7, 8, 9, 13 | 4–5 sessions | **judgment** to design each oracle from the rules; routine to run |
 | B3 | `judge-audit-2` (docs/agents/items/judge-audit-2.md): the blind audit again over 200 tests: every hand-written card's test (153) plus 47 drawn at random from rulings and cr tests written since Oct 14; disagreements adjudicated and refuted as in audit 1 | C3; risk 10, 11 | 1 session plus the coordinator's workflow (audit 1: 118 agent runs in 18 minutes) | **judgment, max** |
-| B4 | `register-sweep-1` (docs/agents/items/register-sweep-1.md): register every behavioral deviation named in an item's "Remaining" or "unless noted" section (Eisenhorn 121.8 first); read the renderer's EQUIVALENCES list against the CR; reconcile `rulings-coverage --write` with the batches script and regenerate docs/RULINGS_COVERAGE.md | C8; risks 10, 11 | 1–2 sessions | judgment for the register entries |
+| B4 | `register-sweep-1` (docs/agents/items/register-sweep-1.md): register every behavioral deviation named in an item's "Remaining" or "unless noted" section (Eisenhorn 121.8 first); read the renderer's EQUIVALENCES list against the CR; regenerate docs/RULINGS_COVERAGE.md and make `rulings-coverage` and the batches script agree on their denominators and exempt counts, with a check | C8; risks 10, 11 | 1–2 sessions | judgment for the register entries |
 | B5 | `gaps-residual-2` (docs/agents/items/gaps-residual-2.md): G32's two unverified bits (tokens in graveyard counts, meld on a copy), the hashed ability links replaced by a per-object counter (607.5), and liveness debug-assertions in the actions.rs primitives with one fuzz chunk run under them | C9; risk 5 | 1–2 sessions | routine |
 
 ### Phase C: the user's standing items and the final measurement
@@ -171,7 +222,11 @@ pending; C3 starts when the user says the data is refreshed.
 - **auditor**: A1, area by area.
 - **rulings-1, rulings-2** (and the API launcher's children when credits allow): A2 in the
   interaction-first order above, then A3.
-- **roundtrip**: A5 first (two sessions of tooling), then A4 with the probe's hits first.
+- **roundtrip**: A5 first (two sessions of tooling), then A4 with the probe's hits first. A
+  second round-trip session is worth more per session than a third rulings session: an item of
+  150 mismatches has found 4–5 parser bugs, a rulings batch about 1.4 fixes (an engine bug does
+  reach more cards than a parser bug, but both pools must be exhausted either way, so run them
+  side by side).
 - **planner** (this session) or a fresh session: B4 now (it is small and unblocks the user's
   review), then B2.
 - A **mutation** session when the auditor has landed an area: B1, one file at a time, since
@@ -203,8 +258,11 @@ from data/.
    for word Midnight Reaper's ruling (2018-10-05) with the name swapped; G'raha Tia's ruling on
    the same template (2025-06-06) says the opposite. A board wipe gives one Clue.
 3. **Run Out of Town** (copying error). Ruling (2022-04-29) says "That permanent's controller
-   chooses whether to put it on the top or bottom of the library ..." twice; the Oracle text and
-   the Streets of New Capenna release notes (2022-04-20) say the owner. Matters whenever a
+   chooses whether to put it on the top or bottom of the library" and, of a permanent made of
+   several cards, "that permanent's controller puts all of them on the top or all of them on the
+   bottom"; the Oracle text ("The owner of target nonland permanent puts it on their choice of
+   the top or bottom of their library.") and the Streets of New Capenna release notes
+   (2022-04-20) say the owner. Matters whenever a
    stolen permanent is targeted.
 4. **Share the Spoils** (inconsistent; the one entry still awaiting the user, decision D1).
    Ruling (2021-07-23): "If you control an opponent's Share the Spoils and that player loses the
@@ -219,8 +277,8 @@ from data/.
    artifact is destroyed this way, its controller draws a card." Noxious Gearhulk's template
    with "you" kept; the published ruling says the opposite of the card's drawback.
 7. **Deranged Assistant** (outdated). Ruling (2025-01-24) describes a mana ability activated
-   while casting; CR 605.1a (2026-08-07 revision) makes an ability whose cost moves a card to
-   or from a library not a mana ability, and Wizards issued new rulings for Millikin, Chromatic
+   while casting; CR 605.1a (revised 2026-08-07 by the log's dating; data/ holds only the
+   current CR) makes an ability whose cost moves a card to or from a library not a mana ability, and Wizards issued new rulings for Millikin, Chromatic
    Sphere and Selvala but left this one (and the Eggs' 2008 "This is a mana ability", Charmed
    Pendant's 2004 one).
 8. **Valakut Awakening and 72 other modal double-faced cards** (outdated). Ruling (2020-09-25
@@ -237,7 +295,9 @@ from data/.
     the card and the release notes (2022-04-20) say "among cards in your graveyard".
 
 Next tier: Rimescale Dragon (Rimefeather Owl's ruling with the name swapped), Fiery
-Annihilation (decided Nov 7), Lich (the 2010 copy of a reworded 2011 ruling), Citanul Druid.
+Annihilation (decided Nov 7), Lich (its 2010 ruling still says "leaves the battlefield" though
+Wizards reworded that text in 2011 and the Oracle text has said "put into a graveyard from the
+battlefield" since 2010), Citanul Druid.
 
 Read most carefully (the evidence is an inference, not a document): Combat Celebrant's origin,
 Araumi, Share the Spoils, Gnoll War Band, Fiery Annihilation, Arbiter of Knollridge, Citanul
@@ -250,7 +310,8 @@ craft and transform entry, and the misattached Clive, Squall and Gut entries.
 Flame and Hada Freeblade (a report would go to Scryfall); Dragon-Kami's Egg's "hatchling"
 typo (Wizards' own, in the release notes too); Geier Reach Sanitarium's "When you activate"
 and Kami of the Crescent Moon's "just after the normal draw" (wording that puts an event at
-the wrong moment, outcome unaffected). Also: ruling-conflicts-3 compared 69 release-notes files
+the wrong moment, outcome unaffected). The recommendation is that none becomes a conflict case
+(the engine is unaffected by all of them); say so if you want any of them reported. Also: ruling-conflicts-3 compared 69 release-notes files
 (2013–2022) against the data by word changes and hand-read about 25; the other ~1,100 changed
 notes were not read one by one, so more copying errors may exist. A one-session item could
 finish that read if the user wants the log complete before reporting.
@@ -272,8 +333,9 @@ game. Does "whenever an opponent loses the game" trigger (the engine, CR 603.10f
 ruling)?
 
 **Recommendation.** Set the ruling aside as inconsistent, as Gnoll War Band's and Arbiter of
-Knollridge's were on Nov 5: an exemption line in the P068 file citing this decision; the log
-entry stays open for review and goes to Wizards with the others. The engine already follows the
+Knollridge's were on Nov 5: an exemption line citing this decision in a new
+docs/rulings-exemptions/rulings-P068.tsv (P068 has none yet); the log entry stays open for
+review and goes to Wizards with the others. The engine already follows the
 CR and is tested (`tests/rulings/r_p068_players.rs`, `tests/cr/r600_look_back.rs`). The
 alternative is to follow the ruling: make the leave-the-game procedure (800.4a) remove the
 object before the loss is checked for triggers; that contradicts 603.10f and three other
@@ -320,7 +382,8 @@ the game. ..."
   the same time its controller loses the game, Grismold's last ability triggers."
 
 **Evidence gathered by rulings-P068 (investigator and skeptic):** 603.10f dates from the CR of
-2016-11-11, so the ruling is not outdated; the Forgotten Realms release notes (2021-07-12) have
+2016-11-11 (by the investigation's reading of the archived CR texts; data/ holds only the
+current CR), so the ruling is not outdated; the Forgotten Realms release notes (2021-07-12) have
 the same words, so it is not a copying error; it names its own card and doesn't contradict the
 Oracle text, so it is neither misattached nor a template error. "the first ability won't
 trigger" appears on no other card.
@@ -416,16 +479,21 @@ this read is the cheapest correctness check left.
 **Recommendation.** Accept C1–C6 and C8–C10 as gates; C7 a gate (it is the only unaudited
 path, and the user already asked for it); C11 reported. Read the nine deviations.
 
-### D6. Deferred categories and the data refresh
+### D6. When to refresh the data
 
-**Question.** The deferrals (digital-only cards 855, cards legal in no format about 2,050 by
-docs/DEFERRED.md's count, sticker sheets 49 plus 24 cards, Contraptions and host/augment,
-dexterity cards 2, Conspiracy draft cards 5; 1,864 deferred ruling texts plus 662 out of scope)
-were reaffirmed on Nov 4. Do they stand for "done"? And when does the user refresh data/, which
-by itself brings the 189 unreleased-set cards into scope and may renumber CR rules?
+**Question.** When does the user refresh data/ (Scryfall cards, rulings and tags; possibly a
+newer CR)? The refresh by itself brings the 189 cards of sets unreleased on 2026-09-24 into
+scope (today deferred as legal in no format) and may renumber or reword CR rules, which breaks
+`cr!` citations until item C3 fixes them. The deferrals themselves (digital-only cards 855,
+cards legal in no format about 2,050 by docs/DEFERRED.md's count, the 50 sticker sheets plus 24
+cards, Contraptions and host/augment, dexterity cards 2, Conspiracy draft cards 5; 1,864
+deferred ruling texts plus 662 out of scope) were reaffirmed on Nov 4 and are not re-asked: the
+plan takes them as standing for "done".
 
-**Recommendation.** Keep every deferral; refresh the data after phase B has landed, so the new
-cards are supported by a compiler that has stopped changing under them (item C3).
+**Recommendation.** Refresh the data after phase B has landed, so the new cards are supported
+by a compiler that has stopped changing under them (item C3). "Done" (item C2) is measured on
+the data of 2026-09-24 that the engine was built against; C3 then re-runs the incremental
+refresh for the new cards.
 
 ### Already decided, not re-asked
 

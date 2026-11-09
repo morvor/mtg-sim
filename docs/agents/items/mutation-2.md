@@ -6,7 +6,9 @@ but simultaneous.rs 55.6%, triggers.rs 75.0%, permissions.rs 78.6%, mana.rs 81.0
 replacement.rs 82.4%. Since then simultaneous.rs, permissions.rs, trigger_timing.rs,
 casting.rs's cost code and range.rs were rewritten or extended by the gap items, and no
 mutation run has looked at them. The one engine bug mutation testing found came from a
-survivor in simultaneous.rs.
+survivor in simultaneous.rs. The 15 files have grown to 33,113 lines since the October sample
+(5,281 mutants then), so the mutant counts below are October's; take the current ones from the
+run.
 
 Machine rules (CLAUDE.md, docs/MUTATION.md): `export CARGO_BUILD_JOBS=2`; one file at a time
 under `scripts/mutants.sh`; nothing else heavy on the machine while a run is going (tell the
@@ -35,4 +37,5 @@ survivor with its classification; the engine bugs found with their rules. Then t
 rate. Target: every file at or above 90% with every remaining survivor classified (a).
 
 DONE when the five full runs and the eleven fresh samples are in docs/MUTATION.md with
-their survivors classified and the (b)/(c) ones killed, and `cargo test --workspace` passes.
+their survivors classified and the (b)/(c) ones killed, `cargo test --workspace` passes, and the
+item's row (mutants run, missing tests added, engine bugs) is in docs/agents/yield.tsv.

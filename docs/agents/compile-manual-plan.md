@@ -12,7 +12,7 @@ Source of the "later" item: `docs/agents/verification-plan.md:342` ("Compile eve
 every `ManualAbility` must become compiler-supported, and the rules hooks the manual cards added become compiled
 constructs any card can use; plan it like a card-support round; it comes after rulings coverage.
 
-Inventory today: **153 cards, 156 texts, 155 files** in `crates/mtg-engine/src/cards/` (12,607 lines; Booby Trap,
+Inventory today: **153 cards, 156 texts, 154 files** (153 card files and `mod.rs`) in `crates/mtg-engine/src/cards/` (12,607 lines; Booby Trap,
 Ertai's Meddling and Swirl the Mists register two texts each). 131 files also implement `KeywordRules` with
 `kinds() -> &[]`; 22 are pure AST (no hooks); 99 build on `parse(ctx, <paraphrase>)` and patch the result, so the
 compiler already produces most of their structure. 124 distinct `card:<Name>:<what>` hook names.

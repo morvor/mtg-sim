@@ -28,19 +28,20 @@ tests in `crates/mtg-engine/tests/properties/`, results in docs/PROPERTIES.md.
     dependency analysis and timestamp ordering; the result must equal the unshuffled one. Also
     recompute after reversing the order statics are collected in. Any difference is an ordering
     bug (or a dependency the analysis misses).
-11. **Copies of abilities and of non-permanent spells** (CR 707.10, 707.10a–c, 603.6 for
-    copied triggers). Extend `properties::copies`: for every card with an activated or
+11. **Copies of abilities and of non-permanent spells** (CR 707.10, 707.10a–c). Extend `properties::copies`: for every card with an activated or
     triggered ability, copy the ability on the stack (Strionic Resonator, Lithoform Engine,
     Rings of Brighthearth) and resolve both on cloned games; the outcomes must agree except where
     707.10 says otherwise (new targets chosen, "if you do" costs not paid for the copy). For
     every instant and sorcery, resolve a copy of the spell alongside the original (Twincast) and
     compare. Copy planeswalkers and battles with a Clone-like effect as well as with tokens.
-12. **Multiplayer variants** (CR 805, 806, 807, 809, 811). Add `--kind 2hg|emperor|grand-melee|
+12. **Multiplayer variants** (CR 801 range of influence, 805 shared team turns, 807 Grand
+    Melee, 809 Emperor, 810 Two-Headed Giant). Add `--kind 2hg|emperor|grand-melee|
     range` to the properties fuzz, so seat symmetry, snapshot equivalence, rollback identity and
     determinism run over those games; a few hundred games each. Include players leaving the game
     and shared team turns (805.10c).
-13. **Library cards shown are the ones the effect entitles** (CR 701.20 look, 701.23 search,
-    401.5, 400.2). In `hidden::check_game`, for every decision that shows a player cards from a
+13. **Library cards shown are the ones the effect entitles** (CR 701.20 reveal and 701.20e
+    looking at cards, 701.23 search, 400.2, 401.5). In `check_game`
+    (`crates/mtg-api/src/hidden.rs`), for every decision that shows a player cards from a
     library, check the count and the zone against the effect that caused it (the effect's
     `Sel`/count in the AST): a search shows the whole library, "look at the top N" shows N, a
     reveal shows what it reveals; anything else is a leak.
@@ -57,5 +58,6 @@ and 500 properties-fuzz games; 10 over the same; 11 over every card; 12 at 300 g
 docs/PROPERTIES.md.
 
 DONE when the six properties run, their first-run violations are fixed with regression tests
-(or registered as interpretations where the CR is silent), and docs/PROPERTIES.md has the
-results. Report the bugs found, each with its rule and fix.
+(or registered as interpretations where the CR is silent), docs/PROPERTIES.md has the
+results, and the item's row is in docs/agents/yield.tsv. Report the bugs found, each with its
+rule and fix.

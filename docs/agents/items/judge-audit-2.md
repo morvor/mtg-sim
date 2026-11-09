@@ -3,8 +3,9 @@
 WHY: docs/agents/finish-line-plan.md, criterion C3 and risks 10, 11. Judge audit 1 (Oct 14,
 docs/agents/reports/judge-audit-1.md) had an agent that saw only the rules predict what 58
 sampled tests should assert: 225 of 225 questions agreed, bounding the wrong-test rate at about
-5%. Since then about 15,000 tests were added, and the 153 hand-written cards (`crates/mtg-engine/
-src/cards/`) are the one place no independent oracle has looked: a wrong manual definition
+5%. Since then the suite has grown to 28,659 tests (the count at audit 1 isn't recorded), and the
+153 hand-written cards (`crates/mtg-engine/src/cards/`) are the one place no independent oracle
+has looked: a wrong manual definition
 with a test written from the same reading stays "verified". The user reversed one tested
 behavior of two reviewed so far (Nov 7), so worker readings are worth a blind check.
 
@@ -15,9 +16,14 @@ Run at effort max throughout. The coordinator runs it as a local workflow, as au
 
 - Every `tests/cards/m_<card>.rs` (153 files; one test each where a file has several: the one
   that exercises the hand-written block).
-- 47 tests drawn at random (seed 20261109) from tests written since commit 9b0af15a: 25 from
-  `tests/rulings/` (prefer the ones whose `ruling!` text is an interaction, not a restatement),
-  12 from `tests/cr/` and 10 from the `engine-audit-1` areas' tests once they have landed.
+- 47 tests drawn at random (seed 20261109) from tests audit 1 did not sample
+  (docs/agents/reports/judge-audit-1.json lists its 60) and that were written since it. The
+  clones are shallow (history from Nov 5 only; audit 1's commit 9b0af15a isn't reachable), so
+  draw from files `git log --diff-filter=A` shows added since Nov 5, else from the rulings test
+  files of the batches landed since Nov 5 (docs/agents/reports/finish-line-rulings-pool.md §2
+  lists them): 25 from `tests/rulings/` (prefer the ones whose `ruling!` text is an interaction,
+  not a restatement), 12 from `tests/cr/` and 10 from the `engine-audit-1` areas' tests once
+  they have landed.
 
 ## Steps (as audit 1)
 
