@@ -642,7 +642,7 @@ fn godsend_that_left_doesnt_lock_the_names_a_new_one_didnt_exile() {
 
 #[test]
 fn aisling_leprechaun_turns_the_creature_green_by_a_trigger_after_blocks() {
-    cr!("509.1a", "702.16b", "603.2", "613.1d");
+    cr!("509.1a", "702.16e", "702.16f", "603.2", "613.1d");
     ruling!(
         "Aisling Leprechaun",
         "Creatures change color as a triggered ability upon the block being declared."

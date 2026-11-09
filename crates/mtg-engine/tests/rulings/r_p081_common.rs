@@ -80,6 +80,34 @@ pub fn can_target_with(t: &mut TestGame, p: PlayerId, name: &str, target: Entity
     spell_targets(t, p, name).contains(&target)
 }
 
+/// Whether `p` can cast the spell `name` choosing `target` as its (first) target: the
+/// card is put into `p`'s hand with mana for it and cast with that target; the game is
+/// then restored to how it was. Judged with the spell on the stack, as targets are chosen
+/// (CR 601.2a, 601.2c), so restrictions about "spells" apply (an illegal answer makes the
+/// engine fall back to a legal target, which counts as "no").
+pub fn casts_targeting(t: &mut TestGame, p: PlayerId, name: &str, target: Entity) -> bool {
+    let snapshot = t.g.clone();
+    lands_for_cost(t, p, name);
+    let card = t.hand(p, name);
+    let ok = match t.cast(p, card).target(target).try_go() {
+        Ok(spell) => crate::r_p006_common::targets_of(t, spell) == vec![target],
+        Err(_) => false,
+    };
+    // The target answer is left queued when no target was asked for: remove it, and
+    // nothing else that was queued.
+    {
+        let mut script = t.script.lock().unwrap();
+        let q = &mut script.queues[p.idx()];
+        if let Some(i) = q.iter().rposition(|(k, a)| {
+            *k == DecisionKind::Targets && *a == Answer::Entities(vec![target])
+        }) {
+            q.remove(i);
+        }
+    }
+    t.g = snapshot;
+    ok
+}
+
 /// The colors of the object (followed across zone changes) now.
 pub fn colors(t: &TestGame, id: ObjectId) -> Vec<Color> {
     let o = t.obj_now(id);
