@@ -278,8 +278,15 @@ pub fn replace_words(text: &str, from: &str, to: &str) -> String {
         let end = start + lf.len();
         let before = lower[..start].chars().next_back();
         let after = lower[end..].chars().next();
+        // A plural ("Mountains", "Islands") is the word followed by an "s" that ends it.
+        let plural = lower[end..].starts_with('s')
+            && lower[end + 1..]
+                .chars()
+                .next()
+                .is_none_or(|c| !c.is_alphabetic());
         let boundary = before.is_none_or(|c| !c.is_alphanumeric())
-            && after.is_none_or(|c| !c.is_alphabetic() || lower[end..].starts_with("walk"));
+            && after
+                .is_none_or(|c| !c.is_alphabetic() || lower[end..].starts_with("walk") || plural);
         out.push_str(&text[i..start]);
         if boundary {
             let upper = text[start..]
