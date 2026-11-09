@@ -16,7 +16,7 @@ use mtg_engine::*;
 pub use crate::r_p046_common::{cost_to_cast, fill_pool, pool, tap_lands};
 pub use crate::r_p048_common::*;
 pub use crate::r_p127_common::untap;
-pub use crate::r_p108_common::{end_step, resolved, two_headed_giant};
+pub use crate::r_p108_common::{a_creature_dies, end_step, resolved, two_headed_giant};
 pub use crate::r_s01_common::{attack_with, block_and_finish, supported, triggers_on_stack, watch};
 pub use crate::r_s02_common::{can_activate, can_cast, create_token, target_candidates};
 pub use crate::r_s06_common::give_control;
