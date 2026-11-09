@@ -1638,6 +1638,7 @@ impl Game {
             event: None,
             source_lki: None,
             chosen_values: Default::default(),
+            source_attached_to: None,
         }));
         self.emit(Event::ZoneChange {
             old: card,

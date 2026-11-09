@@ -52,6 +52,7 @@ pub fn create_stack_ability(
         event,
         source_lki: source_lki.or_else(|| Some(Box::new(g.obj(source).chars.clone()))),
         chosen_values: Default::default(),
+        source_attached_to: g.obj(source).attached_to,
     }));
     let _ = ability;
     let id = ObjectId(g.objects.len() as u32);

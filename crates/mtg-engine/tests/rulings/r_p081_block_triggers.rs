@@ -210,7 +210,7 @@ fn engulfing_slagwurm_gains_the_toughness_as_the_ability_resolves_or_last_known(
 
 #[test]
 fn engulfing_slagwurm_destroys_blockers_in_the_declare_blockers_step_and_needs_trample() {
-    cr!("509.1h", "506.4", "702.19e", "510.1a");
+    cr!("509.1h", "506.4", "702.19d", "510.1a");
     ruling!(
         "Engulfing Slagwurm",
         "Engulfing Slagwurm’s ability triggers and resolves during the declare blockers step. Creatures destroyed this way will not deal combat damage."
@@ -242,7 +242,7 @@ fn engulfing_slagwurm_destroys_blockers_in_the_declare_blockers_step_and_needs_t
 
 #[test]
 fn grasping_giant_stays_blocked_and_doesnt_exile_if_it_left_first() {
-    cr!("509.1h", "506.4", "610.3c", "702.19e");
+    cr!("509.1h", "506.4", "610.3c", "702.19d");
     ruling!(
         "Grasping Giant",
         "Grasping Giant doesn’t become unblocked when the creatures blocking it are exiled. Unless it gains trample, it won’t deal combat damage."
