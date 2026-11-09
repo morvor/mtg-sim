@@ -170,6 +170,22 @@ The user resumed normal work, at the normal pace.
 
 mutation, cards-1 and cards-2 stay held. After the round, everyone waits for the user's go.
 
+### Fable push (user, Nov 9)
+
+The user: "We just received a limit reset for a new Fable model. This model is extremely powerful, so we should find a way to leverage the free usage we have with it to maximally accelerate and improve this project. We are getting close to the end, so using our Fable usage to push us over the finish line with good judgement would be ideal."
+
+All old worker sessions are archived; every item they were given has landed, except P049, which was never started. New sessions run on the Fable model (`claude-fable-5-1`). Implementers run at effort high, and reviewers, investigations and audits at max (worker.md).
+
+| Role | Queue |
+|---|---|
+| planner | finish-line-plan (defines "done", the remaining risks and the ordered items; summarizes the discrepancy log for human review) |
+| auditor | engine-audit-1, area by area: layers, replacement, triggers, zones-lki, combat, casting-costs, sba-copy |
+| roundtrip | roundtrip-pairs-6, then the round-trip items the plan names |
+| rulings-1 | P049, P078, P081, P083, P084, P086 ... (the pool's odd positions) |
+| rulings-2 | P088, P090, P093, P095, P099, P100 ... (the pool's even positions) |
+
+Pace: one item at a time per session. Once finish-line-plan lands, the coordinator re-plans the queues from it.
+
 ### Second API-billed run (user, Nov 7)
 
 The user: "Our API credits have been refreshed, and we used a very appropriate $183 last time — let's repeat that process again, using the API credits to run a few rounds at the new, lower effort levels."
