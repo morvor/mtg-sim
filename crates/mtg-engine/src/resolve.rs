@@ -553,6 +553,11 @@ impl Game {
                         }
                         _ => v,
                     }
+                } else if matches!(source, Sel::Var(_)) {
+                    // "Create an X/X ... token. It deals X damage to you." with several
+                    // tokens created (Anointed Procession): each of them deals the damage
+                    // (Chainer's Torment's rulings).
+                    self.resolve_objects(source, ctx)
                 } else {
                     self.damage_source(source, ctx).into_iter().collect()
                 };

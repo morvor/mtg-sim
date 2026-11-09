@@ -19,7 +19,7 @@ pub use crate::r_p127_common::untap;
 pub use crate::r_p108_common::{a_creature_dies, end_step, resolved, two_headed_giant};
 pub use crate::r_s01_common::{attack_with, block_and_finish, supported, triggers_on_stack, watch};
 pub use crate::r_s02_common::{can_activate, can_cast, create_token, target_candidates};
-pub use crate::r_s06_common::give_control;
+pub use crate::r_s06_common::{attached_to, give_control};
 pub use crate::r_s24_common::enter_together;
 pub use crate::r_s25_common::{abilities_from, cast_new, lands_for_cost, name_now, spell_copies, x_of};
 pub use crate::r_s30_common::set_life;
