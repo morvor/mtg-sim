@@ -176,13 +176,21 @@ The user: "We just received a limit reset for a new Fable model. This model is e
 
 All old worker sessions are archived; every item they were given has landed, except P049, which was never started. New sessions run on the Fable model (`claude-fable-5-1`). Implementers run at effort high, and reviewers, investigations and audits at max (worker.md).
 
-| Role | Queue |
-|---|---|
-| planner | finish-line-plan (defines "done", the remaining risks and the ordered items; summarizes the discrepancy log for human review) |
-| auditor | engine-audit-1, area by area: layers, replacement, triggers, zones-lki, combat, casting-costs, sba-copy |
-| roundtrip | roundtrip-pairs-6, then the round-trip items the plan names |
-| rulings-1 | P049, P078, P081, P083, P084, P086 ... (the pool's odd positions) |
-| rulings-2 | P088, P090, P093, P095, P099, P100 ... (the pool's even positions) |
+| Role | Session | Queue |
+|---|---|---|
+| planner | session_019p6spxhpVg7uo8FiyED8ai | finish-line-plan (defines "done", the remaining risks and the ordered items; summarizes the discrepancy log for human review) |
+| auditor | session_019p6spyBuwnV522bkiqsNty | engine-audit-1, area by area: layers, replacement, triggers, zones-lki, combat, casting-costs, sba-copy |
+| roundtrip | session_019p6spxs4s8RXyT9mkADZuC | roundtrip-pairs-6, then the items the plan names |
+| rulings-1 | session_019p6spyC29FswmnWN3vJ38n | P049 P078 P083 P086 P090 P095 P100 P103 P106 P115 |
+| rulings-2 | session_019p6sq2W1TEG1vYtZZ2PycZ | P081 P084 P088 P093 P099 P101 P105 P114 P135 P138 |
+
+**Usage check (user, Nov 9):** "We should also check usage after these batches land, to make sure it's an efficient use."
+- At every check-in, log each Fable session's `usage.cost_usd` (the API-equivalent cost that get_session reports), its context size and its rate-limit status. Do this in RECOVERY.md, next to the items it landed.
+- When each session's first item lands, report to the user:
+  - the cost per item, against the Opus baselines: rulings batches about $11.50 at default effort (API run, Nov 1) and $15–28 at max (subscription workers, Nov 4–5);
+  - what the item produced: rulings cited, bugs fixed, round-trip passes gained;
+  - how fast the Fable limit is going;
+  - a recommendation: keep the pace, change it, or move work between Fable and Opus.
 
 Pace: one item at a time per session. Once finish-line-plan lands, the coordinator re-plans the queues from it.
 
