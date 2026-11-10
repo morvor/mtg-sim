@@ -2381,6 +2381,19 @@ pub(crate) fn named_referents(trigger: &TriggerCond) -> Vec<(String, Sel)> {
         if matches!(**inner, TriggerCond::Dies(_)) {
             push(super::referents_batches::DIED_BATCH, Sel::TriggerObjects);
         }
+        // "Whenever one or more cards leave your graveyard, ... the greatest mana value
+        // among those cards" (Amzu, Swarm's Hunger), "... a card from among those cards"
+        // (Spirit of Resilience): the cards in their new zone, whatever "it" has come to
+        // mean by then (a token the ability created).
+        if matches!(
+            strip(inner),
+            TriggerCond::ZoneChange {
+                from: Some(ZoneKind::Graveyard),
+                ..
+            }
+        ) {
+            push("those cards", Sel::TriggerObjects);
+        }
         // "... deal damage to one or more of your opponents, ... the number of opponents
         // dealt damage this way": the players of the batch.
         if matches!(
