@@ -52,6 +52,7 @@ pub fn matching_faces(g: &Game, card: ObjectId, f: &Filter, ctx: &Ctx) -> Vec<Fa
 pub fn choose_cards_to_cast(
     g: &mut Game,
     what: &Sel,
+    free: bool,
     ctx: &mut Ctx,
 ) -> Option<Vec<(ObjectId, Vec<FaceState>)>> {
     // "You may cast the exiled card ... if it's an instant spell": each of the cards in a
@@ -84,24 +85,35 @@ pub fn choose_cards_to_cast(
     let n = g.eval_value(count, ctx).max(0) as u32;
     // CR 601.3: only the faces the player could begin to cast now are choices; the
     // spell's own timing restrictions ("Cast this spell only during combat") still apply
-    // while the effect resolves (CR 608.2g).
-    let mut faces: Vec<(ObjectId, Vec<FaceState>)> = zones
+    // while the effect resolves (CR 608.2g), as do its costs (a mandatory additional cost
+    // that can't be paid, Bankrupt in Blood with one creature). Its targets are judged
+    // as it's cast: a later spell may target one cast earlier (Twincast after Lightning
+    // Strike).
+    let cands: Vec<ObjectId> = zones
         .into_iter()
         .flat_map(|z| g.objects_in_zone_kind(z))
+        .collect();
+    let mut faces: Vec<(ObjectId, Vec<FaceState>)> = Vec::new();
+    for o in cands {
         // CR 406.3b: a face-down card in exile is a choice only for a player allowed to
         // look at it (and then judged as the spell it would become).
-        .filter(|o| {
-            let ob = g.obj(*o);
-            !(ob.face_down && ob.zone == crate::object::Zone::Exile)
-                || crate::zones::may_look(g, p, *o)
-        })
-        .map(|o| {
-            let mut f = matching_faces(g, o, filter, ctx);
-            f.retain(|face| g.resolution_cast_allowed(p, o, &g.face_characteristics(o, *face)));
-            (o, f)
-        })
-        .filter(|(_, f)| !f.is_empty())
-        .collect();
+        let ob = g.obj(o);
+        if ob.face_down && ob.zone == crate::object::Zone::Exile && !crate::zones::may_look(g, p, o)
+        {
+            continue;
+        }
+        let mut f = matching_faces(g, o, filter, ctx);
+        f.retain(|face| g.resolution_cast_allowed(p, o, &g.face_characteristics(o, *face)));
+        let mut castable = Vec::new();
+        for face in f {
+            if crate::casting::could_cast_face_during_resolution(g, p, o, face, free, false) {
+                castable.push(face);
+            }
+        }
+        if !castable.is_empty() {
+            faces.push((o, castable));
+        }
+    }
     let mut cands: Vec<ObjectId> = faces.iter().map(|(o, _)| *o).collect();
     // CR 723.4: a controlled player can't be made to choose cards from outside the game.
     crate::player_control::visible_choices(g, p, &mut cands);
