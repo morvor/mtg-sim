@@ -1169,6 +1169,18 @@ impl Game {
     /// Enumerates objects matching a filter in the filter's zone (battlefield by default).
     /// Phased-out permanents are excluded (CR 702.26b).
     pub fn objects_matching(&self, f: &Filter, ctx: &Ctx) -> Vec<ObjectId> {
+        let mut out = self.objects_matching_anywhere(f, ctx);
+        // A card whose casting is being considered is judged as on the stack (CR 601.2a):
+        // it isn't among the cards in the zone it's cast from ("This spell costs {1} less
+        // to cast for each historic card in your graveyard", The Capitoline Triad cast
+        // from the graveyard).
+        if let Some(c) = ctx.casting_card {
+            out.retain(|id| *id != c);
+        }
+        out
+    }
+
+    fn objects_matching_anywhere(&self, f: &Filter, ctx: &Ctx) -> Vec<ObjectId> {
         // Objects among a selection ("a land card milled this way") are wherever they are.
         if f.zone().is_none() {
             let within = |f: &Filter| match f {

@@ -1223,7 +1223,11 @@ impl Game {
             ctx.iter_player = Some(p);
             match r {
                 Restriction::CantCast { who, what } => {
-                    let what = if x_open { without_mana_value(what) } else { what.clone() };
+                    let what = if x_open {
+                        without_mana_value(what)
+                    } else {
+                        what.clone()
+                    };
                     self.player_filter_matches(who, p, &ctx)
                         && self.matches_view(&view, card, &as_spell_filter(&what), &ctx)
                 }
@@ -1231,7 +1235,11 @@ impl Game {
                     self.player_filter_matches(who, p, &ctx) && spells_cast >= *n
                 }
                 Restriction::MaxSpellsOfKindPerTurn { who, what, n } => {
-                    let what = if x_open { without_mana_value(what) } else { what.clone() };
+                    let what = if x_open {
+                        without_mana_value(what)
+                    } else {
+                        what.clone()
+                    };
                     let f = as_spell_filter(&what);
                     self.player_filter_matches(who, p, &ctx)
                         && self.matches_view(&view, card, &f, &ctx)
@@ -2343,7 +2351,12 @@ impl Game {
             if let AbilityKind::Static(s) = &a.kind {
                 if let StaticEffect::CostModifier(cm) = &s.effect {
                     if let CostTarget::ThisSpell = cm.applies_to {
-                        let ctx = Ctx::new(Some(card), p);
+                        let mut ctx = Ctx::new(Some(card), p);
+                        // A card considered for casting counts as on the stack already
+                        // (CR 601.2a): not among the cards of its zone.
+                        if self.obj(card).zone != Zone::Stack {
+                            ctx.casting_card = Some(card);
+                        }
                         // "This spell costs {2} less to cast if ..." (CR 601.2f).
                         if !crate::spell_costs::own_change_applies(self, card, s, cm, &ctx) {
                             continue;
@@ -2372,6 +2385,9 @@ impl Game {
         // Static cost modifiers from other permanents: increases first, then reductions.
         for (src, ctl, cm) in &self.statics.cost_modifiers {
             let mut ctx = Ctx::new(Some(*src), *ctl);
+            if self.obj(card).zone != Zone::Stack {
+                ctx.casting_card = Some(card);
+            }
             // "it" is the spell and "that player" its caster (see `kw/spell_cost_grammar`).
             ctx.event = Some(crate::object::EventInfo {
                 object: Some(card),
