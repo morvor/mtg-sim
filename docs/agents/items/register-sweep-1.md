@@ -54,7 +54,8 @@ a confirmed "wording only" note, and the two rulings counts agree.
 
 ## Result (Nov 10)
 
-Commits `register-sweep-1: ...` on wip/register-sweep-1. No engine behavior changed.
+Commits `register-sweep-1: ...` on wip/register-sweep-1. No engine behavior changed by the
+implementer; the review changed one compile (the grandeur cost, below).
 
 **1. Sweep.** Read in full: every "Remaining", "STATUS", "Review" and "NOT TAKEN" section
 and every "unless noted", "deviation", "approximation", "we chose", "left as is", "not
@@ -136,3 +137,94 @@ rulings (shared texts exempt everywhere), and print the same
 (`crates/mtg-tools/tests/rulings_counts.rs` compares the two lines; the 18 presentation and
 policy texts got explicit lines in their batches' files, the 5 testable ones are OPEN).
 docs/RULINGS_COVERAGE.md regenerated (it had 1,558 cited texts, from October).
+
+## Review (Nov 10)
+
+**EQUIVALENCES.** Every rule read against the CR text (each cited rule grepped from
+`data/comprehensive-rules.txt`, each cited ruling from the data) and every "wording only"
+mark checked against the cards that use the form (the Oracle data). Verdict: 41 citations
+confirmed (none merely related; the dropped and corrected ones above were right to drop
+and correct), 122 "wording only" marks confirmed, the 12 sentence forms and 2 ignored words
+confirmed. The three changes of the implementer stand: the "same name as ~" removal (CR
+201.2a, 201.5; Spy Kit's rulings), the token "It gains" narrowing (Timothar's ruling; the
+engine agrees: the Bat token's text holds only flying, the triggered ability is a `Modify`
+effect after the `CreateToken`, so a copy of the token doesn't have it), the Pirated Copy
+rewrite (its ruling: a copy has the granted ability, which follows the current name) and
+the added `{alt:gains|has}` rule (CR 611.2a, 613.1f). Two more changes:
+
+- Removed `at the beginning of the next upkeep` -> `at the beginning of the next turn's
+  upkeep`. CR 500.1 and 502.4 don't make them the same in a turn with an additional upkeep
+  step (Paradox Haze is compiled and round-trips): created during the first upkeep, "the
+  next upkeep" is that turn's second, "the next turn's upkeep" the next turn's. The parser
+  compiles both to one trigger (`triggers_delayed.rs`: `BeginningOf { Upkeep, Any }`, the
+  next upkeep step to begin), and the renderer words it "the next turn's upkeep", so the
+  57 "next turn's upkeep" cards (Heal, Ritual of Steel, Bone Harvest, ...) are the loosely
+  read ones and the 4 "next upkeep" cards are read right. Affected: Archangel Avacyn //
+  Avacyn, the Purifier and Aang, at the Crossroads // Aang, Destined Savior mismatch now
+  (28,459 of 32,076 pass); The Eagles Are Coming! and Firion, Wild Rose Warrior weren't
+  passing. For the next `roundtrip-pairs-N` (and `gaps-residual-2`, as the engine fires
+  both at the next upkeep step): a distinct trigger for "the next turn's upkeep" (the first
+  upkeep step of the next turn, CR 603.7b), rendered as such.
+- Narrowed `with N additional` to a following counter phrase (`with (x|N|an) additional
+  ((?:word ){0,2}counters?)`): "you start the game with an additional 7 life" (The Slayer,
+  deferred) isn't 7 life. No passing card affected (Apocalypse Hydra's and Bloodspore
+  Thrinax's "an additional X +1/+1 counters" still match).
+- Noted the anaphora limit on "the blocking creature" (No Quarter's event names two
+  creatures). Checked and kept with their cards: "it has ... as long as ~ is on the
+  battlefield" (Necrotic Ooze, Mirran Safehouse; CR 113.6), "Cowards can't block Warriors"
+  (Kargan Intimidator, Boldwyr Intimidator, Gornog: the renderer's evasion form, voice
+  only), "that was attached to" (Hateful Eidolon, Fumble, Zack Fair, Murderous Spoils, Cass:
+  all last known information, CR 608.2h), "your life total can't change" (Platinum
+  Emperion's rulings on set and exchanged life totals, 701.10a: no part of an exchange
+  happens either way), "targets one or more" (Storm, Windrider; Orvar: a condition), "at
+  the beginning of the end step" (only at the start of an ability: Ball Lightning's form),
+  "deal damage to your opponents" (Malcolm, Breeches only).
+
+**The grandeur reading** (CR 201.5 isn't quite the rule: "another card named Baru, Fist
+of Krosa" names other cards by the literal name, and a card has that name by its own
+characteristics; `Filter::Named` checks them, `SameNameAs(This)` checked the source's
+current names, which Spy Kit multiplies) was a small compiler fix, so it was made here
+rather than handed on: `oracle/costs.rs` compiles the cost with `named_this_card()`, as
+every other "card named ~"; test `grandeur_asks_for_a_card_with_the_printed_name_not_one_
+sharing_a_gained_name` in `tests/cards/register_sweep_1.rs` (with Spy Kit on Baru a
+Grizzly Bears card can't pay, another Baru can); the six cards pass the round trip again,
+and the reading is recorded in ROUNDTRIP.md's table of compiler bugs the round trip found.
+
+**The sweep**, spot-checked on fourteen passages the Result doesn't name
+(roundtrip-clusters-3/4, roundtrip-gaps-2/3/5, roundtrip-pairs-2, roundtrip-tail-4/6,
+ruling-conflicts-1/3, verified-refresh-bugs, PROPERTIES "Remaining gaps", MUTATION's
+"today's cards / in practice / in-scope" survivors): each is registered and cited
+(`room-door-unlock-timestamp`, `x-in-a-cost-equal-to-a-cards-mana-cost-is-0`,
+`limited-free-basics-have-a-basic-land-type`, `cast-grant-have-after-cast`,
+`mdfc-back-face-up-enters-transformed`, `self-shuffle-gone-library-still-shuffled`,
+`history-counts-players-who-left`, `mandatory-loop-detection`,
+`growing-loops-run-to-the-limit`; Araumi's and Arbiter of Knollridge's rulings set aside
+by the user Nov 5 with exemption lines and RULING_DISCREPANCIES entries), settled plainly
+by the CR (Animal Magnetism's control, 110.2a; Nameless Race's owners, 400.3; Kaho's linked
+cards, 607.2a; Blitzwing's "no life is lost this way" as the life actually lost; Twist
+Allegiance's two gain-control effects, not an exchange), or wording. Nothing unregistered;
+the register stays at 128 entries, 0 provisional.
+
+**Tests.** `register_sweep_1.rs`'s first test: CR 603.12 fits (the reflexive ability
+triggers on whether the discard happened), and the outcome is the CR's, not a reading: a
+player who discards no card hasn't discarded one or more, so the engine's extra path
+(accept the offer, choose none) is a redundancy of the decision flow with the same result
+as declining; no register entry. `rulings_counts.rs` really compares the two tools' lines
+and fails on a difference (it skips only without a Python interpreter).
+
+**Exemptions.** The 18 new lines read in full: tournament policy (Duel Commander bans;
+casual/tournament provenance of cards from outside the game; a controlled player's
+tournament decisions: Cruel Entertainment's own text is the short sentence, the long
+controlled-player texts on Mindslaver, Sorin Markov, Emrakul and the others are cited by
+tests), presentation (face-down differentiation, same-name differentiation for a random
+choice, the miracle reveal, an artist credit, the story-spotlight symbol) and an art
+attribute (the hat). The 5 texts put back to OPEN are testable (an illegal target: no
+draw, no token, no shuffle). The rulings scope (texts of playable cards; Contraptions and
+host/augment excluded; DEFERRED separate) is sensible and documented in both tools and
+RULINGS_COVERAGE.md; the Rust name lists equal the script's (compared programmatically);
+`rulings: texts=33955 cited=25777 exempt=184 open=6130 deferred=1864 excluded=45` from
+both; RULINGS_COVERAGE.md regenerates to no diff.
+
+**Engine.** The implementer's diff changes no engine behavior (mtg-data gained two
+predicates, the tool and the script changed, compare.rs is the comparison); no
+`todo!`/`unimplemented!`, no `#[ignore]`, no deleted or weakened test.

@@ -88,7 +88,7 @@ fn grandeur_asks_for_a_card_with_the_printed_name_not_one_sharing_a_gained_name(
         "the Bears card wasn't discarded"
     );
     t.resolve();
-    let wurms = t.named_on_battlefield("Wurm");
+    let wurms = t.named_on_battlefield("Wurm Token");
     assert_eq!(wurms.len(), 1, "{}", t.dump_log());
     assert_eq!(t.pt(wurms[0]), (2, 2));
 }
