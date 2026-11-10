@@ -258,6 +258,13 @@ Item `register-decisions-nov5` records this:
 - so is the policy for misattached rulings;
 - `docs/RULING_DISCREPANCIES.md` starts as a log of every erroneous ruling, for human review and reporting to Wizards. Every worker adds to it from now on.
 
+### Fresh sessions whenever nothing is lost (user, Nov 10)
+
+The user: "This should be our established pattern going forward - save context whenever possible by starting new sessions whenever possible (e.g. when we won't lose relevant information)".
+- **Workers:** one item per session (worker.md). A worker lands its item, notifies the coordinator with a one-shot trigger and stops. The coordinator then archives it and starts a fresh session with the rest of the queue (the template below).
+- **The coordinator:** hands off to a fresh coordinator session when it can do so without losing anything. RECOVERY.md and this file hold the state; the hourly check-in is re-pointed to the new session.
+- This replaces the "about 300k tokens" threshold below as the default.
+
 ### Effort and fresh sessions (user, Nov 4, late evening)
 
 The user decided:
