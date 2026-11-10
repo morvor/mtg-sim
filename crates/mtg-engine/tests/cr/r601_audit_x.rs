@@ -124,6 +124,14 @@ fn an_x_paid_as_life_is_bounded_by_the_life_total_not_by_the_mana_available() {
     assert_eq!(offered_x_max(&t, P0), Some(20));
     assert_eq!(t.life(P0), 15);
     assert_eq!(untapped_lands(&t, P0), 0);
+    // At 30 life, up to 30 (the bound is the life total, not a constant).
+    let mut t = TestGame::new(2);
+    t.g.players[P0.idx()].life = 30;
+    t.lands(P0, "Swamp", 3);
+    let deluge = t.hand(P0, "Toxic Deluge");
+    t.cast(P0, deluge).x(25).go();
+    assert_eq!(offered_x_max(&t, P0), Some(30));
+    assert_eq!(t.life(P0), 5);
     // At 4 life, X can't be 5: that casting is illegal and nothing is paid.
     let mut t = TestGame::new(2);
     t.g.players[P0.idx()].life = 4;
@@ -188,7 +196,11 @@ fn the_x_of_a_kicker_cost_is_announced_as_the_spell_is_cast() {
     let spell = t.cast(P0, verdeloth).kicked(true).x(2).go();
     assert_eq!(x_of(&t, spell), Some(2));
     assert_eq!(untapped_lands(&t, P0), 0);
-    assert_eq!(t.g.mana_value_of(spell), 6, "kicker doesn't change the mana value");
+    assert_eq!(
+        t.g.mana_value_of(spell),
+        6,
+        "kicker doesn't change the mana value"
+    );
     t.resolve_all();
     assert_eq!(permanents_with_subtype(&t, "Saproling"), 2);
     // Not kicked: X isn't asked and the Treefolk costs {4}{G}{G}.
@@ -228,13 +240,12 @@ fn a_copy_of_an_x_spell_cast_without_paying_its_mana_cost_has_x_zero() {
     t.answer_targets(P0, &[Entity::Player(P1)]);
     assert!(t.activate(P0, scepter, 0, &[]).is_ok());
     t.resolve_all();
-    let cast_copies = t
-        .g
-        .history
-        .spells_cast
-        .iter()
-        .filter(|(p, s)| *p == P0 && t.g.obj(*s).chars.name == "Volcanic Geyser")
-        .count();
+    let cast_copies =
+        t.g.history
+            .spells_cast
+            .iter()
+            .filter(|(p, s)| *p == P0 && t.g.obj(*s).chars.name == "Volcanic Geyser")
+            .count();
     assert_eq!(cast_copies, 1, "the copy was cast");
     assert_eq!(t.life(P1), 20, "X is 0");
     // Only the Scepter's {2} was paid.

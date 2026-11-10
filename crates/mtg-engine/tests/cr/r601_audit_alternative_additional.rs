@@ -5,6 +5,7 @@
 //! paid can't be chosen (CR 118.3).
 
 use crate::r601_audit_common::*;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::kw::offered_costs::OFFERED_ALT_COST;
 use mtg_engine::object::*;
@@ -73,7 +74,12 @@ fn a_free_cast_with_an_increase_and_a_reduction_costs_nothing() {
     t.battlefield(P1, "Thalia, Guardian of Thraben");
     let bolt = t.hand(P0, "Lightning Bolt");
     assert!(!can_cast(&mut t, P0, bolt, CastMethod::Free));
-    assert!(t.cast(P0, bolt).method(CastMethod::Free).target(P1).try_go().is_err());
+    assert!(t
+        .cast(P0, bolt)
+        .method(CastMethod::Free)
+        .target(P1)
+        .try_go()
+        .is_err());
 }
 
 #[test]
@@ -95,12 +101,18 @@ fn only_one_alternative_cost_applies_to_a_spell() {
     t.battlefield(P0, "Jodah, Archmage Eternal");
     let drifter = t.hand(P0, "Mulldrifter");
     let ways = options(&mut t, P0, drifter);
-    assert!(ways.iter().any(|o| o.method == CastMethod::Normal && o.alt_cost.is_none()));
-    assert!(ways.iter().any(|o| o.method == EVOKE && o.alt_source.is_none()));
+    assert!(ways
+        .iter()
+        .any(|o| o.method == CastMethod::Normal && o.alt_cost.is_none()));
+    assert!(ways
+        .iter()
+        .any(|o| o.method == EVOKE && o.alt_source.is_none()));
     let offered: Vec<_> = ways.iter().filter(|o| o.alt_source.is_some()).collect();
     assert_eq!(offered.len(), 1);
     assert_eq!(offered[0].method, OFFERED);
-    assert!(!ways.iter().any(|o| o.method == EVOKE && o.alt_source.is_some()));
+    assert!(!ways
+        .iter()
+        .any(|o| o.method == EVOKE && o.alt_source.is_some()));
     // Flashback is an alternative cost: Omniscience ("from your hand") doesn't apply to
     // the card in the graveyard, and the flashback cost can't be waived.
     let mut t = TestGame::new(2);
@@ -108,7 +120,12 @@ fn only_one_alternative_cost_applies_to_a_spell() {
     let analysis = t.graveyard(P0, "Deep Analysis");
     assert!(!can_cast(&mut t, P0, analysis, FLASHBACK));
     assert!(!can_cast(&mut t, P0, analysis, CastMethod::Free));
-    assert!(t.cast(P0, analysis).method(FLASHBACK).target(P0).try_go().is_err());
+    assert!(t
+        .cast(P0, analysis)
+        .method(FLASHBACK)
+        .target(P0)
+        .try_go()
+        .is_err());
     assert!(t.in_graveyard(P0, "Deep Analysis"));
     // From the hand it may be cast without paying its mana cost.
     let analysis = t.hand(P0, "Deep Analysis");
@@ -173,7 +190,12 @@ fn buyback_is_an_additional_cost_paid_with_an_alternative_cost_and_its_reduction
     t.lands(P0, "Island", 2);
     t.lands(P0, "Wastes", 1);
     let capsize = t.hand(P0, "Capsize");
-    assert!(t.cast(P0, capsize).kicked(true).target(bears).try_go().is_err());
+    assert!(t
+        .cast(P0, capsize)
+        .kicked(true)
+        .target(bears)
+        .try_go()
+        .is_err());
     assert_eq!(optional_costs_asked(&t, P0), vec!["buyback".to_string()]);
     assert!(t.in_hand(P0, "Capsize"));
     assert_eq!(untapped_lands(&t, P0), 3);
@@ -268,5 +290,84 @@ fn a_card_with_no_mana_cost_is_cast_only_for_an_alternative_cost() {
     let spell = t.cast(P0, end).method(CastMethod::Free).go();
     assert_eq!(t.g.mana_value_of(spell), 0);
     t.resolve();
-    assert!(!t.on_battlefield(bears), "each player sacrifices all creatures");
+    assert!(
+        !t.on_battlefield(bears),
+        "each player sacrifices all creatures"
+    );
+}
+
+#[test]
+fn an_effect_casting_a_card_free_offers_each_way_to_cast_it_by_name() {
+    cr!("702.85a", "702.160a", "118.9");
+    ruling!(
+        "Goring Warplow",
+        "Casting a prototyped spell isn't the same as casting it for an alternative cost, and an alternative cost may be applied to a spell cast this way."
+    );
+    supported("Maelstrom Wanderer");
+    supported("Goring Warplow");
+    // Maelstrom Wanderer's cascade exiles Goring Warplow ({6}, prototype {1}{B}): it may be
+    // cast without paying its mana cost as a 5/4 for {6} or, prototyped, as a 1/1 with
+    // deathtouch (casting it prototyped isn't an alternative cost, so the free cast
+    // combines with it); the two ways are told apart by name. P0 casts it prototyped.
+    let mut t = TestGame::new(2);
+    t.library_top(P0, "Forest");
+    t.library_top(P0, "Forest");
+    t.library_top(P0, "Goring Warplow");
+    t.lands(P0, "Wastes", 5);
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Forest", 1);
+    let wanderer = t.hand(P0, "Maelstrom Wanderer");
+    choose_option(&mut t, P0, 1);
+    t.cast(P0, wanderer).go();
+    t.resolve_all();
+    let options = t
+        .asked()
+        .iter()
+        .find_map(|(q, d)| match d {
+            Decision::ChooseOption {
+                prompt, options, ..
+            } if *q == P0 && prompt.starts_with("Cascade") => Some(options.clone()),
+            _ => None,
+        })
+        .expect("asked how to cast the exiled card");
+    assert_eq!(
+        options,
+        vec![
+            "Cast Goring Warplow (mana value 6)",
+            "Cast Goring Warplow (prototype) (mana value 2)",
+            "Don't cast it"
+        ]
+    );
+    let warplow = t.named_on_battlefield("Goring Warplow")[0];
+    assert_eq!(t.pt(warplow), (1, 1));
+    assert!(t.obj_now(warplow).has_keyword(KeywordKind::Deathtouch));
+    assert!(t.on_battlefield(wanderer));
+}
+
+#[test]
+fn a_repeatable_additional_cost_is_paid_a_whole_number_of_times() {
+    cr!("702.33c", "601.2b");
+    supported("Everflowing Chalice");
+    // Everflowing Chalice ({0}, multikicker {2}) with four Wastes: kicked twice, it enters
+    // with two charge counters. An answer of -1 times isn't a number of times it can be
+    // kicked: the spell is cast unkicked, nothing is paid, and it enters with none.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Wastes", 4);
+    let chalice = t.hand(P0, "Everflowing Chalice");
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Number(2));
+    t.cast(P0, chalice).go();
+    assert_eq!(untapped_lands(&t, P0), 0);
+    t.resolve();
+    assert_eq!(t.counters(t.g.current(chalice), "charge"), 2);
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Wastes", 4);
+    let chalice = t.hand(P0, "Everflowing Chalice");
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Number(-1));
+    t.cast(P0, chalice).go();
+    assert_eq!(untapped_lands(&t, P0), 4);
+    t.resolve();
+    let chalice = t.g.current(chalice);
+    assert!(t.on_battlefield(chalice));
+    assert_eq!(t.counters(chalice, "charge"), 0);
 }
