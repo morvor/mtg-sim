@@ -236,7 +236,13 @@ impl Renderer<'_> {
                 "exile it instead of putting it into a graveyard as it resolves".into()
             }
             "facedown:reveal it" => {
-                let t = self.each_target_mention();
+                // "Reveal target face-down permanent": the target remembered just before.
+                let it = crate::ability::vars::IT;
+                let t = if self.target_vars.iter().any(|(v, _, used)| *v == it && !used) {
+                    self.sel(&Sel::Var(it), Case::Obj)
+                } else {
+                    self.each_target_mention()
+                };
                 format!("reveal {t}")
             }
             "foretell:it becomes foretold with its mana cost reduced by 2" => {

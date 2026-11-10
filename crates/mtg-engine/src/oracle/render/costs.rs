@@ -107,8 +107,14 @@ impl Renderer<'_> {
                     a.as_str(),
                 ) {
                     if !def.contains(['{', '.']) {
+                        // "you may pay that much life again" (Verrak, Warped Sengir).
+                        let again = if def == "the life paid to activate it" {
+                            "|pay that much life again"
+                        } else {
+                            ""
+                        };
                         return format!(
-                            "{{alt:pay X life, where X is {def}|pay life equal to {def}}}"
+                            "{{alt:pay X life, where X is {def}|pay life equal to {def}{again}}}"
                         );
                     }
                 }
@@ -310,7 +316,25 @@ impl Renderer<'_> {
                         .to_string()
                 };
                 let (c, w) = self.counted(count, &noun);
-                format!("reveal {c} from your hand{}", w.unwrap_or_default())
+                let s = format!("reveal {c} from your hand{}", w.unwrap_or_default());
+                // "Reveal two cards from your hand that share a color".
+                if !matches!(count, Value::Const(1)) {
+                    let many = self.noun(&filter.clone().in_zone(ZoneKind::Hand), Num::Many);
+                    let many = many
+                        .trim_end_matches(" in hands")
+                        .trim_end_matches(" in your hand")
+                        .to_string();
+                    if let (Some((head, _)), Some((_, rel))) =
+                        (noun.split_once(" that "), many.split_once(" that "))
+                    {
+                        let (c2, w2) = self.counted(count, head);
+                        return format!(
+                            "{{alt:{s}|reveal {c2} from your hand that {rel}{}}}",
+                            w2.unwrap_or_default()
+                        );
+                    }
+                }
+                s
             }
             CostPart::OneOf(costs) => {
                 let items: Vec<String> = costs.iter().map(|c| self.cost(c)).collect();

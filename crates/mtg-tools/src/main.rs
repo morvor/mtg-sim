@@ -986,17 +986,27 @@ fn match_ruling_refs<'a>(
     let cards = mtg_data::cards();
     let mut unmatched = Vec::new();
     for (card, needle, file) in refs {
-        let Some(c) = cards.by_name(card) else {
+        // Every playable card with that name (two cards can share a name: Liberate and
+        // an Un-set split card with a Liberate half), as `scripts/rulings_batches.py`
+        // resolves names and the `ruling!` macro checks them.
+        let cs: Vec<_> = cards
+            .all_by_name(card)
+            .into_iter()
+            .filter(|c| c.is_playable_card())
+            .collect();
+        if cs.is_empty() {
             unmatched.push(format!("{card}: unknown card ({file})"));
             continue;
-        };
+        }
         let n = mtg_data::normalize_text(needle);
         let mut found = false;
         if !n.is_empty() {
-            for r in rulings.for_oracle_id(&c.oracle_id) {
-                if mtg_data::normalize_text(&r.comment).contains(&n) {
-                    hit.insert((c.oracle_id.clone(), r.comment.clone()));
-                    found = true;
+            for c in &cs {
+                for r in rulings.for_oracle_id(&c.oracle_id) {
+                    if mtg_data::normalize_text(&r.comment).contains(&n) {
+                        hit.insert((c.oracle_id.clone(), r.comment.clone()));
+                        found = true;
+                    }
                 }
             }
         }
@@ -1031,33 +1041,63 @@ fn rulings_coverage(args: &[String]) {
         .filter(|(_, _, r, _)| r.is_empty())
         .map(|(c, n, _, f)| format!("{c}: {n} ({f})"))
         .collect();
-    let unique_comments: BTreeSet<&str> = rulings.iter().map(|r| r.comment.as_str()).collect();
+    // Coverage is counted per ruling text, over the texts in scope: those of playable
+    // cards (not tokens, emblems or art cards) the project hasn't put out of scope
+    // (Contraptions, host/augment, docs/DEFERRED.md). A text shared by an in-scope card
+    // and an excluded one is in scope; one found only on excluded cards is "excluded".
+    // `scripts/rulings_batches.py` counts the same way, and `crates/mtg-tools/tests`
+    // compares the two.
+    let mut unique_comments: BTreeSet<&str> = BTreeSet::new();
+    let mut in_scope: BTreeMap<&str, Vec<&mtg_data::scryfall::ScryfallCard>> = BTreeMap::new();
+    for r in rulings.iter() {
+        unique_comments.insert(r.comment.as_str());
+        if let Some(c) = cards.by_oracle_id(&r.oracle_id) {
+            if c.is_playable_card() && c.out_of_scope_reason().is_none() {
+                in_scope.entry(r.comment.as_str()).or_default().push(c);
+            }
+        }
+    }
+    let excluded = unique_comments.len() - in_scope.len();
     let cited_comments: BTreeSet<&str> = matched.iter().map(|(_, c)| c.as_str()).collect();
     let exempt_comments: BTreeSet<&str> = exempted
         .iter()
         .map(|(_, c)| c.as_str())
         .filter(|c| !cited_comments.contains(c))
         .collect();
-    // A ruling text shared by many cards counts as covered once for "unique" coverage.
-    let covered_unique = unique_comments
-        .iter()
-        .filter(|c| cited_comments.contains(*c))
-        .count();
-    let exempt_unique = unique_comments
-        .iter()
-        .filter(|c| exempt_comments.contains(*c))
-        .count();
-    let pct = |n: usize| 100.0 * n as f64 / unique_comments.len() as f64;
+    // A text shared by several cards is covered once (by a test on any of them); one
+    // every card of which is deferred (docs/DEFERRED.md) is deferred, not open.
+    let (mut covered_unique, mut exempt_unique, mut deferred_unique, mut open_unique) =
+        (0usize, 0usize, 0usize, 0usize);
+    for (text, cs) in &in_scope {
+        if cited_comments.contains(text) {
+            covered_unique += 1;
+        } else if exempt_comments.contains(text) {
+            exempt_unique += 1;
+        } else if cs.iter().all(|c| c.deferred_reason().is_some()) {
+            deferred_unique += 1;
+        } else {
+            open_unique += 1;
+        }
+    }
+    let total_in_scope = in_scope.len();
+    let pct = |n: usize| 100.0 * n as f64 / total_in_scope.max(1) as f64;
     println!(
-        "Rulings cited: {} (card, ruling) pairs; {} of {} unique ruling texts cited ({:.2}%), {} exempt ({:.2}%); {} citations and {} exemptions unmatched",
+        "Rulings cited: {} (card, ruling) pairs; {} of {} ruling texts in scope cited ({:.2}%), {} exempt ({:.2}%), {} open, {} deferred (every card of the text is deferred: docs/DEFERRED.md); {} texts excluded (found only on Contraptions, host/augment cards, tokens or emblems); {} citations and {} exemptions unmatched",
         matched.len(),
         covered_unique,
-        unique_comments.len(),
+        total_in_scope,
         pct(covered_unique),
         exempt_unique,
         pct(exempt_unique),
+        open_unique,
+        deferred_unique,
+        excluded,
         unmatched.len(),
         unmatched_ex.len()
+    );
+    // The same line `python3 scripts/rulings_batches.py summary` prints.
+    println!(
+        "rulings: texts={total_in_scope} cited={covered_unique} exempt={exempt_unique} open={open_unique} deferred={deferred_unique} excluded={excluded}"
     );
     for u in &unmatched {
         println!("  UNMATCHED citation {u}");
@@ -1158,17 +1198,27 @@ fn rulings_coverage(args: &[String]) {
         i += 1;
     }
     let mut md = String::new();
-    md.push_str("# Scryfall rulings coverage\n\nGenerated by `cargo run -p mtg-tools -- rulings-coverage --write docs/RULINGS_COVERAGE.md`. Tests cite rulings with `ruling!(\"Card Name\", \"distinctive text\")`, which fails if no such ruling exists. Rulings with no engine-testable content are listed with a reason in `docs/rulings-exemptions/*.tsv`.\n\n");
+    md.push_str("# Scryfall rulings coverage\n\nGenerated by `cargo run -p mtg-tools -- rulings-coverage --write docs/RULINGS_COVERAGE.md`. Tests cite rulings with `ruling!(\"Card Name\", \"distinctive text\")`, which fails if no such ruling exists. Rulings with no engine-testable content are listed with a reason in `docs/rulings-exemptions/*.tsv`. Coverage is counted per ruling text, over the texts in scope: those of playable cards the project hasn't put out of scope (docs/DEFERRED.md: Contraptions, host/augment); a text every card of which is deferred (digital-only cards, sticker sheets and the cards deferred with them, cards legal in no format, the dexterity cards, the Conspiracy face-down draft cards) is deferred rather than open. `python3 scripts/rulings_batches.py summary` counts the same way and prints the same `rulings:` line; `cargo test -p mtg-tools` keeps the two in step.\n\n");
     md.push_str(&format!(
-        "- Total rulings: {} ({} unique texts across {} cards)\n- (card, ruling) pairs cited by tests: **{}**\n- Unique ruling texts covered by tests: **{}** ({:.2}%)\n- Unique ruling texts exempt: **{}** ({:.2}%)\n\n",
+        "- Total rulings: {} ({} unique texts across {} cards; {} texts excluded as found only on Contraptions, host/augment cards, tokens or emblems)\n- Ruling texts in scope: **{}**\n- (card, ruling) pairs cited by tests: **{}**\n- Ruling texts covered by tests: **{}** ({:.2}%)\n- Ruling texts exempt: **{}** ({:.2}%)\n- Ruling texts deferred: **{}**\n- Ruling texts open: **{}**\n- `rulings: texts={} cited={} exempt={} open={} deferred={} excluded={}`\n\n",
         rulings.len(),
         unique_comments.len(),
         rulings.iter().map(|r| r.oracle_id.as_str()).collect::<BTreeSet<_>>().len(),
+        excluded,
+        total_in_scope,
         matched.len(),
         covered_unique,
         pct(covered_unique),
         exempt_unique,
         pct(exempt_unique),
+        deferred_unique,
+        open_unique,
+        total_in_scope,
+        covered_unique,
+        exempt_unique,
+        open_unique,
+        deferred_unique,
+        excluded,
     ));
     let mut by_card: BTreeMap<String, usize> = BTreeMap::new();
     for (card, _, _) in &cites {

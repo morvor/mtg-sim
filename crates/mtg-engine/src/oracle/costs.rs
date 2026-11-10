@@ -198,10 +198,14 @@ fn parse_cost_part_core(p: &str) -> Option<CostPart> {
         return Some(CostPart::DiscardHand);
     }
     if let Some(r) = strip(p, "discard") {
-        // Grandeur (CR 207.2c): "Discard another card named ~".
+        // Grandeur (CR 207.2c): "Discard another card named ~": a card with that name
+        // (the printed name, as every other "named ~"), not one that shares a name with
+        // this object as it is now (Spy Kit gives it every nonlegendary creature card's
+        // name, CR 612.7; a Grizzly Bears card still isn't a card named Baru, Fist of
+        // Krosa). Found by the round trip (register-sweep-1).
         if r.trim() == "another card named ~" {
             return Some(CostPart::Discard {
-                filter: Filter::and(vec![Filter::SameNameAs(Box::new(Sel::This)), Filter::Other]),
+                filter: Filter::and(vec![named_this_card(), Filter::Other]),
                 count: Value::c(1),
                 random: false,
             });

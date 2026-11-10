@@ -258,10 +258,11 @@ impl Renderer<'_> {
                 let d = self.dig_destination(to, true);
                 // "Shuffle the rest into your library" (not put in place).
                 if to.zone == ZoneKind::Library && to.position == LibraryPosition::Shuffled {
+                    let rest = "{alt:the rest|all other cards revealed this way}";
                     return if self.in_as_player {
-                        format!("{{alt:the player|that player}} shuffles the rest {d}")
+                        format!("{{alt:the player|that player}} shuffles {rest} {d}")
                     } else {
-                        format!("shuffle the rest {d}")
+                        format!("shuffle {rest} {d}")
                     };
                 }
                 // "Put that card into your hand and all other cards revealed this way on
@@ -281,7 +282,7 @@ impl Renderer<'_> {
                 if to.zone == ZoneKind::Exile && !to.face_down && to.with_counters.is_empty() {
                     return format!("{{alt:put the rest {d}|exile the rest}}");
                 }
-                format!("put the rest {d}")
+                format!("put the rest {{opt:of the cards}} {d}")
             }
             DigStep::Until {
                 who,
