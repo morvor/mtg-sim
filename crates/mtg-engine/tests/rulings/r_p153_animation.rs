@@ -232,7 +232,7 @@ fn an_animated_cactus_preserve_not_controlled_since_the_turn_began_cant_tap_or_a
 
 #[test]
 fn cactus_preserve_ignores_the_restrictions_of_the_mana_it_copies() {
-    cr!("605.1a", "106.6");
+    cr!("106.6");
     ruling!(
         "Cactus Preserve",
         "It just produces one mana of the appropriate type, with no restrictions or riders."

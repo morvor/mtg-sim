@@ -646,7 +646,7 @@ fn emissary_escort_has_power_0_off_the_battlefield() {
 
 #[test]
 fn bosh_can_sacrifice_itself_for_8_damage() {
-    cr!("602.2", "118.3");
+    cr!("602.2", "113.7a");
     ruling!(
         "Bosh, Iron Golem",
         "Bosh can be sacrificed to pay the cost of its last ability."

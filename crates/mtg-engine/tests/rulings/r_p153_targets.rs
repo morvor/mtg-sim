@@ -89,7 +89,7 @@ fn orims_thunder_with_an_illegal_target() {
 
 #[test]
 fn vengeful_rebirth_with_both_targets_illegal_doesnt_resolve_and_isnt_exiled() {
-    cr!("608.2b", "608.3");
+    cr!("608.2b");
     ruling!(
         "Vengeful Rebirth",
         "If both targets are illegal, Vengeful Rebirth doesn’t resolve. It will be put into your graveyard."
@@ -126,7 +126,7 @@ fn pucas_upkeep(t: &mut TestGame, mine: ObjectId, theirs: ObjectId) -> ObjectId 
 
 #[test]
 fn pucas_mischief_with_an_illegal_target() {
-    cr!("608.2b", "701.10c");
+    cr!("608.2b", "701.12a");
     ruling!(
         "Puca's Mischief",
         "If either one of the targets becomes illegal (because it leaves the battlefield or for any other reason) by the time the ability resolves, the exchange won't happen. If both targets become illegal, the ability doesn't resolve."
@@ -247,7 +247,7 @@ fn razor_hippogriff_with_an_illegal_target_gains_no_life() {
 
 #[test]
 fn imps_mischief_cant_target_a_spell_with_two_targets_even_if_one_is_illegal() {
-    cr!("115.1", "115.4");
+    cr!("115.1", "115.7a");
     ruling!(
         "Imp's Mischief",
         "If a spell targets multiple things, you can't target it with Imp's Mischief, even if all but one of those targets have become illegal."
@@ -309,7 +309,7 @@ fn draining_whelk_counters_the_spell_even_after_leaving_the_battlefield() {
 
 #[test]
 fn pyreswipe_hawk_leaving_before_its_trigger_resolves_changes_no_control() {
-    cr!("611.2b", "113.7a", "702.180a");
+    cr!("611.2b", "113.7a", "700.14");
     ruling!(
         "Pyreswipe Hawk",
         "If Pyreswipe Hawk leaves the battlefield before its last ability resolves, control of the target artifact won't change at all."
@@ -434,7 +434,7 @@ fn eriette_gains_no_control_if_the_aura_is_gone_as_the_trigger_resolves() {
 
 #[test]
 fn light_paws_leaves_an_aura_that_cant_be_attached_to_it_in_the_library() {
-    cr!("701.3b", "303.4a"); // "put onto the battlefield attached": if it can't, it stays
+    cr!("701.3b", "303.4i");
     ruling!(
         "Light-Paws, Emperor's Voice",
         "If the Aura card you find can't be attached to Light-Paws for any reason, it stays in your library and does not enter the battlefield."

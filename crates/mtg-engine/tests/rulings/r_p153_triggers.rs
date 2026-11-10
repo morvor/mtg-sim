@@ -145,7 +145,7 @@ fn orah_triggers_for_itself_and_for_a_cleric_dying_with_it() {
 
 #[test]
 fn amzu_triggers_once_for_several_cards_leaving_the_graveyard_together() {
-    cr!("603.2d");
+    cr!("603.2c");
     ruling!(
         "Amzu, Swarm's Hunger",
         "If multiple cards leave your graveyard at the same time, Amzu, Swarm's Hunger's ability will trigger only once."
@@ -174,7 +174,7 @@ fn amzu_triggers_once_for_several_cards_leaving_the_graveyard_together() {
 
 #[test]
 fn scythe_specter_triggers_once_per_player_dealt_combat_damage() {
-    cr!("603.2c", "120.4");
+    cr!("603.2c", "614.9");
     ruling!(
         "Scythe Specter",
         "If Scythe Specter deals combat damage to multiple players simultaneously (perhaps because some of the combat damage was redirected to another player), its ability will trigger for each of those players."
@@ -200,7 +200,7 @@ fn scythe_specter_triggers_once_per_player_dealt_combat_damage() {
 
 #[test]
 fn scythe_specter_discards_are_chosen_blind_and_made_together() {
-    cr!("701.8", "608.2c");
+    cr!("701.9a", "608.2c");
     ruling!(
         "Scythe Specter",
         "Each opponent in turn order chooses a card to discard without revealing it, then all the chosen cards are discarded simultaneously. No one sees what the other players are discarding before deciding which card to discard."

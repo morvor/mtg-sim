@@ -46,7 +46,7 @@ fn metallurgic_summonings_uses_the_chosen_x_of_clash_of_wills() {
 
 #[test]
 fn metallurgic_summonings_uses_the_countered_spells_last_known_mana_value() {
-    cr!("603.10", "608.2h", "202.3e");
+    cr!("608.2h", "202.3e");
     ruling!(
         "Metallurgic Summonings",
         "use that spell's mana value as it last existed on the stack to determine the value of X"
@@ -114,7 +114,7 @@ fn rashmi_counts_the_spells_x_and_the_library_cards_x_as_0() {
 
 #[test]
 fn rashmi_uses_the_countered_spells_last_known_mana_value() {
-    cr!("603.10", "608.2h");
+    cr!("608.2h");
     ruling!(
         "Rashmi, Eternities Crafter",
         "use that spell's mana value as it last existed on the stack to determine whether or not you may cast the top card of your library"
@@ -180,7 +180,7 @@ fn alchemists_talent_deals_the_spells_mana_value_with_its_x() {
 
 #[test]
 fn hammerhead_tyrant_measures_the_spells_mana_value_with_its_x() {
-    cr!("202.3e", "115.1a");
+    cr!("202.3e", "115.1");
     ruling!(
         "Hammerhead Tyrant",
         "If a spell has {X} in its mana cost, use the value of X chosen as it was cast to determine that spell’s mana value."
@@ -432,7 +432,7 @@ fn dovescape_counts_the_mana_value_of_the_half_that_was_cast() {
 
 #[test]
 fn erratic_cyclops_trigger_resolves_before_the_spell_even_if_it_is_countered() {
-    cr!("603.3", "608.2h", "603.10");
+    cr!("603.3", "608.2h");
     ruling!(
         "Erratic Cyclops",
         "Erratic Cyclops’s triggered ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered."
@@ -460,7 +460,7 @@ fn erratic_cyclops_trigger_resolves_before_the_spell_even_if_it_is_countered() {
 
 #[test]
 fn graha_tia_trigger_resolves_before_the_spell_even_if_it_leaves_the_stack() {
-    cr!("603.3", "608.2h", "603.10");
+    cr!("603.3", "608.2h");
     ruling!(
         "G'raha Tia, Scion Reborn",
         "G'raha Tia's last ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered or otherwise leaves the stack."
@@ -483,7 +483,7 @@ fn graha_tia_trigger_resolves_before_the_spell_even_if_it_leaves_the_stack() {
 
 #[test]
 fn sunbirds_invocation_doesnt_trigger_on_itself_and_a_free_x_spell_has_x_0() {
-    cr!("603.6d", "107.3b");
+    cr!("113.6", "107.3b");
     ruling!(
         "Sunbird's Invocation",
         "Casting Sunbird's Invocation won't cause its own ability to trigger."
@@ -524,7 +524,7 @@ fn sunbirds_invocation_doesnt_trigger_on_itself_and_a_free_x_spell_has_x_0() {
 
 #[test]
 fn baral_and_kari_zev_count_spells_cast_before_they_arrived() {
-    cr!("603.2", "603.6d");
+    cr!("603.2");
     ruling!(
         "Baral and Kari Zev",
         "This means if you cast an instant or sorcery spell, then Baral and Kari Zev comes under your control, its triggered ability won’t trigger that turn."

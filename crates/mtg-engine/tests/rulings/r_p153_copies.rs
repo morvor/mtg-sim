@@ -154,7 +154,7 @@ fn will_of_the_temur_copy_of_a_copy_is_what_that_permanent_copied() {
 
 #[test]
 fn a_token_copy_of_radagast_triggers_its_own_ability() {
-    cr!("603.2", "707.2", "201.4b");
+    cr!("603.2", "707.2", "201.5a");
     ruling!(
         "Radagast the Brown",
         "If a token copy of Radagast the Brown enters the battlefield, its own ability will trigger."
@@ -187,7 +187,7 @@ fn a_token_copy_of_radagast_triggers_its_own_ability() {
 
 #[test]
 fn a_copy_of_morbid_curiosity_draws_as_many_cards_without_a_sacrifice() {
-    cr!("707.10", "707.11");
+    cr!("707.10");
     ruling!(
         "Morbid Curiosity",
         "If an effect copies Morbid Curiosity, the controller of the copy will draw the same number of cards as determined by the original. Its controller can't and doesn't have to sacrifice a permanent."
@@ -253,7 +253,7 @@ fn cooperate_copies_a_spell_without_targets() {
 
 #[test]
 fn surge_to_victory_copying_the_card_doesnt_trigger_magecraft_but_casting_the_copy_does() {
-    cr!("707.12", "702.155a");
+    cr!("707.12", "707.10");
     ruling!(
         "Surge to Victory",
         "Copying the card doesn't cause magecraft abilities to trigger, although casting the copies does."

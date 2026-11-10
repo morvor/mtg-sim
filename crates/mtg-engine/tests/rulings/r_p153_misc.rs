@@ -58,7 +58,7 @@ fn kenriths_royal_funeral_stops_counting_a_card_that_left_exile() {
 
 #[test]
 fn stronghold_arena_reveals_the_card_only_after_you_decide_and_then_you_must_take_it() {
-    cr!("608.2c", "701.15a");
+    cr!("608.2c", "701.20a");
     ruling!(
         "Stronghold Arena",
         "As Stronghold Arena's last ability resolves, you don't get to see what the card of your library is before deciding whether to reveal it. If you choose to reveal it, you must put it into your hand and will lose life."
@@ -309,7 +309,7 @@ fn megatron_attacks(t: &mut TestGame, artifact: ObjectId, target: ObjectId) -> O
 
 #[test]
 fn megatrons_excess_damage_is_what_exceeds_lethal_ignoring_indestructible() {
-    cr!("120.10", "702.2b", "702.12b");
+    cr!("120.4a", "702.2b", "702.12b");
     ruling!(
         "Megatron, Tyrant // Megatron, Destructive Force",
         "This is usually the creature's toughness minus the amount of damage that it already has marked on it, but ignoring any replacement or prevention effects that will modify this damage. Also ignore whether the creature has an ability such as indestructible that will result in it not being destroyed by this damage."
@@ -403,7 +403,7 @@ fn each_creation_of_avacyn_refers_to_its_own_exiled_card() {
 
 #[test]
 fn earthquake_dragons_last_ability_works_only_from_the_graveyard() {
-    cr!("113.6", "602.2");
+    cr!("113.6b");
     ruling!(
         "Earthquake Dragon",
         "Earthquake Dragon's last ability can be activated only if it is in your graveyard."
@@ -488,7 +488,7 @@ fn nylas_exiled_card_stays_exiled_if_nyla_leaves_or_returns_as_a_new_object() {
 
 #[test]
 fn saruman_has_ward_2_when_it_is_an_orc() {
-    cr!("702.21a", "613.1e");
+    cr!("702.21a", "613.1d", "613.1f");
     ruling!(
         "Saruman, the White Hand",
         "If Saruman, the White Hand is a Goblin or an Orc, it will have ward {2}."
@@ -543,7 +543,7 @@ fn ulamog_entering_from_exile_counts_itself() {
 
 #[test]
 fn spark_of_creativity_lets_you_play_an_exiled_land_if_you_have_a_land_play() {
-    cr!("305.2", "305.9");
+    cr!("305.1", "305.2");
     ruling!(
         "Spark of Creativity",
         "If a land card is exiled this way, you can play that land card until end of turn if you have any available land plays."
@@ -633,7 +633,7 @@ fn scrap_trawler_can_target_the_card_of_a_copy_with_greater_mana_value() {
 
 #[test]
 fn lord_of_pain_stops_a_life_total_being_set_higher() {
-    cr!("119.7", "119.8");
+    cr!("119.7");
     ruling!(
         "The Lord of Pain",
         "If an effect says to set an opponent's life total to a number that's higher than their current life total, that player's life total won't change."
