@@ -100,3 +100,31 @@ pub fn full_party(t: &mut TestGame, p: PlayerId) -> Vec<ObjectId> {
 pub fn hand(t: &TestGame, p: PlayerId) -> Vec<ObjectId> {
     t.g.players[p.idx()].hand.clone()
 }
+
+/// Whether the spell `id` resolved (CR 608.2): a `SpellResolved` event this turn, which
+/// a spell whose targets were all illegal doesn't produce (CR 608.2b).
+pub fn resolved(t: &TestGame, id: ObjectId) -> bool {
+    t.g.turn_events
+        .iter()
+        .any(|e| matches!(e, mtg_engine::events::Event::SpellResolved { spell } if *spell == id))
+}
+
+/// Makes the permanent `color` only, until end of turn (as a resolving effect would).
+pub fn make_color(t: &mut TestGame, id: ObjectId, color: Color) {
+    crate::r_s26_common::modify_until_eot(
+        t,
+        id,
+        vec![mtg_engine::ability::Modification::SetColors(ColorSet::single(color))],
+    );
+}
+
+/// Gives the permanent hexproof until end of turn (as a resolving effect would).
+pub fn hexproof(t: &mut TestGame, id: ObjectId) {
+    crate::r_s26_common::modify_until_eot(
+        t,
+        id,
+        vec![mtg_engine::ability::Modification::AddKeyword(
+            mtg_engine::keywords::Keyword::new(mtg_engine::keywords::KeywordKind::Hexproof),
+        )],
+    );
+}
