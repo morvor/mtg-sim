@@ -78,6 +78,15 @@ impl Renderer<'_> {
             // is the opponent who chooses it (CR 601.2c).
             if let Some((head, tail)) = s.split_once(" the chosen player controls") {
                 s = format!("{head}{tail} of an opponent's choice they control");
+            } else if let Some((head, rest)) = s
+                .split_once(" you ")
+                .filter(|_| !s.contains('{'))
+                .map(|(h, r)| (h.to_string(), r.to_string()))
+            {
+                // "target nonbasic land of an opponent's choice you don't control".
+                s = format!(
+                    "{{alt:{s} of an opponent's choice|{head} of an opponent's choice you {rest}}}"
+                );
             } else {
                 s.push_str(" of an opponent's choice");
             }
@@ -186,8 +195,9 @@ impl Renderer<'_> {
                 return match (count, other) {
                     (None, false) => "any target".into(),
                     (None, true) => "any other target".into(),
+                    // "3 damage to each of up to two other targets".
                     (Some(c), false) => format!("{c} targets"),
-                    (Some(c), true) => format!("{c} other targets"),
+                    (Some(c), true) => format!("{{opt:each of}} {c} other targets"),
                 };
             }
             // "any other target": other than the object dealing the damage.
@@ -422,7 +432,7 @@ impl Renderer<'_> {
                 let v = self.value(v);
                 format!("with total {st} {v} or greater")
             }
-            TargetGroup::SameName => "with the same name".into(),
+            TargetGroup::SameName => "with the same name {opt:as one another}".into(),
             TargetGroup::ShareColor => "that share a color".into(),
             TargetGroup::CardTypesAmong(v) => {
                 let v = self.value(v);
@@ -814,7 +824,7 @@ impl Renderer<'_> {
                     && matches!(v[1], Filter::InZone(ZoneKind::Exile)) =>
             {
                 decline(
-                    "{alt:the exiled card|each card exiled with ~it}".into(),
+                    "{alt:the exiled card|each card exiled with ~it|the cards exiled with ~it}".into(),
                     case,
                 )
             }
@@ -1154,6 +1164,11 @@ impl Renderer<'_> {
                 };
                 decline(s, case)
             }
+            // "You may look at the top card of your library. You may cast it": the card
+            // looked at.
+            Sel::TopOfLibrary(PlayerRef::You, Value::Const(1)) if self.top_looked => {
+                decline("{alt:the top card of your library|it}".into(), case)
+            }
             Sel::TopOfLibrary(p, n) => {
                 let p = self.player(p, Case::Poss);
                 let s = match n {
@@ -1247,6 +1262,21 @@ impl Renderer<'_> {
                     _ => n,
                 };
             }
+            // "~ deals 3 damage to any target. Then that player or that permanent's
+            // controller may discard a card. If the player does, they may copy ~": the
+            // targeted player, or the targeted permanent's controller (`eval`).
+            PlayerRef::ControllerOf(sel)
+                if matches!(sel.as_ref(), Sel::Target(i)
+                    if self.targets.get(*i as usize).is_some_and(|t| matches!(t.what, TargetKind::AnyTarget))) =>
+            {
+                let s = self.sel(sel, Case::Poss);
+                let they = if matches!(case, Case::Subj) {
+                    "|they"
+                } else {
+                    ""
+                };
+                format!("{{alt:that player or that permanent's controller|{s} controller{they}}}")
+            }
             // "Counter target spell unless its controller pays {1}. That player discards a
             // card": the controller named before, the one player the text names (no player
             // target, no other player the event names).
@@ -1281,14 +1311,20 @@ impl Renderer<'_> {
                 let Sel::Target(i) = sel.as_ref() else {
                     return self.gap("player or controller");
                 };
-                let Some(TargetKind::ObjectOrPlayer(f, _)) =
+                let Some(TargetKind::ObjectOrPlayer(f, pf)) =
                     self.targets.get(*i as usize).map(|t| t.what.clone())
                 else {
                     return self.gap("player or controller");
                 };
                 let n = self.noun(&f, Num::One);
                 let s = self.sel(sel, Case::Poss);
-                format!("{{alt:that player or that {n}'s controller|{s} controller}}")
+                // "that opponent or that planeswalker's controller".
+                let who = if matches!(pf, PlayerFilter::Opponent) {
+                    "that opponent"
+                } else {
+                    "that player"
+                };
+                format!("{{alt:that player or that {n}'s controller|{who} or that {n}'s controller|{s} controller}}")
             }
             // "~ deals 2 damage to each player who sacrificed a Plains this way": a player
             // sacrifices only permanents they control (CR 701.21a).
@@ -1344,6 +1380,14 @@ impl Renderer<'_> {
                     Some(o) => format!("{{alt:{s} owner|the owner of {o}}}"),
                     None => format!("{{alt:{s} owner|that player}}"),
                 }
+            }
+            // "Search its owner's graveyard, hand, and library ... That player shuffles,
+            // then draws a card": the owner named before.
+            PlayerRef::OwnerOf(sel)
+                if matches!(case, Case::Subj) && matches!(sel.as_ref(), Sel::Var(_)) =>
+            {
+                let s = self.sel(sel, Case::Poss);
+                format!("{{alt:{s} owner|that player}}")
             }
             PlayerRef::OwnerOf(sel) => {
                 let s = self.sel(sel, Case::Poss);
@@ -1633,7 +1677,7 @@ impl Renderer<'_> {
                 "who voted for a choice you didn't vote for".into()
             }
             PlayerFilter::LessThanHalfStartingLife => {
-                "with less than half their starting life total".into()
+                "{alt:with|whose life total is} less than half their starting life total".into()
             }
             PlayerFilter::History(c) => self.history_player_clause(c),
             PlayerFilter::HalfStartingLife(c) => {
@@ -1781,6 +1825,11 @@ impl Renderer<'_> {
                 match c {
                     Cmp::Gt => format!("more {n} than {v}"),
                     Cmp::Lt => format!("fewer {n} than {v}"),
+                    // "each player who controls the most creatures": at least as many as
+                    // the greatest number a player controls.
+                    Cmp::Ge if v.starts_with("the greatest number of ") => {
+                        format!("{{alt:at least as many {n} as {v}|the most {n}}}")
+                    }
                     Cmp::Ge => format!("at least as many {n} as {v}"),
                     Cmp::Le => format!("no more {n} than {v}"),
                     Cmp::Eq => format!("the same number of {n} as {v}"),

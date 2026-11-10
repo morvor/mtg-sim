@@ -537,7 +537,16 @@ impl Renderer<'_> {
     }
 
     fn trigger_event(&mut self, t: &TriggerCond, det: Det) -> Ev {
-        let obj = |r: &mut Self, f: &Filter| -> String { r.noun_det(f, det.clone()) };
+        let obj = |r: &mut Self, f: &Filter| -> String {
+            let s = r.noun_det(f, det.clone());
+            // "Whenever an equipped creature you control other than ~ attacks".
+            match s.strip_prefix("another ") {
+                Some(rest) if !rest.contains('{') && matches!(det, Det::A) => {
+                    format!("{{alt:{s}|{} other than ~}}", with_article(rest))
+                }
+                _ => s,
+            }
+        };
         if let Some((s, vp)) = self.qualified_trigger_event(t, &det) {
             return Ev::new(s, vp);
         }
@@ -582,11 +591,19 @@ impl Renderer<'_> {
                     .filter(|x| !matches!(x, Filter::OwnedBy(_)))
                     .cloned()
                     .collect();
+                let permanent = matches!(rest.as_slice(), [Filter::Permanent]);
                 let n = obj(self, &Filter::and(rest));
+                // "Whenever a permanent is put into an opponent's graveyard": a permanent
+                // is on the battlefield (CR 110.1), so it's put there from the battlefield.
+                let bare = if permanent {
+                    format!("|{n} is put into {whose} graveyard")
+                } else {
+                    String::new()
+                };
                 Ev::new(
                     "",
                     format!(
-                        "{{alt:{o} dies|{n} is put into {whose} graveyard from the battlefield}}"
+                        "{{alt:{o} dies|{n} is put into {whose} graveyard from the battlefield{bare}}}"
                     ),
                 )
             }
@@ -1891,7 +1908,14 @@ impl Renderer<'_> {
             } if name == crate::kwa::vote::FINISHED_VOTING => Ev::new("players", "finish voting"),
             TriggerCond::PlayerAction { name, who } => {
                 let w = self.rel_subject(*who);
-                Ev::new(w, name.to_string())
+                // The player action named "monarch" is becoming the monarch
+                // (`Event::BecameMonarch`, CR 724.2).
+                let vp = if name == "monarch" {
+                    "become the monarch".to_string()
+                } else {
+                    name.to_string()
+                };
+                Ev::new(w, vp)
             }
             TriggerCond::PlayerAttacked {
                 attacker,

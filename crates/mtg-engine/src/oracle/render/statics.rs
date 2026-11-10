@@ -376,6 +376,13 @@ impl Renderer<'_> {
                 // rendering, `RenderedFace::static_if`).
                 if self.static_if {
                     format!("if {c}, {}", lower_first(&e))
+                } else if let Some(rest) = c.strip_prefix("it's your turn and ") {
+                    // "As long as it's your turn and you control an Army, ~ is an artifact
+                    // creature" / "During your turn, as long as ~ is equipped, it has
+                    // double strike": the condition after the effect, joined either way.
+                    let e = lower_first(&e);
+                    let e = e.trim_end_matches('.');
+                    format!("{e} {{alt:as long as it's your turn and|during your turn, as long as}} {rest}")
                 } else {
                     format!("as long as {c}, {}", lower_first(&e))
                 }
@@ -1466,7 +1473,7 @@ impl Renderer<'_> {
             }
             CostTarget::LoyaltyAbilities(f) => {
                 let n = self.noun_det(f, Det::Plural);
-                format!("loyalty abilities of {n}")
+                format!("{{opt:the}} loyalty abilities of {n}")
             }
             CostTarget::ActivatedAbilities(scope) => self.ability_scope(scope),
         }
@@ -1615,6 +1622,11 @@ impl Renderer<'_> {
             (_, PlayerRel::You) => " you activate".into(),
             (_, r) => {
                 let w = self.rel_subject(r);
+                let w = if w == "an opponent" {
+                    "your opponents".to_string()
+                } else {
+                    w
+                };
                 format!(" {w} activate")
             }
         };
@@ -1685,9 +1697,9 @@ impl Renderer<'_> {
         };
         // "Abilities you activate that aren't mana abilities": abilities a player
         // activates are activated abilities (CR 602.1).
-        let target = match target.strip_prefix("activated abilities you activate ") {
-            Some(r) => format!("{{opt:activated}} abilities you activate {r}"),
-            None => target,
+        let target = match target.strip_prefix("activated abilities ") {
+            Some(r) if r.contains(" activate ") => format!("{{opt:activated}} abilities {r}"),
+            _ => target,
         };
         let act = if is_spell { "to cast" } else { "to activate" };
         // "Dash costs you pay cost {2} less", "Flashback costs your opponents pay cost {2}
@@ -2456,11 +2468,18 @@ impl Renderer<'_> {
                 "{} can attack as though it didn't have defender",
                 subj(self, f)
             ),
-            Restriction::AttackPlayersDespiteDefender { attackers, players } => format!(
-                "{} can attack players for whom {} as though it didn't have defender",
-                subj(self, attackers),
-                self.condition(players)
-            ),
+            Restriction::AttackPlayersDespiteDefender { attackers, players } => {
+                let a = subj(self, attackers);
+                let c = self.condition(players);
+                // "players who attacked you during their last turn".
+                let who = match c.strip_prefix("{alt:that player|they} ") {
+                    Some(r) => {
+                        format!("|{a} can attack players who {r} as though it didn't have defender")
+                    }
+                    None => String::new(),
+                };
+                format!("{{alt:{a} can attack players for whom {c} as though it didn't have defender{who}}}")
+            }
             Restriction::AttackAsThoughHaste {
                 attackers,
                 defender,
@@ -2789,6 +2808,10 @@ impl Renderer<'_> {
                     " that aren't mana abilities"
                 };
                 format!("{w} can't activate {s}{m}")
+            }
+            // Only spells and abilities are countered (CR 701.5a).
+            Restriction::CantBeCountered(Filter::Any) => {
+                "spells and abilities can't be countered".into()
             }
             Restriction::CantBeCountered(f) => format!("{} can't be countered", subj(self, f)),
             Restriction::CantBeCopied(f) => format!("{} can't be copied", subj(self, f)),

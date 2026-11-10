@@ -50,6 +50,14 @@ impl Renderer<'_> {
                 (self.alt_and, self.plural_alts) = saved;
                 if Self::counts_all_permanents(f, &n) {
                     format!("the number of {n} {{opt:on the battlefield}}")
+                } else if let Some((a, b)) = n
+                    .split_once(" with ")
+                    .filter(|(_, b)| b.ends_with(" in graveyards"))
+                {
+                    // "the number of cards in all graveyards with the same name as that
+                    // spell".
+                    let b = b.trim_end_matches(" in graveyards");
+                    format!("the number of {{alt:{n}|{a} in all graveyards with {b}}}")
                 } else {
                     format!("the number of {n}")
                 }
@@ -130,11 +138,20 @@ impl Renderer<'_> {
                     _ => format!("{p} power"),
                 }
             }
-            Value::PowerOf(s) => {
-                let s = self.sel(s, Case::Poss);
+            Value::PowerOf(sel) => {
+                let s = self.sel(sel, Case::Poss);
                 // Several objects: the sum of their powers (`eval`), "their total power".
                 if s == "their" {
                     return "their total power".into();
+                }
+                // "the power of the creature exiled this way" (one creature was).
+                if s.ends_with(" this way's") && !s.contains('{') {
+                    let o = self.sel(sel, Case::Obj);
+                    let o = match o.strip_prefix("creatures ") {
+                        Some(r) if r.ends_with(" this way") => format!("the creature {r}"),
+                        _ => o,
+                    };
+                    return format!("{{alt:{s} power|the power of {o}}}");
                 }
                 format!("{s} power")
             }
@@ -206,7 +223,7 @@ impl Renderer<'_> {
             }
             // "where X is the amount of damage it dealt to that player".
             Value::EventAmount if self.extra.event_amount.is_some() => format!(
-                "{{alt:that much|that many|that damage|{}}}",
+                "{{alt:that much|that many|that amount of|that damage|{}}}",
                 self.extra.event_amount.unwrap_or_default()
             ),
             // "amass Orcs X, where X is that excess damage" (CR 120.10).
@@ -615,11 +632,11 @@ impl Renderer<'_> {
         }
         // "that much damage", "that many {E}": the same amount, worded for the noun.
         if matches!(v, Value::EventAmount) {
-            return ("{alt:that much|that many}".into(), None);
+            return ("{alt:that much|that many|that amount of}".into(), None);
         }
         // "You gain that much life": the amount of the previous instruction.
         if matches!(v, Value::Prev) {
-            return ("{alt:that much|that many}".into(), None);
+            return ("{alt:that much|that many|that amount of}".into(), None);
         }
         // "You gain 4 life for each creature tapped this way": a multiple of a number
         // remembered just before, said with that number's words.
@@ -831,6 +848,9 @@ impl Renderer<'_> {
             return s;
         }
         if let Some(s) = self.pairs_condition(c) {
+            return s;
+        }
+        if let Some(s) = self.condition_pairs6(c) {
             return s;
         }
         // "If you win two or more flips" after a flip whose loss voids the rest (Fiery
@@ -1114,7 +1134,7 @@ impl Renderer<'_> {
                 if !matches!(s, Sel::This) =>
             {
                 let subj = self.sel(s, Case::Subj);
-                format!("{{alt:{subj} is under your control|you control {subj}|you controlled {subj}}}")
+                format!("{{alt:{subj} is under your control|you control {subj}|you controlled {subj}|{subj} entered under your control}}")
             }
             Condition::SelMatches(s, Filter::EnteredThisTurn) => {
                 let subj = self.sel(s, Case::Subj);
@@ -1326,7 +1346,9 @@ impl Renderer<'_> {
                 };
                 format!("it's not {poss} turn")
             }
-            Condition::WasCast => "you didn't cast it".into(),
+            // "it wasn't cast" is judged as the object last existed (CR 608.2h, as the
+            // comparison reads "if it was"): "it isn't cast".
+            Condition::WasCast => "{alt:you didn't cast it|it wasn't cast|it isn't cast}".into(),
             // "If you didn't cast it from your hand" / "if ~ was cast from anywhere other
             // than your hand".
             Condition::CastFrom(z) => {
@@ -1492,7 +1514,13 @@ impl Renderer<'_> {
                     // "you control no Humans" / "you don't control a Human".
                     let n = self.noun(&rest, Num::Many);
                     let dont = if subj == "you" { "don't" } else { "doesn't" };
-                    format!("{subj} {{alt:{verb} no|{dont} control}} {n}")
+                    // "if you control no Thopters other than ~".
+                    match n.strip_prefix("other ") {
+                        Some(m) => format!(
+                            "{subj} {{alt:{verb} no {n}|{dont} control {n}|{verb} no {m} other than ~}}"
+                        ),
+                        None => format!("{subj} {{alt:{verb} no|{dont} control}} {n}"),
+                    }
                 } else {
                     let n = self.noun_det(&rest, Det::A);
                     // "if you control one or more other creatures ...": another one.
@@ -2156,7 +2184,7 @@ impl Renderer<'_> {
             if let (Some(PlayerRel::You), rest) = split_controller(f) {
                 if f.zone().is_none_or(|z| z == ZoneKind::Battlefield) {
                     let n = self.count_phrase(&rest, cmp, b);
-                    return format!("you control {n} with the same name");
+                    return format!("you control {n} with the same name {{opt:as one another}}");
                 }
             }
         }
