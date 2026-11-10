@@ -1,9 +1,10 @@
-//! Rulings batch P158 — the rest: where a spell is cast from (CR 601.1a, 702.34a), a
-//! stolen creature phasing out (CR 702.26n), unearth (CR 702.84c), casting from a
-//! revealed pile (CR 608.2c), Auras put onto the battlefield (CR 303.4f), mana abilities
-//! (CR 605.3), mana restrictions (CR 609.4), a countered spell's destination (CR 701.6a,
-//! 614.15), activating a bestowed Aura (CR 602.2), "played a land" (CR 305.1), searching
-//! by subtype (CR 205.3d) and card types (CR 205.2a), and a countered delayed trigger.
+//! Rulings batch P158 — the rest: where a spell is cast from (CR 601.2a, 702.34a), a
+//! stolen creature phasing out (CR 702.26n), unearth (CR 702.84a), casting from a
+//! revealed pile (CR 608.2c), Auras put onto the battlefield (CR 303.4f, 303.4g), mana
+//! abilities (CR 605.3), mana restrictions (CR 106.6, 106.7), a countered spell's
+//! destination (CR 701.6a, 614.15), activating a bestowed Aura (CR 602.2), "played a
+//! land" (CR 305.1, 305.4), searching by subtype (CR 205.3m) and card types (CR 205.2a),
+//! and a countered delayed trigger.
 
 use crate::r_p158_common::*;
 use mtg_engine::decision::Decision;
