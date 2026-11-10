@@ -488,3 +488,35 @@ fn cost_reductions_dont_change_a_spells_mana_value() {
     t.resolve_all();
     assert_eq!(mana_value(&t, spell), 10);
 }
+
+#[test]
+fn oswald_fiddlebender_uses_the_copied_mana_value_of_a_copy() {
+    cr!("707.2", "202.3");
+    ruling!(
+        "Oswald Fiddlebender",
+        "If an artifact is copying something else, its mana value is the mana value of whatever it's copying."
+    );
+    supported("Oswald Fiddlebender");
+    // A Clone ({3}{U}) copying Memnite is an artifact with mana value 0: sacrificing it
+    // finds an artifact card with mana value 1 (Sol Ring), not 5.
+    let mut t = TestGame::new(2);
+    let oswald = t.battlefield(P0, "Oswald Fiddlebender");
+    let memnite = t.battlefield(P0, "Memnite");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[obj(memnite)]);
+    let clone = t.enter(P0, "Clone");
+    t.settle();
+    assert_eq!(mana_value(&t, clone), 0);
+    let ring = t.library_top(P0, "Sol Ring");
+    let stone = t.library_top(P0, "Mind Stone");
+    mana(&mut t, P0, "W");
+    let from = t.asked().len();
+    t.answer_choose(P0, &[obj(clone)]);
+    t.answer_choose(P0, &[obj(ring)]);
+    act(&mut t, P0, oswald, "Sacrifice an artifact", &[]).expect("Oswald");
+    t.resolve_all();
+    assert!(!t.on_battlefield(clone));
+    assert!(was_offered(&t, P0, from, ring), "{:?}", asked_of(&t, P0, from));
+    assert!(!was_offered(&t, P0, from, stone));
+    assert!(t.on_battlefield(ring));
+}
