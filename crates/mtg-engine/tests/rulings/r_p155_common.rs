@@ -125,3 +125,4 @@ pub fn brisela(t: &mut TestGame, p: PlayerId) -> ObjectId {
 }
 
 pub use crate::r_p003_common::activate;
+pub use crate::r_s02_common::can_play_land;
