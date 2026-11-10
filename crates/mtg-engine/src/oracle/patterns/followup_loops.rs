@@ -297,6 +297,27 @@ pub fn sentence(s: &str, effects: &mut Vec<Effect>, b: &mut Builder) -> bool {
             return true;
         }
     }
+    // "Draw a card. You may put a land card from your hand onto the battlefield tapped.
+    // If you control eight or more lands, repeat this process once." (Zimone and Dina):
+    // the process is every instruction so far, performed again if the condition holds
+    // once it has been performed (CR 608.2c; Zimone and Dina's rulings: "the entire
+    // effect, but not the cost"). A process of one sentence is left to
+    // `followups_4::repeat_once_if`, which also tracks what its optional instruction did.
+    if effects.len() >= 2 {
+        if let Some(c) = l
+            .strip_prefix("if ")
+            .and_then(|r| r.strip_suffix(", repeat this process once"))
+        {
+            if let Some(cond) = crate::oracle::statics::parse_condition(c, b.ctx) {
+                effects.push(Effect::If {
+                    cond,
+                    then: Box::new(process),
+                    otherwise: Box::new(Effect::Noop),
+                });
+                return true;
+            }
+        }
+    }
     if let Some(list) = for_list(l) {
         if let Some(more) = varied(&process, list) {
             effects.extend(more);

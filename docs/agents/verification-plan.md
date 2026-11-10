@@ -176,15 +176,28 @@ The user: "We just received a limit reset for a new Fable model. This model is e
 
 All old worker sessions are archived; every item they were given has landed, except P049, which was never started. New sessions run on the Fable model (`claude-fable-5-1`). Implementers run at effort high, and reviewers, investigations and audits at max (worker.md).
 
-| Role | Queue |
-|---|---|
-| planner | finish-line-plan (defines "done", the remaining risks and the ordered items; summarizes the discrepancy log for human review) |
-| auditor | engine-audit-1, area by area: layers, replacement, triggers, zones-lki, combat, casting-costs, sba-copy |
-| roundtrip | roundtrip-pairs-6, then the round-trip items the plan names |
-| rulings-1 | P049, P078, P081, P083, P084, P086 ... (the pool's odd positions) |
-| rulings-2 | P088, P090, P093, P095, P099, P100 ... (the pool's even positions) |
+| Role | Session | Queue |
+|---|---|---|
+| planner (archived Nov 9, 295k context) | session_019p6spxhpVg7uo8FiyED8ai | finish-line-plan: landed |
+| verification | session_019p6spxbaCwCcy1CdSExmiM | register-sweep-1 (B4), then property-tests-3 (B2) |
+| auditor | session_019p6spyBuwnV522bkiqsNty | engine-audit-1 (A1): layers (in progress), then casting-costs, triggers, zones-lki, replacement, sba-copy, combat |
+| roundtrip | session_019p6spxs4s8RXyT9mkADZuC | roundtrip-pairs-6, roundtrip-probe-1 (A5, at max), then roundtrip-pairs with the probe's hits first (A4) |
+| rulings-1 | session_019p6spyC29FswmnWN3vJ38n | P049, then A2: P154 P155 P101 P157 P090 P197 P139 P181 P114 P115 |
+| rulings-2 | session_019p6sq2W1TEG1vYtZZ2PycZ | P081, then A2: P153 P100 P158 P144 P196 P138 P182 P175 P200 P135 |
+
+Re-planned from finish-line-plan §3 on Nov 9 (23:45 UTC). Later: a mutation session for B1 (mutation-2) once an audit area lands; the rest of A2's order (P093 P095 P049 P081 P083 P084 P086 P164 P167 P168 P170 P173 P103 P105 P106 P191 P149 P088 P078) after these queues.
+
+**Usage check (user, Nov 9):** "We should also check usage after these batches land, to make sure it's an efficient use."
+- At every check-in, log each Fable session's `usage.cost_usd` (the API-equivalent cost that get_session reports), its context size and its rate-limit status. Do this in RECOVERY.md, next to the items it landed.
+- When each session's first item lands, report to the user:
+  - the cost per item, against the Opus baselines: rulings batches about $11.50 at default effort (API run, Nov 1) and $15–28 at max (subscription workers, Nov 4–5);
+  - what the item produced: rulings cited, bugs fixed, round-trip passes gained;
+  - how fast the Fable limit is going;
+  - a recommendation: keep the pace, change it, or move work between Fable and Opus.
 
 Pace: one item at a time per session. Once finish-line-plan lands, the coordinator re-plans the queues from it.
+
+**finish-line-plan landed (Nov 9):** docs/agents/finish-line-plan.md defines the done criteria (§1), the remaining risks (§2), the ordered items in three phases (§3), the discrepancy-log summary for the user (§4) and the six decisions for the user (§5). New briefs: items/rulings-residue.md, roundtrip-probe-1.md, mutation-2.md, property-tests-3.md, judge-audit-2.md, register-sweep-1.md, gaps-residual-2.md, verified-refresh-final.md, data-refresh.md; the hand-written-card plan is docs/agents/compile-manual-plan.md; the evidence reports are in docs/agents/reports/finish-line-*.md (finish-line-measurements.md re-measured every number of §1.2 on commit ad23a7a) and ruling-discrepancies-review.md. Reviewed the same day: the plan's stopping signal is read from docs/agents/yield.tsv (one row per landed item, appended by the reviewer; worker.md reviewer brief step 4) and criterion C1 reconciles the script's OPEN count against docs/rulings-uncovered.tsv.
 
 ### Second API-billed run (user, Nov 7)
 

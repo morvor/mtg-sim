@@ -1379,11 +1379,27 @@ impl Game {
                 .map(Entity::Object)
                 .into_iter()
                 .collect(),
-            Sel::AttachedTo => ctx
-                .source
-                .and_then(|s| self.obj(s).attached_to)
-                .into_iter()
-                .collect(),
+            Sel::AttachedTo => {
+                // While a target's legality is checked, the "equipped creature" an
+                // ability's targeting restriction names is the one the source was
+                // attached to when the ability was put onto the stack: information about
+                // the source used while announcing an ability is checked then
+                // (CR 113.7a), so an Equipment moved in response doesn't make the target
+                // illegal (Plasma Caster). The effect itself reads the attachment as it
+                // is when it resolves.
+                let recorded = if ctx.target_legality {
+                    ctx.stack_obj
+                        .and_then(|so| self.objects.get(so.0 as usize))
+                        .and_then(|o| o.stack.as_ref())
+                        .and_then(|s| s.source_attached_to)
+                } else {
+                    None
+                };
+                recorded
+                    .or_else(|| ctx.source.and_then(|s| self.obj(s).attached_to))
+                    .into_iter()
+                    .collect()
+            }
             Sel::AttachedAsItLeft(s) => {
                 let mut out: Vec<Entity> = Vec::new();
                 for e in self.eval_sel(s, ctx) {

@@ -122,12 +122,16 @@ reviewer reported, and remaining gaps.
 >      yourself); push back on approximations.
 > 3. Fix every problem you find (rewrite weak tests, correct citations, fix engine bugs),
 >    and commit (subjects start with `<slug>: `).
-> 4. Land: run `scripts/land.sh` from the worktree. It merges the latest origin PR branch,
+> 4. Yield: append one row for the item to docs/agents/yield.tsv (date, item, kind, units
+>    processed, engine bugs, compiler fixes, test errors, commit) and put the same counts in
+>    your last commit's message as a `Yield:` line. It is the plan's stopping signal
+>    (finish-line-plan §1.1), so count every bug whatever found it.
+> 5. Land: run `scripts/land.sh` from the worktree. It merges the latest origin PR branch,
 >    builds, tests, and pushes fast-forward only, retrying if another machine landed
 >    first. On CONFLICT: resolve keeping both sides' behavior, `cargo fmt`, `git add`,
 >    `git commit --no-edit`, re-run. On build or test failure: find the root cause and fix
 >    it (never skip, ignore or delete tests), commit, re-run. Repeat until it prints LANDED.
-> 5. After LANDED: `cargo clean` inside the worktree.
+> 6. After LANDED: `cargo clean` inside the worktree.
 >
 > REPORT: landed (yes/no), commit, problems found, fixes made, remaining gaps.
 
@@ -181,7 +185,9 @@ reviewer reported, and remaining gaps.
 >   and the coordinator takes it up as a conflict case.
 > (c) UNCOVERED: every card it applies to is unsupported by the compiler, or the engine
 >     lacks the behavior and the fix is not small. List each in remaining_gaps with its
->     reason. When the fix IS small and general (a missing compositional phrase pattern,
+>     reason, and add it to docs/rulings-uncovered.tsv (`Card<TAB>substring<TAB>reason`; the
+>     script has no such status, so this list is what the OPEN count is reconciled against,
+>     finish-line-plan §1.2). When the fix IS small and general (a missing compositional phrase pattern,
 >     an engine bug the ruling exposes), make it, with tests, instead. If supporting a
 >     card would be hacky, leave it as "unsupported: <text>" (a card-support workstream
 >     handles the compiler and hand-written definitions).
