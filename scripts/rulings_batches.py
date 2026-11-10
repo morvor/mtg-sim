@@ -12,11 +12,20 @@ Texts are grouped by the keyword they discuss (Scryfall `keywords`) or, otherwis
 cards' function (Scryfall Tagger oracle tags), so a batch covers one kind of ability.
 
 Status comes from the repo: a text is CITED when a test has ruling!("<card or face name>",
-"<substring of that ruling>") for any card with that ruling, EXEMPT when
-docs/rulings-exemptions/*.tsv lists it as having no engine-testable content, DEFERRED when
+"<substring of that ruling>") for any card with that ruling, EXEMPT when a line of
+docs/rulings-exemptions/*.tsv (`Card<TAB>substring<TAB>reason`) names a card with that
+ruling and a substring of it (the same text on another card is exempt too, as a citation
+covers it; a different text that merely contains the substring isn't), DEFERRED when
 every card it applies to is deferred (docs/DEFERRED.md: digital-only cards, sticker sheets
 and the cards deferred with them, cards not legal in any format, the dexterity cards
-Chaos Orb and Falling Star), OPEN otherwise.
+Chaos Orb and Falling Star, the Conspiracy face-down draft cards), OPEN otherwise.
+
+The texts in scope are those of playable cards (not tokens, emblems or art cards) that
+aren't out of scope by owner decision (Contraptions, host/augment); a text found only on
+excluded cards is counted as excluded. `mtg-tools rulings-coverage` counts the same way
+(its `out_of_scope_reason`, `deferred_reason` and exemption matching mirror this script),
+both print the same `rulings: texts=... cited=... exempt=... open=... deferred=...
+excluded=...` line, and `cargo test -p mtg-tools` fails when the two lines differ.
 
 Usage (from the repo root):
   python3 scripts/rulings_batches.py summary            # overall coverage
@@ -34,7 +43,9 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUDGET = 150  # ruling texts per batch
-EXCLUDED_LAYOUTS = {'art_series', 'token', 'double_faced_token', 'emblem'}
+# Layouts that aren't playable cards; mirrors `ScryfallCard::is_playable_card` in
+# crates/mtg-data/src/scryfall.rs.
+EXCLUDED_LAYOUTS = {'art_series', 'token', 'double_faced_token', 'emblem', 'front_card'}
 # Tagger tags about names, art, flavor or printing say nothing about what a card does.
 NONFUNCTIONAL = re.compile(
     r'portmanteau|pun|alliteration|english word|fun ruling|black border|aesthetic|'
@@ -54,7 +65,8 @@ def faces(c):
 
 
 def out_of_scope(c):
-    """Contraptions and host/augment cards are out of scope for now."""
+    """Contraptions and host/augment cards are out of scope for now (docs/DEFERRED.md);
+    mirrors `ScryfallCard::out_of_scope_reason` in crates/mtg-data/src/scryfall.rs."""
     if c.get('layout') in ('host', 'augment'):
         return 'host/augment'
     txt = ' '.join((f.get('type_line') or '') + ' ' + (f.get('oracle_text') or '')
@@ -93,7 +105,9 @@ def is_paper(c):
 def deferred(c):
     """Cards the project has decided not to support for now (docs/DEFERRED.md):
     digital-only cards, sticker sheets and the cards deferred with them, cards not legal
-    in any format, the dexterity cards and the Conspiracy face-down draft cards."""
+    in any format, the dexterity cards and the Conspiracy face-down draft cards; mirrors
+    `ScryfallCard::deferred_reason` in crates/mtg-data/src/scryfall.rs (the two name lists
+    below mirror `FACE_DOWN_DRAFT_CARDS` and `STICKER_DEFERRED_CARDS` there)."""
     if not is_paper(c):
         return 'digital-only'
     if 'Stickers' in (c.get('type_line') or ''):
@@ -150,8 +164,10 @@ def load():
             if n:
                 names.setdefault(n.lower(), oid)
     texts = collections.defaultdict(set)  # oracle_id -> ruling texts
+    all_texts = set()  # every ruling text in the data, whatever card it's on
     for line in gzip.open(os.path.join(ROOT, 'data/rulings.jsonl.gz'), 'rt'):
         r = json.loads(line)
+        all_texts.add(r['comment'])
         if r.get('oracle_id') in cards:
             texts[r['oracle_id']].add(r['comment'])
     tags = collections.defaultdict(list)  # oracle_id -> [(tag, global size)]
@@ -163,7 +179,7 @@ def load():
         for o in ids:
             if o in cards:
                 tags[o].append((t['label'], len(ids)))
-    return cards, names, texts, tags
+    return cards, names, texts, tags, all_texts
 
 
 def function_tag(tagl):
@@ -187,7 +203,7 @@ def type_key(c):
 
 
 def plan():
-    cards, names, texts, tags = load()
+    cards, names, texts, tags, all_texts = load()
     by_text = collections.defaultdict(list)
     oos = []
     for oid in sorted(texts, key=lambda o: cards[o]['name']):
@@ -216,20 +232,26 @@ def plan():
     groups.sort(key=lambda g: (g[0], g[1]))
     batches = [groups[i:i + BUDGET] for i in range(0, len(groups), BUDGET)]
     ids = {f'P{i:03d}': b for i, b in enumerate(batches, 1)}
-    return cards, names, ids, oos
+    return cards, names, ids, oos, texts, len(all_texts)
 
 
-def citations(names, cards=None):
-    """(oracle_id, normalized needle) pairs cited anywhere in the workspace sources.
-
-    With `cards`, a citation counts for every card with the cited name (two cards can
-    share a name, e.g. Liberate and an Un-set split card with a Liberate half; the
-    ruling! macro checks that one of them has the ruling)."""
+def name_index(cards):
+    """Lowercase full or face name -> every oracle_id with that name (two cards can share
+    a name, e.g. Liberate and an Un-set split card with a Liberate half)."""
     all_oids = collections.defaultdict(list)
     for oid, c in (cards or {}).items():
         for n in {c['name']} | {f.get('name', '') for f in faces(c)}:
             if n:
                 all_oids[n.lower()].append(oid)
+    return all_oids
+
+
+def citations(names, cards=None):
+    """(oracle_id, normalized needle) pairs cited anywhere in the workspace sources.
+
+    With `cards`, a citation counts for every card with the cited name (the ruling!
+    macro checks that one of them has the ruling)."""
+    all_oids = name_index(cards)
     pat = re.compile(r'ruling!\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"', re.S)
     out = collections.defaultdict(list)
     for f in glob.glob(os.path.join(ROOT, 'crates/**/*.rs'), recursive=True):
@@ -245,27 +267,45 @@ def citations(names, cards=None):
     return out
 
 
-def exemptions(names):
-    out = collections.defaultdict(list)  # needle -> reasons, applied to every card
+def exemptions(names, cards=None):
+    """(oracle_ids of the named card, normalized needle, file) for every line of
+    docs/rulings-exemptions/*.tsv. A line exempts the rulings of its card whose text
+    contains the needle, as `mtg-tools rulings-coverage` reads it; a needle is distinctive
+    within one card's rulings, not globally, so it isn't applied to other cards' texts."""
+    all_oids = name_index(cards)
+    out = []
     for f in sorted(glob.glob(os.path.join(ROOT, 'docs/rulings-exemptions/*.tsv'))):
         for line in open(f, encoding='utf-8'):
             if line.startswith('#') or not line.strip():
                 continue
             p = line.rstrip('\n').split('\t')
             if len(p) >= 2:
-                out[normalize(p[1])].append(p[2] if len(p) > 2 else '')
+                oids = all_oids.get(p[0].lower()) or ([names[p[0].lower()]] if p[0].lower() in names else [])
+                out.append((oids, normalize(p[1]), f))
     return out
 
 
-def status_fn(names, cards):
+def exempt_texts(names, cards, texts):
+    """The ruling texts the exemption lines cover: a text of the named card containing
+    the line's needle (shared texts are then exempt on every card that has them)."""
+    out = set()
+    for oids, needle, _ in exemptions(names, cards):
+        for o in oids:
+            for t in texts.get(o, ()):
+                if needle in normalize(t):
+                    out.add(t)
+    return out
+
+
+def status_fn(names, cards, texts):
     cites = citations(names, cards)
-    ex = exemptions(names)
+    ex = exempt_texts(names, cards, texts)
 
     def status(oids, text):
         n = normalize(text)
         if any(c in n for o in oids for c in cites.get(o, ())):
             return 'CITED'
-        if any(e in n for e in ex):
+        if text in ex:
             return 'EXEMPT'
         if all(deferred(cards[o]) for o in oids):
             return 'DEFERRED'
@@ -278,15 +318,19 @@ def main():
     if not args:
         print(__doc__)
         return
-    cards, names, batches, oos = plan()
-    status = status_fn(names, cards)
+    cards, names, batches, oos, texts, n_all = plan()
+    status = status_fn(names, cards, texts)
     cmd = args[0]
     if cmd == 'summary':
         c = collections.Counter(status(os_, t) for b in batches.values() for _, t, os_ in b)
         tot = sum(c.values())
         print(f'ruling texts {tot} in {len(batches)} batches: CITED {c["CITED"]} ({100 * c["CITED"] / tot:.1f}%), '
-              f'EXEMPT {c["EXEMPT"]}, OPEN {c["OPEN"]}, DEFERRED (digital-only, sticker sheets and their cards, not legal anywhere, dexterity cards) {c["DEFERRED"]}; '
-              f'out of scope (Contraptions, host/augment): {len(oos)}')
+              f'EXEMPT {c["EXEMPT"]}, OPEN {c["OPEN"]}, DEFERRED (digital-only, sticker sheets and their cards, not legal anywhere, dexterity cards, face-down draft cards) {c["DEFERRED"]}; '
+              f'excluded {n_all - tot} texts found only on Contraptions, host/augment cards, tokens or emblems '
+              f'({len(oos)} (card, text) pairs on out-of-scope cards)')
+        # The same line `mtg-tools rulings-coverage` prints; crates/mtg-tools/tests compares them.
+        print(f'rulings: texts={tot} cited={c["CITED"]} exempt={c["EXEMPT"]} open={c["OPEN"]} '
+              f'deferred={c["DEFERRED"]} excluded={n_all - tot}')
     elif cmd == 'list':
         for bid, b in batches.items():
             c = collections.Counter(status(os_, t) for _, t, os_ in b)
