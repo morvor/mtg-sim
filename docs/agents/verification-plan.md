@@ -178,7 +178,7 @@ All old worker sessions are archived; every item they were given has landed, exc
 
 | Role | Session | Queue |
 |---|---|---|
-| rulings 1b | session_019p6spxY7M7pzzAAnKaQt6e | user-decisions-nov10 (Share the Spoils follows its ruling; Stinging Study's commander chosen), then P155 P101 P157 P090 P197 P139 P181 P114 P115 |
+| rulings A | session_019p6spxDCoNePNP7JLuLWf7 (one item per session; user-decisions-nov10 landed 09acfb4 in session_019p6spxY7M7pzzAAnKaQt6e) | P155, then P101 P157 P090 P197 P139 P181 P114 P115 |
 | rulings 2b | session_019p6spyL7KLTfxGk47h3KbB | P100 P158 P144 P196 P138 P182 P175 P200 P135 |
 | auditor 2 | session_019p6spzTrg18GmgaGYGFEx9 | engine-audit-1: casting-costs, triggers, zones-lki, replacement, sba-copy, combat (layers landed, 44139cb) |
 | parked (user, Nov 10) | | roundtrip-probe-1 (A5) and property-tests-3 (B2): "round trip and verification can wait"; the user thinks verification isn't strictly necessary. C4 still needs the existing 8 properties re-run on the final code. |
