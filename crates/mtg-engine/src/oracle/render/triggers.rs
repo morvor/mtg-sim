@@ -790,6 +790,13 @@ impl Renderer<'_> {
                     // "Whenever an opponent activates an ability": of any object, in any
                     // zone.
                     "activate an ability".to_string()
+                } else if !*include_mana && matches!(source, Filter::Any) {
+                    // "Whenever you activate an ability that isn't a mana ability" (of any
+                    // object; mana abilities have no targets, CR 605.1a, so one with a
+                    // target is never one).
+                    format!(
+                        "{{alt:activate {kind}|activate {kind} of {s}|activate an ability of {s} that isn't a mana ability|activate an ability of {s}, if it isn't a mana ability}}"
+                    )
                 } else if !*include_mana {
                     // "an ability of an artifact or creature that isn't a mana ability".
                     format!(
@@ -1807,7 +1814,19 @@ impl Renderer<'_> {
                 }
                 let e = self.trigger_event(trigger, det);
                 let c = self.condition(cond);
-                Ev::new(e.subj, format!("{} {{alt:while|if}} {c}", e.vp))
+                // "Whenever you activate an ability that targets a creature or player": the
+                // condition as a relative clause (Ertha Jo).
+                match c.strip_prefix("it targets ") {
+                    Some(r) => {
+                        let vp = e.vp.replace("activate an ability that isn't a mana ability", "activate an ability {opt:that isn't a mana ability}");
+                        let r = r.replace(
+                            "{alt:a creature or a player|a player or a creature}",
+                            "{alt:a creature or a player|a creature or player|a player or a creature}",
+                        );
+                        Ev::new(e.subj, format!("{{alt:{} {{alt:while|if}} {c}|{vp} that targets {r}}}", e.vp))
+                    }
+                    None => Ev::new(e.subj, format!("{} {{alt:while|if}} {c}", e.vp)),
+                }
             }
             // "Whenever you gain life for the first time during each of your turns": the
             // first time each turn, during your turn.

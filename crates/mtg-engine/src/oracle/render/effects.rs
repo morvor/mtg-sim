@@ -312,6 +312,9 @@ impl Renderer<'_> {
                             )
                         }
                     }
+                } else if matches!(n, Value::EventAmount | Value::Prev) {
+                    // "they get that many rad counters" (Infesting Radroach).
+                    format!("that many {}", plural(&counter_name(kind)))
                 } else {
                     let (c, w) = self.counted(n, &counter_name(kind));
                     match w {
@@ -1145,6 +1148,12 @@ impl Renderer<'_> {
                     return format!("for each {syms} spent to cast {{alt:it|~}}, {inner}");
                 }
                 let t = self.times(times);
+                // "investigate once for each nontoken attacking creature" (Sophina).
+                if let (true, Value::Count(f)) = (inner == "investigate", times) {
+                    let n = self.noun(f, Num::One);
+                    let n2 = n.replace("attacking nontoken", "nontoken attacking");
+                    return format!("{{alt:{inner} {t}|{inner} once for each {n}|{inner} once for each {n2}}}");
+                }
                 format!("{inner} {t}")
             }
             // "Put your choice of a flying counter or a first strike counter on it."
@@ -6892,8 +6901,22 @@ impl Renderer<'_> {
             }
             None => n,
         };
+        // "You may cast instant and sorcery spells with mana value X or less from among
+        // them": as many as you like (Epic Experiment).
+        let n = match n.strip_prefix("any number of ") {
+            Some(r) if many => format!("{{opt:any number of}} {r}"),
+            _ => n,
+        };
         let n = if group.is_some() {
-            format!("{n} from among {{alt:them|those cards|the exiled cards}}")
+            let among = "from among {alt:them|those cards|the exiled cards}";
+            // "cast a spell from among them with mana value less than or equal to ..."
+            // (Cosmic Cube): the quality after the cards.
+            match n.split_once(" with ") {
+                Some((head, tail)) if !head.contains('{') => {
+                    format!("{{alt:{n} {among}|{head} {among} with {tail}}}")
+                }
+                _ => format!("{n} {among}"),
+            }
         } else {
             n
         };
@@ -7160,6 +7183,17 @@ impl Renderer<'_> {
                 format!("{{alt:{w}|{head} from among cards exiled with ~}}")
             }
             _ => w,
+        };
+        // "Target opponent reveals their hand. You may cast an instant or sorcery spell from
+        // among those cards": the cards revealed (Mindclaw Shaman).
+        let w = if self.revealed_hand {
+            w.replacen(
+                " in {alt:that player's|their} hand",
+                " {alt:in {alt:that player's|their} hand|from among those cards}",
+                1,
+            )
+        } else {
+            w
         };
         // An ability that functions in a graveyard casts the card from there ("you may cast
         // ~ from your graveyard", CR 113.6m).
@@ -7902,6 +7936,26 @@ impl Renderer<'_> {
             let a = self.dig_destination(take_to, false);
             let b = self.dig_destination(rest_to, false);
             return format!("{s}. If it's {noun}, put it {a}. Otherwise, put it {b}");
+        }
+        // "reveals the top card of their library. If it's a permanent card, they put it onto
+        // the battlefield": one card, taken if it's of that kind, left where it is if not
+        // (Chaos Warp).
+        if reveal
+            && matches!(n, Value::Const(1))
+            && matches!(take, Value::Const(1))
+            && !matches!(filter, Filter::Any)
+            && rest_to.zone == ZoneKind::Library
+            && matches!(rest_to.position, LibraryPosition::FromTop(_))
+            && take_to.zone == ZoneKind::Battlefield
+        {
+            let noun = with_article(&self.card_noun(filter));
+            let a = self.dig_destination(take_to, false);
+            let they = if matches!(who, PlayerRef::You) {
+                ""
+            } else {
+                "{alt:they|that player} "
+            };
+            return format!("{s}. If it's {noun}, {they}put it {a}");
         }
         // Only looking ("Look at the top card of your library."), or looking and
         // putting them back ("then put them back in any order").
@@ -9551,7 +9605,14 @@ impl Renderer<'_> {
         {
             return self.mana_restriction_purpose(r);
         }
-        format!("Spend this mana only {}", self.mana_restriction_purpose(r))
+        let p = self.mana_restriction_purpose(r);
+        // "a spell that's one or more colors": a colored spell (CR 105.2c), Titans' Nest.
+        let p = p.replacen(
+            "a colored spell ",
+            "{alt:a colored spell|a spell that's one or more colors} ",
+            1,
+        );
+        format!("Spend this mana only {p}")
     }
 
     fn mana_restriction_purpose(&mut self, r: &crate::mana::ManaRestriction) -> String {

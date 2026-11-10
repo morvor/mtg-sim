@@ -1252,6 +1252,8 @@ impl Renderer<'_> {
             return;
         }
         match inner {
+            // "a spell that's one or more colors without {X} in its mana cost".
+            Filter::HasX => np.post.push("without {X} in its mana cost".into()),
             Filter::Type(t) => np.nons.push(format!("non{}", t.word())),
             Filter::Subtype(s) => np.nons.push(format!("non-{s}")),
             Filter::Supertype(s) => np.nons.push(format!("non{}", supertype_word(*s))),

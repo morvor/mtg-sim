@@ -87,6 +87,23 @@ impl Renderer<'_> {
                     _ => None,
                 }
             }
+            // "as long as an opponent's life total is less than half their starting life
+            // total" (Anya, Merciless Angel).
+            Condition::PlayerMatches(PlayerRef::EachOpponent, PlayerFilter::LessThanHalfStartingLife) => {
+                Some(
+                    "{alt:an opponent has less than half their starting life total|an opponent's life total is less than half their starting life total}"
+                        .into(),
+                )
+            }
+            // "When ~ dies, if she was a nonland creature" (Princess Yue): as it last existed
+            // (CR 608.2h).
+            Condition::SelMatches(Sel::This, Filter::And(v))
+                if matches!(v.as_slice(), [Filter::Not(l), Filter::Type(CardType::Creature)]
+                    if matches!(l.as_ref(), Filter::Type(CardType::Land))) =>
+            {
+                let m = self.me();
+                Some(format!("{{alt:{m} isn't a land|{m} is a nonland creature|{m} was a nonland creature}}"))
+            }
             // "if it was kicked twice" (Archangel of Wrath): kicked two or more times.
             Condition::Compare(
                 v @ (Value::Custom(_) | Value::TimesKicked),
@@ -236,7 +253,8 @@ impl Renderer<'_> {
         match e {
             Effect::Move { what, to } => self
                 .commanders_to_hand(what, to)
-                .or_else(|| self.player_puts_of_their_choice(what, to)),
+                .or_else(|| self.player_puts_of_their_choice(what, to))
+                .or_else(|| self.put_from_zone_onto_battlefield(what, to)),
             // "Attach it to another permanent it can enchant" (Aura Graft): a permanent
             // other than the one it's attached to that it can legally enchant (CR 701.3b).
             Effect::Attach {
@@ -363,6 +381,101 @@ impl Renderer<'_> {
         ))
     }
 
+    /// "Put ~ from exile onto the battlefield tapped" (Torrent Elemental), "Return to the
+    /// battlefield tapped all artifact, creature, enchantment, and land cards in your
+    /// graveyard that ..." (Gerrard's Hourglass Pendant): the generic wording or those.
+    pub(crate) fn put_from_zone_onto_battlefield(
+        &mut self,
+        what: &Sel,
+        to: &Destination,
+    ) -> Option<String> {
+        if to.zone != ZoneKind::Battlefield || to.controller.is_some() || !to.tapped {
+            return None;
+        }
+        let Sel::All(f) = what else {
+            return None;
+        };
+        let tapped = " tapped";
+        if let Filter::And(v) = f {
+            if let [Filter::Custom(c), Filter::InZone(z)] = v.as_slice() {
+                if c.as_str() == "the source or the object it became" {
+                    let g = self.move_effect(what, to);
+                    let zone = zone_word(*z);
+                    return Some(format!(
+                        "{{alt:{g}|put ~ from {zone} onto the battlefield{tapped}}}"
+                    ));
+                }
+            }
+        }
+        if format!("{f:?}").contains("the source or the object it became") {
+            return None;
+        }
+        let mut probe = self.clone();
+        let n = probe.noun(f, Num::Many);
+        let g = self.move_effect(what, to);
+        Some(format!(
+            "{{alt:{g}|return to the battlefield{tapped} all {n}}}"
+        ))
+    }
+
+    /// "Once during each of your turns, you may cast a spell from your hand or the top of
+    /// your library without paying its mana cost" (One with the Multiverse): one
+    /// once-each-turn permission compiled as one static ability per zone, sharing its
+    /// use (`kw/once_each_turn_cast.rs`).
+    pub(crate) fn once_each_turn_zones_group(
+        &mut self,
+        abilities: &[Ability],
+    ) -> Option<(usize, String)> {
+        let [a, b, ..] = abilities else {
+            return None;
+        };
+        let (AbilityKind::Static(sa), AbilityKind::Static(sb)) = (&a.kind, &b.kind) else {
+            return None;
+        };
+        let (StaticEffect::PlayPermission(pa), StaticEffect::PlayPermission(pb)) =
+            (&sa.effect, &sb.effect)
+        else {
+            return None;
+        };
+        let once = |s: &StaticAbility| {
+            s.condition
+                .as_ref()
+                .and_then(crate::kw::once_each_turn_cast::condition_slot)
+                .is_some()
+        };
+        if !once(sa) || !once(sb) || format!("{:?}", sa.condition) != format!("{:?}", sb.condition)
+        {
+            return None;
+        }
+        let same_but_zone = |p: &PlayPermission, q: &PlayPermission| {
+            let mut p2 = p.clone();
+            p2.zone = q.zone;
+            p2.top_only = q.top_only;
+            format!("{p2:?}") == format!("{q:?}")
+        };
+        if !same_but_zone(pa, pb) {
+            return None;
+        }
+        let (hand, lib) = match ((pa.zone, pa.top_only), (pb.zone, pb.top_only)) {
+            ((ZoneKind::Hand, false), (ZoneKind::Library, true)) => (a, b),
+            ((ZoneKind::Library, true), (ZoneKind::Hand, false)) => (b, a),
+            _ => return None,
+        };
+        let _ = lib;
+        let line = self.ability(hand);
+        if !line.contains("from your hand") {
+            return None;
+        }
+        Some((
+            2,
+            line.replacen(
+                "from your hand",
+                "from your hand or the top of your library",
+                1,
+            ),
+        ))
+    }
+
     /// Pairs of instructions said as one: (the wording, how many instructions).
     pub(crate) fn pairs6_seq(&mut self, v: &[Effect]) -> Option<(String, usize)> {
         use crate::kw::choice_grammar as cg;
@@ -386,6 +499,49 @@ impl Renderer<'_> {
                 let w = w.unwrap_or_default();
                 Some((
                     format!("{{alt:choose an opponent at random. {src} deals {a} damage to that player|{src} deals {a} damage to an opponent chosen at random}}{w}"),
+                    2,
+                ))
+            }
+            // "Shuffle your library, then reveal the top card" (Unexpected Results): the
+            // library just named.
+            [Effect::Shuffle {
+                who: PlayerRef::You,
+            }, Effect::Dig {
+                who: PlayerRef::You,
+                n: Value::Const(1),
+                reveal: true,
+                take: Value::Const(0),
+                ..
+            }, ..] => {
+                let s = self.effect(&v[0]);
+                let d = self.effect(&v[1]);
+                let d = d.replacen(
+                    "the top card of your library",
+                    "the top card {opt:of your library}",
+                    1,
+                );
+                Some((format!("{s}. {d}"), 2))
+            }
+            // "You may search your library for a Food card, reveal it, put it into your
+            // hand, then shuffle. If you don't put a card into your hand this way, create a
+            // Food token." (Courier of Comestibles): whether a card was found and put there.
+            [search @ Effect::May { .. }, Effect::If {
+                cond: Condition::Not(c),
+                then,
+                otherwise,
+            }, ..]
+                if matches!(otherwise.as_ref(), Effect::Noop)
+                    && matches!(c.as_ref(), Condition::And(w)
+                        if matches!(w.as_slice(), [Condition::PrevHappened, Condition::SelNonEmpty(Sel::Var(x))] if *x == vars::IT))
+                    && {
+                        let d = format!("{search:?}");
+                        d.contains("Search") && d.contains("zone: Hand")
+                    } =>
+            {
+                let s = self.effect(search);
+                let t = self.effect(then);
+                Some((
+                    format!("{s}. if you don't put a card into your hand this way, {t}"),
                     2,
                 ))
             }

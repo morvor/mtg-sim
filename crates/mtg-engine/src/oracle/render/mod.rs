@@ -216,6 +216,7 @@ fn render_abilities_with(abilities: &[Ability], info: &FaceInfo, static_if: bool
             .or_else(|| r.otherwise_group(&abilities[i..]))
             .or_else(|| r.exactly_one_static(&abilities[i..]))
             .or_else(|| r.cast_or_activate_group(&abilities[i..]))
+            .or_else(|| r.once_each_turn_zones_group(&abilities[i..]))
         {
             out.lines.push(line);
             skip = n - 1;

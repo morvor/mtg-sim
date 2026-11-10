@@ -107,8 +107,14 @@ impl Renderer<'_> {
                     a.as_str(),
                 ) {
                     if !def.contains(['{', '.']) {
+                        // "you may pay that much life again" (Verrak, Warped Sengir).
+                        let again = if def == "the life paid to activate it" {
+                            "|pay that much life again"
+                        } else {
+                            ""
+                        };
                         return format!(
-                            "{{alt:pay X life, where X is {def}|pay life equal to {def}}}"
+                            "{{alt:pay X life, where X is {def}|pay life equal to {def}{again}}}"
                         );
                     }
                 }

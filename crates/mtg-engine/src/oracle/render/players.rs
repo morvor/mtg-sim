@@ -70,6 +70,21 @@ impl Renderer<'_> {
     /// creatures"); later mentions are pronouns.
     pub(crate) fn target_phrase(&mut self, i: u8) -> String {
         let mut s = self.target_phrase_core(i);
+        // "target legendary permanent that's an artifact, creature, or enchantment": a
+        // list of card types of one legendary permanent (Bounty Agent).
+        if let Some(rest) = s.strip_prefix("target legendary ") {
+            let types = rest
+                .split([',', ' '])
+                .filter(|w| !w.is_empty() && *w != "or");
+            if rest.contains(", or ")
+                && types.clone().count() >= 3
+                && types
+                    .clone()
+                    .all(|w| CardType::ALL.iter().any(|t| t.word() == w))
+            {
+                s = format!("{{alt:{s}|target legendary permanent that's {rest}}}");
+            }
+        }
         let Some(t) = self.targets.get(i as usize).cloned() else {
             return s;
         };

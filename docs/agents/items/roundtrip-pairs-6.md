@@ -164,3 +164,161 @@ clusters, then the untriaged two-card clusters, then single-card clusters in the
 - oracle `a doctor card in your` vs rendered `any doctor card in your`: The Fourteenth Doctor
 - oracle `target opponent put a creature` vs rendered `put a creature card in`: Visions of Dread
 - oracle `it is a instant or` vs rendered `the top card of your`: Galvanoth
+
+## Result
+
+28,460 of 32,076 fully supported cards passed at the start (ad23a7a); 28,601 of 32,076 after.
+88 of the 150 taken cards pass; `roundtrip --check` passes.
+
+Parser and engine: no misreading found (see "Parser bugs found"); every mismatch of the
+taken cards was the renderer's wording or a construct it can't word.
+
+Renderer (most in the new `oracle/render/pairs6_terms.rs`, hooks in the existing files):
+"Whenever you become the monarch" (the player action named `monarch`); "with the same name
+as one another"; "Modular—Sunburst" (the keyword variant, as megamorph); "Spells and
+abilities can't be countered" (`CantBeCountered(Any)`); "a mana ability of each land they
+control" (CR 605.3a); "As long as it's your turn and X, E" / "During your turn, as long as
+X, E" (the effect first, so the comparison can reorder it); "artifacts and creatures target
+opponent controls don't untap during that player's next untap step" and "Creatures don't
+untap during target player's next untap step"; "opponents whose life total is less than
+half their starting life total"; "each player who controls the most creatures"; "you had
+no cards in hand at the beginning of this turn"; "a land card milled this way"; "players who
+attacked you during their last turn"; "if it wasn't cast or no mana was spent to cast it";
+"a creature of your choice with shadow"; "shuffles all other cards revealed this way"; "if
+it was kicked twice"; "hexproof from activated and triggered abilities", "hexproof from
+each of its colors"; "each player exiles the top card of their library"; per-player searches
+("each player searches their library for up to two basic land cards, puts them onto the
+battlefield, then shuffles": the searching player's verbs, the subject said again before
+each as the comparison reads it); "Choose X" (exactly X modes); "the loyalty abilities of
+~"; "if you control no Thopters other than ~"; "3 damage to each of up to two other
+targets"; "Whenever a permanent is put into an opponent's graveyard" (a permanent is on the
+battlefield, CR 110.1); "If it entered under your control"; "X damage to any target and X
+damage to itself"; "Enchanted permanent's controller sacrifices a nonland permanent, then
+that player loses 1 life" (a subject the comparison doesn't carry over, said again);
+"Whenever an equipped creature you control other than ~ attacks or dies"; "~ deals 10
+damage to an opponent chosen at random"; "put all cards exiled this way that weren't cast
+into your graveyard"; "then put all cards revealed this way into your hand"; "Target player
+loses all poison counters"; "counter all abilities your opponents control"; "Exile all cards
+from target player's hand and graveyard"; a named token's abilities name it or say "this
+creature" ("Jumblebones can't block"); "that opponent or that planeswalker's controller";
+"is every land type", "put an everything counter on each of up to one target land and up to
+one target creature"; "creates that many 2/2 black Zombie creature tokens"; "target nonbasic
+land of an opponent's choice you don't control"; "discards all cards of each of the
+sacrificed creature's colors"; "Reveal two cards from your hand that share a color"; "target
+Aura that's attached to a permanent", "attach it to another permanent it can enchant"
+(`CanBeAttachedBy`); "the power of the creature exiled this way"; "If ..., put each of those
+cards into your hand instead" (the same look, all the cards taken); "[instruction] if
+[condition]" in either order for one plain clause; "loses all other card types and
+abilities", "and it loses all other abilities"; "That player shuffles, then draws a card"
+(an owner named before), "cards with that name"; "Add twice that much {G}"; "a card ... that
+was discarded this turn", "put there from a library this turn"; "if target player has fewer
+than nine poison counters, they get a number of poison counters equal to the difference";
+"you may cast it" after looking at the top card of your library, "if it's an instant or
+sorcery spell"; "Target creature becomes a green Bear creature with base power and toughness
+4/4 in addition to its other colors and types"; "the rest of the cards"; "unless you pay {R},
+whenever ..."; "reveal target face-down permanent" (the target remembered just before);
+"You may play the exiled card for as long as
+it remains exiled", "on the bottom of that library", "Mana of any type can be spent to cast
+spells this way"; "Put all commanders you own from the command zone and from your graveyard
+into your hand"; "Target opponent puts a creature card of their choice from their graveyard
+onto the battlefield under your control"; "in addition to its other costs"; "Put ~ from
+exile onto the battlefield tapped", "Return to the battlefield tapped all ..."; "they get
+that many rad counters"; "an opponent's life total is less than half their starting life
+total"; "cast a spell from among them with mana value less than or equal to ..."; "Once
+during each of your turns, you may cast a spell from your hand or the top of your library"
+(one permission compiled per zone, sharing its use); "Shuffle your library, then reveal the
+top card"; "If you don't put a card into your hand this way, create a Food token"; "target
+legendary permanent that's an artifact, creature, or enchantment"; "Whenever you activate an
+ability that isn't a mana ability", "pay that much life again"; "Whenever you activate an
+ability that targets a creature or player" (mana abilities have no targets, CR 605.1a);
+"equal to the difference" (a creature's power minus its base power); "a spell that's one or
+more colors without {X} in its mana cost".
+
+## Parser bugs found
+
+None. Each taken card whose mismatch could have meant a different behavior was checked
+against the AST, and in play where the AST alone didn't settle it (tests in
+`crates/mtg-engine/tests/cards/roundtrip_pairs_6.rs`, all passing on the old code too, so
+wording only): Spider-Punk ("Spells and abilities can't be countered" compiled as a
+restriction on every object, rendered "permanents": an ability on the stack can't be
+countered either), Aura Graft (no legal place to move the Aura: it stays, and you control
+it — its open ruling), Galvanoth (a top card that isn't an instant or sorcery card stays on
+top — its open ruling), Blinding Beam ("Creatures don't untap during target player's next
+untap step" compiled as the permanents that player controls: the duration is the targeted
+player's untap step whoever's turn it's cast on), Tinybones (each opponent with no cards in
+hand as the ability resolves — its open ruling; rendered "each opponent ifs they have no
+cards"), Chain of Plasma (`ControllerOf` of a player target is that player). Checked by
+reading the AST and the engine: Timesifter (each player exiles; the tied players repeat),
+Drain Power (only the lands the player controls, `mana_abilities::activate_each`), One with
+the Multiverse (the two zones' permissions share one once-each-turn slot,
+`kw/once_each_turn_cast.rs`), Kalitas (the token's power and toughness are the destroyed
+creature's, as last on the battlefield), Ertha Jo and Verrak (`AbilityActivated` with
+`source: Any` matches an ability activated from any zone), Tam ("hexproof from each of its
+colors" is judged with the holder as `This`), Unexpected Results (the land and the return
+of the spell are one "may"), Arcbound Wanderer ("Modular—Sunburst" is told apart by the
+keyword's text in `kw/modular.rs`, as the renderer now does too), Princess Yue (the
+intervening "if" keeps "creature"), Fallaji Wayfarer ("This ability doesn't affect its color
+identity" is read in `commander_rules::computed_color_identity`; the sentence compiles to
+nothing, so the renderer can't say it), Rashmi and Counterbalance (the mana values compared
+are the revealed card's and the spell's).
+
+## Remaining
+
+Of the 150 taken cards, these still mismatch; each was checked against the AST and plays as
+the text says (wording only) unless noted:
+
+- Custom nodes not worded (`gap:`): Kozilek, the Broken Reality (manifest from hands),
+  Rootweaver Druid (opt in), The Toymaker's Trap (secret choices), Pir's Whim (friend or
+  foe), Spry and Mighty (`remembering Matching`), Fallaji Wayfarer (no AST for "This
+  ability doesn't affect its color identity").
+- One printed sentence compiled as several abilities, or two sentences as one: Shower of
+  Coals (two sentences, one ability with an "instead"), Storm, Windrider ("can't attack you
+  or block creatures you control": two restrictions), Radiant Destiny ("they also have
+  vigilance"), Whipgrass Entangler (two granted restrictions, "can't attack or block
+  unless"), Kaya, Spirits' Justice (two trigger events in one condition), Veil of Summer
+  ("You and permanents you control gain hexproof from blue and from black": a player effect
+  per color and one modification), Last Night Together ("Choose two target creatures" first;
+  "After this main phase" without the main-phase check the AST makes).
+- The comparison's own reading: Unnerving Assault (the normalizer moves the second clause's
+  "if {R} was spent" to the front of the sentence), Jace, the Perfected Mind ("Then if ...,
+  draw three. Otherwise, draw a card" against "draw a card. If ..., draw three instead"),
+  Black Cat, Cunning Thief (the rendering's alternatives cover each phrase — "that library",
+  "their library", "Mana of any type can be spent to cast spells this way" — but the line
+  still differs somewhere the tool's diff doesn't show).
+- Referents and quantities worded differently: Rocco, Street Chef and Memory Vessel ("each
+  player may play the card they exiled this way"), Timesifter (the tie loop), Kalitas ("if
+  that creature dies this way", "Its power is equal to that creature's power"), Ogre
+  Battlecaster ("When you cast that spell": the cast, its replacement and the reflexive
+  trigger are rendered by the permission path), End-Blaze Epiphany ("then choose a card
+  exiled this way"), Collective Voyage ("where X is" with the cards searched for), Mindclaw
+  Shaman ("from among those cards"), Rashmi ("a spell with lesser mana value", "If you
+  don't cast it"), Eye of the Storm ("casts an instant or sorcery card"; "For each copy, the
+  player may cast the copy"), Sworn Defender, New Blood ("with Vampire" compiled as every
+  other type excluded), Green Sun's Twilight, Ravenous Gigantotherium ("Each of those
+  creatures deals damage equal to its power"), Mindblade Render ("if any of that damage was
+  dealt by a Warrior"), Rakdos, the Showstopper ("whose coin comes up tails"), Eye of
+  Duskmantle (word order; "rather than paying"), Strongarm Tactics ("each player who didn't
+  discard a creature card this way"), Call Forth the Tempest ("other spells you've cast this
+  turn"), Giant Oyster, Ecological Appreciation (the chosen cards shuffled before the rest
+  enter; "that each have"), Infesting Radroach ("that many rad counters": the amount is a
+  custom value), Urborg Panther (the sacrifice costs' order), Lantern Flare ("X is ..."
+  without "where"), Nyssa of Traken ("When you sacrifice one or more artifacts this way",
+  "that many"), Thunderous Debut ("the revealed cards"; "If ..., put them onto the
+  battlefield. Otherwise, ..."), Chaos Warp ("If it's a permanent card, they put it onto
+  the battlefield"), Sab-Sunen ("an even number of counters": the parity arithmetic),
+  Ghost of Ramirez DePietro ("card in a graveyard that was discarded or put there from a
+  library this turn": the two relative clauses of an `Or` inside the card's filter),
+  Counterbalance ("the same mana value as the revealed card"), Preston Garvey (the token's
+  "Enchanted land has"), Neurok Transmuter ("becomes blue and isn't an artifact": the order),
+  Illuna ("or into your hand"), Ghostfire Blade ("~'s equip ability costs {2} less to
+  activate if it targets a colorless creature"), Sophina ("once for each nontoken attacking
+  creature"), Shimian Night Stalker ("All damage that would be dealt to you this turn by
+  target attacking creature is dealt to ~ instead"), Pollywog Symbiote ("costs {1} less to
+  cast if it has mutate"), The Fourteenth Doctor ("a copy of a Doctor card", "If you do, it
+  gains haste"), The Dalek Emperor (the villainous choice printed as prose: "That player
+  sacrifices a creature of their choice, or you create ..."), Darksteel Mutation and Tenth
+  District Hero (the modifications in the card's order), Princess Yue ("She's a land named
+  Moon. She gains ..."), The Cyber-Controller ("They're 2/2 Cyberman artifact creatures"; the
+  graveyard said after "milled this way"), Heroic Sacrifice ("the chosen creature"), Twilight
+  Diviner ("entered or were cast from a graveyard", "one of them"), Weatherlight Compleated
+  (the condition's place; "Then draw a card if ... If it doesn't, scry 1").

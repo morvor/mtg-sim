@@ -319,7 +319,14 @@ impl Renderer<'_> {
                 };
                 let one = self.spell_noun(&f, Det::A);
                 match limit {
-                    Some(1) => format!("{one} from among {among}"),
+                    // "cast a spell from among them with mana value less than or equal to
+                    // ...": the quality after the cards (Cosmic Cube).
+                    Some(1) => match one.split_once(" with ") {
+                        Some((head, tail)) if !head.contains('{') => format!(
+                            "{{alt:{one} from among {among}|{head} from among {among} with {tail}}}"
+                        ),
+                        _ => format!("{one} from among {among}"),
+                    },
                     Some(n) => {
                         let many = self.spell_noun(&f, Det::Plural);
                         format!("up to {} {many} from among {among}", number_word(n as i32))

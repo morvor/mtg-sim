@@ -542,9 +542,12 @@ impl Renderer<'_> {
                     let (kx, ky) = (format!("{x:?}"), format!("{y:?}"));
                     (kx == ka && ky == kb) || (kx == kb && ky == ka)
                 });
+                // "for each creature you control with power greater than its base power,
+                // put a number of +1/+1 counters on it equal to the difference".
+                let own_power = matches!((a.as_ref(), b.as_ref()), (Value::PowerOf(x), Value::BasePowerOf(y)) if format!("{x:?}") == format!("{y:?}"));
                 let a = self.value(a);
                 let b = self.value(b);
-                if named {
+                if named || own_power {
                     format!("{{alt:the difference|{a} minus {b}}}")
                 } else {
                     format!("{a} minus {b}")
