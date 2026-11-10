@@ -416,6 +416,12 @@ pub struct StackInfo {
     pub source_lki: Option<Box<Characteristics>>,
     /// Numeric/object variables fixed when put on the stack (e.g. "choose a number").
     pub chosen_values: BTreeMap<u16, i64>,
+    /// What an ability's source was attached to when the ability was put onto the stack:
+    /// the "equipped creature" (or "enchanted creature") a targeting restriction names is
+    /// checked then (CR 113.7a), so a target chosen as "a creature blocking equipped
+    /// creature" stays legal when the Equipment is moved in response (Plasma Caster).
+    #[serde(default)]
+    pub source_attached_to: Option<Entity>,
 }
 
 /// Values chosen for a permanent ("as this enters, choose a color").

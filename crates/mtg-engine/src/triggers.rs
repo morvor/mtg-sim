@@ -9,7 +9,7 @@ use crate::game::*;
 use crate::object::*;
 use crate::turn::Step;
 use crate::types::*;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 /// Whether an ability is a keyword whose rules include a triggered ability.
@@ -24,6 +24,22 @@ pub mod turn_keys {
     pub const RESOLVED: u64 = 1 << 63;
     /// A "Do this only once each turn" action was taken this turn (CR 603.2h).
     pub const DONE_ONCE: u64 = 1 << 62;
+}
+
+/// The declared attackers grouped by the player who controlled each as it was declared
+/// (`as_declared`; the declaring player when that isn't recorded), in player order: the
+/// attacking players of the declaration (CR 508.3d, 805.10a).
+fn attackers_by_player(
+    attackers: &[(ObjectId, Entity)],
+    declared_by: PlayerId,
+    as_declared: &[(std::sync::Arc<crate::object::Characteristics>, PlayerId)],
+) -> Vec<(PlayerId, Vec<ObjectId>)> {
+    let mut by: BTreeMap<PlayerId, Vec<ObjectId>> = BTreeMap::new();
+    for (i, (a, _)) in attackers.iter().enumerate() {
+        let ctl = as_declared.get(i).map(|x| x.1).unwrap_or(declared_by);
+        by.entry(ctl).or_default().push(*a);
+    }
+    by.into_iter().collect()
 }
 
 /// Whether a triggered ability with this trigger condition "looks back in time" for the
@@ -1326,19 +1342,26 @@ impl Game {
             (
                 TriggerCond::PlayerAttacks(rel),
                 Event::AttackersDeclared {
-                    attackers, player, ..
+                    attackers,
+                    player,
+                    as_declared,
                 },
             ) => {
-                if !attackers.is_empty() && self.player_rel_matches(*rel, *player, &ctx) {
-                    one(EventInfo {
-                        player: Some(*player),
-                        objects: attackers.iter().map(|x| x.0).collect(),
-                        amount: attackers.len() as i32,
+                // CR 508.3d: once for each player one or more of whose creatures were
+                // declared as attackers. In a two-player game that's the active player;
+                // with shared team turns both teammates attack in the one declaration
+                // (CR 805.10a-b), and each is an attacking player (Ever-Watching
+                // Threshold in Two-Headed Giant).
+                attackers_by_player(attackers, *player, as_declared)
+                    .into_iter()
+                    .filter(|(p, _)| self.player_rel_matches(*rel, *p, &ctx))
+                    .map(|(p, objects)| EventInfo {
+                        player: Some(p),
+                        amount: objects.len() as i32,
+                        objects,
                         ..Default::default()
                     })
-                } else {
-                    none()
-                }
+                    .collect()
             }
             (
                 TriggerCond::PlayerAttacked {
@@ -1348,38 +1371,47 @@ impl Game {
                     min,
                 },
                 Event::AttackersDeclared {
-                    attackers, player, ..
+                    attackers,
+                    player,
+                    as_declared,
                 },
             ) => {
-                if !self.player_rel_matches(*attacker, *player, &ctx) {
-                    return none();
-                }
-                // CR 508.3e: once for each player attacked.
+                // CR 508.3e: once for each player attacked, by each attacking player
+                // (with shared team turns, each teammate whose creatures were declared,
+                // CR 805.10a-b).
                 let mut out = Vec::new();
-                let mut seen = BTreeSet::new();
-                for (_, t) in attackers {
-                    let Entity::Player(d) = *t else {
-                        continue;
-                    };
-                    if !seen.insert(d) || !self.player_filter_matches(defender, d, &ctx) {
+                for (ap, mine) in attackers_by_player(attackers, *player, as_declared) {
+                    if !self.player_rel_matches(*attacker, ap, &ctx) {
                         continue;
                     }
-                    let objects: Vec<ObjectId> = attackers
-                        .iter()
-                        .filter(|(_, t2)| *t2 == Entity::Player(d))
-                        .map(|x| x.0)
-                        .collect();
-                    let n = objects
-                        .iter()
-                        .filter(|o| self.matches(**o, with, &ctx))
-                        .count() as u32;
-                    if n >= (*min).max(1) {
-                        out.push(EventInfo {
-                            player: Some(d),
-                            amount: objects.len() as i32,
-                            objects,
-                            ..Default::default()
-                        });
+                    let mut seen = BTreeSet::new();
+                    for (a, t) in attackers {
+                        if !mine.contains(a) {
+                            continue;
+                        }
+                        let Entity::Player(d) = *t else {
+                            continue;
+                        };
+                        if !seen.insert(d) || !self.player_filter_matches(defender, d, &ctx) {
+                            continue;
+                        }
+                        let objects: Vec<ObjectId> = attackers
+                            .iter()
+                            .filter(|(a2, t2)| mine.contains(a2) && *t2 == Entity::Player(d))
+                            .map(|x| x.0)
+                            .collect();
+                        let n = objects
+                            .iter()
+                            .filter(|o| self.matches(**o, with, &ctx))
+                            .count() as u32;
+                        if n >= (*min).max(1) {
+                            out.push(EventInfo {
+                                player: Some(d),
+                                amount: objects.len() as i32,
+                                objects,
+                                ..Default::default()
+                            });
+                        }
                     }
                 }
                 out
