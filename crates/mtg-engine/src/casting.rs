@@ -225,21 +225,22 @@ pub const MANA_ABILITY_RESOLVED: &str = "mana ability resolved";
 /// A "you may cast it" effect doesn't offer a card this says can't be cast (rulings of
 /// Rashmi, Eternities Crafter and Sunbird's Invocation). `free`: without paying its mana
 /// cost.
-pub fn could_cast_during_resolution(g: &Game, p: PlayerId, card: ObjectId, free: bool) -> bool {
+pub fn could_cast_during_resolution(g: &mut Game, p: PlayerId, card: ObjectId, free: bool) -> bool {
     castable_faces(g, card)
         .into_iter()
         .any(|face| could_cast_face_during_resolution(g, p, card, face, free, true))
 }
 
 /// Whether `p` could begin to cast `card` as `face` while a spell or ability resolves (CR
-/// 608.2g), `free` without paying its mana cost: no prohibition and its costs payable (CR
-/// 601.3), the mandatory additional costs among them ("As an additional cost to cast this
-/// spell, sacrifice two creatures"), and with `targets` its targets available (CR 601.2c).
-/// A card chosen among several to cast during one resolution may target a spell cast
-/// before it (Twincast after Lightning Strike, Plargg and Nassari's ruling), so its
-/// targets are judged as it's cast rather than as it's chosen.
+/// 608.2g) in one of the ways [`cast_during_resolution_as`] would offer: no prohibition
+/// and its costs payable (CR 601.3), the mandatory additional costs among them ("As an
+/// additional cost to cast this spell, sacrifice two creatures"), and with `targets` its
+/// targets available (CR 601.2c). A card chosen among several to cast during one
+/// resolution may target a spell cast before it (Twincast after Lightning Strike, Plargg
+/// and Nassari's ruling), so its targets are judged as it's cast rather than as it's
+/// chosen.
 pub fn could_cast_face_during_resolution(
-    g: &Game,
+    g: &mut Game,
     p: PlayerId,
     card: ObjectId,
     face: FaceState,
@@ -249,13 +250,66 @@ pub fn could_cast_face_during_resolution(
     if g.split_second_on_stack() {
         return false;
     }
-    let mut opt = CastOption::normal(face);
-    opt.method = face_method(face);
+    resolution_cast_options(g, p, card, face, free)
+        .iter()
+        .any(|opt| g.can_begin_cast_checking(p, card, opt, targets))
+}
+
+/// The ways `p` could cast `card` as `face` while an effect resolves, as
+/// [`cast_during_resolution_as`] offers them: without paying its mana cost (`free`); for
+/// the effect's "rather than" cost ("You may cast it by paying {1} rather than paying its
+/// mana cost", Jadzi, CR 118.9); or for its mana cost, one of its own alternative costs
+/// (evoke) or another way to cast it (prototyped, CR 718.3); each with the effect's
+/// additional cost ("by paying {R}{R} in addition to its other costs", CR 601.2b).
+fn resolution_cast_options(
+    g: &mut Game,
+    p: PlayerId,
+    card: ObjectId,
+    face: FaceState,
+    free: bool,
+) -> Vec<CastOption> {
+    let mut base = CastOption::normal(face);
+    base.method = face_method(face);
+    base.any_time = true;
+    let mv = g
+        .face_characteristics(card, face)
+        .mana_cost
+        .as_ref()
+        .map_or(0, |m| m.mana_value_with_x(0));
+    let mut opts = Vec::new();
     if free {
-        opt.alt_cost = Some(Cost::free());
+        base.alt_cost = Some(Cost::free());
+        opts.push(base);
+    } else if let Some(cost) = crate::permissions::resolution_alt_cost(g) {
+        base.alt_cost = Some(crate::permissions::spell_relative_cost(&cost, mv));
+        if matches!(base.method, CastMethod::Normal | CastMethod::Half(_)) {
+            base.method = CastMethod::Alternative(PERMISSION_COST);
+        }
+        opts.push(base);
+    } else {
+        opts.push(base);
+        if face == FaceState::Front {
+            let mut others = crate::kw::cast_options_with_any_cost(g, p, card);
+            others.extend(resolution_alternative_costs(g, p, card));
+            for mut o in others {
+                o.any_time = true;
+                opts.push(o);
+            }
+        }
     }
-    opt.any_time = true;
-    g.can_begin_cast_checking(p, card, &opt, targets)
+    if let Some(extra) = g.resolution_extra_cost.clone() {
+        let e = crate::permissions::spell_relative_cost(&extra, mv);
+        for o in &mut opts {
+            o.extra_cost = Some(match o.extra_cost.take() {
+                Some(mut c) => {
+                    add_cost(&mut c, &e);
+                    c
+                }
+                None => e.clone(),
+            });
+        }
+    }
+    opts
 }
 
 /// Like [`cast_during_resolution`], cast as one of the faces or halves `only` (those with
