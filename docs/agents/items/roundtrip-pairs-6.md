@@ -168,8 +168,9 @@ clusters, then the untriaged two-card clusters, then single-card clusters in the
 ## Result
 
 28,460 of 32,076 fully supported cards passed at the start (ad23a7a); 28,602 of 32,076 after
-(28,601 before the review's Rakdos fix). 89 of the 150 taken cards pass; `roundtrip --check`
-passes.
+on the item's base (28,601 before the review's Rakdos fix), 28,601 after merging
+register-sweep-1, which dropped a comparison equivalence (one card elsewhere). 89 of the 150
+taken cards pass; `roundtrip --check` passes.
 
 Parser and engine: two bugs, both found in review (see "Parser bugs found"): Rakdos, the
 Showstopper destroyed the creatures one flip at a time, and Counterbalance could reveal from
