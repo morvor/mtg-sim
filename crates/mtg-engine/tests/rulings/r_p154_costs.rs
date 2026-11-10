@@ -283,5 +283,4 @@ fn manaplasm_uses_the_mana_value_not_the_cost_paid() {
         .go();
     t.resolve();
     assert_eq!(t.pt(plasm), (6, 6));
-    let _ = CardType::Creature;
 }

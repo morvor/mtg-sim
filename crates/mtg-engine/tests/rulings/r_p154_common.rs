@@ -110,3 +110,19 @@ pub fn asked_of(t: &TestGame, p: PlayerId, from: usize) -> Vec<Decision> {
         .map(|(_, d)| d.clone())
         .collect()
 }
+
+/// The names of the objects offered by the target choices asked of `p` since decision
+/// `from` (sorted, without duplicates).
+pub fn target_candidate_names(t: &TestGame, p: PlayerId, from: usize) -> Vec<String> {
+    let mut names: Vec<String> = target_candidates(t, p, from)
+        .iter()
+        .flatten()
+        .filter_map(|e| match e {
+            Entity::Object(o) => Some(t.g.obj(*o).chars.name.to_string()),
+            _ => None,
+        })
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}

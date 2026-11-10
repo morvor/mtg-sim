@@ -323,5 +323,4 @@ fn kellan_uses_the_mana_value_of_the_split_half_cast() {
     assert!(!was_offered(&t, P0, from, giant));
     assert_eq!(count_named(&t, "Grizzly Bears"), 1);
     assert_eq!(t.life(P0), 16, "Shock and its copy");
-    let _ = CardType::Creature;
 }

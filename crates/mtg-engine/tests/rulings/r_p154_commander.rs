@@ -137,5 +137,4 @@ fn commander_bonuses_use_the_commanders_current_characteristics_wherever_it_is()
     act(&mut t, P0, cactus, "becomes an X/X", &[]).expect("animate");
     t.resolve_all();
     assert_eq!(t.pt(cactus), (2, 2));
-    let _ = CardType::Land;
 }

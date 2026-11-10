@@ -219,6 +219,11 @@ pub fn note_paid(g: &mut Game, cost: &crate::ability::Cost, ctx: &mut Ctx) {
         })
         .map(|o| crate::types::Entity::Object(g.current(*o)))
         .collect();
+    // "sacrifice ~ unless you discard a card. When you discard a card this way, destroy
+    // target nonland permanent ... with mana value less than or equal to the mana value of
+    // the discarded card" (Argentum Masticore): the discarded cards are what "the
+    // discarded card" and "it" refer to in what follows.
+    ctx.set_var(crate::ability::vars::IT, discarded.clone());
     ctx.set_var(crate::discard_rules::DISCARDED, discarded);
 }
 

@@ -6,7 +6,6 @@
 //! (CR 608.2b).
 
 use crate::r_p154_common::*;
-use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -487,5 +486,4 @@ fn reinterpret_still_lets_you_cast_when_the_target_cant_be_countered() {
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Hill Giant"), "Heated Debate resolved: 4 damage");
     assert_eq!(count_named(&t, "Grizzly Bears"), 1);
-    let _ = (CastMethod::Normal, Zone::Stack);
 }
