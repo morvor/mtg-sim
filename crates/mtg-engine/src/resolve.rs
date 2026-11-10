@@ -2371,7 +2371,7 @@ impl Game {
                 let mut cast: Vec<Entity> = Vec::new();
                 // CR 601.3e: a choice of "a spell with [characteristics]" considers the
                 // spell each card could become, and it's cast as such.
-                let chosen = crate::spell_choice::choose_cards_to_cast(self, what, ctx);
+                let chosen = crate::spell_choice::choose_cards_to_cast(self, what, *free, ctx);
                 let mut objs: Vec<ObjectId> = match &chosen {
                     Some(v) => v.iter().map(|(o, _)| *o).collect(),
                     None => self.resolve_objects(what, ctx),

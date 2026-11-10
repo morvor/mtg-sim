@@ -225,16 +225,32 @@ pub const MANA_ABILITY_RESOLVED: &str = "mana ability resolved";
 /// A "you may cast it" effect doesn't offer a card this says can't be cast (rulings of
 /// Rashmi, Eternities Crafter and Sunbird's Invocation).
 pub fn could_cast_during_resolution(g: &Game, p: PlayerId, card: ObjectId) -> bool {
+    castable_faces(g, card)
+        .into_iter()
+        .any(|face| could_cast_face_during_resolution(g, p, card, face, true))
+}
+
+/// Whether `p` could begin to cast `card` as `face` while a spell or ability resolves (CR
+/// 608.2g), `free` without paying its mana cost: no prohibition, targets available and
+/// its costs payable (CR 601.3), the mandatory additional costs among them ("As an
+/// additional cost to cast this spell, sacrifice two creatures").
+pub fn could_cast_face_during_resolution(
+    g: &Game,
+    p: PlayerId,
+    card: ObjectId,
+    face: FaceState,
+    free: bool,
+) -> bool {
     if g.split_second_on_stack() {
         return false;
     }
-    castable_faces(g, card).into_iter().any(|face| {
-        let mut opt = CastOption::normal(face);
-        opt.method = face_method(face);
+    let mut opt = CastOption::normal(face);
+    opt.method = face_method(face);
+    if free {
         opt.alt_cost = Some(Cost::free());
-        opt.any_time = true;
-        g.can_begin_cast(p, card, &opt)
-    })
+    }
+    opt.any_time = true;
+    g.can_begin_cast(p, card, &opt)
 }
 
 /// Like [`cast_during_resolution`], cast as one of the faces or halves `only` (those with
@@ -969,7 +985,7 @@ impl Game {
         if self.legendary_spell_prohibited(p, &chars) {
             return false;
         }
-        if self.cast_prohibited(p, card, &chars) && !proposal_may_change_qualities(&chars) {
+        if self.cast_prohibited_at_proposal(p, card, &chars) {
             return false;
         }
         // Targets must be available. The card itself isn't among them: it's on the stack
@@ -1067,7 +1083,7 @@ impl Game {
     ) -> bool {
         crate::combat::spell_cast_restrictions_ok(self, p, card, chars)
             && !self.player_restricted(p, |r| matches!(r, Restriction::SorcerySpeedOnly(_)))
-            && !(self.cast_prohibited(p, card, chars) && !proposal_may_change_qualities(chars))
+            && !(self.cast_prohibited_at_proposal(p, card, chars))
     }
 
     pub(crate) fn timing_allows_cast(
@@ -1155,18 +1171,37 @@ impl Game {
         card: ObjectId,
         chars: &Characteristics,
     ) -> bool {
-        self.cast_prohibited_by_effects(p, card, chars)
+        self.cast_prohibited_by_effects(p, card, chars, false)
             // CR 702.61a split second: no casting while a split-second spell is on the stack.
             || self.split_second_on_stack()
     }
 
+    /// Whether a rule or effect stops the player from beginning to cast the spell (CR
+    /// 601.3, 601.3a). A prohibition that a choice made while proposing the spell could
+    /// lift (the value of X, which changes its mana value: "noncreature spells with mana
+    /// value 4 or greater can't be cast") doesn't stop the proposal; it's checked again once
+    /// the proposal is complete (CR 601.2e). One no such choice can lift ("noncreature
+    /// spells with {X} in their mana costs can't be cast", Gaddock Teeg) does.
+    pub(crate) fn cast_prohibited_at_proposal(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+    ) -> bool {
+        self.cast_prohibited_by_effects(p, card, chars, proposal_may_change_qualities(chars))
+            || self.split_second_on_stack()
+    }
+
     /// Rules and effects that prohibit casting a spell with the given characteristics
-    /// ("can't cast", "can't cast more than one spell each turn"), CR 601.3.
+    /// ("can't cast", "can't cast more than one spell each turn"), CR 601.3. With
+    /// `x_open`, the spell's X isn't chosen yet: conditions on its mana value are taken as
+    /// ones some choice of X could fail (CR 601.3a).
     fn cast_prohibited_by_effects(
         &self,
         p: PlayerId,
         card: ObjectId,
         chars: &Characteristics,
+        x_open: bool,
     ) -> bool {
         if self.legendary_spell_prohibited(p, chars) {
             return true;
@@ -1188,14 +1223,16 @@ impl Game {
             ctx.iter_player = Some(p);
             match r {
                 Restriction::CantCast { who, what } => {
+                    let what = if x_open { without_mana_value(what) } else { what.clone() };
                     self.player_filter_matches(who, p, &ctx)
-                        && self.matches_view(&view, card, &as_spell_filter(what), &ctx)
+                        && self.matches_view(&view, card, &as_spell_filter(&what), &ctx)
                 }
                 Restriction::MaxSpellsPerTurn(who, n) => {
                     self.player_filter_matches(who, p, &ctx) && spells_cast >= *n
                 }
                 Restriction::MaxSpellsOfKindPerTurn { who, what, n } => {
-                    let f = as_spell_filter(what);
+                    let what = if x_open { without_mana_value(what) } else { what.clone() };
+                    let f = as_spell_filter(&what);
                     self.player_filter_matches(who, p, &ctx)
                         && self.matches_view(&view, card, &f, &ctx)
                         && self
@@ -1526,7 +1563,7 @@ impl Game {
         // CR 601.3a: if choices made while proposing the spell (such as the value of X)
         // could change the qualities a prohibition looks at, the player may begin to cast
         // it; the prohibition is checked again once the proposal is complete (CR 601.2e).
-        if self.cast_prohibited(p, card, &chars) && !proposal_may_change_qualities(&chars) {
+        if self.cast_prohibited_at_proposal(p, card, &chars) {
             return Err(Illegal("prohibited".into()));
         }
         self.cast_with_option(p, card, opt)
@@ -1955,8 +1992,8 @@ impl Game {
         if let Some(m) = from_zone.mana_cost.as_mut() {
             *m = m.with_x(x.max(0) as u32);
         }
-        if self.cast_prohibited_by_effects(p, id, &proposed)
-            || self.cast_prohibited_by_effects(p, card, &from_zone)
+        if self.cast_prohibited_by_effects(p, id, &proposed, false)
+            || self.cast_prohibited_by_effects(p, card, &from_zone, false)
         {
             return Err(Illegal("the proposed spell can't be cast".into()));
         }
@@ -4713,6 +4750,30 @@ pub(crate) fn as_spell_filter(f: &Filter) -> Filter {
 /// prohibitions look at (CR 601.3a): the value of X changes its mana value.
 fn proposal_may_change_qualities(chars: &Characteristics) -> bool {
     chars.mana_cost.as_ref().is_some_and(|m| m.has_x())
+}
+
+/// Whether a filter looks at an object's mana value.
+fn filter_mentions_mana_value(f: &Filter) -> bool {
+    match f {
+        Filter::ManaValue(..) | Filter::SharesManaValue(_) => true,
+        Filter::And(fs) | Filter::Or(fs) => fs.iter().any(filter_mentions_mana_value),
+        Filter::Not(f) => filter_mentions_mana_value(f),
+        _ => false,
+    }
+}
+
+/// The filter with each condition on the mana value (negated or not) replaced by one
+/// nothing matches: for a spell whose X isn't chosen yet, some value of X may fail the
+/// condition, so it can't be relied on to prohibit the spell (CR 601.3a).
+fn without_mana_value(f: &Filter) -> Filter {
+    let never = || Filter::Not(Box::new(Filter::Any));
+    match f {
+        Filter::ManaValue(..) | Filter::SharesManaValue(_) => never(),
+        Filter::Not(x) if filter_mentions_mana_value(x) => never(),
+        Filter::And(fs) => Filter::And(fs.iter().map(without_mana_value).collect()),
+        Filter::Or(fs) => Filter::Or(fs.iter().map(without_mana_value).collect()),
+        other => other.clone(),
+    }
 }
 
 /// A cost as a player reads it: its mana cost ("{2}{U}"), with any other parts.

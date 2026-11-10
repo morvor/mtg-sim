@@ -52,6 +52,7 @@ pub fn matching_faces(g: &Game, card: ObjectId, f: &Filter, ctx: &Ctx) -> Vec<Fa
 pub fn choose_cards_to_cast(
     g: &mut Game,
     what: &Sel,
+    free: bool,
     ctx: &mut Ctx,
 ) -> Option<Vec<(ObjectId, Vec<FaceState>)>> {
     // "You may cast the exiled card ... if it's an instant spell": each of the cards in a
@@ -84,7 +85,8 @@ pub fn choose_cards_to_cast(
     let n = g.eval_value(count, ctx).max(0) as u32;
     // CR 601.3: only the faces the player could begin to cast now are choices; the
     // spell's own timing restrictions ("Cast this spell only during combat") still apply
-    // while the effect resolves (CR 608.2g).
+    // while the effect resolves (CR 608.2g), as do its targets and its costs (a mandatory
+    // additional cost that can't be paid, Bankrupt in Blood with one creature).
     let mut faces: Vec<(ObjectId, Vec<FaceState>)> = zones
         .into_iter()
         .flat_map(|z| g.objects_in_zone_kind(z))
@@ -97,7 +99,10 @@ pub fn choose_cards_to_cast(
         })
         .map(|o| {
             let mut f = matching_faces(g, o, filter, ctx);
-            f.retain(|face| g.resolution_cast_allowed(p, o, &g.face_characteristics(o, *face)));
+            f.retain(|face| {
+                g.resolution_cast_allowed(p, o, &g.face_characteristics(o, *face))
+                    && crate::casting::could_cast_face_during_resolution(g, p, o, *face, free)
+            });
             (o, f)
         })
         .filter(|(_, f)| !f.is_empty())
