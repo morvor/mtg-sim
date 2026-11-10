@@ -721,6 +721,7 @@ fn glyph_of_delusion_targets_creatures_switched_into_or_out_of_the_walls_block()
 #[test]
 fn glyph_of_delusion_needs_a_creature_that_wall_blocked() {
     cr!("115.1", "601.2c");
+    interp!("anchor-target-chosen-first");
     let mut t = TestGame::new(2);
     let wall = t.battlefield(P0, "Wall of Stone");
     let other = t.battlefield(P0, "Wall of Wood");
@@ -729,19 +730,40 @@ fn glyph_of_delusion_needs_a_creature_that_wall_blocked() {
     t.advance_to(P1, Step::BeginningOfCombat);
     attack_and_block(&mut t, P1, &[bears], P0, &[(other, bears)]);
     t.advance_to(P1, Step::PostcombatMain);
-    // Wall of Stone blocked nothing: no creature to target with it.
+    // Wall of Stone blocked nothing: no creature to target with it, so it isn't offered
+    // as the Wall (the targets are chosen as a set, CR 601.2c); Wall of Wood is, with the
+    // Bears it blocked.
+    let glyph = t.hand(P0, "Glyph of Delusion");
+    mana(&mut t, P0);
+    let from = t.asked().len();
+    t.cast_with(P0, glyph, &[Entity::Object(other), Entity::Object(bears)])
+        .unwrap();
+    let offered: Vec<Vec<Entity>> = t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseTargets { candidates, .. } => Some(candidates.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(offered.len(), 2, "{offered:?}");
+    assert_eq!(offered[0], vec![Entity::Object(other)]);
+    assert_eq!(offered[1], vec![Entity::Object(bears)]);
+    assert!(!offered.iter().flatten().any(|e| *e == Entity::Object(wall)));
+    t.resolve_all();
+    assert_eq!(t.counters(bears, "glyph"), 2);
+    // No Wall blocked anything this turn: the spell has no legal targets and can't be cast.
+    let mut t = TestGame::new(2);
+    let wall = t.battlefield(P0, "Wall of Stone");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    ready(&mut t, bears);
+    t.advance_to(P1, Step::BeginningOfCombat);
+    attack_and_block(&mut t, P1, &[bears], P0, &[]);
+    t.advance_to(P1, Step::PostcombatMain);
     let glyph = t.hand(P0, "Glyph of Delusion");
     mana(&mut t, P0);
     assert!(t
         .cast_with(P0, glyph, &[Entity::Object(wall), Entity::Object(bears)])
         .is_err());
-    // With the Wall that blocked them, the Bears.
-    t.clear_answers();
-    mana(&mut t, P0);
-    t.cast_with(P0, glyph, &[Entity::Object(other), Entity::Object(bears)])
-        .unwrap();
-    t.resolve_all();
-    assert_eq!(t.counters(bears, "glyph"), 2);
 }
 
 /// The candidates of the latest target choice whose text starts with `text`.

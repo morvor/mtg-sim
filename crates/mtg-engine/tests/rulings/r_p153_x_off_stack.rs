@@ -587,7 +587,7 @@ fn x_is_0_for_cards_an_ability_looks_at_in_several_zones() {
 
 #[test]
 fn a_library_of_lands_only_gives_x_0_and_no_damage() {
-    cr!("202.3a", "608.2h");
+    cr!("202.3a", "107.2");
     ruling!(
         "Goblin Machinist",
         "If all the cards in your library are lands, X is zero."

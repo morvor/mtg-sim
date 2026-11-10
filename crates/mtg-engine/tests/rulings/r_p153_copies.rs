@@ -154,7 +154,7 @@ fn will_of_the_temur_copy_of_a_copy_is_what_that_permanent_copied() {
 
 #[test]
 fn a_token_copy_of_radagast_triggers_its_own_ability() {
-    cr!("603.2", "707.2", "201.5a");
+    cr!("603.2", "707.2", "201.5");
     ruling!(
         "Radagast the Brown",
         "If a token copy of Radagast the Brown enters the battlefield, its own ability will trigger."
@@ -229,7 +229,7 @@ fn a_copy_of_morbid_curiosity_draws_as_many_cards_without_a_sacrifice() {
 
 #[test]
 fn cooperate_copies_a_spell_without_targets() {
-    cr!("707.10", "115.3");
+    cr!("707.10", "707.10c");
     ruling!(
         "Refuse // Cooperate",
         "Cooperate can copy any instant or sorcery spell, not just one with targets."

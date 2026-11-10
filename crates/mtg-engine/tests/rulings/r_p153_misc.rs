@@ -203,7 +203,7 @@ fn captain_rex_nebulas_vehicle_is_sacrificed_before_its_crash_land_damage() {
 
 #[test]
 fn ride_the_avalanche_has_no_target_and_its_delayed_trigger_chooses_one() {
-    cr!("603.7d", "115.1");
+    cr!("603.7a", "603.3d", "115.1");
     ruling!(
         "Ride the Avalanche",
         "Casting Ride the Avalanche doesn't require a target. As you put the delayed triggered ability on the stack after casting your next spell, you choose the target creature, if any."
@@ -677,7 +677,7 @@ fn pact_weapon_keeps_you_alive_while_attached_to_a_creature_an_opponent_controls
 
 #[test]
 fn arni_metalbrow_uses_the_attackers_last_known_mana_value() {
-    cr!("608.2h", "113.7a");
+    cr!("608.2h");
     ruling!(
         "Arni Metalbrow",
         "If the attacking creature or creature that entered the battlefield attacking isn't on the battlefield as the triggered ability resolves, use its mana value from when it was last on the battlefield."

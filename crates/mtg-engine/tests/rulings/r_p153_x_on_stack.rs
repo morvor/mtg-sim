@@ -325,7 +325,7 @@ fn press_the_enemy_measures_a_spells_x_and_a_permanents_x_as_0() {
     );
     supported("Press the Enemy");
     // A spell: P1's Blaze with X = 3 (mana value 4) is returned; Lightning Bolt (1) and
-    // a mana value 4 instant may be cast, a mana value 5 one may not.
+    // Fact or Fiction (4) may be cast, Opportunity (6) may not.
     let mut t = TestGame::new(2);
     t.set_step(P1, Step::PrecombatMain);
     let blaze = cast_blaze(&mut t, P1, 3, Entity::Player(P0));
@@ -584,7 +584,7 @@ fn excaliburs_mana_value_is_12_whatever_the_reduction() {
     );
     supported("Excalibur, Sword of Eden");
     let mut t = TestGame::new(2);
-    // Historic permanents with total mana value 7: Excalibur costs {5}.
+    // Bosh (8) is historic, Hill Giant isn't: Excalibur costs {12} less {8}, {4}.
     t.battlefield(P0, "Hill Giant");
     t.battlefield(P0, "Bosh, Iron Golem");
     let sword = t.hand(P0, "Excalibur, Sword of Eden");

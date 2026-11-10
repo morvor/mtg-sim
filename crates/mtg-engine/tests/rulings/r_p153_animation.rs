@@ -78,7 +78,7 @@ fn march_of_the_machines_animated_equipment_becomes_unattached_and_cant_equip() 
 
 #[test]
 fn bludgeon_brawls_effect_stops_applying_to_an_artifact_that_becomes_a_creature() {
-    cr!("613.8", "704.5n", "613.5");
+    cr!("613.8", "704.5p", "613.5");
     ruling!(
         "Bludgeon Brawl",
         "If an artifact affected by Bludgeon Brawl later becomes a creature, Bludgeon Brawl’s effect no longer applies to it. That artifact will stop being an Equipment and become unattached from any creature it was attached to; it will remain on the battlefield. The same thing if Bludgeon Brawl leaves the battlefield."
@@ -199,7 +199,7 @@ fn is_mana_source(t: &TestGame, p: PlayerId, id: ObjectId) -> bool {
 
 #[test]
 fn an_animated_cactus_preserve_not_controlled_since_the_turn_began_cant_tap_or_attack() {
-    cr!("302.6", "605.3a");
+    cr!("302.6");
     ruling!(
         "Cactus Preserve",
         "If Cactus Preserve becomes a creature but you haven’t controlled it continuously since your most recent turn began, you won’t be able to activate its mana ability or attack with it that turn."
@@ -253,7 +253,7 @@ fn cactus_preserve_ignores_the_restrictions_of_the_mana_it_copies() {
 
 #[test]
 fn cactus_preserve_checks_what_lands_could_produce_not_their_costs_or_legality() {
-    cr!("605.1a");
+    cr!("106.7");
     ruling!(
         "Cactus Preserve",
         "It doesn’t matter whether you control an artifact, whether you can pay 1 life, or whether Spire of Industry is untapped."

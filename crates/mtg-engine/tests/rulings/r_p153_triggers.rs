@@ -57,9 +57,11 @@ fn birthing_ritual_does_nothing_if_you_control_no_creature_as_it_resolves() {
     assert_eq!(triggers_on_stack(&t, "look at the top seven"), 1);
     destroy(&mut t, bears);
     let from = t.asked().len();
+    let library = t.g.players[0].library.clone();
     t.answer_yes(P0, true);
     t.resolve_all();
-    // Nothing was looked at or sacrificed: no choices, the library untouched.
+    // Nothing was looked at or sacrificed: no choices, and the library untouched (had the
+    // ability resolved, the seven cards would have gone to the bottom in a random order).
     assert_eq!(
         crate::r_s04_common::asked_of_since(&t, P0, from, |d| !matches!(
             d,
@@ -70,6 +72,7 @@ fn birthing_ritual_does_nothing_if_you_control_no_creature_as_it_resolves() {
         t.dump_log()
     );
     assert_eq!(t.library_size(P0), 37);
+    assert_eq!(t.g.players[0].library, library);
 }
 
 #[test]
@@ -200,7 +203,7 @@ fn scythe_specter_triggers_once_per_player_dealt_combat_damage() {
 
 #[test]
 fn scythe_specter_discards_are_chosen_blind_and_made_together() {
-    cr!("701.9a", "608.2c");
+    cr!("101.4", "101.4a", "701.9a");
     ruling!(
         "Scythe Specter",
         "Each opponent in turn order chooses a card to discard without revealing it, then all the chosen cards are discarded simultaneously. No one sees what the other players are discarding before deciding which card to discard."
@@ -228,7 +231,7 @@ fn scythe_specter_discards_are_chosen_blind_and_made_together() {
 
 #[test]
 fn a_kicked_dralnus_pet_enters_with_flying() {
-    cr!("614.12", "614.1c", "603.6d");
+    cr!("614.12", "614.1c", "603.6d", "603.6a");
     ruling!(
         "Dralnu's Pet",
         "If Dralnu's Pet is kicked, Dralnu's Pet will have flying from the moment it enters. This will trigger abilities that look for a creature with flying entering."

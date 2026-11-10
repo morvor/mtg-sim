@@ -168,7 +168,7 @@ fn pucas_mischief_with_an_illegal_target() {
 
 #[test]
 fn pucas_mischief_must_target_when_it_can_and_targets_nothing_otherwise() {
-    cr!("603.3d", "115.1");
+    cr!("603.3d", "601.2c", "115.1");
     ruling!(
         "Puca's Mischief",
         "Even if you don't plan on exchanging control of any permanents, if you can choose two legal targets when the ability triggers, you must do so. If you can't, then you don't choose any targets."
@@ -200,10 +200,33 @@ fn pucas_mischief_must_target_when_it_can_and_targets_nothing_otherwise() {
     let from = t.asked().len();
     next_upkeep(&mut t, P0);
     assert_eq!(triggers_on_stack(&t, "exchange control"), 0);
-    // No second target was offered. (The engine asks for the first one before finding
-    // that no pair is legal; the answer is discarded.)
+    // No target is asked for at all: there's no pair to choose.
     let cands = crate::r_s02_common::target_candidates(&t, P0, from);
-    assert!(cands.len() <= 1, "{cands:?}");
+    assert!(cands.is_empty(), "{cands:?}");
+    // The targets are chosen as a set that meets every condition (CR 601.2c): Memnite (0)
+    // can't be the first target, since no permanent of the opponent's has mana value 0 or
+    // less; Grizzly Bears (2) and Puca's Mischief (4) can, and with the Bears chosen only
+    // Llanowar Elves (1) is offered for the second, not Craw Wurm (6).
+    let mut t = TestGame::new(2);
+    let mischief = t.battlefield(P0, "Puca's Mischief");
+    let memnite = t.battlefield(P0, "Memnite");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let from = t.asked().len();
+    t.answer_targets(P0, &[obj(bears)]);
+    t.answer_targets(P0, &[obj(elves)]);
+    next_upkeep(&mut t, P0);
+    let cands = crate::r_s02_common::target_candidates(&t, P0, from);
+    assert_eq!(cands.len(), 2, "{cands:?}");
+    assert!(cands[0].contains(&obj(bears)) && cands[0].contains(&obj(mischief)), "{cands:?}");
+    assert!(!cands[0].contains(&obj(memnite)), "{cands:?}");
+    assert_eq!(cands[1], vec![obj(elves)]);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(t.obj_now(bears).controller, P1);
+    assert_eq!(t.obj_now(elves).controller, P0);
+    assert_eq!(t.obj_now(wurm).controller, P1);
 }
 
 #[test]
@@ -247,7 +270,7 @@ fn razor_hippogriff_with_an_illegal_target_gains_no_life() {
 
 #[test]
 fn imps_mischief_cant_target_a_spell_with_two_targets_even_if_one_is_illegal() {
-    cr!("115.1", "115.7a");
+    cr!("115.1");
     ruling!(
         "Imp's Mischief",
         "If a spell targets multiple things, you can't target it with Imp's Mischief, even if all but one of those targets have become illegal."
@@ -406,7 +429,7 @@ fn skyclave_apparition_token_sums_the_mana_values_of_all_the_exiled_cards() {
 
 #[test]
 fn eriette_gains_no_control_if_the_aura_is_gone_as_the_trigger_resolves() {
-    cr!("608.2b", "611.2b");
+    cr!("611.2b");
     ruling!(
         "Eriette, the Beguiler",
         "If the Aura you control becomes unattached from a nonland permanent (most likely because the Aura left the battlefield) before Eriette’s triggered ability resolves, you won’t gain control of that nonland permanent at all."
