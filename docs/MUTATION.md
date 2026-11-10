@@ -84,7 +84,7 @@ Each surviving mutant is classified as
 | layers.rs | 423 | 43 (1/10) | 34 | 5 | 1 | 3 | 87.5% | 87.5% (no killable survivor) |
 | layers.rs (2026-11-10, after the layers audit; all 53 tested, see below) | 524 | 53 (1/10) | 45 | 6 | 2 | 0 | 88.7% | 88.7% (no killable survivor) |
 | casting.rs | 841 | 85 (1/10) | 74 | 9 | 0 | 2 | 89.2% | 96.4% (80/83) |
-| casting.rs (2026-11-10, after the casting-costs audit; 81 of 105 sampled reached when written, see below) | 1049 | 105 (1/10) | 70 | 9 | 1 | 1 | 88.8% | 92.5% (74/80) expected: the 3 killable survivors' tests are written, the re-run is pending |
+| casting.rs (2026-11-10, after the casting-costs audit; all 105 tested, see below) | 1049 | 105 (1/10) | 87 | 16 | 1 | 1 | 84.6% | 89.4% (93/104): the 5 killable survivors and the timed-out mutant caught in the re-run, 11 equivalent |
 | combat.rs | 876 | 88 (1/10) | 68 | 13 | 0 | 7 | 84.0% | 93.8% (76/81) |
 | **all 15** | 5,281 | 551 | 423 | 93 | 4 | 31 | **82.1%** | **88.3%** (459/520) |
 
@@ -551,22 +551,23 @@ was reached.
 
 ### casting.rs, second run (2026-11-10)
 
-Run after the `engine-audit-1/casting-costs` tests (62 new tests in `tests/cr/r601_audit_*.rs`
+Run after the `engine-audit-1/casting-costs` tests (64 new tests in `tests/cr/r601_audit_*.rs`
 and `tests/cr/r701_018b_face_down_card_played_as_what_it_is.rs`, with that audit's engine fixes)
-against the current file: 105 of 1049 mutants (round-robin 0/10), about five minutes per
-mutant (65–115 s build + 320–550 s test). The run was still going when this was written and
-the audit landed alongside it: 81 of the 105 had been tested, 70 caught, 9 missed, 1 timeout,
-1 unviable, kill rate **88.8%** (71/80). Three of the nine survivors are killable and have
-tests, each checked to fail with its mutant applied to the worktree and to pass without it;
-the re-run (`RERUN=1 scripts/mutants.sh casting`, allowed only once the first run has ended)
-remains to be done and would make it 92.5% (74/80). The 24 sampled mutants not yet reached
-are listed at the end and remain to be tested.
+against the current file: 105 of 1049 mutants (round-robin 0/10), six hours (65–115 s build
++ 320–550 s test per mutant; the first hours overlapped the review's own builds). All 105 were
+reached: 87 caught, 16 missed, 1 timeout, 1 unviable, kill rate **84.6%** (88/104). Five of
+the sixteen survivors are killable and have tests, each checked to fail with its mutant applied
+to the worktree and to pass without it; the re-run (`RERUN=1 scripts/mutants.sh casting`)
+over all sixteen (and the timed-out mutant, which it caught outright) caught the five and
+missed the eleven again, kill rate after it **89.4%** (93/104). The re-run matched each
+survivor to its line in the current file (e.g. `420:41` had become `495:41`); the numbers
+below are the first run's. The other eleven are equivalent or dead paths.
 
 - `casting.rs:50:9: replace CastOption::normal -> CastOption with Default::default()`:
   unviable (`CastOption` has no `Default`).
 - `casting.rs:194:9: delete match arm 1 in choose_face_to_cast` (one castable face): **(a)
   equivalent**. `Game::ask_option` returns 0 without asking for one option or none, so the
-  `_` arm yields `faces[0]` as the deleted arm did.
+  `_` arm yields `faces[0]` as the deleted arm did. Re-run: missed again (equivalent).
 - `casting.rs:420:41: replace != with == in free_cast_options` (the "(prototype)" suffix on
   the name of a tagged way to cast a card without paying its mana cost): **(b) missing
   test**. The suffix moved onto `CastMethod::Free` options, none of which is tagged, and
@@ -574,13 +575,14 @@ are listed at the end and remain to be tested.
   `tests/cr/r601_audit_alternative_additional.rs`
   (`an_effect_casting_a_card_free_offers_each_way_to_cast_it_by_name`: Maelstrom Wanderer
   cascading into Goring Warplow offers "Cast Goring Warplow (mana value 6)" and "Cast Goring
-  Warplow (prototype) (mana value 2)").
+  Warplow (prototype) (mana value 2)"). Re-run: caught.
 - `casting.rs:686:17: replace && with || in Game::card_has_land_face`: **(b) missing test**.
   `o.face_down || (zone != Battlefield && front is a land)` made any face-down card outside
   the battlefield a land card to play: a creature card exiled face down with a play
   permission (Praetor's Grasp) was offered as a land play and `play_land` accepted it. Killed
   by `tests/cr/r701_018b_face_down_card_played_as_what_it_is.rs` (Grizzly Bears exiled face
   down is cast, never played as a land; an Island is played as a land face up, CR 701.18b).
+  Re-run: caught.
 - `casting.rs:958:41: replace && with || in Game::face_characteristics`: **(a) equivalent in
   practice**. For a face-up card outside the battlefield the mutant returns the printed front
   characteristics instead of the computed ones. They differ only under effects that change
@@ -589,11 +591,11 @@ are listed at the end and remain to be tested.
   `spell_preview::spell_characteristics` recomputes the characteristics on the stack before
   any prohibition or permission is judged; the other callers filter lands
   (`castable_faces`, `card_has_land_face`), name the face (`choose_face_to_cast`) or check
-  keyword prohibitions printed on the card.
+  keyword prohibitions printed on the card. Re-run: missed again (equivalent).
 - `casting.rs:1342:32: replace || with && in Game::play_land_during_resolution`: **(a)
   equivalent (dead path)**. The guard `!is_live(card) || !card_has_land_face(card)` is
   reached only from `Effect::PlayCard`, for the live objects a selection resolved whose front
-  face is a land, so neither disjunct is ever true there.
+  face is a land, so neither disjunct is ever true there. Re-run: missed again (equivalent).
 - `casting.rs:1703:42: replace match guard n >= 0 with true in Game::cast_inner` (how many
   times a repeatable optional additional cost is paid, multikicker and replicate): **(b)
   missing test**, and an engine bug behind it. A negative answer became `u32::MAX` times, and
@@ -604,39 +606,78 @@ are listed at the end and remain to be tested.
   `a_repeatable_additional_cost_is_paid_a_whole_number_of_times`
   (`tests/cr/r601_audit_alternative_additional.rs`: Everflowing Chalice kicked twice, then
   answered -1, 3 and 1_000_000_000) kills the mutant in a second instead of running out of
-  memory.
+  memory. Re-run: caught.
 - `casting.rs:2168:31: replace += with *= in Game::cast_inner` (`cast.life_paid` of a spell):
   **(a) equivalent (dead field for spells)**. A spell's `life_paid` is recorded here and in
   `mana_abilities::pay_mana` but read nowhere: the only readers (`kw/trigger_modifiers.rs`,
   "if life was paid to activate it", "the amount of life paid") read an activated ability's,
-  recorded by `activate_inner`.
+  recorded by `activate_inner`. Re-run: missed again (equivalent).
 - `casting.rs:2689:30: replace && with || in Game::can_activate` (the search for a value of X
   the cost can be paid at): **(a) equivalent in practice**. With no X in the cost the search
   tries the same cost at every x and fails as before. It differs only for an ability whose
   condition needs X ≥ 1 (`least_x` set) and whose non-mana X cost is payable at some X but
   not at the least one, where the mutant would (rightly) find the other X; the one printed
   card with both, Ruthless Technomancer ("Sacrifice X artifacts", "X can't be 0"), can pay at
-  X = 1 whenever it can pay at any X.
+  X = 1 whenever it can pay at any X. Re-run: missed again (equivalent).
 - `casting.rs:3549:13: delete field source from struct SpendContext expression in
   Game::pay_cost` (a cost paid while a spell or ability resolves, an attack tax, a face-up
   cost): **(a) equivalent**. Every reader of `SpendContext::source` is gated on `is_spell` or
   `is_ability` (`ManaRestriction::allows_in`'s CastSpell, ActivateAbilityOf and
   ArtifactSpellOrAbility arms, `cast_history::record_payment`, the cast-record paths of
-  `mana_abilities::pay_mana`), both false for `pay_cost`.
+  `mana_abilities::pay_mana`), both false for `pay_cost`. Re-run: missed again (equivalent).
+- `casting.rs:3770:27: replace >= with < in Game::cost_part_payable` ("Remove X counters from
+  an artifact or creature you control", `CostPart::RemoveCountersFromOne`; Moxite Refinery is
+  the one printed card compiled to it, the n = 1 form being another part): **(b) missing
+  test**. The production check is right (a permanent must carry at least X counters); the
+  mutant inverts it, which shows in the X a player leaves to the engine, the least value the
+  cost can be paid at (`default-numbers`): 0 with the check, 1 with the mutant. Killed by
+  `tests/cr/r601_audit_x.rs`
+  (`an_unannounced_x_of_an_activation_cost_paid_with_counters_is_the_least_payable_value`:
+  Moxite Refinery with a Grizzly Bears carrying two +1/+1 counters, the default X removes
+  nothing and puts no charge counter on Bonesplitter; X = 2 announced removes both and puts
+  two). Re-run: caught.
+- `casting.rs:3810:29: replace && with || in Game::cost_part_payable` ("Put a card from your
+  hand on top of your library: ...", `CostPart::PutFromHandOnLibrary`): **(a) equivalent in
+  practice**. The three printed cards with that cost (Penance, Leashling, Hidden Retreat) take
+  any card, so `usable_for_cost` (the filter) is true for every card in hand, and the
+  ability's source is a permanent, never a card in the hand; both sides of the `||` are true
+  for every card either way. Re-run: missed again (equivalent).
+- `casting.rs:4278:81: replace < with > in Game::pay_cost_part` (`CostPart::RemoveCounters`:
+  "not enough counters" after removing them): **(a) equivalent (dead path in practice)**.
+  `pay_total_cost_ordered` checks every part's payability (`cost_part_payable`: the source
+  carries at least X counters) right before paying any part, and nothing removes counters
+  from the source in between (a mana ability removing counters from the same permanent during
+  the payment would; no printed card has one beside such a cost). The test written for it,
+  `an_x_greater_than_the_counters_the_source_carries_cant_be_paid` (`tests/cr/r601_audit_x.rs`:
+  Calciform Pools with three storage counters and X = 5, an illegal activation reversed with
+  nothing added), is satisfied by that earlier check and kept as a test of CR 601.2h and
+  118.3. Re-run: missed again (equivalent).
+- `casting.rs:4329:53: replace - with / in Game::pay_cost_part` (`kinds[i.min(kinds.len() -
+  1)]`, the kind of counter to remove): **(a) equivalent**. `ask_option` returns an index
+  below the number of options, so the `.min` guard never applies either way. Re-run: missed again (equivalent).
+- `casting.rs:4637:21: delete field is_ability from struct SpendContext expression in
+  Game::pay_cost_part` (the `Repeated` arm): **(a) equivalent (dead path)**.
+  `kw::cumulative_upkeep::expand_repeated` flattens every `Repeated` part of a cost before
+  `pay_cost_part` sees it (the first step of `pay_total_cost_ordered`, and of `can_pay_cost`),
+  so the arm is never reached. Its hardcoded `is_ability: true` would be wrong for a
+  cumulative upkeep cost, which is paid as a triggered ability resolves, not an activation
+  cost; the flattened payment uses the outer context (`is_ability` false), so mana that may
+  be spent only to activate abilities (Omen Hawker) can't pay cumulative upkeep, as the rules
+  say. Re-run: missed again (equivalent).
+- `casting.rs:4671:21: delete field purpose from struct SpendContext expression in
+  Game::pay_cost_part` (the arm paying a choice of costs): **(a) equivalent in practice**.
+  `purpose` matters only to mana restricted to a purpose (Adarkar Unicorn's "only to pay
+  cumulative upkeep costs", Qarsi Deceiver's face-up costs), and no cumulative upkeep or morph
+  cost offers a choice of costs. Re-run: missed again (equivalent).
+- `casting.rs:4735:41: replace match guard is_x(v) with false in Game::x_bound_of_parts` (the
+  "pay X life" bound becomes the generic 20): **(b) missing test**. Killed by the 30-life
+  Toxic Deluge scenario of
+  `an_x_paid_as_life_is_bounded_by_the_life_total_not_by_the_mana_available`
+  (`tests/cr/r601_audit_x.rs`: with 30 life, X up to 30 is offered). Re-run: caught.
 - Timeout (a detection): `casting.rs:3725:45: replace && with || in Game::cost_part_payable`
   (the tapped permanents an "untap" cost could untap excluded every permanent whenever the
-  cost untaps its own source): the suite ran past the 600 s timeout.
-- The 24 sampled mutants the run hadn't reached when this was written, all in the payment
-  code from `cost_part_payable` on, remain to be tested: `cost_part_payable` 3770:27 and
-  3810:29, `exile_cost_cards` 3878:20, `cost_zone_cards` 3901:53, `pay_total_cost_ordered`
-  3981:20 and 4025:25, `pay_cost_part` 4079:62, 4100:32, 4129:25, 4278:81, 4329:53, 4396:29,
-  4420:81, 4510:50, 4542:20, 4637:21 and 4671:21, `max_mana_available` 4712:13,
-  `x_bound_of_parts` 4735:41 and 4765:26, `WithChars::face_down` 4828:15,
-  `cost_part_pays_last` 4926:7, `cost_part_has_x` 4934:62 and `filter_mentions_x` 4976:9.
-  One of them already has a test written for it: `x_bound_of_parts` 4735:41 (the "pay X
-  life" bound becomes the generic 20) is killed by the 30-life Toxic Deluge scenario of
-  `an_x_paid_as_life_is_bounded_by_the_life_total_not_by_the_mana_available`
-  (`tests/cr/r601_audit_x.rs`), checked to fail with the mutant applied to the worktree.
+  cost untaps its own source): the suite ran past the 600 s timeout in the first run and
+  failed outright in the re-run (caught).
 
 ### casting.rs
 
