@@ -1,0 +1,1 @@
+Forsaken Crossroads	it is highly recommended that you write down who was the starting player	advice on physical bookkeeping (writing down the starting player) with no game behavior; the game remembers the starting player itself, and the ability the advice serves ("If you weren't the starting player, you may untap ~ instead") is tested in tests/rulings/r_p158_misc.rs

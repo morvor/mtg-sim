@@ -539,3 +539,30 @@ fn defabricate_counters_the_unearth_delayed_trigger_but_not_the_exile_replacemen
     kill(&mut t, zombie);
     assert!(t.in_exile("Dregscape Zombie"), "exiled instead of dying");
 }
+
+#[test]
+fn forsaken_crossroads_may_untap_only_for_a_player_who_didnt_start() {
+    cr!("103.1", "614.1a");
+    // The ruling on Forsaken Crossroads ("it is highly recommended that you write down who
+    // was the starting player") is bookkeeping advice (exempt in
+    // docs/rulings-exemptions/rulings-P158.tsv); the game remembers the starting player,
+    // which its "instead" needs: the starting player's Crossroads stays tapped, another
+    // player's may untap.
+    supported("Forsaken Crossroads");
+    for (p, untaps) in [(P0, false), (P1, true)] {
+        let mut t = TestGame::new(2);
+        assert_eq!(t.g.turn.starting_player, P0);
+        t.set_step(p, Step::PrecombatMain);
+        let from = t.asked().len();
+        crate::r_p198_common::choose_words(&mut t, p, &["Blue"]);
+        t.answer_yes(p, true);
+        let c = t.hand(p, "Forsaken Crossroads");
+        t.play_land(p, c).expect("land");
+        t.resolve_all();
+        assert_eq!(!t.obj_now(c).tapped, untaps, "{p:?}");
+        let offered = asked_since(&t, from)
+            .iter()
+            .any(|(q, d)| *q == p && matches!(d, Decision::YesNo { .. }));
+        assert_eq!(offered, untaps, "{p:?}: {:?}", asked_since(&t, from));
+    }
+}
