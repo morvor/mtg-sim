@@ -1865,20 +1865,6 @@ fn stat_extras(s: &str, b: &mut Builder) -> Option<(Value, String)> {
             }
         }
     }
-    // "the mana value of a commander you own on the battlefield or in the command zone"
-    // (CR 903.3): the greatest, if there are several.
-    if let Some(rest) = s.strip_prefix(
-        "the mana value of a commander you own on the battlefield or in the command zone",
-    ) {
-        if word_end(rest) {
-            return super::value_grammar::parse_value(
-                &format!(
-                    "the greatest mana value of a commander you own on the battlefield or in the command zone{rest}"
-                ),
-                b,
-            );
-        }
-    }
     if let Some(rest) = s.strip_prefix("~'s loyalty") {
         if word_end(rest) {
             return Some((Value::LoyaltyOf(Box::new(Sel::This)), rest.to_string()));

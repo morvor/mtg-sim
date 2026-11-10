@@ -19,7 +19,7 @@ use crate::game::Game;
 use crate::types::*;
 
 /// `ctx` with `id` as the object being tested.
-fn testing(ctx: &Ctx, id: ObjectId) -> Ctx {
+pub(crate) fn testing(ctx: &Ctx, id: ObjectId) -> Ctx {
     let mut c = ctx.clone();
     c.vars.insert(vars::TESTED, vec![Entity::Object(id)]);
     c

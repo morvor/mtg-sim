@@ -2,8 +2,8 @@
 //! the command zone" and "the greatest mana value among your commanders" (CR 903.3: a
 //! card's commander designation is an attribute of the card, kept wherever it is and
 //! whoever controls it); the current characteristics of a commander that became a copy
-//! (CR 707.2); with several commanders, the engine uses the greatest
-//! (`interp!("a-commander-you-own-is-the-greatest")`).
+//! (CR 707.2); with several commanders, the player chooses which one as the spell
+//! resolves (`interp!("a-commander-you-own-is-chosen")`).
 
 use crate::r_p154_common::*;
 use mtg_engine::testing::*;
@@ -54,25 +54,96 @@ fn a_commander_another_player_controls_still_sets_x() {
 }
 
 #[test]
-fn stinging_study_with_two_commanders_uses_the_greatest_mana_value() {
-    cr!("903.3", "702.124");
-    interp!("a-commander-you-own-is-the-greatest");
+fn stinging_study_with_two_commanders_lets_you_choose_which() {
+    cr!("903.3", "702.124e", "608.2d");
+    interp!("a-commander-you-own-is-chosen");
     ruling!(
         "Stinging Study",
         "If you own multiple commanders on the battlefield and/or in the command zone, you choose one of them as Stinging Study resolves to determine the value of X."
     );
     supported("Stinging Study");
     // Partners: Thrasios (mana value 2) in the command zone and Tymna (3) on the
-    // battlefield; the engine uses the greatest, 3 (no choice is asked).
+    // battlefield. Both are offered as the spell resolves (not as it's cast: a choice the
+    // effect offers is made while applying it, CR 608.2d); choosing Thrasios, the smaller,
+    // X is 2.
+    let mut t = commander_game();
+    let thrasios = commander(&mut t, P0, "Thrasios, Triton Hero");
+    let tymna = commander_on_battlefield(&mut t, "Tymna the Weaver");
+    let hand = t.hand_size(P0);
+    let from = t.asked().len();
+    t.answer_choose(P0, &[obj(thrasios)]);
+    cast(&mut t, P0, "Stinging Study", "4B", &[]);
+    assert!(
+        entity_candidates(&t, P0, from).is_empty(),
+        "no commander is chosen as the spell is cast: {:?}",
+        asked_of(&t, P0, from)
+    );
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 2);
+    assert_eq!(t.life(P0), 38);
+    let offered = entity_candidates(&t, P0, from);
+    let mut last = offered.last().cloned().unwrap_or_default();
+    last.sort();
+    let mut both = vec![obj(thrasios), obj(tymna)];
+    both.sort();
+    assert_eq!(last, both, "{offered:?}");
+    // Choosing Tymna: X is 3.
+    let mut t = commander_game();
+    commander(&mut t, P0, "Thrasios, Triton Hero");
+    let tymna = commander_on_battlefield(&mut t, "Tymna the Weaver");
+    let hand = t.hand_size(P0);
+    t.answer_choose(P0, &[obj(tymna)]);
+    cast_resolve(&mut t, P0, "Stinging Study", "4B", &[]);
+    assert_eq!(t.hand_size(P0), hand + 3);
+    assert_eq!(t.life(P0), 37);
+}
+
+#[test]
+fn stinging_study_default_choice_is_the_first_commander_offered() {
+    cr!("903.3", "702.124e");
+    interp!("a-commander-you-own-is-chosen");
+    interp!("default-first-listed-choice");
+    supported("Stinging Study");
+    // With no answer, the first commander listed is chosen: X is its mana value.
     let mut t = commander_game();
     commander(&mut t, P0, "Thrasios, Triton Hero");
     commander_on_battlefield(&mut t, "Tymna the Weaver");
     let hand = t.hand_size(P0);
     let from = t.asked().len();
     cast_resolve(&mut t, P0, "Stinging Study", "4B", &[]);
-    assert_eq!(t.hand_size(P0), hand + 3);
-    assert_eq!(t.life(P0), 37);
-    assert!(entity_candidates(&t, P0, from).is_empty(), "no commander is chosen");
+    let offered = entity_candidates(&t, P0, from);
+    let first = offered
+        .last()
+        .and_then(|c| c.first().copied())
+        .and_then(|e| e.object())
+        .expect("a commander is chosen");
+    let x = mana_value(&t, first) as usize;
+    assert!(x == 2 || x == 3);
+    assert_eq!(t.hand_size(P0), hand + x);
+    assert_eq!(t.life(P0), 40 - x as i32);
+}
+
+#[test]
+fn stinging_study_offers_a_commander_another_player_controls() {
+    cr!("903.3", "702.124e");
+    interp!("a-commander-you-own-is-chosen");
+    ruling!(
+        "Stinging Study",
+        "If your commander is under the control of another player as Stinging Study resolves, it is still on the battlefield and will still be used to determine the value of X."
+    );
+    supported("Stinging Study");
+    // Thrasios (2) in the command zone and P0's Craw Wurm (6) under P1's control: the Wurm
+    // is still a commander P0 owns on the battlefield, so it may be chosen, and X is 6.
+    let mut t = commander_game();
+    commander(&mut t, P0, "Thrasios, Triton Hero");
+    let wurm = stolen_commander(&mut t, "Craw Wurm");
+    let hand = t.hand_size(P0);
+    let from = t.asked().len();
+    t.answer_choose(P0, &[obj(wurm)]);
+    cast_resolve(&mut t, P0, "Stinging Study", "4B", &[]);
+    assert!(was_offered(&t, P0, from, wurm));
+    assert_eq!(t.hand_size(P0), hand + 6);
+    assert_eq!(t.life(P0), 34);
 }
 
 #[test]

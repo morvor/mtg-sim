@@ -587,8 +587,21 @@ fn extra_suffix(t: &str) -> Option<(Filter, &str)> {
 pub(crate) fn object_phrase(s: &str) -> Option<(Filter, bool, &str)> {
     // "commander creatures you own", "commanders you control" (CR 903.3).
     if let Some(r) = s.strip_prefix("commander ") {
-        let (f, plural, rest) = object_phrase(r)?;
-        return Some((Filter::and(vec![Filter::Commander, f]), plural, rest));
+        if let Some((f, plural, rest)) = object_phrase(r) {
+            return Some((Filter::and(vec![Filter::Commander, f]), plural, rest));
+        }
+    }
+    // "a commander you own", "commander you control": one commander (a permanent, or a
+    // card where another zone is named).
+    if let Some(r) = s.strip_prefix("commander") {
+        if r.is_empty() || r.starts_with(' ') {
+            let t = r.trim_start();
+            let elsewhere = t.starts_with("from ") || t.starts_with("in ");
+            let probe = format!("{}{r}", if elsewhere { "card" } else { "permanent" });
+            let (f, plural, rest) = object_phrase(&probe)?;
+            let rest = &r[r.len() - rest.len()..];
+            return Some((Filter::and(vec![Filter::Commander, f]), plural, rest));
+        }
     }
     if let Some(r) = s.strip_prefix("commanders") {
         if r.is_empty() || r.starts_with(' ') {

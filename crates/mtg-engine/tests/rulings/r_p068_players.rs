@@ -189,16 +189,18 @@ fn apple_of_eden_cards_stay_exiled_if_you_leave_before_the_end_step() {
 }
 
 #[test]
-fn share_the_spoils_borrowed_from_a_player_who_loses_still_triggers() {
+fn share_the_spoils_borrowed_from_a_player_who_loses_doesnt_trigger() {
     cr!("603.10f", "603.3a", "800.4a", "611.3b");
-    // Pins the CR, not the card's ruling of 2021-07-23 ("If you control an opponent's Share
-    // the Spoils and that player loses the game, Share the Spoils leaves the game with them
-    // and the first ability won't trigger."), which contradicts CR 603.10f: it is left
-    // uncited, pending the coordinator's conflict decision (docs/RULING_DISCREPANCIES.md).
+    ruling!(
+        "Share the Spoils",
+        "If you control an opponent's Share the Spoils and that player loses the game, Share the Spoils leaves the game with them and the first ability won't trigger."
+    );
+    interp!("loses-the-game-trigger-leaves-with-the-loser");
     supported("Share the Spoils");
-    // P0 controls P2's Share the Spoils; P2 loses. It leaves the game with P2, but its
-    // "whenever an opponent loses the game" ability looks back in time and triggers, under
-    // P0's control.
+    // P0 controls P2's Share the Spoils; P2 loses. It leaves the game with P2 (CR 800.4a),
+    // and although "whenever an opponent loses the game" abilities look back in time (CR
+    // 603.10f), the ability of the very object that leaves with the loser doesn't trigger
+    // (the ruling; decided by the user, Nov 10).
     let mut t = TestGame::new(3);
     let sts = t.battlefield(P2, "Share the Spoils");
     give_control(&mut t, sts, P0);
@@ -207,26 +209,24 @@ fn share_the_spoils_borrowed_from_a_player_who_loses_still_triggers() {
     t.g.lose_game(P2);
     assert!(!t.on_battlefield(sts), "{}", t.dump_log());
     t.settle();
-    assert_eq!(t.stack_len(), 1, "{}", t.dump_log());
-    let trigger = *t.g.stack.last().unwrap();
-    assert_eq!(t.obj_now(trigger).controller, P0);
+    assert_eq!(t.stack_len(), 0, "{}", t.dump_log());
     t.resolve_all();
-    // The top card of each library still in the game is exiled.
-    assert!(exiled(&t, bears) && exiled(&t, forest), "{}", t.dump_log());
-    assert_eq!(t.g.exile.len(), 2, "{}", t.dump_log());
-    // No one may play them: the enchantment that let players do so is gone.
-    for p in [P0, P1] {
-        t.set_step(p, Step::PrecombatMain);
-        mana(&mut t, p, G, 2);
-        assert!(!castable(&mut t, p, bears), "{p:?}: {}", t.dump_log());
-        assert!(!playable_land(&mut t, p, forest), "{p:?}");
-    }
-    // Had its owner stayed (P1's Share the Spoils, P2 losing), P0 could cast the Bears.
+    // Nothing is exiled: the top cards stay where they were.
+    assert!(!exiled(&t, bears) && !exiled(&t, forest), "{}", t.dump_log());
+    assert!(t.g.exile.is_empty(), "{}", t.dump_log());
+    assert_eq!(t.g.library_top(P0), Some(bears), "{}", t.dump_log());
+    assert_eq!(t.g.library_top(P1), Some(forest), "{}", t.dump_log());
+    // Had its owner stayed (P1's Share the Spoils, P2 losing), the ability triggers under
+    // P0's control (CR 603.3a) and P0 could cast the Bears.
     let mut t = TestGame::new(3);
     let sts = t.battlefield(P1, "Share the Spoils");
     give_control(&mut t, sts, P0);
     let bears = t.library_top(P0, "Grizzly Bears");
     t.g.lose_game(P2);
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "{}", t.dump_log());
+    let trigger = *t.g.stack.last().unwrap();
+    assert_eq!(t.obj_now(trigger).controller, P0);
     t.resolve_all();
     assert!(t.on_battlefield(sts) && exiled(&t, bears), "{}", t.dump_log());
     mana(&mut t, P0, G, 2);

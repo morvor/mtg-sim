@@ -280,6 +280,9 @@ impl Game {
                 ctx.vars.insert(*var, v);
             }
             Effect::StoreValue { var, value } => {
+                // A value about one object picked from several has the controller choose
+                // it now, as the effect resolves (CR 608.2d; "where X is ...").
+                crate::chosen_object_value::choose(self, value, ctx);
                 let n = self.eval_value(value, ctx);
                 ctx.nums.insert(*var, n);
             }
@@ -295,6 +298,9 @@ impl Game {
             }
             Effect::NoteManaSpent { amount } => crate::noted_mana::note(self, *amount, ctx),
             Effect::SetX { value } => {
+                // A value about one object picked from several has the controller choose
+                // it now, as the effect resolves (CR 608.2d).
+                crate::chosen_object_value::choose(self, value, ctx);
                 ctx.x = self.eval_value(value, ctx) as i32;
                 ctx.x_defined = true;
             }
