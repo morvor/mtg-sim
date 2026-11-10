@@ -185,7 +185,7 @@ impl Renderer<'_> {
         if let Some(c) = &terms.extra_cost {
             let pay = self.cost_as_payment(c);
             s.push_str(&format!(
-                " by {} in addition to paying its other costs",
+                " by {} in addition to {{opt:paying}} its other costs",
                 super::statics::gerund_first(&pay)
             ));
         }
@@ -196,7 +196,7 @@ impl Renderer<'_> {
         }
         if terms.spend_any_type {
             s.push_str(
-                " {alt:and mana of any type can be spent to cast it|and mana of any type can be spent to cast that spell|. You may spend mana as though it were mana of any type to cast that spell|. If you cast a spell this way, you may spend mana as though it were mana of any type to cast it|. If you cast a spell this way, mana of any type can be spent to cast it}",
+                " {alt:and mana of any type can be spent to cast it|and mana of any type can be spent to cast that spell|. You may spend mana as though it were mana of any type to cast that spell|. If you cast a spell this way, you may spend mana as though it were mana of any type to cast it|. If you cast a spell this way, mana of any type can be spent to cast it|. Mana of any type can be spent to cast spells this way}",
             );
         }
         if terms.cost_increase > 0 {
@@ -319,7 +319,14 @@ impl Renderer<'_> {
                 };
                 let one = self.spell_noun(&f, Det::A);
                 match limit {
-                    Some(1) => format!("{one} from among {among}"),
+                    // "cast a spell from among them with mana value less than or equal to
+                    // ...": the quality after the cards (Cosmic Cube).
+                    Some(1) => match one.split_once(" with ") {
+                        Some((head, tail)) if !head.contains('{') => format!(
+                            "{{alt:{one} from among {among}|{head} from among {among} with {tail}}}"
+                        ),
+                        _ => format!("{one} from among {among}"),
+                    },
                     Some(n) => {
                         let many = self.spell_noun(&f, Det::Plural);
                         format!("up to {} {many} from among {among}", number_word(n as i32))

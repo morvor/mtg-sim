@@ -361,8 +361,16 @@ impl Renderer<'_> {
                     }
                     // "a source of your choice of the chosen color".
                     (None, Some(rest)) => format!("a source of your choice {rest}"),
-                    // "an artifact source of your choice".
-                    (None, None) => format!("{} source of your choice", with_article(&n)),
+                    // "an artifact source of your choice", "a creature of your choice with
+                    // shadow".
+                    (None, None) => match n.split_once(" with ") {
+                        Some((a, b)) if !n.contains('{') => format!(
+                            "{{alt:{} source of your choice|{} of your choice with {b}}}",
+                            with_article(&n),
+                            with_article(a)
+                        ),
+                        _ => format!("{} source of your choice", with_article(&n)),
+                    },
                 }
             }
         };

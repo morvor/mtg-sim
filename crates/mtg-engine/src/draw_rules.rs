@@ -134,6 +134,16 @@ pub fn can_choose(g: &Game, e: &Effect, ctx: &Ctx) -> bool {
                     .all(|p| draws_left(g, p).is_none_or(|left| n <= left))
         }
         Effect::Seq(v) => v.iter().all(|x| can_choose(g, x, ctx)),
+        // CR 608.2d: a player can't choose an impossible option. "You may look at (reveal)
+        // the top card of your library" with no card there can't be chosen, so "if you do"
+        // is false (Counterbalance with an empty library).
+        Effect::Dig { who, n, .. } => {
+            let n = g.eval_value(n, ctx).max(0) as usize;
+            n == 0
+                || g.eval_players(who, ctx)
+                    .into_iter()
+                    .all(|p| !g.player(p).library.is_empty())
+        }
         // CR 701.17b: a player can't choose to mill more cards than their library has.
         Effect::Mill { who, n } => {
             let n = g.eval_value(n, ctx).max(0) as usize;

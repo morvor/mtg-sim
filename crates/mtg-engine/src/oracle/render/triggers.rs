@@ -537,7 +537,16 @@ impl Renderer<'_> {
     }
 
     fn trigger_event(&mut self, t: &TriggerCond, det: Det) -> Ev {
-        let obj = |r: &mut Self, f: &Filter| -> String { r.noun_det(f, det.clone()) };
+        let obj = |r: &mut Self, f: &Filter| -> String {
+            let s = r.noun_det(f, det.clone());
+            // "Whenever an equipped creature you control other than ~ attacks".
+            match s.strip_prefix("another ") {
+                Some(rest) if !rest.contains('{') && matches!(det, Det::A) => {
+                    format!("{{alt:{s}|{} other than ~}}", with_article(rest))
+                }
+                _ => s,
+            }
+        };
         if let Some((s, vp)) = self.qualified_trigger_event(t, &det) {
             return Ev::new(s, vp);
         }
@@ -582,11 +591,19 @@ impl Renderer<'_> {
                     .filter(|x| !matches!(x, Filter::OwnedBy(_)))
                     .cloned()
                     .collect();
+                let permanent = matches!(rest.as_slice(), [Filter::Permanent]);
                 let n = obj(self, &Filter::and(rest));
+                // "Whenever a permanent is put into an opponent's graveyard": a permanent
+                // is on the battlefield (CR 110.1), so it's put there from the battlefield.
+                let bare = if permanent {
+                    format!("|{n} is put into {whose} graveyard")
+                } else {
+                    String::new()
+                };
                 Ev::new(
                     "",
                     format!(
-                        "{{alt:{o} dies|{n} is put into {whose} graveyard from the battlefield}}"
+                        "{{alt:{o} dies|{n} is put into {whose} graveyard from the battlefield{bare}}}"
                     ),
                 )
             }
@@ -773,6 +790,13 @@ impl Renderer<'_> {
                     // "Whenever an opponent activates an ability": of any object, in any
                     // zone.
                     "activate an ability".to_string()
+                } else if !*include_mana && matches!(source, Filter::Any) {
+                    // "Whenever you activate an ability that isn't a mana ability" (of any
+                    // object; mana abilities have no targets, CR 605.1a, so one with a
+                    // target is never one).
+                    format!(
+                        "{{alt:activate {kind}|activate {kind} of {s}|activate an ability of {s} that isn't a mana ability|activate an ability of {s}, if it isn't a mana ability}}"
+                    )
                 } else if !*include_mana {
                     // "an ability of an artifact or creature that isn't a mana ability".
                     format!(
@@ -1790,7 +1814,19 @@ impl Renderer<'_> {
                 }
                 let e = self.trigger_event(trigger, det);
                 let c = self.condition(cond);
-                Ev::new(e.subj, format!("{} {{alt:while|if}} {c}", e.vp))
+                // "Whenever you activate an ability that targets a creature or player": the
+                // condition as a relative clause (Ertha Jo).
+                match c.strip_prefix("it targets ") {
+                    Some(r) => {
+                        let vp = e.vp.replace("activate an ability that isn't a mana ability", "activate an ability {opt:that isn't a mana ability}");
+                        let r = r.replace(
+                            "{alt:a creature or a player|a player or a creature}",
+                            "{alt:a creature or a player|a creature or player|a player or a creature}",
+                        );
+                        Ev::new(e.subj, format!("{{alt:{} {{alt:while|if}} {c}|{vp} that targets {r}}}", e.vp))
+                    }
+                    None => Ev::new(e.subj, format!("{} {{alt:while|if}} {c}", e.vp)),
+                }
             }
             // "Whenever you gain life for the first time during each of your turns": the
             // first time each turn, during your turn.
@@ -1891,7 +1927,14 @@ impl Renderer<'_> {
             } if name == crate::kwa::vote::FINISHED_VOTING => Ev::new("players", "finish voting"),
             TriggerCond::PlayerAction { name, who } => {
                 let w = self.rel_subject(*who);
-                Ev::new(w, name.to_string())
+                // The player action named "monarch" is becoming the monarch
+                // (`Event::BecameMonarch`, CR 725.1).
+                let vp = if name == "monarch" {
+                    "become the monarch".to_string()
+                } else {
+                    name.to_string()
+                };
+                Ev::new(w, vp)
             }
             TriggerCond::PlayerAttacked {
                 attacker,

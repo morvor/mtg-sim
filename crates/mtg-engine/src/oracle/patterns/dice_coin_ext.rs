@@ -148,6 +148,9 @@ use super::r705_706_dice::last_flip;
 
 /// The object the current flip of "flip a coin for each [object]" is for.
 const FLIPPED_FOR: Var = vars::USER + 8540;
+/// The objects whose coins came up the way a follow-up names ("each creature whose coin
+/// comes up tails"), collected over the flips.
+pub(crate) const CAME_UP: Var = vars::USER + 8541;
 
 /// "Flip a coin for each creature that isn't a Demon", "for each blocking creature, flip a
 /// coin", "flip a coin for each opponent you have": one flip for each, all as one
@@ -251,8 +254,12 @@ fn f_whose_coin_objects(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     let Some(j) = l[..i].rfind("each ") else {
         return false;
     };
+    // What's done to the objects whose coins came up that way is one action on all of
+    // them, after the flips (CR 608.2f; Rakdos, the Showstopper: "All of the creatures
+    // whose coins come up tails are destroyed at the same time"): each flip adds its
+    // object to `CAME_UP`, and the action follows the loop.
     let rewritten = format!("{}it{after}", &l[..j]);
-    let saved = std::mem::replace(&mut b.it, Sel::Var(FLIPPED_FOR));
+    let saved = std::mem::replace(&mut b.it, Sel::Var(CAME_UP));
     let e = parse_clause(&rewritten, b);
     b.it = saved;
     let Some(e) = e else {
@@ -269,7 +276,19 @@ fn f_whose_coin_objects(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     if !matches!(branch, Effect::Noop) {
         return false;
     }
-    *branch = e;
+    *branch = Effect::Store {
+        var: CAME_UP,
+        sel: Sel::Union(vec![Sel::Var(CAME_UP), Sel::Var(FLIPPED_FOR)]),
+    };
+    let flips = std::mem::take(prev);
+    *prev = Effect::Seq(vec![
+        Effect::Store {
+            var: CAME_UP,
+            sel: Sel::Union(vec![]),
+        },
+        flips,
+        e,
+    ]);
     true
 }
 
