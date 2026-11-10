@@ -11,11 +11,17 @@
 //! ruling) that makes the two wordings the same, or with "Wording only" when no rules
 //! content differs (grammar, anaphora, word order, number, tense, contraction, synonym);
 //! the list was read as a whole against the CR on Nov 10, 2026 (item register-sweep-1).
-//! One rule that hid a difference was removed then: "with the same name as ~" read as
+//! Two rules that hid a difference were removed then: "with the same name as ~" read as
 //! "named ~" (an object's current name and its printed name differ, CR 201.2a, 201.5:
 //! Spy Kit, clones), which had let the grandeur costs "Discard another card named ~",
-//! compiled as the current name, pass. A token's following "It gains ..." is no longer
-//! read as its text (Timothar, Baron of Bats's ruling), only "It has ...".
+//! compiled as the current name, pass (the compiler now reads them as the printed name);
+//! and "at the beginning of the next upkeep" read as "the next turn's upkeep", which the
+//! parser compiles alike (`TriggerCond::BeginningOf { Upkeep, Any }`, the next upkeep step
+//! to begin) but which differ in a turn with an additional upkeep step (Paradox Haze:
+//! created during the first, "the next upkeep" is that turn's second, "the next turn's
+//! upkeep" the next turn's), so the "next turn's upkeep" cards are the loosely read ones.
+//! A token's following "It gains ..." is no longer read as its text (Timothar, Baron of
+//! Bats's ruling), only "It has ...".
 
 use super::{render_card, RenderedFace};
 use crate::card::CardDef;
@@ -235,7 +241,10 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         pattern: r"\bthe blocking creature\b",
         replacement: "thatit",
         why: "Wording only (anaphora): \"Whenever ~ becomes blocked by a creature, the \
-              blocking creature gets -1/-1\": the creature the trigger event named.",
+              blocking creature gets -1/-1\": the creature the trigger event named. (Where \
+              the event names two creatures, \"Whenever a creature becomes blocked by a \
+              creature with lesser power, destroy the blocking creature\", No Quarter, which \
+              one the parser bound isn't caught by this comparison: see \"that creature\".)",
     },
     Equivalence {
         pattern: r"\bany other target\b",
@@ -819,14 +828,6 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               -1/-1\": the noun and the pronoun name the same object, one way or the other.",
     },
     Equivalence {
-        pattern: r"\bat the beginning of the next upkeep\b",
-        replacement: "at the beginning of the next turn's upkeep",
-        why: "CR 500.1, 502.4: each turn has one upkeep, and no effect is created during a \
-              turn's untap step before its upkeep (no player receives priority then, and an \
-              ability that triggers during it waits for the upkeep), so the next upkeep is \
-              the next turn's.",
-    },
-    Equivalence {
         pattern: r"\bat the beginning of each of your postcombat main phases\b",
         replacement: "at the beginning of your postcombat main phase",
         why: "CR 505.1a: every main phase of a turn after the first is a postcombat main \
@@ -886,12 +887,13 @@ pub const EQUIVALENCES: &[Equivalence] = &[
               hand\", \"onto the battlefield\").",
     },
     Equivalence {
-        pattern: r"\bwith (x|\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten) additional\b",
-        replacement: "with $1",
+        pattern: r"\bwith (x|\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten) additional ((?:[a-z+/0-9-]+ ){0,2}counters?)\b",
+        replacement: "with $1 $2",
         why: "CR 614.1c, 616.1: \"enters with two additional +1/+1 counters\" and \"enters \
               with two +1/+1 counters\" are each a replacement effect on the entering event, \
               applied along with any other \"enters with\" effect, so the permanent enters \
-              with the counters of both.",
+              with the counters of both. Only counters: \"you start the game with an \
+              additional 7 life\" (The Slayer) isn't 7 life.",
     },
     Equivalence {
         pattern: r"\balso\b ",
