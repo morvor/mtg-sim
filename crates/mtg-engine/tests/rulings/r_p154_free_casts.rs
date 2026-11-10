@@ -279,8 +279,10 @@ fn kellans_land_isnt_a_land_play() {
     let first = t.hand(P0, "Forest");
     t.play_land(P0, first).expect("land drop");
     let second = t.hand(P0, "Mountain");
+    t.hand(P0, "Grizzly Bears");
     kellan_flashback(&mut t, |t| {
-        t.answer_yes(P0, false);
+        // Cast none of the permanent spells; put the Mountain onto the battlefield.
+        t.answer_choose(P0, &[]);
         t.answer_yes(P0, true);
         t.answer_choose(P0, &[obj(second)]);
     });

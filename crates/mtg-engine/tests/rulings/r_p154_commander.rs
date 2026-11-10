@@ -113,15 +113,19 @@ fn commander_bonuses_use_the_commanders_current_characteristics_wherever_it_is()
     kill(&mut t, wurm);
     assert!(!t.on_battlefield(wurm));
     assert_eq!(t.pt(germ[0]), (6, 6), "{:?}", t.zone(wurm));
-    // Cactus Preserve: an X/X Plant where X is the commander's mana value, 6 with the Wurm
-    // in the command zone; 2 while it is a copy of Grizzly Bears.
+    // Cactus Preserve: an X/X Plant where X is the commander's mana value as the ability
+    // resolves (CR 608.2h): 6 with the Wurm in the command zone; 2 if the Wurm is a copy of
+    // Grizzly Bears then.
     let mut t = commander_game();
-    let wurm = commander(&mut t, P0, "Craw Wurm");
+    commander(&mut t, P0, "Craw Wurm");
     let cactus = t.battlefield(P0, "Cactus Preserve");
     mana(&mut t, P0, "3");
     act(&mut t, P0, cactus, "becomes an X/X", &[]).expect("animate");
     t.resolve_all();
     assert_eq!(t.pt(cactus), (6, 6));
+    let mut t = commander_game();
+    let wurm = commander(&mut t, P0, "Craw Wurm");
+    let cactus = t.battlefield(P0, "Cactus Preserve");
     mana(&mut t, P0, "4GG");
     let wurm = t.cast(P0, wurm).go();
     t.resolve_all();
@@ -129,6 +133,9 @@ fn commander_bonuses_use_the_commanders_current_characteristics_wherever_it_is()
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.answer_choose(P0, &[obj(bears)]);
     cast_resolve(&mut t, P0, "Cytoshape", "1GU", &[obj(wurm)]);
+    mana(&mut t, P0, "3");
+    act(&mut t, P0, cactus, "becomes an X/X", &[]).expect("animate");
+    t.resolve_all();
     assert_eq!(t.pt(cactus), (2, 2));
     let _ = CardType::Land;
 }

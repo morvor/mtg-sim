@@ -256,14 +256,14 @@ fn manaplasm_uses_the_mana_value_not_the_cost_paid() {
         "Mana value takes into account only the mana symbols printed in the upper right corner of the card. Manaplasm doesn't care about additional costs, alternative costs, cost-reduction effects, or what you actually paid to cast the spell."
     );
     supported("Manaplasm");
-    // Kicked Burst Lightning ({R}, kicker {4}): +1/+1, not +5/+5.
+    // Manaplasm is a 1/1. Kicked Burst Lightning ({R}, kicker {4}): +1/+1, not +5/+5.
     let mut t = TestGame::new(2);
     let plasm = t.battlefield(P0, "Manaplasm");
     let burst = t.hand(P0, "Burst Lightning");
     mana(&mut t, P0, "R4");
     t.cast(P0, burst).kicked(true).target(pl(P1)).go();
     t.resolve();
-    assert_eq!(t.pt(plasm), (3, 3), "{{R}} is 1\n{}", t.dump_log());
+    assert_eq!(t.pt(plasm), (2, 2), "{{R}} is 1");
     // Metalwork Colossus cast for {0}: +11/+11.
     let mut t = TestGame::new(2);
     let plasm = t.battlefield(P0, "Manaplasm");
@@ -272,7 +272,7 @@ fn manaplasm_uses_the_mana_value_not_the_cost_paid() {
     let colossus = t.hand(P0, "Metalwork Colossus");
     t.cast(P0, colossus).go();
     t.resolve();
-    assert_eq!(t.pt(plasm), (13, 13));
+    assert_eq!(t.pt(plasm), (12, 12));
     // Mulldrifter evoked ({2}{U}, an alternative cost): +5/+5.
     let mut t = TestGame::new(2);
     let plasm = t.battlefield(P0, "Manaplasm");
@@ -282,6 +282,6 @@ fn manaplasm_uses_the_mana_value_not_the_cost_paid() {
         .method(CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Evoke))
         .go();
     t.resolve();
-    assert_eq!(t.pt(plasm), (7, 7));
+    assert_eq!(t.pt(plasm), (6, 6));
     let _ = CardType::Creature;
 }
