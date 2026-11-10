@@ -16,7 +16,6 @@ Aang, A Lot to Learn
 Aang, Air Nomad
 Aang, Airbending Master
 Aang, Swift Savior // Aang and La, Ocean's Fury
-Aang, at the Crossroads // Aang, Destined Savior
 Aang, the Last Airbender
 Aarakocra Sneak
 Aardvark Sloth
@@ -1024,7 +1023,6 @@ Archaeomancer
 Archaeomancer's Map
 Archaeomender
 Archangel
-Archangel Avacyn // Avacyn, the Purifier
 Archangel Elspeth
 Archangel of Strife
 Archangel of Thune
@@ -1846,6 +1844,7 @@ Bartered Cow
 Bartizan Bats
 Bartolomé del Presidio
 Bartz and Boko
+Baru, Fist of Krosa
 Baru, Wurmspeaker
 Basal Sliver
 Basal Thrull
@@ -13363,6 +13362,7 @@ Kor Scythemaster
 Kor Sky Climber
 Kor Skyfisher
 Kor Spiritdancer
+Korlash, Heir to Blackblade
 Korlessa, Scale Singer
 Kormus Bell
 Korozda Gorgon
@@ -17109,6 +17109,7 @@ Orim's Thunder
 Orim's Touch
 Orim, Samite Healer
 Oriq Loremage
+Oriss, Samite Guardian
 Ormos, Archive Keeper
 Ornamental Courage
 Ornate Kanzashi
@@ -17287,6 +17288,7 @@ Packsong Pup
 Pact of Negation
 Pact of the Titan
 Pactdoll Terror
+Page, Loose Leaf
 Pain // Suffering
 Pain 101
 Pain Distributor
@@ -22024,6 +22026,7 @@ Skittish Kavu
 Skittish Valesk
 Skizzik
 Skizzik Surger
+Skoa, Embermage
 Skola Grovedancer
 Skophos Reaver
 Skophos Warleader
@@ -24295,6 +24298,7 @@ Tarmogoyf
 Tarmogoyf Nest
 Tarnation Vista
 Tarnished Citadel
+Tarox Bladewing
 Tarpan
 Tarrian's Soulcleaver
 Tasha's Hideous Laughter
