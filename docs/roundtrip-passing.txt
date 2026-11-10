@@ -1846,7 +1846,6 @@ Bartered Cow
 Bartizan Bats
 Bartolomé del Presidio
 Bartz and Boko
-Baru, Fist of Krosa
 Baru, Wurmspeaker
 Basal Sliver
 Basal Thrull
@@ -13364,7 +13363,6 @@ Kor Scythemaster
 Kor Sky Climber
 Kor Skyfisher
 Kor Spiritdancer
-Korlash, Heir to Blackblade
 Korlessa, Scale Singer
 Kormus Bell
 Korozda Gorgon
@@ -13875,6 +13873,7 @@ Life Chisel
 Life Finds a Way
 Life Goes On
 Life Insurance
+Life Matrix
 Life from the Loam
 Life of Toshiro Umezawa // Memory of Toshiro
 Life of the Party
@@ -17110,7 +17109,6 @@ Orim's Thunder
 Orim's Touch
 Orim, Samite Healer
 Oriq Loremage
-Oriss, Samite Guardian
 Ormos, Archive Keeper
 Ornamental Courage
 Ornate Kanzashi
@@ -17289,7 +17287,6 @@ Packsong Pup
 Pact of Negation
 Pact of the Titan
 Pactdoll Terror
-Page, Loose Leaf
 Pain // Suffering
 Pain 101
 Pain Distributor
@@ -22027,7 +22024,6 @@ Skittish Kavu
 Skittish Valesk
 Skizzik
 Skizzik Surger
-Skoa, Embermage
 Skola Grovedancer
 Skophos Reaver
 Skophos Warleader
@@ -24299,7 +24295,6 @@ Tarmogoyf
 Tarmogoyf Nest
 Tarnation Vista
 Tarnished Citadel
-Tarox Bladewing
 Tarpan
 Tarrian's Soulcleaver
 Tasha's Hideous Laughter

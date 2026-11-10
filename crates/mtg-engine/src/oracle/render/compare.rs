@@ -10,11 +10,12 @@
 //! hide a real difference in meaning. Each justification starts with the CR rule (or the
 //! ruling) that makes the two wordings the same, or with "Wording only" when no rules
 //! content differs (grammar, anaphora, word order, number, tense, contraction, synonym);
-//! the list was read as a whole against the CR on Nov 10, 2026 (item register-sweep-1),
-//! and three rules that hid a difference were removed then: "with the same name as ~"
-//! and "or another creature with the same name" read as "named ~" (a printed name and
-//! the object's current name differ, CR 201.2, 201.5: Spy Kit, clones), and the unused
-//! "if your opponents would" read as "if an opponent would".
+//! the list was read as a whole against the CR on Nov 10, 2026 (item register-sweep-1).
+//! One rule that hid a difference was removed then: "with the same name as ~" read as
+//! "named ~" (an object's current name and its printed name differ, CR 201.2a, 201.5:
+//! Spy Kit, clones), which had let the grandeur costs "Discard another card named ~",
+//! compiled as the current name, pass. A token's following "It gains ..." is no longer
+//! read as its text (Timothar, Baron of Bats's ruling), only "It has ...".
 
 use super::{render_card, RenderedFace};
 use crate::card::CardDef;
@@ -116,6 +117,16 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "CR 113.6: the abilities of a permanent function only while it's on the \
               battlefield, so \"as long as ~ is on the battlefield, it has ...\" adds \
               nothing to \"~ has ...\".",
+    },
+    Equivalence {
+        pattern: r#"\b(or (?:an)?other (?:creature|permanent)) with the same name( (?:deals?|enters?|dies|die|attacks?|blocks?|gets?|has|have)\b|[.,"])"#,
+        replacement: "$1 with the same name as ~$2",
+        why: "Wording only (grammar): \"~ or another creature with the same name deals \
+              damage\" (Pirated Copy's granted ability) names no object to share the name \
+              with, so it's the same name as ~, the object the sentence names first, which \
+              the renderer spells out (\"with the same name as ~\"). Not \"named ~\": an \
+              object's current name and its printed name differ (CR 201.2a, 201.5), and this \
+              one follows the current name (a copy's).",
     },
     Equivalence {
         pattern: r"\bthe player ([a-z]+s)\b",
@@ -304,6 +315,15 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         why: "Wording only (synonym): a player who gets an additional poison counter gets a \
               poison counter; \"additional\" says only that it's in addition to the counters \
               another instruction gave.",
+    },
+    Equivalence {
+        pattern: r"\bif your opponents would\b",
+        replacement: "if an opponent would",
+        why: "Wording only (number): the renderer words a replacement effect that applies to \
+              each of your opponents as \"if your opponents would ...\" (Tainted Remedy, \
+              Plague Drone); a player's life gain, draw or the like is that player's own \
+              event, so the effect applies to each opponent's event, which is what the \
+              cards' \"if an opponent would ...\" says.",
     },
     Equivalence {
         pattern: r"\b(creature|permanent) that's one or more colors\b",
@@ -830,6 +850,17 @@ pub const EQUIVALENCES: &[Equivalence] = &[
         replacement: "this turn",
         why: "CR 514.2: \"until end of turn\" and \"this turn\" effects both end in the \
               cleanup step.",
+    },
+    Equivalence {
+        pattern: r#"\bit \{alt:gains\|has\} ""#,
+        replacement: "it has \"",
+        why: "CR 611.2a, 613.1f: an ability an effect gives an object for a duration (\"For \
+              as long as that creature has a bounty counter on it, it has '...'\": Mathas, \
+              Fiend Seeker; Obsidian Fireheart; Makeshift Mannequin) is one continuous \
+              effect in layer 6 whether the text says \"has\" or \"gains\", so the renderer \
+              marks such a grant `{alt:gains|has}`. (A token's \"It has\" is its text, CR \
+              111.3, the next entry; \"It gains\" of a following sentence with no duration \
+              isn't rewritten: Timothar, Baron of Bats's ruling of 2021-11-19.)",
     },
     Equivalence {
         pattern: r#"\. (it has|thatit has|they have) ""#,
