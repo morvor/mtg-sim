@@ -2395,7 +2395,8 @@ impl Game {
                 for (k, o) in objs.clone().into_iter().enumerate() {
                     // A card that can't be cast now (its own "cast only during combat",
                     // a prohibition, no legal target) isn't offered (CR 608.2g, 601.3).
-                    if *optional && !crate::casting::could_cast_during_resolution(self, p, o) {
+                    if *optional && !crate::casting::could_cast_during_resolution(self, p, o, *free)
+                    {
                         continue;
                     }
                     if *optional && !self.ask_yes_no(p, Some(o), "Cast this card?", true) {

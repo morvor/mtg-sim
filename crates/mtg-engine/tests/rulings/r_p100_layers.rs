@@ -133,7 +133,7 @@ fn tenth_district_heros_second_ability_checks_for_a_detective_however_it_became_
 
 #[test]
 fn the_capitoline_triads_emblem_overwrites_earlier_set_effects_only() {
-    cr!("613.4b", "613.4c", "613.7", "614.1c");
+    cr!("613.4b", "613.4c", "613.7", "114.1");
     ruling!(
         "The Capitoline Triad",
         "The ability of the emblem created by The Capitoline Triad overwrites all previous effects that set the power and toughness of creatures you control to specific values. Other effects that set these characteristics to specific values that start to apply after the emblem is created will overwrite this effect."

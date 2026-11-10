@@ -101,7 +101,7 @@ fn temporary_lockdowns_exile_and_return_are_one_abilitys_two_one_shot_effects() 
 
 #[test]
 fn culling_scales_does_nothing_if_its_target_isnt_the_lowest_as_it_resolves() {
-    cr!("608.2b", "115.5");
+    cr!("608.2b");
     ruling!(
         "Culling Scales",
         "If the targeted permanent doesn't have the lowest mana value when the ability resolves, the ability doesn't resolve and the permanent isn't destroyed."
@@ -122,7 +122,7 @@ fn culling_scales_does_nothing_if_its_target_isnt_the_lowest_as_it_resolves() {
 
 #[test]
 fn end_of_the_hunt_lets_the_opponent_choose_among_tied_creatures() {
-    cr!("608.2d", "101.4");
+    cr!("608.2d");
     ruling!(
         "End of the Hunt",
         "If the target opponent has multiple creatures and/or planeswalkers tied for the greatest mana value, that player chooses which one to exile."
@@ -162,7 +162,7 @@ fn lukkas_minus_two_with_no_greater_creature_card_shuffles_and_moves_on() {
 
 #[test]
 fn lukkas_ultimate_hits_each_opponent_so_a_two_headed_giant_team_loses_twice() {
-    cr!("810.9", "810.7");
+    cr!("810.9");
     ruling!(
         "Lukka, Coppercoat Outcast",
         "In a Two-Headed Giant game, Lukka's last ability causes the opposing team to lose twice as much life as the power of your creatures."
@@ -182,7 +182,7 @@ fn lukkas_ultimate_hits_each_opponent_so_a_two_headed_giant_team_loses_twice() {
 
 #[test]
 fn polygraph_orb_in_two_headed_giant_hits_both_opponents() {
-    cr!("810.9", "810.7");
+    cr!("810.9");
     ruling!(
         "Polygraph Orb",
         "In a Two-Headed Giant game, Polygraph Orb's last ability causes both opponents to sacrifice a creature, discard a card, or lose 3 life."
@@ -267,7 +267,7 @@ fn each_opponent_chooses_in_turn_order_then_the_actions_happen_together() {
 
 #[test]
 fn squirming_emergence_counts_the_graveyard_as_it_resolves() {
-    cr!("608.2b", "115.5");
+    cr!("608.2b");
     ruling!(
         "Squirming Emergence",
         "Like all spells that require targets, Squirming Emergence will check to make sure its target is still legal as it tries to resolve. Use the number of permanent cards in your graveyard at that time, even though it may be a different number than the number that were there as you cast the spell. If the permanent card's mana value is greater than the number of permanent cards in your graveyard at that time, Squirming Emergence won't resolve."

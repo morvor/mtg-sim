@@ -334,7 +334,7 @@ fn rishkars_expertise_draws_for_the_greatest_power_as_it_resolves_and_casts_rega
 
 #[test]
 fn coveted_prize_casts_the_card_it_found_during_its_resolution_only() {
-    cr!("608.2g", "400.7h", "117.1a");
+    cr!("608.2g", "608.2c", "117.1a");
     ruling!(
         "Coveted Prize",
         "If you have a full party and wish to cast a spell with Coveted Prize's effect, you do so as part of the resolution of Coveted Prize after searching for a card. You can't wait to cast it later in the turn. Timing permissions based on a card's type are ignored."
@@ -532,7 +532,7 @@ fn fires_of_invention_counts_countered_spells_and_both_casts_of_an_adventurer_ca
 
 #[test]
 fn lukkas_exiled_cards_keep_their_timing_and_a_spell_begun_outlives_lukka() {
-    cr!("117.1a", "113.7a", "601.2");
+    cr!("117.1a", "601.3", "601.2");
     ruling!(
         "Lukka, Coppercoat Outcast",
         "The ability granted by Lukka's first ability doesn't change when you may cast the card."

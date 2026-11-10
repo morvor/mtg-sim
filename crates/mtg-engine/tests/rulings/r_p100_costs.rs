@@ -103,3 +103,30 @@ fn the_capitoline_triad_cast_from_the_graveyard_doesnt_count_itself() {
     assert_eq!(pool(&t, P0), 0, "{{5}} paid");
     assert_eq!(t.zone(triad), Zone::Stack);
 }
+
+#[test]
+fn the_capitoline_triads_cost_is_locked_in_before_mana_abilities_are_activated() {
+    cr!("601.2f", "601.2g", "601.2h");
+    ruling!(
+        "The Capitoline Triad",
+        "Once you determine the cost to cast The Capitoline Triad, you may activate mana abilities to pay that cost. If the number of historic cards in your graveyard changes while activating mana abilities, the cost to cast The Capitoline Triad remains what you previously determined."
+    );
+    supported("The Capitoline Triad");
+    supported("Ashnod's Altar");
+    // Five Sol Ring cards in the graveyard: the Triad costs {5}. P0 has {3} and pays the
+    // rest by sacrificing an Ornithopter to Ashnod's Altar ("Sacrifice a creature: Add
+    // {C}{C}.") while paying: a sixth historic card in the graveyard, but the cost stays
+    // {5} rather than becoming {4}: all five mana are spent.
+    let mut t = TestGame::new(2);
+    for _ in 0..5 {
+        t.graveyard(P0, "Sol Ring");
+    }
+    t.battlefield(P0, "Ashnod's Altar");
+    let thopter = t.battlefield(P0, "Ornithopter");
+    let triad = t.hand(P0, "The Capitoline Triad");
+    mana(&mut t, P0, "3");
+    t.cast(P0, triad).go();
+    assert_eq!(t.zone(triad), Zone::Stack);
+    assert_eq!(t.zone(thopter), Zone::Graveyard(P0), "sacrificed for {{C}}{{C}}: {}", t.dump_log());
+    assert_eq!(pool(&t, P0), 0, "{{5}} paid, not {{4}}: {}", t.dump_log());
+}

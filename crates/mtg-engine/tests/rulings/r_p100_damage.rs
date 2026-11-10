@@ -13,6 +13,7 @@ use mtg_engine::*;
 #[test]
 fn obosh_doubles_trample_damage_after_it_is_assigned_unmodified() {
     cr!("614.1a", "702.19b", "510.1a", "510.2");
+    interp!("default-damage-assignment");
     ruling!(
         "Obosh, the Preypiercer",
         "If a creature with trample you control would deal combat damage to a blocking creature while you control Obosh, you must assign its unmodified damage. For example, a 3/3 creature with trample blocked by a 2/2 creature can have 1 damage assigned to the defending player. It will then deal 4 damage to the blocking creature and 2 damage to the defending player."
@@ -40,8 +41,9 @@ fn obosh_doubles_trample_damage_after_it_is_assigned_unmodified() {
     );
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
     assert_eq!(t.life(P1), 18, "1 assigned, doubled");
-    // Assigning only 1 to the Bears (not lethal) is illegal: the engine assigns the lethal
-    // 2 and the rest to the player.
+    // Assigning only 1 to the Bears (not lethal) is illegal: the engine falls back to its
+    // default assignment (lethal 2 to the Bears, the rest to the player; register
+    // default-damage-assignment).
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Obosh, the Preypiercer");
     let rider = t.battlefield(P0, "Jhovall Rider");
@@ -55,7 +57,7 @@ fn obosh_doubles_trample_damage_after_it_is_assigned_unmodified() {
 
 #[test]
 fn obosh_doubles_divided_damage_after_the_division() {
-    cr!("614.1a", "601.2d", "608.2c");
+    cr!("614.1a", "601.2d", "603.3d", "608.2c");
     ruling!(
         "Obosh, the Preypiercer",
         "If an effect such as that of Ravenous Gigantotherium asks you to divide damage among targets, you must divide the unmodified damage before doubling it."
@@ -92,7 +94,7 @@ fn the_affected_player_orders_oboshs_doubling_against_a_prevention_shield() {
     // P1 has a shield preventing the next 3 damage dealt to them; P0's Shock (1) would
     // deal 2. Doubling first: 4, 3 prevented, P1 loses 1. Preventing first: all 2
     // prevented, and the shield has 1 left to use on nothing.
-    for (pick, life) in [(0usize, 19), (1usize, 20)] {
+    for pick in [0usize, 1] {
         let mut t = TestGame::new(2);
         t.battlefield(P0, "Obosh, the Preypiercer");
         t.set_step(P1, Step::PrecombatMain);
@@ -119,7 +121,6 @@ fn the_affected_player_orders_oboshs_doubling_against_a_prevention_shield() {
         assert_eq!(options[0].len(), 2, "{options:?}");
         let doubling_first = options[0][pick].to_lowercase().contains("obosh");
         assert_eq!(t.life(P1), if doubling_first { 19 } else { 20 }, "{options:?}");
-        let _ = life;
     }
 }
 

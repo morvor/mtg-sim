@@ -2,7 +2,7 @@
 //! clauses checked twice (CR 603.4), cast triggers resolving before the spell and
 //! surviving its countering (603.2, 608.2b), last known information for a spell that left
 //! the stack (608.2h), several instances of cascade (702.85c), a creature destroyed before
-//! its own damage trigger resolves (704.3), simultaneous entering (614.1c, 603.6a), and a
+//! its own damage trigger resolves (704.3), simultaneous entering (614.1d, 614.12), and a
 //! team's attackers in Two-Headed Giant (810.7).
 
 use crate::r_p100_common::*;
@@ -76,7 +76,7 @@ fn obscura_ascendancy_triggers_at_one_plus_its_counters_and_checks_again_on_reso
 
 #[test]
 fn imminent_doom_deals_the_counters_it_had_as_it_triggered_and_resolves_before_the_spell() {
-    cr!("603.2", "603.3", "608.2b", "117.3b");
+    cr!("603.2", "603.3", "608.2b", "117.3c");
     ruling!(
         "Imminent Doom",
         "The amount of damage Imminent Doom's triggered ability deals is the number of counters it had on it as the ability triggered. For example, if you cast Shock and then respond to Imminent Doom's triggered ability with a second Shock, both abilities cause Imminent Doom to deal 1 damage and Imminent Doom will end up with three doom counters on it."
@@ -116,7 +116,7 @@ fn imminent_doom_deals_the_counters_it_had_as_it_triggered_and_resolves_before_t
 
 #[test]
 fn ancient_cellarspawn_uses_the_last_known_mana_value_of_a_countered_spell() {
-    cr!("608.2h", "603.10", "601.2f");
+    cr!("608.2h", "603.4", "601.2f");
     ruling!(
         "Ancient Cellarspawn",
         "If the spell is no longer on the stack when Ancient Cellarspawn's last ability resolves, use its mana value as it last existed on the stack."
@@ -223,7 +223,7 @@ fn padeem_needs_the_greatest_artifact_as_the_upkeep_begins_and_as_the_trigger_re
 }
 
 #[test]
-fn two_instances_of_cascade_from_bigger_on_the_inside_trigger_separately() {
+fn two_instances_of_cascade_trigger_separately() {
     cr!("702.85c", "702.85a");
     ruling!(
         "Bigger on the Inside",
@@ -231,8 +231,10 @@ fn two_instances_of_cascade_from_bigger_on_the_inside_trigger_separately() {
     );
     ruling!("TARDIS Bay", "If a spell has multiple instances of cascade, each one triggers separately.");
     supported("Bigger on the Inside");
-    // (TARDIS Bay is a plane: its cascade is tested with Bigger on the Inside's, the same
-    // "has cascade" wording given twice.)
+    supported("TARDIS Bay");
+    supported("Bloodbraid Elf");
+    // Bigger on the Inside's mana ability activated twice: "The next spell they cast this
+    // turn has cascade" twice over, so Hill Giant has two instances.
     let mut t = TestGame::new(2);
     let thopter = t.battlefield(P0, "Ornithopter");
     let aura = t.battlefield(P0, "Bigger on the Inside");
@@ -253,6 +255,28 @@ fn two_instances_of_cascade_from_bigger_on_the_inside_trigger_separately() {
         t.g.obj(spell).chars.keywords_of(mtg_engine::keywords::KeywordKind::Cascade).count(),
         2,
         "two instances"
+    );
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "Cascade"), 2, "{:?}", stack_items(&t));
+    t.resolve_all();
+    assert!(t.on_battlefield(spell));
+    assert_eq!(count_named(&t, "Grizzly Bears"), 1, "{:?}", battlefield_names(&t));
+    assert_eq!(count_named(&t, "Memnite"), 1, "{:?}", battlefield_names(&t));
+    // TARDIS Bay (a plane): "The first spell you cast during each of your turns with mana
+    // value 2 or greater has cascade." Bloodbraid Elf ({2}{R}{G}) has cascade printed on
+    // it as well: two instances, two triggers.
+    let mut t = crate::r_s19_common::planechase_game(2);
+    crate::r_s19_common::start_planar_deck(&mut t, P0, &["TARDIS Bay"]);
+    t.set_step(P0, Step::PrecombatMain);
+    stack_library(&mut t, P0, &["Grizzly Bears", "Memnite", "Forest"]);
+    let elf = t.hand(P0, "Bloodbraid Elf");
+    mana(&mut t, P0, "2RG");
+    let spell = t.cast(P0, elf).go();
+    t.g.recompute();
+    assert_eq!(
+        t.g.obj(spell).chars.keywords_of(mtg_engine::keywords::KeywordKind::Cascade).count(),
+        2,
+        "its own and the plane's"
     );
     t.settle();
     assert_eq!(triggers_on_stack(&t, "Cascade"), 2, "{:?}", stack_items(&t));
@@ -356,7 +380,7 @@ fn vessel_of_the_all_consuming_dies_before_its_counter_arrives() {
 
 #[test]
 fn dauntless_dismantler_doesnt_tap_an_artifact_entering_with_it() {
-    cr!("614.1c", "614.12", "603.6a");
+    cr!("614.1d", "614.12");
     ruling!(
         "Dauntless Dismantler",
         "If an artifact an opponent controls enters the battlefield at the same time that Dauntless Dismantler enters the battlefield, Dauntless Dismantler's effect won't apply to that artifact."
@@ -380,7 +404,7 @@ fn dauntless_dismantler_doesnt_tap_an_artifact_entering_with_it() {
 
 #[test]
 fn simulacrum_synthesizers_construct_counts_itself() {
-    cr!("604.3", "613.4a");
+    cr!("613.4c", "604.2");
     ruling!(
         "Simulacrum Synthesizer",
         "The ability of the Construct token created by Simulacrum Synthesizer's last ability does count the Construct itself, so it'll be at least 1/1."

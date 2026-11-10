@@ -276,6 +276,18 @@ impl ManaCost {
             .count() as u32
     }
 
+    /// The cost as a spell proposed with X = `x` would have it for its mana value (CR
+    /// 202.3e) while its {X} symbols stay in it ("spells with {X} in their mana costs"
+    /// still holds of it): the generic amount grows by `x` for each X.
+    pub fn with_x_counted_as(&self, x: u32) -> ManaCost {
+        let mut out = self.clone();
+        let extra = x * self.x_count();
+        if extra > 0 {
+            out.symbols.push(ManaSymbol::Generic(extra));
+        }
+        out
+    }
+
     /// Replaces X/Y/Z with generic amounts.
     pub fn with_x(&self, x: u32) -> ManaCost {
         let mut out = ManaCost::default();
