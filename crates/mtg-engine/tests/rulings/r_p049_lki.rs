@@ -196,7 +196,7 @@ fn nihiloor_leaving_before_its_abilities_resolve_gains_no_control() {
 
 #[test]
 fn nihiloor_checks_both_powers_as_the_ability_is_put_on_the_stack_and_as_it_resolves() {
-    cr!("608.2b", "115.5", "603.12");
+    cr!("608.2b", "603.3d", "603.12");
     ruling!(
         "Nihiloor",
         "Both the tapped creature's power and the target creature's power are checked both as you put the ability on the stack and as the ability resolves in order to make sure the target is legal."

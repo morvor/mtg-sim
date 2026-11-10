@@ -53,7 +53,7 @@ fn arrogant_outlaw_cares_that_an_opponent_lost_life_not_how_their_total_changed(
 
 #[test]
 fn arterial_flow_drains_even_opponents_who_couldnt_discard() {
-    cr!("608.2c", "701.8b");
+    cr!("608.2c", "701.9a");
     ruling!(
         "Arterial Flow",
         "Arterial Flow causes each opponent to lose 2 life if you control a Vampire, even if some or all of those players were unable to discard any cards."
@@ -184,7 +184,7 @@ fn denethors_end_step_trigger_checks_the_turn_once_and_needs_a_death_before_it()
 
 #[test]
 fn doom_foretold_can_be_sacrificed_to_its_own_ability() {
-    cr!("608.2c", "701.17a");
+    cr!("608.2c", "701.21a");
     ruling!(
         "Doom Foretold",
         "During your upkeep, you can sacrifice Doom Foretold for its own ability."

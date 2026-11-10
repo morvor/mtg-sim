@@ -217,7 +217,7 @@ fn revelation_returns(t: &mut TestGame, spell_target: ObjectId) {
 
 #[test]
 fn a_copy_of_a_spell_returned_to_hand_ceases_to_exist() {
-    cr!("707.10", "704.5e", "111.8");
+    cr!("707.10", "704.5e");
     ruling!(
         "Jeskai Revelation",
         "If a copy of a spell is returned to its owner’s hand, it’s moved there, then it will cease to exist as a state-based action. It can’t be recast."
@@ -245,7 +245,7 @@ fn a_copy_of_a_spell_returned_to_hand_ceases_to_exist() {
 
 #[test]
 fn a_spell_returned_to_hand_isnt_countered_and_doesnt_resolve() {
-    cr!("608.2", "400.7", "101.2");
+    cr!("608.2", "400.7");
     ruling!(
         "Jeskai Revelation",
         "If a spell is returned to its owner’s hand, it’s removed from the stack and thus will not resolve. The spell isn’t countered; it just no longer exists. This works even against a spell that can’t be countered."

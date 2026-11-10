@@ -61,7 +61,7 @@ fn cruel_ultimatum_acts_in_order_and_chooses_the_creature_card_on_resolution() {
 
 #[test]
 fn vicious_rumors_damages_then_each_opponent_chooses_in_turn_order_then_discards_mills_and_you_gain() {
-    cr!("608.2c", "101.4", "701.8c");
+    cr!("608.2c", "101.4", "701.9b");
     ruling!(
         "Vicious Rumors",
         "As Vicious Rumors resolves, it deals 1 damage to each opponent, then the next opponent in turn order (or, if it’s an opponent’s turn, that opponent) chooses a card in hand without revealing it, then each other opponent in turn order does the same. Then the chosen cards are discarded at the same time. Next, each opponent puts the top card of their library into their graveyard at the same time. Finally, you gain 1 life."
@@ -105,7 +105,7 @@ fn vicious_rumors_damages_then_each_opponent_chooses_in_turn_order_then_discards
 
 #[test]
 fn kayas_discards_are_chosen_in_turn_then_made_at_the_same_time() {
-    cr!("101.4", "701.8c", "608.2c");
+    cr!("101.4", "701.9b", "608.2c");
     ruling!(
         "Kaya, Ghost Assassin",
         "As the last ability resolves, each opponent will choose a card to discard and set it aside. Then all those cards are revealed and discarded simultaneously."

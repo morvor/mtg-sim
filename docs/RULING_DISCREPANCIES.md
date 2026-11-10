@@ -300,7 +300,7 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Status: open for review
 - Ruling, Souls of the Faultless (2006-02-01): "If Souls of the Faultless is dealt combat damage in a Two-Headed Giant game, you may choose either member of the attacking team as the player who will lose life. The player you choose doesn't have to be the controller of a creature that dealt damage to Souls of the Faultless."
 - Conflicts with: CR 805.10c: "Any rule, object, or effect that refers to an “attacking player” refers to one specific attacking player, not to all attacking players. If an ability of a blocking creature refers to an attacking player, or a spell or ability refers to both a blocking creature and an attacking player, then unless otherwise specified, the attacking player it’s referring to is the player who controls the attacking creature that blocking creature is blocking. ..." and CR 810.7: "The Two-Headed Giant variant uses the combat rules for the shared team turns option (see rule 805.10). This is a change from previous rules." Souls of the Faultless: "Whenever this creature is dealt combat damage, you gain that much life and attacking player loses that much life." — the ability of a blocking creature.
-- Evidence: the ruling stated the Two-Headed Giant rule of its time: CR 606.7b of the CR effective 2006-02-01 (Guildpact), still 810.7b in the CR effective 2018-01-19: "Any one-shot effect that refers to the 'defending player' refers to one specific defending player, not to both of the defending players. The controller of the effect chooses which one the spell or ability refers to at the time the effect is applied. The same is true for any one-shot effect that refers to the 'attacking player.'" The CR effective 2017-08-25 (Commander 2017) added 805.10c for the shared team turns option (absent from the CR effective 2017-04-28), and the CR effective 2018-04-27 (Dominaria) replaced Two-Headed Giant's own combat rules with it (810.7 as quoted; the CR effective 2018-01-19 still had the old 810.7b). All from the archived CR texts (github.com/pit142857/mtg-cr). Work item rulings-P049.
+- Evidence: the ruling stated the Two-Headed Giant combat rules of its time. The CR current as of 2006-02-01 (Guildpact) had them at 606.7; 606.7a: "each player on the active team is an attacking player", and no rule picked one of them for the ability of a blocking creature, so the ruling let the controller choose. The CR current as of 2007-02-01 (Planar Chaos) wrote that choice into 606.7a: "Any one-shot effect or characteristic-setting ability that refers to the 'defending player' refers to one specific defending player, not to both of the defending players. The controller of the effect or of the object with the characteristic-setting ability chooses which one the spell or ability refers to. The same is true for any one-shot effect that refers to the 'attacking player.'"; it was still 810.7b in the CR effective 2018-01-19: "Any one-shot effect that refers to the 'defending player' refers to one specific defending player, not to both of the defending players. The controller of the effect chooses which one the spell or ability refers to at the time the effect is applied. The same is true for any one-shot effect that refers to the 'attacking player.'" The CR effective 2017-06-05 added 805.10c for the shared team turns option (absent from the CR effective 2017-04-28; then "the attacking player it's referring to is the player who controls that attacking creature"), and the CR effective 2018-04-27 (Dominaria) replaced Two-Headed Giant's own combat rules with it (810.7 as quoted; the CR effective 2018-01-19 still had the old 810.7b). All from the archived CR texts (github.com/pit142857/mtg-cr), checked file by file in review. Work item rulings-P049.
 - Engine: in a Two-Headed Giant game, Souls of the Faultless's ability makes the controller of the attacking creature it blocked lose the life (no choice).
 - Recorded: exemption `docs/rulings-exemptions/rulings-P049.tsv`; test `tests/rulings/r_p049_combat.rs` (`souls_of_the_faultless_in_two_headed_giant_drains_the_controller_of_the_creature_it_blocks`).
 
@@ -544,6 +544,23 @@ Possible further instances found while compiling this log. They haven't been thr
 conflict process (an investigator and a skeptic), so they aren't entries yet; the coordinator
 decides whether they become a conflict case.
 
+- **Avatar Aang // Aang, Master of Elements** (rulings-P049 review): "An ability that triggers
+  "whenever you airbend" triggers after the process described by the airbend keyword action
+  is complete, even if some or all of the actions were impossible." (2025-10-02) beside
+  CR 701.65b: "An ability that triggers whenever a player airbends triggers when that player
+  exiles one or more objects as a result of an instruction to airbend." (the same words from
+  the CR effective 2025-11-14, the set's release, to the current one, effective 2026-09-25).
+  They agree whenever at least one object is exiled and differ in words when none is ("all
+  of the actions were impossible"): the ruling has the ability trigger, the rule doesn't. No
+  current effect stops a permanent or spell from being exiled (a commander is exiled and
+  then may be moved, CR 903.9a), and with every target illegal the instruction isn't carried
+  out at all (CR 608.2b), so no game the engine plays tells the two apart; the earthbend
+  ruling beside it, whose "even if ... impossible" is realizable (Solemnity), agrees with
+  CR 701.66b, so the airbend sentence looks copied from it. The ruling stays cited for the
+  realizable part (`tests/rulings/r_p049_misc.rs`,
+  `avatar_aang_triggers_once_a_bend_is_complete_even_if_parts_were_impossible`); the engine
+  follows the rule (`src/kwa/bending.rs` reports an airbend only when something was exiled).
+  Not exempted; not an entry.
 - **Spatial Contortion, Circle of Flame and Hada Freeblade** (rulings-P059): the same note
   on each, written by Scryfall (source "scryfall", 2021-02-01), not by Wizards: "Spatial
   Contortion is banned in Pauper (not just non-legal), due to a special case on MTGO:

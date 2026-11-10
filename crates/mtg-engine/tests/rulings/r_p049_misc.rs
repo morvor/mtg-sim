@@ -372,6 +372,58 @@ fn zimone_and_dina_repeat_the_effect_but_not_the_cost() {
 }
 
 #[test]
+fn zimone_and_dina_check_the_land_count_after_the_first_pass_and_repeat_at_most_once() {
+    cr!("608.2c");
+    ruling!(
+        "Zimone and Dina",
+        "As this is your second time through the process, the ability will finish resolving."
+    );
+    supported("Zimone and Dina");
+    let lands = |t: &TestGame| {
+        t.g.permanents()
+            .filter(|o| o.controller == P0 && o.is(CardType::Land))
+            .count()
+    };
+    // Seven lands: the land the first pass puts onto the battlefield is the eighth, so the
+    // process is repeated, and only once (nine lands are controlled after the second
+    // pass, but that pass is the last).
+    let mut t = TestGame::new(2);
+    let zd = t.battlefield(P0, "Zimone and Dina");
+    t.lands(P0, "Forest", 7);
+    let fodder = t.battlefield(P0, "Grizzly Bears");
+    let s1 = t.hand(P0, "Swamp");
+    let s2 = t.hand(P0, "Swamp");
+    t.answer_choose(P0, &[obj(fodder)]);
+    for s in [s1, s2] {
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[obj(s)]);
+    }
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    activate_containing(&mut t, P0, zd, "Draw a card").unwrap();
+    t.resolve_all();
+    assert!(t.on_battlefield(s1) && t.on_battlefield(s2));
+    assert_eq!(lands(&t), 9);
+    assert_eq!(t.hand_size(P0), 2);
+    assert_eq!((t.life(P0), t.life(P1)), (22, 18));
+    // Seven lands and the land kept in hand: seven lands as the condition is checked, so
+    // the process isn't repeated (one card drawn, so Zimone's trigger doesn't happen).
+    let mut t = TestGame::new(2);
+    let zd = t.battlefield(P0, "Zimone and Dina");
+    t.lands(P0, "Forest", 7);
+    let fodder = t.battlefield(P0, "Grizzly Bears");
+    let s1 = t.hand(P0, "Swamp");
+    t.answer_choose(P0, &[obj(fodder)]);
+    t.answer_yes(P0, false);
+    activate_containing(&mut t, P0, zd, "Draw a card").unwrap();
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Swamp"));
+    assert_eq!(t.zone(s1), mtg_engine::object::Zone::Hand(P0));
+    assert_eq!(lands(&t), 7);
+    assert_eq!(t.hand_size(P0), 2);
+    assert_eq!((t.life(P0), t.life(P1)), (20, 20));
+}
+
+#[test]
 fn gaining_control_of_a_creature_doesnt_give_control_of_its_auras() {
     cr!("301.5", "303.4", "714.2"); // CR 303.4: an Aura's controller is separate.
     ruling!(
@@ -398,7 +450,7 @@ fn gaining_control_of_a_creature_doesnt_give_control_of_its_auras() {
 
 #[test]
 fn a_card_with_x_in_its_mana_cost_has_mana_value_0_in_a_graveyard() {
-    cr!("202.3b", "202.3"); // CR 202.3b: X is 0 except on the stack.
+    cr!("202.3e", "202.3"); // CR 202.3e: X is 0 except on the stack.
     ruling!(
         "Revival // Revenge",
         "If a card in a graveyard has {X} in its mana cost, X is considered to be 0."

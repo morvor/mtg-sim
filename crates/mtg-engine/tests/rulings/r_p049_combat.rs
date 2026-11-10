@@ -52,7 +52,7 @@ fn aurelias_triggers_dont_care_what_happens_to_the_attackers() {
 
 #[test]
 fn oath_of_kaya_triggers_once_for_each_planeswalker_attacked() {
-    cr!("603.2c", "508.1c"); // CR 603.2c: once per event; each planeswalker attacked.
+    cr!("603.2c", "508.1b"); // CR 603.2c: once per event; each planeswalker attacked.
     ruling!(
         "Oath of Kaya",
         "If an opponent attacks more than one planeswalker you control, the last ability of Oath of Kaya triggers once for each of those attacked planeswalkers."
@@ -74,7 +74,7 @@ fn oath_of_kaya_triggers_once_for_each_planeswalker_attacked() {
 
 #[test]
 fn campaign_of_vengeance_drains_the_controller_of_an_attacked_planeswalker() {
-    cr!("506.2", "508.1c");
+    cr!("506.2", "508.1b");
     ruling!(
         "Campaign of Vengeance",
         "If a creature attacks a planeswalker, the defending player is the player who controls that planeswalker."
