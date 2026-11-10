@@ -1714,44 +1714,22 @@ impl Game {
                     cast_info.times_kicked += n;
                     cast_info.paid.push("kicker".into());
                 }
-            } else {
-                // Whether it could be paid is judged with the effects that modify that
-                // keyword's costs ("Buyback costs cost {2} less", CR 601.2f), which apply
-                // to the total cost once the cost is announced: it's recorded on the spell
-                // for the check.
-                let affordable = {
-                    if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
-                        si.cast.paid.push(name.clone());
-                    }
-                    let ok = self.can_pay_cost_optimistic(p, &cost, Some(id), &chars)
-                        || self.total_payable_with(p, id, &chars, opt, &extra, &cost);
-                    if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
-                        si.cast.paid.pop();
-                    }
-                    ok
-                };
-                if !affordable
-                    || !matches!(
-                        self.ask(
-                            p,
-                            Decision::OptionalCost {
-                                source: id,
-                                name: name.to_string(),
-                                repeatable: false
-                            }
-                        ),
-                        Answer::Bool(true)
-                    )
-                {
-                    continue;
-                }
+            } else if (self.can_pay_cost_optimistic(p, &cost, Some(id), &chars)
+                || self.total_payable_with(p, id, &chars, opt, &extra, &cost))
+                && matches!(
+                    self.ask(
+                        p,
+                        Decision::OptionalCost {
+                            source: id,
+                            name: name.to_string(),
+                            repeatable: false
+                        }
+                    ),
+                    Answer::Bool(true)
+                )
+            {
                 add_cost(&mut extra, &cost);
                 cast_info.paid.push(name.clone());
-                // Recorded on the spell now: the total cost is determined with the effects
-                // that modify this keyword's costs (CR 601.2f).
-                if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
-                    si.cast.paid.push(name.clone());
-                }
                 if name.as_str() == "kicker" || name.as_str() == "multikicker" {
                     cast_info.times_kicked += 1;
                     // CR 607.2i: abilities linked to a specific kicker cost refer to it.
@@ -2433,19 +2411,8 @@ impl Game {
                 changes.add(self, &mut cost, &cm.change, &ctx);
             }
         }
-        // Effects that modify the costs of a keyword ("Dash costs you pay cost {2} less",
-        // "Buyback costs cost {2} less"): reductions of the keyword cost the spell is cast
-        // for and of the keyword additional costs announced for it, applied with the other
-        // reductions, after every increase (CR 601.2f, 118.9d). (Their increases are part
-        // of those costs already, see `kw::modified_keyword_cost`.)
-        for k in crate::kw::keyword_costs_being_paid(self, card, &opt.method) {
-            let less = crate::kw::keyword_cost_reductions(self, p, k);
-            if less > 0 {
-                changes
-                    .reductions
-                    .push(crate::activation_costs::Reduction::Generic(less));
-            }
-        }
+        // (Effects that modify the costs of a keyword, "Dash costs you pay cost {2} less",
+        // change that keyword's cost itself, see `kw::modified_keyword_cost`.)
         // "Spells you cast this way cost {2} less to cast": a reduction that comes with the
         // permission it's cast with.
         // So does one an effect casting the spell as it resolves gives ("That copy costs
@@ -4789,6 +4756,13 @@ impl Game {
                 {
                     counters().max(objects())
                 }
+                CostPart::AnyNumberOf { part, .. } | CostPart::AndPayItsManaCost(part) => {
+                    self.x_bound_of_parts(p, &[&**part])
+                }
+                // A keyword action with a variable number ("blight X", "waterbend {X}") or
+                // any other part that uses X: no practical limit of its own; the spell's
+                // "X can't be greater than ..." and the feasibility check narrow it.
+                other if cost_part_has_x(other) => (self.max_mana_available(p) as i64).max(20),
                 _ => 0,
             })
             .max()

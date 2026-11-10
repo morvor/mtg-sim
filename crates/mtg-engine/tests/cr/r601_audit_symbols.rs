@@ -75,6 +75,11 @@ fn phyrexian_symbols_may_be_split_between_mana_and_life_and_count_toward_mana_va
     let dismember = t.hand(P0, "Dismember");
     assert!(can_cast(&mut t, P0, dismember, CastMethod::Normal));
     let spell = t.cast(P0, dismember).target(giant).go();
+    // How each Phyrexian symbol is paid is announced before the targets (CR 601.2b).
+    let labels = decision_labels(&t, P0);
+    let announced = labels.iter().position(|l| *l == "option").expect("asked how to pay");
+    let targets = labels.iter().position(|l| *l == "targets").expect("asked for targets");
+    assert!(announced < targets, "{labels:?}");
     assert_eq!(untapped_lands(&t, P0), 0);
     assert_eq!(t.life(P0), 18);
     assert_eq!(t.g.mana_value_of(spell), 3);
@@ -202,5 +207,26 @@ fn a_colored_reduction_reduces_a_phyrexian_symbol_of_its_color() {
     t.lands(P0, "Wastes", 1);
     let skirge = t.hand(P0, "Vault Skirge");
     t.cast(P0, skirge).go();
+    assert_eq!(t.life(P0), 18);
+}
+
+#[test]
+fn trinispheres_floor_counts_a_phyrexian_symbol_as_one_mana() {
+    cr!("601.2f", "107.4f", "601.2h");
+    ruling!(
+        "Trinisphere",
+        "Finally, apply Trinisphere's effect if the mana component of the spell's cost is less than three mana"
+    );
+    // Gitaxian Probe's {U/P} is one mana: under Trinisphere the total is {2}{U/P}, paid
+    // with two Wastes and 2 life.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Trinisphere");
+    t.lands(P0, "Wastes", 1);
+    let probe = t.hand(P0, "Gitaxian Probe");
+    assert!(!can_cast(&mut t, P0, probe, CastMethod::Normal));
+    t.lands(P0, "Wastes", 1);
+    assert!(can_cast(&mut t, P0, probe, CastMethod::Normal));
+    t.cast(P0, probe).target(P1).go();
+    assert_eq!(untapped_lands(&t, P0), 0);
     assert_eq!(t.life(P0), 18);
 }

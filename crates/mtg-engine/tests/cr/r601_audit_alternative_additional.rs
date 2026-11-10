@@ -137,11 +137,12 @@ fn casting_face_down_is_an_alternative_cost_that_cant_be_waived() {
 }
 
 #[test]
-fn buyback_is_an_additional_cost_paid_with_an_alternative_cost_and_reduced_after_increases() {
+fn buyback_is_an_additional_cost_paid_with_an_alternative_cost_and_its_reductions_stay_within_it() {
     cr!("118.8", "118.9d", "601.2f", "702.27a");
+    interp!("keyword-cost-reduction-bounded-by-the-keyword-cost");
     ruling!(
         "Memory Crystal",
-        "Only affects generic mana portions of Buyback costs."
+        "Does not apply to other parts of the cost."
     );
     supported("Capsize");
     supported("Memory Crystal");
@@ -161,9 +162,9 @@ fn buyback_is_an_additional_cost_paid_with_an_alternative_cost_and_reduced_after
     t.resolve();
     assert!(t.in_hand(P1, "Grizzly Bears"));
     assert!(t.in_hand(P0, "Capsize"));
-    // Two Memory Crystals ({4} less off buyback costs) under Thalia: {1}{U}{U} + {3} + {1}
-    // - {4} = {1}{U}{U}. Reducing the buyback cost before the increase would leave
-    // {2}{U}{U}.
+    // Two Memory Crystals ({4} less off buyback costs) under Thalia: the buyback cost {3}
+    // becomes {0} and the fourth {1} is lost; Thalia's {1} is added to the total:
+    // {1}{U}{U} + {0} + {1} = {2}{U}{U}.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Memory Crystal");
     t.battlefield(P0, "Memory Crystal");
@@ -172,9 +173,12 @@ fn buyback_is_an_additional_cost_paid_with_an_alternative_cost_and_reduced_after
     t.lands(P0, "Island", 2);
     t.lands(P0, "Wastes", 1);
     let capsize = t.hand(P0, "Capsize");
-    assert_eq!(optional_costs_asked(&t, P0).len(), 0);
-    t.cast(P0, capsize).kicked(true).target(bears).go();
+    assert!(t.cast(P0, capsize).kicked(true).target(bears).try_go().is_err());
     assert_eq!(optional_costs_asked(&t, P0), vec!["buyback".to_string()]);
+    assert!(t.in_hand(P0, "Capsize"));
+    assert_eq!(untapped_lands(&t, P0), 3);
+    t.lands(P0, "Wastes", 1);
+    t.cast(P0, capsize).kicked(true).target(bears).go();
     assert_eq!(untapped_lands(&t, P0), 0);
     t.resolve();
     assert!(t.in_hand(P0, "Capsize"));
@@ -239,4 +243,30 @@ fn both_kicker_costs_of_a_spell_may_be_paid() {
     t.resolve_all();
     assert!(t.on_battlefield(drake));
     assert_eq!(t.hand_size(P0), hand - 1 + 2);
+}
+
+#[test]
+fn a_card_with_no_mana_cost_is_cast_only_for_an_alternative_cost() {
+    cr!("118.6", "118.6a", "601.2f");
+    ruling!(
+        "Living End",
+        "A card with no mana cost can't be cast normally; you'll need a way to cast it for an alternative cost or without paying its mana cost, such as by suspending it."
+    );
+    supported("Living End");
+    // Living End has no mana cost: an unpayable cost, even with all the mana in the world,
+    // but Omniscience's "without paying its mana cost" casts it.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Swamp", 8);
+    let end = t.hand(P0, "Living End");
+    assert!(!can_cast(&mut t, P0, end, CastMethod::Normal));
+    assert!(t.cast(P0, end).try_go().is_err());
+    assert!(t.in_hand(P0, "Living End"));
+    t.battlefield(P0, "Omniscience");
+    let end = t.g.current(end);
+    assert!(can_cast(&mut t, P0, end, CastMethod::Free));
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let spell = t.cast(P0, end).method(CastMethod::Free).go();
+    assert_eq!(t.g.mana_value_of(spell), 0);
+    t.resolve();
+    assert!(!t.on_battlefield(bears), "each player sacrifices all creatures");
 }

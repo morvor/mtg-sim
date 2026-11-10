@@ -2,9 +2,11 @@
 //! cards. The total cost is the mana cost or alternative cost plus the additional costs
 //! and cost increases, minus the cost reductions (all of them after all of the increases,
 //! CR 601.2f, 118.9d), with effects that directly affect the total (Trinisphere's floor)
-//! applied after that; convoke and delve then pay part of that total (CR 702.51b,
-//! 702.66b), and the total is locked in before the mana abilities are activated and the
-//! costs paid (CR 601.2g–h).
+//! applied after that; an effect that changes a keyword's cost ("Flashback costs you pay
+//! cost {2} less") changes that cost alone (`keyword-cost-reduction-bounded-by-the-
+//! keyword-cost`); convoke and delve then pay part of that total (CR 702.51b, 702.66b),
+//! and the total is locked in before the mana abilities are activated and the costs paid
+//! (CR 601.2g–h).
 
 use crate::r601_audit_common::*;
 use mtg_engine::keywords::KeywordKind;
@@ -248,22 +250,28 @@ fn a_cost_increaser_sacrificed_for_mana_while_paying_doesnt_change_the_locked_in
 }
 
 #[test]
-fn a_flashback_cost_reduction_applies_after_a_cost_increase() {
-    cr!("601.2f", "118.9d", "702.34a");
+fn a_flashback_cost_reduction_reduces_only_the_flashback_cost() {
+    cr!("601.2f", "118.7a", "702.34a");
+    interp!("keyword-cost-reduction-bounded-by-the-keyword-cost");
     ruling!(
         "Thalia, Guardian of Thraben",
         "start with the mana cost or alternative cost you're paying, add any cost increases, then apply any cost reductions"
     );
     supported("Catalyst Stone");
     supported("Deep Analysis");
-    // Deep Analysis's flashback cost {1}{U}, Pay 3 life, under Thalia (+{1}) with Catalyst
-    // Stone ("Flashback costs you pay cost {2} less"): {1}{U} + {1} - {2} = {U}. Reducing
-    // the flashback cost before the increase would leave {1}{U}.
+    // Catalyst Stone ("Flashback costs you pay cost {2} less") reduces Deep Analysis's
+    // flashback cost {1}{U}, Pay 3 life to {U}, Pay 3 life: only that cost's generic mana,
+    // so the second {1} of the reduction is lost. Thalia's {1} is added to the total:
+    // {1}{U}, not {U}.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Catalyst Stone");
     t.battlefield(P1, "Thalia, Guardian of Thraben");
     t.lands(P0, "Island", 1);
     let analysis = t.graveyard(P0, "Deep Analysis");
+    assert!(!can_cast(&mut t, P0, analysis, FLASHBACK));
+    assert!(t.cast(P0, analysis).method(FLASHBACK).target(P0).try_go().is_err());
+    assert_eq!(t.life(P0), 20);
+    t.lands(P0, "Wastes", 1);
     assert!(can_cast(&mut t, P0, analysis, FLASHBACK));
     t.cast(P0, analysis).method(FLASHBACK).target(P0).go();
     assert_eq!(untapped_lands(&t, P0), 0);
@@ -271,6 +279,14 @@ fn a_flashback_cost_reduction_applies_after_a_cost_increase() {
     t.resolve();
     assert_eq!(t.hand_size(P0), 2);
     assert!(t.in_exile("Deep Analysis"));
+    // Without Thalia the flashback cost is {U}, Pay 3 life.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Catalyst Stone");
+    t.lands(P0, "Island", 1);
+    let analysis = t.graveyard(P0, "Deep Analysis");
+    assert!(can_cast(&mut t, P0, analysis, FLASHBACK));
+    t.cast(P0, analysis).method(FLASHBACK).target(P0).go();
+    assert_eq!(untapped_lands(&t, P0), 0);
     // An opponent's Catalyst Stone ("Flashback costs your opponents pay cost {2} more")
     // with Helm of Awakening: Think Twice's {2}{U} + {2} - {1} = {3}{U}.
     let mut t = TestGame::new(2);
@@ -286,17 +302,26 @@ fn a_flashback_cost_reduction_applies_after_a_cost_increase() {
 }
 
 #[test]
-fn a_dash_cost_reduction_applies_after_a_cost_increase() {
-    cr!("601.2f", "118.9d", "702.109a");
+fn a_dash_cost_reduction_reduces_only_the_dash_cost() {
+    cr!("601.2f", "118.7a", "702.109a");
+    interp!("keyword-cost-reduction-bounded-by-the-keyword-cost");
+    ruling!(
+        "Warbringer",
+        "If a card’s dash cost includes one generic mana, that cost will be reduced by {1}."
+    );
     supported("Warbringer");
     supported("Mardu Scout");
-    // Mardu Scout's dash cost {1}{R} under Sphere of Resistance (+{1}) with Warbringer
-    // ("Dash costs you pay cost {2} less"): {1}{R} + {1} - {2} = {R}.
+    // Warbringer ("Dash costs you pay cost {2} less") reduces Mardu Scout's dash cost
+    // {1}{R} to {R}; the other {1} is lost. Sphere of Resistance's {1} is added to the
+    // total: {1}{R}, not {R}.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Warbringer");
     t.battlefield(P1, "Sphere of Resistance");
     t.lands(P0, "Mountain", 1);
     let scout = t.hand(P0, "Mardu Scout");
+    assert!(!can_cast(&mut t, P0, scout, DASH));
+    assert!(t.cast(P0, scout).method(DASH).try_go().is_err());
+    t.lands(P0, "Mountain", 1);
     assert!(can_cast(&mut t, P0, scout, DASH));
     t.cast(P0, scout).method(DASH).go();
     assert_eq!(untapped_lands(&t, P0), 0);
@@ -442,4 +467,41 @@ fn an_activated_abilitys_increase_is_applied_before_a_reduction_that_keeps_one_m
     assert!(is_tapped(&t, tim) && is_tapped(&t, island));
     t.resolve();
     assert_eq!(t.life(P1), 19);
+}
+
+#[test]
+fn a_reduction_reduces_the_x_part_of_an_activation_cost() {
+    cr!("602.2b", "601.2f", "107.3a", "118.7a");
+    ruling!(
+        "Training Grounds",
+        "If you control Training Grounds and you activate the ability with X equal to 5, you'll have to pay only {3}{B}{B}."
+    );
+    supported("Drana, Kalastria Bloodchief");
+    // Drana's {X}{B}{B} with X = 5 under Training Grounds: {3}{B}{B}, five lands; Wall of
+    // Stone (0/8) gets -0/-5.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Training Grounds");
+    let drana = t.battlefield(P0, "Drana, Kalastria Bloodchief");
+    let wall = t.battlefield(P1, "Wall of Stone");
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Wastes", 3);
+    t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(5));
+    assert!(t.activate(P0, drana, 0, &[Entity::Object(wall)]).is_ok());
+    assert_eq!(untapped_lands(&t, P0), 0);
+    t.resolve();
+    assert_eq!(t.pt(wall), (0, 3));
+    assert_eq!(t.pt(drana), (9, 4));
+    // Without Training Grounds, five lands pay only X = 3.
+    let mut t = TestGame::new(2);
+    let drana = t.battlefield(P0, "Drana, Kalastria Bloodchief");
+    let wall = t.battlefield(P1, "Wall of Stone");
+    t.lands(P0, "Swamp", 2);
+    t.lands(P0, "Wastes", 3);
+    t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(5));
+    assert!(t.activate(P0, drana, 0, &[Entity::Object(wall)]).is_err());
+    assert_eq!(untapped_lands(&t, P0), 5);
+    t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(3));
+    assert!(t.activate(P0, drana, 0, &[Entity::Object(wall)]).is_ok());
+    t.resolve();
+    assert_eq!(t.pt(wall), (0, 5));
 }

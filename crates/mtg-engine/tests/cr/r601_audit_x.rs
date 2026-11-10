@@ -201,3 +201,69 @@ fn the_x_of_a_kicker_cost_is_announced_as_the_spell_is_cast() {
     t.resolve_all();
     assert_eq!(permanents_with_subtype(&t, "Saproling"), 0);
 }
+
+#[test]
+fn a_copy_of_an_x_spell_cast_without_paying_its_mana_cost_has_x_zero() {
+    cr!("707.12", "107.3b", "601.2b");
+    ruling!(
+        "Isochron Scepter",
+        "If a spell has {X} in its mana cost, you must choose 0 as the value of X when casting it without paying its mana cost."
+    );
+    supported("Isochron Scepter");
+    supported("Volcanic Geyser");
+    // Volcanic Geyser ({X}{R}{R}) imprinted on Isochron Scepter: the copy is cast without
+    // paying its mana cost, so X is 0 and it deals no damage.
+    let mut t = TestGame::new(2);
+    let geyser = t.hand(P0, "Volcanic Geyser");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(geyser)]);
+    let scepter = t.enter(P0, "Isochron Scepter");
+    t.resolve_all();
+    assert_eq!(t.zone(geyser), Zone::Exile);
+    t.lands(P0, "Mountain", 4);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    // The player would like X = 2; it must be 0.
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    assert!(t.activate(P0, scepter, 0, &[]).is_ok());
+    t.resolve_all();
+    let cast_copies = t
+        .g
+        .history
+        .spells_cast
+        .iter()
+        .filter(|(p, s)| *p == P0 && t.g.obj(*s).chars.name == "Volcanic Geyser")
+        .count();
+    assert_eq!(cast_copies, 1, "the copy was cast");
+    assert_eq!(t.life(P1), 20, "X is 0");
+    // Only the Scepter's {2} was paid.
+    assert_eq!(tapped_lands(&t, P0), 2);
+}
+
+#[test]
+fn x_may_be_announced_higher_than_the_mana_available_when_convoke_pays_for_it() {
+    cr!("601.2b", "702.51b", "107.3a");
+    ruling!(
+        "Chord of Calling",
+        "When using convoke to cast a spell with {X} in its mana cost, first choose the value for X."
+    );
+    // Chord of Calling {X}{G}{G}{G} with four green creatures and no lands: X = 1 makes the
+    // total {1}{G}{G}{G}, which the four creatures convoke.
+    let mut t = TestGame::new(2);
+    let bears: Vec<ObjectId> = (0..4).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
+    let chord = t.hand(P0, "Chord of Calling");
+    choose_objects(&mut t, P0, &bears);
+    let spell = t.cast(P0, chord).x(1).go();
+    assert_eq!(x_of(&t, spell), Some(1));
+    assert!(bears.iter().all(|b| is_tapped(&t, *b)));
+    assert_eq!(t.g.mana_value_of(spell), 4);
+    // With three creatures, X = 1 can't be paid: the casting is reversed.
+    let mut t = TestGame::new(2);
+    let bears: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
+    let chord = t.hand(P0, "Chord of Calling");
+    choose_objects(&mut t, P0, &bears);
+    assert!(t.cast(P0, chord).x(1).try_go().is_err());
+    assert!(bears.iter().all(|b| !is_tapped(&t, *b)));
+    assert!(t.in_hand(P0, "Chord of Calling"));
+}
