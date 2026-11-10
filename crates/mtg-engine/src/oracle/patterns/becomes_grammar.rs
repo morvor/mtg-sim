@@ -713,7 +713,31 @@ pub(crate) fn predicate_mods(
         m.extend(keyword_mods(kws)?);
         return Some(m);
     }
-    type_predicate_mods(&r, subj)
+    let mut m = type_predicate_mods(&r, subj)?;
+    its_mana_value_is_its(&mut m, b);
+    Some(m)
+}
+
+/// "an Illusion creature with power and toughness each equal to that spell's mana value"
+/// (Veiled Sentry), rewritten to "its mana value" by `triggers_referents::that_creatures`
+/// (`Builder::its_is_it`): the type-words parser reads "its" as each affected object's
+/// own mana value, as in a static ability ("Each noncreature artifact is an artifact
+/// creature with power and toughness each equal to its mana value", March of the
+/// Machines); here it is the object "it" refers to (the spell cast).
+pub(crate) fn its_mana_value_is_its(mods: &mut [Modification], b: &Builder) {
+    if !b.its_is_it || matches!(b.it, Sel::None | Sel::This) {
+        return;
+    }
+    let affected = |v: &Value| matches!(v, Value::ManaValueOf(s) if matches!(**s, Sel::Var(x) if x == vars::AFFECTED));
+    for m in mods.iter_mut() {
+        if let Modification::SetPT(Some(p), Some(t)) = m {
+            if affected(p) && affected(t) {
+                let mv = Value::ManaValueOf(Box::new(b.it.clone()));
+                *p = mv.clone();
+                *t = mv;
+            }
+        }
+    }
 }
 
 /// "[type words] with base power and toughness N/N, [keywords]" → the type words with the
