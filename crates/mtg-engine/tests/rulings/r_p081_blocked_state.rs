@@ -278,7 +278,7 @@ fn a_blocking_creature_stays_blocking_after_its_attacker_left() {
 
 #[test]
 fn dwarven_sea_clan_needs_the_island_on_activation_and_resolution() {
-    cr!("115.1a", "608.2b", "603.7a");
+    cr!("115.1c", "608.2b", "603.7a");
     ruling!(
         "Dwarven Sea Clan",
         "You can't target a creature if its controller doesn't control an Island as you are activating the ability, and the ability won't resolve if the creature's controller doesn't control an Island as the ability resolves."
@@ -317,11 +317,16 @@ fn dwarven_sea_clan_needs_the_island_on_activation_and_resolution() {
 
 #[test]
 fn plasma_caster_resolves_after_leaving_or_coming_unattached() {
-    cr!("113.7a", "608.2h", "705.1");
+    cr!("113.7a", "608.2b", "608.2h", "705.1");
     ruling!(
         "Plasma Caster",
         "If Plasma Caster is no longer on the battlefield or no longer attached to the same creature when its third ability resolves, the ability will still resolve as normal."
     );
+    ruling!(
+        "Plasma Caster",
+        "it won't resolve and none of its effects happen. You won't flip a coin."
+    );
+    interp!("target-restriction-source-attachment-as-announced");
     supported("Plasma Caster");
     for gone in [true, false] {
         let mut t = TestGame::new(2);
@@ -350,6 +355,23 @@ fn plasma_caster_resolves_after_leaving_or_coming_unattached() {
         t.resolve_all();
         assert_eq!(marked(&t, b), 1, "gone: {gone}");
     }
+    // The target leaves the battlefield in response: the ability doesn't resolve and no
+    // coin is flipped.
+    let mut t = TestGame::new(2);
+    let caster = t.battlefield(P0, "Plasma Caster");
+    let a = t.battlefield(P0, "Hill Giant");
+    assert!(t.g.attach(caster, obj(a)));
+    let b = t.battlefield(P1, "Hill Giant");
+    blocked(&mut t, &[a], &[(b, a)]);
+    t.resolve_all();
+    crate::r_p017_common::load_coins(&mut t, &[false]);
+    t.activate(P0, caster, 0, &[obj(b)]).unwrap();
+    cast_new(&mut t, P1, "Unsummon", &[obj(b)]);
+    t.resolve();
+    assert!(t.in_hand(P1, "Hill Giant"));
+    t.resolve_all();
+    assert!(crate::r_p017_common::flip_results(&t).is_empty(), "no coin was flipped");
+    assert_eq!(t.stack_len(), 0);
 }
 
 #[test]
@@ -387,7 +409,7 @@ fn maze_of_ith_and_ith_untap_an_attacker_after_damage_without_undoing_it() {
 
 #[test]
 fn ice_floe_may_target_a_tapped_attacker() {
-    cr!("115.1a");
+    cr!("115.1c");
     ruling!(
         "Ice Floe",
         "You may target a tapped creature with Ice Floe’s activated ability."
@@ -542,7 +564,7 @@ fn flash_foliage_is_cast_only_after_blockers_are_declared() {
 
 #[test]
 fn choking_vines_may_be_cast_with_x_zero_and_no_targets() {
-    cr!("601.2c", "107.3", "115.1a");
+    cr!("601.2c", "107.3", "115.1a", "115.6");
     ruling!("Choking Vines", "You can declare zero targets, with X=0.");
     supported("Choking Vines");
     let mut t = TestGame::new(2);

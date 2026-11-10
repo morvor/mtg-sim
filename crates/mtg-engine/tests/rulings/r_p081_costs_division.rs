@@ -193,7 +193,7 @@ fn fire_at_will_may_target_attackers_and_blockers_alike() {
 
 #[test]
 fn thrull_wizard_may_be_activated_again_after_the_payment() {
-    cr!("602.2", "608.2", "117.3b");
+    cr!("602.2", "608.2");
     ruling!(
         "Thrull Wizard",
         "You can use this ability multiple times on one spell to force your opponent to use more than one mana to prevent the spell from being countered. You can even use this ability, let them pay, then use this ability repeatedly."

@@ -2,7 +2,7 @@
 //! attackers and blockers: how many times they trigger (CR 509.3c–509.3e), that they
 //! resolve in the declare blockers step before combat damage and leave the attacker
 //! blocked (CR 509.1h, 506.4), the toughness they read (last known information,
-//! CR 608.2h), and what happens when their source leaves (CR 112.7a, 610.3c).
+//! CR 608.2h), and what happens when their source leaves (CR 113.7a).
 
 use crate::r_p081_common::*;
 use mtg_engine::decision::{Answer, Decision};
@@ -169,7 +169,7 @@ fn plague_wight_shrinks_its_blockers_after_leaving_the_battlefield() {
 
 #[test]
 fn engulfing_slagwurm_gains_the_toughness_as_the_ability_resolves_or_last_known() {
-    cr!("608.2h", "603.3", "701.15a");
+    cr!("608.2h", "603.3", "701.19a");
     ruling!(
         "Engulfing Slagwurm",
         "As each ability resolves, the amount of life you gain is equal to the appropriate creature’s current toughness (if it’s somehow still on the battlefield), or its toughness as it last existed on the battlefield (in all other cases)."
@@ -242,7 +242,7 @@ fn engulfing_slagwurm_destroys_blockers_in_the_declare_blockers_step_and_needs_t
 
 #[test]
 fn grasping_giant_stays_blocked_and_doesnt_exile_if_it_left_first() {
-    cr!("509.1h", "506.4", "610.3c", "702.19d");
+    cr!("509.1h", "506.4", "702.19d");
     ruling!(
         "Grasping Giant",
         "Grasping Giant doesn’t become unblocked when the creatures blocking it are exiled. Unless it gains trample, it won’t deal combat damage."
@@ -443,7 +443,7 @@ fn dream_fighter_phases_out_with_each_blocker_and_beats_flanking_to_it() {
 
 #[test]
 fn jabaris_banner_flanking_granted_after_blocks_is_too_late() {
-    cr!("702.25a", "603.2", "603.4");
+    cr!("702.25a", "603.2");
     ruling!(
         "Jabari's Banner",
         "Giving a creature flanking after blockers have been declared won’t have any effect. Specifically: — If you give flanking to an attacking creature after blockers have been declared, it’s too late for flanking to trigger. — If you give flanking to a creature that’s blocking an attacking creature with flanking, it’s too late to prevent the blocking creature from getting -1/-1, even if the attacker’s flanking ability hasn’t resolved yet."
@@ -476,7 +476,7 @@ fn jabaris_banner_flanking_granted_after_blocks_is_too_late() {
 
 #[test]
 fn knight_of_the_holy_nimbus_cant_be_regenerated_after_its_last_ability() {
-    cr!("701.19c", "701.19b", "614.1c");
+    cr!("701.19c", "701.19b", "614.1");
     ruling!(
         "Knight of the Holy Nimbus",
         "After the last ability resolves, regeneration shields don't apply if Knight of the Holy Nimbus would be destroyed for the remainder of the turn. This includes its own effect as well as regeneration shields from other sources."
@@ -517,11 +517,10 @@ fn carnage_gladiator_triggers_for_any_players_blocker() {
     // P0 a life.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Carnage Gladiator");
-    let (a, bs) = block_with(&mut t, "Grizzly Bears", &["Hill Giant"]);
+    let (a, _) = block_with(&mut t, "Grizzly Bears", &["Hill Giant"]);
     t.resolve_all();
     assert_eq!(t.life(P1), 19);
     assert!(is_blocked(&t, a));
-    let _ = bs;
     let mut t = TestGame::new(2);
     let glad = t.battlefield(P0, "Carnage Gladiator");
     let a = t.battlefield(P1, "Grizzly Bears");
@@ -533,7 +532,7 @@ fn carnage_gladiator_triggers_for_any_players_blocker() {
 
 #[test]
 fn benefactors_draught_gives_priority_after_its_trigger_before_damage() {
-    cr!("509.4", "117.3b", "603.7");
+    cr!("117.3b", "603.7");
     ruling!(
         "Benefactor's Draught",
         "Each player will have a chance to cast instants and activate abilities after Benefactor’s Draught’s delayed triggered abilities have resolved, before combat damage is dealt."
@@ -611,7 +610,7 @@ fn wiitigo_removes_a_counter_from_any_source() {
 
 #[test]
 fn godsend_that_left_doesnt_lock_the_names_a_new_one_didnt_exile() {
-    cr!("400.7", "608.2h");
+    cr!("400.7");
     ruling!(
         "Godsend",
         "If Godsend leaves the battlefield, and later another Godsend enters the battlefield, it is a new object (even if the two were represented by the same card). The new Godsend won't stop opponents from casting cards with the same name as cards exiled with the first one."
@@ -642,7 +641,7 @@ fn godsend_that_left_doesnt_lock_the_names_a_new_one_didnt_exile() {
 
 #[test]
 fn aisling_leprechaun_turns_the_creature_green_by_a_trigger_after_blocks() {
-    cr!("509.1a", "702.16e", "702.16f", "603.2", "613.1d");
+    cr!("509.1a", "702.16e", "702.16f", "603.2", "613.1e");
     ruling!(
         "Aisling Leprechaun",
         "Creatures change color as a triggered ability upon the block being declared."

@@ -69,7 +69,7 @@ fn windreader_sphinx_triggers_on_its_own_attack() {
 
 #[test]
 fn sentry_bot_counts_the_attackers_as_its_ability_resolves() {
-    cr!("608.2h", "603.3", "702.8");
+    cr!("608.2h", "603.3", "702.8a");
     ruling!(
         "Sentry Bot",
         "Use the number of creatures attacking you as Sentry Bot’s third ability resolves to determine the number of energy counters you get."
@@ -130,7 +130,7 @@ fn vengeful_pharaoh_must_already_be_in_the_graveyard() {
 
 #[test]
 fn trouble_in_pairs_counts_countered_spells_and_needs_only_the_second() {
-    cr!("603.2", "603.2e", "608.2h");
+    cr!("603.2");
     ruling!(
         "Trouble in Pairs",
         "Trouble in Pairs counts spells that were cast even if they didn't resolve. This means it still counts spells that were countered."
@@ -177,7 +177,7 @@ fn trouble_in_pairs_counts_countered_spells_and_needs_only_the_second() {
 
 #[test]
 fn mangara_and_ever_watching_threshold_draw_one_card_per_attack() {
-    cr!("603.2c", "508.1", "603.4");
+    cr!("603.2c", "508.1", "603.4", "508.3d", "805.10a");
     ruling!(
         "Mangara, the Diplomat",
         "You draw just one card, no matter how many creatures are attacking you and your planeswalkers beyond the second."
@@ -338,7 +338,7 @@ fn kazuul_is_the_defending_player_for_its_planeswalkers_and_battles_too() {
 
 #[test]
 fn wars_toll_lets_the_opponent_tap_lands_in_response() {
-    cr!("605.3a", "603.3", "117.3b");
+    cr!("605.3a", "603.3", "106.4");
     ruling!(
         "War's Toll",
         "Your opponent can tap lands for mana in response to the triggered ability. The effect won't prevent your opponent from casting spells or activating abilities, but it will make it difficult for that player to cast other spells or activate abilities later in the turn because unspent mana is lost at the end of each step."
@@ -483,7 +483,7 @@ fn whirling_dervish_counts_damage_to_its_current_controllers_opponents_once() {
 
 #[test]
 fn gabriel_angelfire_keeps_the_ability_through_the_untap_step() {
-    cr!("611.2a", "500.4", "502.1", "503.1");
+    cr!("611.2a", "500.4", "503.1");
     ruling!(
         "Gabriel Angelfire",
         "Gabriel Angelfire will have the ability it gains through your next untap step, but will no longer have it during your next upkeep step."
@@ -499,13 +499,6 @@ fn gabriel_angelfire_keeps_the_ability_through_the_untap_step() {
     assert!(has_keyword(&t, gabe, KeywordKind::Flying));
     t.advance_to(P1, Step::PrecombatMain);
     assert!(has_keyword(&t, gabe, KeywordKind::Flying));
-    let seen = watch(
-        &mut t,
-        P0,
-        |_| true,
-        |g| (g.turn.step, g.turn.active),
-    );
-    let _ = seen;
     t.advance_to(P0, Step::Upkeep);
     // The upkeep has begun; the trigger hasn't resolved yet: no flying.
     assert!(!has_keyword(&t, gabe, KeywordKind::Flying));
@@ -534,8 +527,7 @@ fn attack_reselectors_dont_trigger_outside_the_declare_attackers_step() {
     for name in ["Misleading Signpost", "Portal Mage", "Windshaper Planetar"] {
         supported(name);
         let mut t = TestGame::new(2);
-        let a = t.battlefield(P0, "Grizzly Bears");
-        let _ = a;
+        t.battlefield(P0, "Grizzly Bears");
         assert!(can_cast_now(&mut t, P0, name), "{name}");
         let spell = cast_new(&mut t, P0, name, &[]);
         t.resolve();
@@ -580,7 +572,7 @@ fn tamiyo_transformed_in_combat_waits_for_a_main_phase() {
 
 #[test]
 fn unstable_glyphbridge_triggers_only_if_cast() {
-    cr!("603.2", "603.6a");
+    cr!("603.2", "601.2i");
     ruling!(
         "Unstable Glyphbridge // Sandswirl Wanderglyph",
         "Unstable Glyphbridge's first ability triggers if you cast it from any zone. It doesn't trigger if you put Unstable Glyphbridge onto the battlefield without casting it."
@@ -607,7 +599,7 @@ fn unstable_glyphbridge_triggers_only_if_cast() {
 
 #[test]
 fn balduvian_trading_post_sacrifices_a_mountain_however_it_enters_and_doubles_either_type() {
-    cr!("614.1a", "614.12", "106.7", "605.1a");
+    cr!("614.1a", "614.12", "605.1a");
     ruling!(
         "Balduvian Trading Post",
         "You sacrifice the Mountain before this card is put onto the battlefield, and do so no matter how it is put onto the battlefield."
@@ -689,7 +681,7 @@ fn entrapment_maneuver_uses_the_toughness_as_the_creature_last_existed() {
 
 #[test]
 fn wing_shards_targets_the_player_who_then_chooses_the_creature() {
-    cr!("115.1a", "701.17a", "608.2c");
+    cr!("115.1a", "701.21a", "608.2c");
     ruling!(
         "Wing Shards",
         "Wing Shards doesn’t target the creature to be sacrificed. The target player chooses the creature as it resolves."

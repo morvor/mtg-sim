@@ -21,7 +21,7 @@ fn targetable(t: &mut TestGame, p: PlayerId, name: &str, target: ObjectId) -> bo
 
 #[test]
 fn great_sable_stag_cant_be_equipped_by_a_black_equipment() {
-    cr!("702.16d", "704.5n", "702.16b");
+    cr!("702.16d", "701.3b", "702.16b");
     ruling!(
         "Great Sable Stag",
         "Although the reminder text doesn’t say so, Great Sable Stag also can’t be equipped by blue or black Equipment."
@@ -71,7 +71,7 @@ fn great_sable_stag_is_targeted_by_counterspells_whose_other_effects_still_happe
 
 #[test]
 fn autumns_veil_is_a_rule_about_your_spells_and_creatures_not_an_ability() {
-    cr!("611.2c", "608.2b", "115.5", "702.16a");
+    cr!("611.2c", "608.2b", "109.2");
     ruling!(
         "Autumn's Veil",
         "Autumn’s Veil affects any spells and creatures you happen to control at any point during the rest of the turn, not just spells and creatures you control as it resolves. That’s because it doesn’t grant an ability to those spells or creatures; rather, it affects the game rules and states something that’s now true about those spells and creatures."
@@ -83,6 +83,10 @@ fn autumns_veil_is_a_rule_about_your_spells_and_creatures_not_an_ability() {
     ruling!(
         "Autumn's Veil",
         "Autumn’s Veil itself may be countered by blue or black spells. Its effect doesn’t apply until after it resolves."
+    );
+    ruling!(
+        "Autumn's Veil",
+        "After Autumn’s Veil resolves, any spell you control that turn can still be targeted by spells that try to counter it (such as Cancel), regardless of their color."
     );
     ruling!(
         "Display of Dominance",
@@ -140,7 +144,7 @@ fn autumns_veil_is_a_rule_about_your_spells_and_creatures_not_an_ability() {
 
 #[test]
 fn a_spell_already_targeting_your_creature_fizzles_when_the_veil_resolves() {
-    cr!("608.2b", "115.5");
+    cr!("608.2b", "601.2c");
     ruling!(
         "Autumn's Veil",
         "If a creature you control is being targeted by a spell when Autumn’s Veil resolves, nothing happens right away. When that spell would resolve, its color is checked. If it’s blue or black, that creature will be an illegal target for that spell, and will be unable to be affected by it. If all that spell’s targets have become illegal by the time it would resolve, it won’t resolve."
@@ -178,7 +182,7 @@ fn a_spell_already_targeting_your_creature_fizzles_when_the_veil_resolves() {
 
 #[test]
 fn an_aura_spell_targets_but_an_attached_aura_doesnt() {
-    cr!("303.4a", "303.4b", "115.1a");
+    cr!("303.4a", "303.4b", "115.1b");
     ruling!(
         "Autumn's Veil",
         "Keep in mind that an Aura spell targets the permanent it will enchant (but an Aura on the battlefield doesn’t target the permanent it’s attached to)."
@@ -202,7 +206,7 @@ fn an_aura_spell_targets_but_an_attached_aura_doesnt() {
 
 #[test]
 fn devout_lightcaster_must_exile_your_own_black_permanent_if_its_the_only_one() {
-    cr!("603.3c", "115.1a");
+    cr!("603.3d", "115.1d");
     ruling!(
         "Devout Lightcaster",
         "Devout Lightcaster's triggered ability isn't optional. When it enters, if you're the only player that controls a black permanent, you'll have to target a black permanent you control."
@@ -220,7 +224,7 @@ fn devout_lightcaster_must_exile_your_own_black_permanent_if_its_the_only_one() 
 
 #[test]
 fn kithkin_zealot_and_honorable_scout_count_each_permanent_once() {
-    cr!("608.2h", "105.2c");
+    cr!("105.2b");
     ruling!(
         "Kithkin Zealot",
         "Each permanent is counted only once. For example, if the targeted player controls a black creature, a red enchantment, and a black-red creature, you’ll gain 3 life."
@@ -250,7 +254,7 @@ fn kithkin_zealot_and_honorable_scout_count_each_permanent_once() {
 
 #[test]
 fn fiendslayer_paladin_is_hit_by_untargeted_red_spells() {
-    cr!("115.1a", "608.2c");
+    cr!("115.1a", "115.10a");
     ruling!(
         "Fiendslayer Paladin",
         "Fiendslayer Paladin can be affected by black or red spells that don't target it. For example, a red spell that \"deals 3 damage to each creature\" would deal damage to Fiendslayer Paladin."
@@ -269,7 +273,7 @@ fn fiendslayer_paladin_is_hit_by_untargeted_red_spells() {
 
 #[test]
 fn council_guardian_votes_as_the_ability_resolves_even_once_it_left() {
-    cr!("701.38a", "608.2h", "603.3", "702.16a");
+    cr!("701.38a", "113.7a", "603.3", "702.16b");
     ruling!(
         "Council Guardian",
         "If Council Guardian is not on the battlefield when its ability resolves, the vote will still take place; it simply won't have any effect. However, cards that care about voting (for example, Grudge Keeper) will still see the vote."
@@ -355,7 +359,7 @@ fn sanctifier_en_vec_exiles_what_dies_with_it_and_spells_that_kill_it_slowly() {
 
 #[test]
 fn sanctifier_en_vec_reads_the_color_in_the_zone_the_card_leaves() {
-    cr!("614.1a", "709.3", "707.2", "400.7");
+    cr!("614.1a", "709.3", "709.3a", "707.2", "400.7");
     ruling!(
         "Sanctifier en-Vec",
         "Sanctifier En-Vec's last ability cares only what the color of the card would be in the zone it's moving from, not what it would be in the graveyard. For example, if a Clone is a copy of a red creature on the battlefield and then dies, the Clone will be exiled. Conversely, if you cast Order, the white half of the split card Order//Chaos, it will not be exiled as it resolves because it is not red before it goes to the graveyard."
@@ -393,7 +397,7 @@ fn sanctifier_en_vec_reads_the_color_in_the_zone_the_card_leaves() {
 
 #[test]
 fn mask_of_law_and_grace_changed_to_white_falls_off() {
-    cr!("612.1", "704.5m", "702.16d");
+    cr!("612.1", "704.5m", "702.16c");
     ruling!(
         "Mask of Law and Grace",
         "If a text-changing effect is used to change one of the color words so it grants Protection from white, then it will cause itself to be put into the graveyard."
@@ -426,7 +430,7 @@ fn mask_of_law_and_grace_changed_to_white_falls_off() {
 
 #[test]
 fn radiant_essence_and_crusading_knight_count_every_opponent() {
-    cr!("608.2h", "102.3");
+    cr!("604.2", "611.3a");
     ruling!(
         "Radiant Essence",
         "In a multiplayer game, it gets the bonus if at least one opponent controls a black permanent."
@@ -453,7 +457,7 @@ fn radiant_essence_and_crusading_knight_count_every_opponent() {
 
 #[test]
 fn sandstalker_moloch_counts_a_countered_or_pending_blue_spell() {
-    cr!("603.4", "608.2h");
+    cr!("603.4", "702.8a");
     ruling!(
         "Sandstalker Moloch",
         "It doesn’t matter if the blue and/or black spell an opponent cast that turn resolved, didn’t resolve, was countered, or is still on the stack."
@@ -488,7 +492,7 @@ fn sandstalker_moloch_counts_a_countered_or_pending_blue_spell() {
 
 #[test]
 fn lands_are_colorless_for_celestial_purge_and_lightwielder_paladin() {
-    cr!("105.2c", "202.2b", "115.1a");
+    cr!("105.2c", "202.2b", "115.1a", "115.1d");
     ruling!(
         "Celestial Purge",
         "Lands are colorless (even if their frames have some colored elements to them). You can’t target a Swamp, a Mountain, or any other land with Celestial Purge (unless some other effect has turned that land black or red)."
@@ -527,7 +531,7 @@ fn lands_are_colorless_for_celestial_purge_and_lightwielder_paladin() {
 
 #[test]
 fn compost_triggers_on_any_black_card_put_into_an_opponents_graveyard() {
-    cr!("603.2", "603.6c", "701.8a", "701.19a");
+    cr!("603.2", "603.6c", "701.8a", "701.9a", "701.17a", "701.6a");
     ruling!(
         "Compost",
         "The ability triggers on a black card being discarded, milled, or countered, as well as a black card going to the graveyard from the battlefield."
@@ -606,7 +610,7 @@ fn reap_counts_the_black_permanents_of_the_target_opponent_as_cast() {
 
 #[test]
 fn knight_of_the_mists_may_destroy_an_opponents_knight() {
-    cr!("115.1a", "701.7b");
+    cr!("115.1d", "701.8a");
     ruling!("Knight of the Mists", "Can destroy an opponent’s knight.");
     supported("Knight of the Mists");
     let mut t = TestGame::new(2);
@@ -620,12 +624,56 @@ fn knight_of_the_mists_may_destroy_an_opponents_knight() {
 
 #[test]
 fn outrider_en_kor_chooses_which_simultaneous_source_is_redirected() {
-    cr!("615.1", "616.1", "510.2");
+    cr!("614.1a", "616.1", "510.2");
     ruling!(
         "Outrider en-Kor",
         "After Outrider en-Kor's activated ability has resolved, if multiple sources would deal damage to Outrider en-Kor simultaneously that turn (which can happen if Outrider en-Kor is blocked by multiple creatures, for example), you choose which source has its 1 damage redirected. If Outrider en-Kor's ability has resolved more than once that turn, you may choose a different source for each redirection effect."
     );
     supported("Outrider en-Kor");
+    supported("Vampire Nighthawk");
+    // One shield (to the Hill Giant) and two blockers whose 1 damage each is dealt at
+    // once: Vampire Nighthawk (deathtouch, 1/2 after flanking) and Grizzly Bears (1/1).
+    // P0 orders the damage the shield applies to. Redirecting the Nighthawk's damage
+    // leaves the 2/2 Outrider with 1 ordinary damage (and the Giant dies to the
+    // deathtouch damage dealt to it instead); redirecting the Bears' leaves the Outrider
+    // 1 deathtouch damage, and it dies.
+    let mut outrider_died = Vec::new();
+    for first in [0usize, 1] {
+        let mut t = TestGame::new(2);
+        let out = t.battlefield(P0, "Outrider en-Kor");
+        let giant = t.battlefield(P0, "Hill Giant");
+        let hawk = t.battlefield(P1, "Vampire Nighthawk");
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        blocked(&mut t, &[out], &[(hawk, out), (bears, out)]);
+        t.resolve_all();
+        assert_eq!((t.pt(hawk), t.pt(bears)), ((1, 2), (1, 1)), "flanking");
+        t.activate(P0, out, 0, &[obj(giant)]).unwrap();
+        t.resolve();
+        let from = mark(&t);
+        let order = if first == 0 { vec![0, 1] } else { vec![1, 0] };
+        t.answer(P0, DecisionKind::Order, Answer::Indices(order));
+        finish_combat(&mut t);
+        let items = t.asked()[from..]
+            .iter()
+            .find_map(|(p, d)| match d {
+                Decision::Order { items, .. } if *p == P0 => Some(items.clone()),
+                _ => None,
+            })
+            .expect("P0 chooses which source's damage is redirected");
+        assert_eq!(items.len(), 2, "{items:?}");
+        let hawk_redirected = items[first].contains("Vampire Nighthawk");
+        if hawk_redirected {
+            assert!(died(&t, giant), "the Nighthawk's deathtouch damage went to the Giant");
+            assert!(!died(&t, out), "{items:?}");
+            assert_eq!(marked(&t, out), 1);
+        } else {
+            assert_eq!(marked(&t, giant), 1, "{items:?}");
+            assert!(died(&t, out), "1 deathtouch damage from the Nighthawk");
+        }
+        outrider_died.push(died(&t, out));
+    }
+    assert_ne!(outrider_died[0], outrider_died[1], "the choice decides which damage is redirected");
+    // Two shields: each may take a different source's damage.
     let mut t = TestGame::new(2);
     let out = t.battlefield(P0, "Outrider en-Kor");
     let giant = t.battlefield(P0, "Hill Giant");
@@ -647,7 +695,7 @@ fn outrider_en_kor_chooses_which_simultaneous_source_is_redirected() {
 
 #[test]
 fn toshiro_recasts_the_instant_that_killed_the_creature() {
-    cr!("603.3", "603.10", "608.2n", "115.1a");
+    cr!("603.3", "603.10", "608.2n", "115.1d");
     ruling!(
         "Toshiro Umezawa",
         "Creatures destroyed by an instant that you cast normally can cause a trigger that allows the instant to be cast again. For example, cast Terror on an opponent’s creature. The creature is destroyed, triggering Toshiro’s ability, and then the Terror is put into your graveyard. You can put Toshiro’s ability on the stack targeting the Terror and then recast it when the ability resolves."
