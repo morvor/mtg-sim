@@ -1581,7 +1581,7 @@ impl Game {
                 .eval_sel_objects(s, ctx)
                 .iter()
                 .map(|o| {
-                    self.obj(crate::zones::exiled_card_lki(self, s, *o, ctx))
+                    self.obj(crate::zones::moved_object_lki(self, s, *o, ctx))
                         .power() as i64
                 })
                 .sum(),
@@ -1591,7 +1591,7 @@ impl Game {
                 .eval_sel_objects(s, ctx)
                 .iter()
                 .map(|o| {
-                    self.obj(crate::zones::exiled_card_lki(self, s, *o, ctx))
+                    self.obj(crate::zones::moved_object_lki(self, s, *o, ctx))
                         .toughness() as i64
                 })
                 .sum(),
@@ -1599,7 +1599,9 @@ impl Game {
             Value::ManaValueOf(s) => self
                 .eval_sel_objects(s, ctx)
                 .iter()
-                .map(|o| self.mana_value_of(*o) as i64)
+                .map(|o| {
+                    self.mana_value_of(crate::zones::moved_object_lki(self, s, *o, ctx)) as i64
+                })
                 .sum(),
             Value::LoyaltyOf(s) => self
                 .eval_sel_objects(s, ctx)
