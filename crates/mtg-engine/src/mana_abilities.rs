@@ -326,14 +326,19 @@ fn production_units_raw(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaT
 /// Among the options of a "choose one" effect that each add mana ("Add {W}{W}, {W}{U}, or
 /// {U}{U}"), the first whose mana covers every type a pending payment planned for the
 /// ability (`Game::mana_hint`, one type per unit of mana): each hinted type is matched to
-/// a different unit of mana the option could make. `None` if an option doesn't add mana
-/// or none covers the hint (the player chooses then).
+/// a different unit of mana the option could make. `None` if an option doesn't add mana,
+/// none covers the hint, or the hint names no type (an effect had the player activate the
+/// ability, "activates a mana ability of each land they control", and no payment is
+/// pending): the player chooses then.
 pub(crate) fn option_making(
     g: &Game,
     options: &[(String, Effect)],
     hint: &[ManaType],
     ctx: &Ctx,
 ) -> Option<usize> {
+    if hint.is_empty() {
+        return None;
+    }
     let units: Vec<Vec<Vec<ManaType>>> = options
         .iter()
         .map(|(_, e)| production_units(g, e, ctx))

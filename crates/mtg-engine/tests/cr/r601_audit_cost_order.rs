@@ -73,7 +73,13 @@ fn increases_and_reductions_apply_to_an_offered_alternative_cost_in_that_order()
     // Lightning Bolt for Fist of Suns's {W}{U}{B}{R}{G} under Thalia (+{1}) with Helm of
     // Awakening (-{1}): exactly {W}{U}{B}{R}{G}.
     let wubrg = |t: &mut TestGame| {
-        for ty in [ManaType::W, ManaType::U, ManaType::B, ManaType::R, ManaType::G] {
+        for ty in [
+            ManaType::W,
+            ManaType::U,
+            ManaType::B,
+            ManaType::R,
+            ManaType::G,
+        ] {
             add_mana(t, P0, ty, 1);
         }
     };
@@ -102,6 +108,30 @@ fn increases_and_reductions_apply_to_an_offered_alternative_cost_in_that_order()
     assert!(can_cast(&mut t, P0, bolt, OFFERED));
     t.cast(P0, bolt).method(OFFERED).target(P1).go();
     assert_eq!(pool_total(&t, P0), 0);
+    // An additional cost is paid with the alternative cost (CR 118.9d): Burst Lightning
+    // kicked for Fist of Suns's cost is {W}{U}{B}{R}{G} + {4}, and deals 4.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Fist of Suns");
+    wubrg(&mut t);
+    add_mana(&mut t, P0, ManaType::C, 3);
+    let burst = t.hand(P0, "Burst Lightning");
+    assert!(t
+        .cast(P0, burst)
+        .method(OFFERED)
+        .kicked(true)
+        .target(P1)
+        .try_go()
+        .is_err());
+    assert_eq!(pool_total(&t, P0), 8, "nothing paid for a reversed cast");
+    add_mana(&mut t, P0, ManaType::C, 1);
+    t.cast(P0, burst)
+        .method(OFFERED)
+        .kicked(true)
+        .target(P1)
+        .go();
+    assert_eq!(pool_total(&t, P0), 0);
+    t.resolve();
+    assert_eq!(t.life(P1), 16);
 }
 
 #[test]
@@ -269,7 +299,12 @@ fn a_flashback_cost_reduction_reduces_only_the_flashback_cost() {
     t.lands(P0, "Island", 1);
     let analysis = t.graveyard(P0, "Deep Analysis");
     assert!(!can_cast(&mut t, P0, analysis, FLASHBACK));
-    assert!(t.cast(P0, analysis).method(FLASHBACK).target(P0).try_go().is_err());
+    assert!(t
+        .cast(P0, analysis)
+        .method(FLASHBACK)
+        .target(P0)
+        .try_go()
+        .is_err());
     assert_eq!(t.life(P0), 20);
     t.lands(P0, "Wastes", 1);
     assert!(can_cast(&mut t, P0, analysis, FLASHBACK));
@@ -299,6 +334,21 @@ fn a_flashback_cost_reduction_reduces_only_the_flashback_cost() {
     assert!(can_cast(&mut t, P0, twice, FLASHBACK));
     t.cast(P0, twice).method(FLASHBACK).go();
     assert_eq!(untapped_lands(&t, P0), 0);
+    // Both effects on one flashback cost, each player's Catalyst Stone: the increase is
+    // added to Deep Analysis's flashback cost before the reduction is taken off it
+    // (CR 601.2f): {1}{U} + {2} - {2} = {1}{U}. Reducing first would leave {U} + {2} =
+    // {2}{U}.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Catalyst Stone");
+    t.battlefield(P1, "Catalyst Stone");
+    t.lands(P0, "Island", 1);
+    let analysis = t.graveyard(P0, "Deep Analysis");
+    assert!(!can_cast(&mut t, P0, analysis, FLASHBACK));
+    t.lands(P0, "Wastes", 1);
+    assert!(can_cast(&mut t, P0, analysis, FLASHBACK));
+    t.cast(P0, analysis).method(FLASHBACK).target(P0).go();
+    assert_eq!(untapped_lands(&t, P0), 0);
+    assert_eq!(t.life(P0), 17);
 }
 
 #[test]
@@ -369,7 +419,9 @@ fn convoke_may_tap_creatures_that_came_under_your_control_this_turn() {
     );
     // Four summoning-sick Hill Giants (red) pay all of Stoke the Flames's {2}{R}{R}.
     let mut t = TestGame::new(2);
-    let giants: Vec<ObjectId> = (0..4).map(|_| t.battlefield_sick(P0, "Hill Giant")).collect();
+    let giants: Vec<ObjectId> = (0..4)
+        .map(|_| t.battlefield_sick(P0, "Hill Giant"))
+        .collect();
     let stoke = t.hand(P0, "Stoke the Flames");
     assert!(can_cast(&mut t, P0, stoke, CastMethod::Normal));
     choose_objects(&mut t, P0, &giants);
@@ -385,10 +437,6 @@ fn reductions_apply_to_the_total_cost_with_x_and_kicker_included() {
     ruling!(
         "Burst Lightning",
         "add any cost increases (such as kicker), then apply any cost reductions"
-    );
-    ruling!(
-        "Helm of Awakening",
-        "This can lower the cost to zero, but not below zero."
     );
     // Blaze with X = 3 under Helm of Awakening: {3}{R} - {1} = {2}{R}, and it deals 3.
     let mut t = TestGame::new(2);
@@ -414,7 +462,7 @@ fn reductions_apply_to_the_total_cost_with_x_and_kicker_included() {
 
 #[test]
 fn a_colored_only_reduction_applies_after_an_increase_and_leaves_generic_mana_alone() {
-    cr!("601.2f", "118.7a");
+    cr!("601.2f");
     ruling!(
         "Edgewalker",
         "You apply cost reduction effects after other cost modifiers"
@@ -445,7 +493,7 @@ fn a_colored_only_reduction_applies_after_an_increase_and_leaves_generic_mana_al
 
 #[test]
 fn an_activated_abilitys_increase_is_applied_before_a_reduction_that_keeps_one_mana() {
-    cr!("602.2b", "601.2f", "118.7a");
+    cr!("602.2b", "601.2f");
     ruling!(
         "Training Grounds",
         "Since activating Urabrask's activated ability would now cost {2}{R}, Training Grounds reduces that cost back to {R}."
@@ -491,6 +539,17 @@ fn a_reduction_reduces_the_x_part_of_an_activation_cost() {
     t.resolve();
     assert_eq!(t.pt(wall), (0, 3));
     assert_eq!(t.pt(drana), (9, 4));
+    // The reduction leaves the {B}{B} alone (CR 118.7a): one Swamp and four Wastes can't
+    // pay {3}{B}{B}.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Training Grounds");
+    let drana = t.battlefield(P0, "Drana, Kalastria Bloodchief");
+    let wall = t.battlefield(P1, "Wall of Stone");
+    t.lands(P0, "Swamp", 1);
+    t.lands(P0, "Wastes", 4);
+    t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(5));
+    assert!(t.activate(P0, drana, 0, &[Entity::Object(wall)]).is_err());
+    assert_eq!(untapped_lands(&t, P0), 5);
     // Without Training Grounds, five lands pay only X = 3.
     let mut t = TestGame::new(2);
     let drana = t.battlefield(P0, "Drana, Kalastria Bloodchief");

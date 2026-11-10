@@ -61,10 +61,13 @@ fn an_ability_activated_only_as_an_instant_cant_pay_for_a_spell_being_cast() {
 #[test]
 fn a_mana_ability_that_costs_mana_is_activated_while_paying_with_mana_made_meanwhile() {
     cr!("605.3a", "601.2g", "601.2h");
+    interp!("automatic-mana-payment");
     supported("Mystic Gate");
     supported("Boomerang");
-    // Boomerang {U}{U} with a Plains and Mystic Gate ({W/U}, {T}: Add {U}{U}): the Plains'
-    // {W} pays the Gate's cost during the payment.
+    // Boomerang {U}{U} with a Plains and Mystic Gate ({W/U}, {T}: Add {W}{W}, {W}{U}, or
+    // {U}{U}): the Plains' {W} pays the Gate's cost during the payment, and the payment
+    // the engine plans picks the Gate's {U}{U} without asking (the player's own choices
+    // are made with priority, `automatic-mana-payment`).
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let plains = t.lands(P0, "Plains", 1)[0];
@@ -76,6 +79,44 @@ fn a_mana_ability_that_costs_mana_is_activated_while_paying_with_mana_made_meanw
     assert_eq!(pool_total(&t, P0), 0);
     t.resolve();
     assert!(t.in_hand(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn a_mana_ability_activated_by_an_effect_leaves_its_choice_of_mana_to_the_player() {
+    cr!("605.3a", "605.3b");
+    interp!("automatic-mana-payment");
+    supported("Mystic Gate");
+    // Drain Power has P1 activate a mana ability of each land they control: no payment is
+    // pending, so which mana Mystic Gate adds is P1's choice, not a planned payment's.
+    // P1 picks the Gate's second ability (its {W/U} paid with the Plains' mana) and
+    // {U}{U}; P0 adds the {U}{U} P1 loses.
+    let mut t = TestGame::new(2);
+    t.lands(P1, "Plains", 1);
+    t.battlefield(P1, "Mystic Gate");
+    t.lands(P0, "Island", 2);
+    let drain = t.hand(P0, "Drain Power");
+    t.cast(P0, drain).target(P1).go();
+    choose_option(&mut t, P1, 1);
+    choose_option(&mut t, P1, 2);
+    t.resolve();
+    assert_eq!(pool_count(&t, P0, ManaType::U), 2);
+    assert_eq!(pool_count(&t, P0, ManaType::W), 0);
+    assert_eq!(pool_total(&t, P1), 0);
+    let asked: Vec<String> = t
+        .asked()
+        .iter()
+        .filter_map(|(q, d)| match d {
+            mtg_engine::decision::Decision::ChooseOption { prompt, .. } if *q == P1 => {
+                Some(prompt.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        asked,
+        vec!["Choose a mana ability to activate", "Choose one"],
+        "P1 chose the ability and what it adds"
+    );
 }
 
 #[test]
@@ -107,7 +148,7 @@ fn mana_in_the_pool_before_casting_pays_first_and_survives_a_reversed_cast() {
 
 #[test]
 fn a_mana_ability_paid_with_a_counter_is_activated_during_payment_once_each_turn() {
-    cr!("605.3a", "601.2g", "602.5b");
+    cr!("605.3a", "601.2g");
     supported("Wall of Roots");
     // Wall of Roots: "Put a -0/-1 counter on this creature: Add {G}. Activate only once
     // each turn." It pays for Giant Growth with no lands; a second Giant Growth can't be
