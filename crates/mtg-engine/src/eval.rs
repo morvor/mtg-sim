@@ -35,6 +35,9 @@ pub struct Ctx {
     /// Current player in a "for each player" loop.
     pub iter_player: Option<PlayerId>,
     pub prev_happened: bool,
+    /// Whether the previous "you may" was taken (`Condition::PrevChosen`).
+    #[serde(default)]
+    pub prev_chosen: bool,
     pub prev_value: i64,
     /// How many times the event of a reflexive triggered ability that follows happened,
     /// set by an instruction that can happen "several times over": putting N counters on
@@ -1169,6 +1172,18 @@ impl Game {
     /// Enumerates objects matching a filter in the filter's zone (battlefield by default).
     /// Phased-out permanents are excluded (CR 702.26b).
     pub fn objects_matching(&self, f: &Filter, ctx: &Ctx) -> Vec<ObjectId> {
+        let mut out = self.objects_matching_anywhere(f, ctx);
+        // A card whose casting is being considered is judged as on the stack (CR 601.2a):
+        // it isn't among the cards in the zone it's cast from ("This spell costs {1} less
+        // to cast for each historic card in your graveyard", The Capitoline Triad cast
+        // from the graveyard).
+        if let Some(c) = ctx.casting_card {
+            out.retain(|id| *id != c);
+        }
+        out
+    }
+
+    fn objects_matching_anywhere(&self, f: &Filter, ctx: &Ctx) -> Vec<ObjectId> {
         // Objects among a selection ("a land card milled this way") are wherever they are.
         if f.zone().is_none() {
             let within = |f: &Filter| match f {
@@ -1793,6 +1808,9 @@ impl Game {
             Value::Extreme(of, sel, greatest) => {
                 crate::relational::extreme(self, of, sel, *greatest, ctx)
             }
+            Value::OfChosen { filter, of, store } => {
+                crate::chosen_object_value::eval(self, filter, of, *store, ctx)
+            }
             Value::GreatestPower(f) => self
                 .objects_matching(f, ctx)
                 .iter()
@@ -1966,6 +1984,7 @@ impl Game {
                 .is_some_and(|c| c.paid.iter().any(|p| p == name)),
             Condition::WasCast => self.cast_info(ctx).is_some_and(|c| c.was_cast),
             Condition::PrevHappened => ctx.prev_happened,
+            Condition::PrevChosen => ctx.prev_chosen,
             Condition::PrevAffectedAny => !ctx.prev_affected.is_empty(),
             Condition::CastFrom(z) => self
                 .cast_info(ctx)

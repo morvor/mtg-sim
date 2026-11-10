@@ -16,6 +16,19 @@ fn tested_stat(v: &Value) -> Option<&'static str> {
     })
 }
 
+/// A noun phrase for one object of several ("a commander you own"): with an article,
+/// unless it already names one object ("target creature", "another creature").
+fn one_of(noun: &str) -> String {
+    let determined = ["a ", "an ", "the ", "target ", "another ", "{"]
+        .iter()
+        .any(|p| noun.starts_with(p));
+    if determined {
+        noun.to_string()
+    } else {
+        with_article(noun)
+    }
+}
+
 /// The qualities of a filter, as a sorted list (the battlefield, where permanents are,
 /// left out).
 fn atoms(f: &Filter, out: &mut Vec<String>) {
@@ -209,6 +222,47 @@ impl Renderer<'_> {
             (false, _) => "least",
         };
         format!("the {word} {stat} among {s}")
+    }
+
+    /// [`Value::OfChosen`]: "the mana value of a commander you own on the battlefield or
+    /// in the command zone", one object the controller picks from several.
+    pub(crate) fn of_chosen_value(&mut self, f: &Filter, of: &Value) -> String {
+        let Some(stat) = tested_stat(of) else {
+            return self.gap("Value::OfChosen");
+        };
+        // Objects in either of two zones ("a commander you own on the battlefield or in the
+        // command zone"): the noun, then the zones.
+        let zones = |f: &Filter| -> Option<Vec<ZoneKind>> {
+            let Filter::Or(v) = f else { return None };
+            v.iter()
+                .map(|z| match z {
+                    Filter::InZone(z) => Some(*z),
+                    _ => None,
+                })
+                .collect()
+        };
+        if let Filter::And(parts) = f {
+            if let Some(zs) = parts.iter().find_map(zones) {
+                let head: Vec<Filter> = parts
+                    .iter()
+                    .filter(|p| zones(p).is_none())
+                    .cloned()
+                    .collect();
+                let n = one_of(&self.noun(&Filter::and(head), Num::One));
+                let zs: Vec<String> = zs
+                    .iter()
+                    .map(|z| match z {
+                        ZoneKind::Battlefield => "on the battlefield".to_string(),
+                        ZoneKind::Command => "in the command zone".to_string(),
+                        ZoneKind::Exile => "in exile".to_string(),
+                        other => format!("in {}", with_article(zone_word(*other))),
+                    })
+                    .collect();
+                return format!("the {stat} of {n} {}", zs.join(" or "));
+            }
+        }
+        let n = one_of(&self.noun(f, Num::One));
+        format!("the {stat} of {n}")
     }
 
     /// [`Value::OverPlayers`]: each matching player's value, combined.

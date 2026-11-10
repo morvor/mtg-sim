@@ -38,17 +38,35 @@ fn loses_the_game_triggers_on_any_loss_or_concession() {
 }
 
 #[test]
-fn loses_the_game_abilities_look_back_before_the_players_objects_leave() {
-    cr!("603.10", "603.10f");
-    let mut t = TestGame::new(3);
+fn loses_the_game_abilities_look_back_unless_their_source_leaves_with_the_loser() {
+    cr!("603.10", "603.10f", "800.4a");
+    interp!("loses-the-game-trigger-leaves-with-the-loser");
+    ruling!(
+        "Share the Spoils",
+        "If you control an opponent's Share the Spoils and that player loses the game, Share the Spoils leaves the game with them and the first ability won't trigger."
+    );
     // P0 controls an enchantment owned by P2. When P2 loses, it leaves the game with
-    // them (CR 800.4a), but the ability looks back in time and still triggers.
+    // them (CR 800.4a): the object that carries the ability is gone with the loser, and
+    // the ability doesn't trigger (the Share the Spoils ruling; decided by the user).
+    let mut t = TestGame::new(3);
     let w = t.custom(P2, loss_watcher("Borrowed Watcher"), Zone::Battlefield);
     t.g.objects[w.0 as usize].base_controller = P0;
     t.g.recompute();
     t.g.player_loses(P2);
     assert!(!t.is_live(w));
     t.settle();
+    assert_eq!(t.stack_len(), 0, "{}", t.dump_log());
+    t.resolve_all();
+    assert_eq!(t.life(P0), 20);
+    // An object that stays in the game sees the loss: P0's own watcher triggers, although
+    // P2's permanents leave as P2 loses (the loss is checked before they leave).
+    let mut t = TestGame::new(3);
+    t.custom(P0, loss_watcher("Loss Watcher"), Zone::Battlefield);
+    let bears = t.battlefield(P2, "Grizzly Bears");
+    t.g.player_loses(P2);
+    assert!(!t.is_live(bears));
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "{}", t.dump_log());
     t.resolve_all();
     assert_eq!(t.life(P0), 22);
 }

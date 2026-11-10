@@ -34,6 +34,12 @@ implementation, an adversarial review, and landing, using subagents.
    `git log`/`git status`/`git diff`. After a usage limit your session may only resume when
    the coordinator messages you: then relaunch every interrupted item the same way.
 
+**One item per session (user, Nov 10).** The user's standing rule: "save context whenever possible by starting new sessions whenever possible (e.g. when we won't lose relevant information)". Everything an item needs is in the repo once it lands, so a session does one item. After the item lands and its worktree is removed:
+1. Tell the coordinator: create a one-shot trigger into the coordinator session (session_012W2MbEm6CBbHkDdCXqJdaZ), with `run_once_at` two minutes ahead, saying "<item> landed: <commit>; next in queue: <items>", plus the item's report.
+2. Stop. Don't start the next item. The coordinator archives this session and starts a fresh one with the rest of the queue.
+
+Anything a successor would need goes into the item file or the register before landing, never only into this session's context.
+
 Keep your own context small: don't read engine code yourself, delegate. Never push
 anything yourself except through `scripts/land.sh` (the reviewer runs it); never push
 another branch, force-push, or open pull requests.

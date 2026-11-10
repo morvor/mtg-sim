@@ -178,12 +178,12 @@ All old worker sessions are archived; every item they were given has landed, exc
 
 | Role | Session | Queue |
 |---|---|---|
-| planner (archived Nov 9, 295k context) | session_019p6spxhpVg7uo8FiyED8ai | finish-line-plan: landed |
-| verification | session_019p6spxbaCwCcy1CdSExmiM | register-sweep-1 (B4), then property-tests-3 (B2) |
-| auditor | session_019p6spyBuwnV522bkiqsNty | engine-audit-1 (A1): layers (in progress), then casting-costs, triggers, zones-lki, replacement, sba-copy, combat |
-| roundtrip | session_019p6spxs4s8RXyT9mkADZuC | roundtrip-pairs-6, roundtrip-probe-1 (A5, at max), then roundtrip-pairs with the probe's hits first (A4) |
-| rulings-1 | session_019p6spyC29FswmnWN3vJ38n | P049, then A2: P154 P155 P101 P157 P090 P197 P139 P181 P114 P115 |
-| rulings-2 | session_019p6sq2W1TEG1vYtZZ2PycZ | P081, then A2: P153 P100 P158 P144 P196 P138 P182 P175 P200 P135 |
+| rulings A | session_019p6spxDCoNePNP7JLuLWf7 (one item per session; user-decisions-nov10 landed 09acfb4 in session_019p6spxY7M7pzzAAnKaQt6e) | P155, then P101 P157 P090 P197 P139 P181 P114 P115 |
+| rulings B | session_019p6spyp45E8WeUMNVLGcHN (one item per session; P100 landed 02b06aa) | P158 P144 P196 P138 P182 P175 P200 P135 |
+| auditor 2 | session_019p6spzTrg18GmgaGYGFEx9 | engine-audit-1: casting-costs, triggers, zones-lki, replacement, sba-copy, combat (layers landed, 44139cb) |
+| parked (user, Nov 10) | | roundtrip-probe-1 (A5) and property-tests-3 (B2): "round trip and verification can wait"; the user thinks verification isn't strictly necessary. C4 still needs the existing 8 properties re-run on the final code. |
+
+Round 1 of the push (Nov 9 22:18 to Nov 10 03:13) landed finish-line-plan, P049, P081, P153, P154, roundtrip-pairs-6, register-sweep-1 and engine-audit-1/layers, for about $670 at API rates. All five of its sessions were archived on Nov 10 at 04:35 and replaced by fresh ones: the user asked "Is there any reason why all of them shouldn't just use fresh sessions?", and since every item had landed, nothing was lost and each turn now costs less.
 
 Re-planned from finish-line-plan §3 on Nov 9 (23:45 UTC). Later: a mutation session for B1 (mutation-2) once an audit area lands; the rest of A2's order (P093 P095 P049 P081 P083 P084 P086 P164 P167 P168 P170 P173 P103 P105 P106 P191 P149 P088 P078) after these queues.
 
@@ -257,6 +257,13 @@ Item `register-decisions-nov5` records this:
 - the policy "the card's text wins over a ruling that contradicts it" is recorded and applied;
 - so is the policy for misattached rulings;
 - `docs/RULING_DISCREPANCIES.md` starts as a log of every erroneous ruling, for human review and reporting to Wizards. Every worker adds to it from now on.
+
+### Fresh sessions whenever nothing is lost (user, Nov 10)
+
+The user: "This should be our established pattern going forward - save context whenever possible by starting new sessions whenever possible (e.g. when we won't lose relevant information)".
+- **Workers:** one item per session (worker.md). A worker lands its item, notifies the coordinator with a one-shot trigger and stops. The coordinator then archives it and starts a fresh session with the rest of the queue (the template below).
+- **The coordinator:** hands off to a fresh coordinator session when it can do so without losing anything. RECOVERY.md and this file hold the state; the hourly check-in is re-pointed to the new session.
+- This replaces the "about 300k tokens" threshold below as the default.
 
 ### Effort and fresh sessions (user, Nov 4, late evening)
 

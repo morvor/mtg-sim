@@ -223,18 +223,93 @@ pub const MANA_ABILITY_RESOLVED: &str = "mana ability resolved";
 /// this spell only during combat"), prohibitions and the need for legal targets aren't
 /// (CR 601.3, 601.2c). Costs aren't judged, so an offer isn't withheld for want of mana.
 /// A "you may cast it" effect doesn't offer a card this says can't be cast (rulings of
-/// Rashmi, Eternities Crafter and Sunbird's Invocation).
-pub fn could_cast_during_resolution(g: &Game, p: PlayerId, card: ObjectId) -> bool {
+/// Rashmi, Eternities Crafter and Sunbird's Invocation). `free`: without paying its mana
+/// cost.
+pub fn could_cast_during_resolution(g: &mut Game, p: PlayerId, card: ObjectId, free: bool) -> bool {
+    castable_faces(g, card)
+        .into_iter()
+        .any(|face| could_cast_face_during_resolution(g, p, card, face, free, true))
+}
+
+/// Whether `p` could begin to cast `card` as `face` while a spell or ability resolves (CR
+/// 608.2g) in one of the ways [`cast_during_resolution_as`] would offer: no prohibition
+/// and its costs payable (CR 601.3), the mandatory additional costs among them ("As an
+/// additional cost to cast this spell, sacrifice two creatures"), and with `targets` its
+/// targets available (CR 601.2c). A card chosen among several to cast during one
+/// resolution may target a spell cast before it (Twincast after Lightning Strike, Plargg
+/// and Nassari's ruling), so its targets are judged as it's cast rather than as it's
+/// chosen.
+pub fn could_cast_face_during_resolution(
+    g: &mut Game,
+    p: PlayerId,
+    card: ObjectId,
+    face: FaceState,
+    free: bool,
+    targets: bool,
+) -> bool {
     if g.split_second_on_stack() {
         return false;
     }
-    castable_faces(g, card).into_iter().any(|face| {
-        let mut opt = CastOption::normal(face);
-        opt.method = face_method(face);
-        opt.alt_cost = Some(Cost::free());
-        opt.any_time = true;
-        g.can_begin_cast(p, card, &opt)
-    })
+    resolution_cast_options(g, p, card, face, free)
+        .iter()
+        .any(|opt| g.can_begin_cast_checking(p, card, opt, targets))
+}
+
+/// The ways `p` could cast `card` as `face` while an effect resolves, as
+/// [`cast_during_resolution_as`] offers them: without paying its mana cost (`free`); for
+/// the effect's "rather than" cost ("You may cast it by paying {1} rather than paying its
+/// mana cost", Jadzi, CR 118.9); or for its mana cost, one of its own alternative costs
+/// (evoke) or another way to cast it (prototyped, CR 718.3); each with the effect's
+/// additional cost ("by paying {R}{R} in addition to its other costs", CR 601.2b).
+fn resolution_cast_options(
+    g: &mut Game,
+    p: PlayerId,
+    card: ObjectId,
+    face: FaceState,
+    free: bool,
+) -> Vec<CastOption> {
+    let mut base = CastOption::normal(face);
+    base.method = face_method(face);
+    base.any_time = true;
+    let mv = g
+        .face_characteristics(card, face)
+        .mana_cost
+        .as_ref()
+        .map_or(0, |m| m.mana_value_with_x(0));
+    let mut opts = Vec::new();
+    if free {
+        base.alt_cost = Some(Cost::free());
+        opts.push(base);
+    } else if let Some(cost) = crate::permissions::resolution_alt_cost(g) {
+        base.alt_cost = Some(crate::permissions::spell_relative_cost(&cost, mv));
+        if matches!(base.method, CastMethod::Normal | CastMethod::Half(_)) {
+            base.method = CastMethod::Alternative(PERMISSION_COST);
+        }
+        opts.push(base);
+    } else {
+        opts.push(base);
+        if face == FaceState::Front {
+            let mut others = crate::kw::cast_options_with_any_cost(g, p, card);
+            others.extend(resolution_alternative_costs(g, p, card));
+            for mut o in others {
+                o.any_time = true;
+                opts.push(o);
+            }
+        }
+    }
+    if let Some(extra) = g.resolution_extra_cost.clone() {
+        let e = crate::permissions::spell_relative_cost(&extra, mv);
+        for o in &mut opts {
+            o.extra_cost = Some(match o.extra_cost.take() {
+                Some(mut c) => {
+                    add_cost(&mut c, &e);
+                    c
+                }
+                None => e.clone(),
+            });
+        }
+    }
+    opts
 }
 
 /// Like [`cast_during_resolution`], cast as one of the faces or halves `only` (those with
@@ -963,6 +1038,18 @@ impl Game {
     /// Whether the player could begin casting the card this way right now (timing,
     /// permissions, targets, and an optimistic cost check).
     pub fn can_begin_cast(&self, p: PlayerId, card: ObjectId, opt: &CastOption) -> bool {
+        self.can_begin_cast_checking(p, card, opt, true)
+    }
+
+    /// [`Game::can_begin_cast`], judging the spell's targets only with `targets` (see
+    /// [`could_cast_face_during_resolution`]).
+    pub(crate) fn can_begin_cast_checking(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        opt: &CastOption,
+        targets: bool,
+    ) -> bool {
         // Judged as the spell it would be on the stack (CR 601.3e).
         let chars = crate::spell_preview::spell_characteristics(self, p, card, opt);
         if !opt.any_time && !self.timing_allows_cast(p, card, &chars, opt) {
@@ -974,7 +1061,7 @@ impl Game {
         if self.legendary_spell_prohibited(p, &chars) {
             return false;
         }
-        if self.cast_prohibited(p, card, &chars) && !proposal_may_change_qualities(&chars) {
+        if self.cast_prohibited_at_proposal(p, card, &chars) {
             return false;
         }
         // Targets must be available. The card itself isn't among them: it's on the stack
@@ -986,6 +1073,7 @@ impl Game {
         let bodies: Vec<&Body> = chars
             .abilities
             .iter()
+            .filter(|_| targets)
             .filter_map(|a| match &a.kind {
                 AbilityKind::Spell(s) => Some(&s.body),
                 _ => None,
@@ -1016,7 +1104,7 @@ impl Game {
             }
         }
         // Aura spells need a legal object to enchant (CR 303.4a).
-        if chars.has_subtype("Aura") && chars.is(CardType::Enchantment) {
+        if targets && chars.has_subtype("Aura") && chars.is(CardType::Enchantment) {
             if let Some(spec) = crate::attach::aura_target_spec(&chars) {
                 if !self.targets_possible(&[spec], &ctx, card) {
                     return false;
@@ -1072,7 +1160,7 @@ impl Game {
     ) -> bool {
         crate::combat::spell_cast_restrictions_ok(self, p, card, chars)
             && !self.player_restricted(p, |r| matches!(r, Restriction::SorcerySpeedOnly(_)))
-            && !(self.cast_prohibited(p, card, chars) && !proposal_may_change_qualities(chars))
+            && !(self.cast_prohibited_at_proposal(p, card, chars))
     }
 
     pub(crate) fn timing_allows_cast(
@@ -1167,6 +1255,37 @@ impl Game {
         self.cast_prohibited_by_effects(p, card, chars)
             // CR 702.61a split second: no casting while a split-second spell is on the stack.
             || self.split_second_on_stack()
+    }
+
+    /// Whether a rule or effect stops the player from beginning to cast the spell (CR
+    /// 601.3). The value of X is chosen while the spell is proposed and changes its mana
+    /// value (CR 202.3e): if some choice of X would leave the spell unprohibited, the
+    /// player may begin to cast it, and the prohibition is checked again with the chosen X
+    /// once the proposal is complete (CR 601.3a, 601.2e: Void Winnower's "spells with
+    /// even mana values" against Rolling Thunder, the rule's own example). A prohibition
+    /// no choice of X lifts ("noncreature spells with {X} in their mana costs can't be
+    /// cast", Gaddock Teeg) stops the proposal, so the spell isn't offered as castable.
+    pub(crate) fn cast_prohibited_at_proposal(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+    ) -> bool {
+        if self.split_second_on_stack() {
+            return true;
+        }
+        // `chars` has X as 0 (CR 202.3e): the first of the values the player could choose.
+        if !self.cast_prohibited_by_effects(p, card, chars) {
+            return false;
+        }
+        let Some(cost) = chars.mana_cost.as_ref().filter(|m| m.has_x()) else {
+            return true;
+        };
+        !(1..=MAX_PROPOSED_X).any(|x| {
+            let mut proposed = chars.clone();
+            proposed.mana_cost = Some(cost.with_x_counted_as(x));
+            !self.cast_prohibited_by_effects(p, card, &proposed)
+        })
     }
 
     /// Rules and effects that prohibit casting a spell with the given characteristics
@@ -1539,7 +1658,7 @@ impl Game {
         // CR 601.3a: if choices made while proposing the spell (such as the value of X)
         // could change the qualities a prohibition looks at, the player may begin to cast
         // it; the prohibition is checked again once the proposal is complete (CR 601.2e).
-        if self.cast_prohibited(p, card, &chars) && !proposal_may_change_qualities(&chars) {
+        if self.cast_prohibited_at_proposal(p, card, &chars) {
             return Err(Illegal("prohibited".into()));
         }
         self.cast_with_option(p, card, opt)
@@ -2354,7 +2473,12 @@ impl Game {
             if let AbilityKind::Static(s) = &a.kind {
                 if let StaticEffect::CostModifier(cm) = &s.effect {
                     if let CostTarget::ThisSpell = cm.applies_to {
-                        let ctx = Ctx::new(Some(card), p);
+                        let mut ctx = Ctx::new(Some(card), p);
+                        // A card considered for casting counts as on the stack already
+                        // (CR 601.2a): not among the cards of its zone.
+                        if self.obj(card).zone != Zone::Stack {
+                            ctx.casting_card = Some(card);
+                        }
                         // "This spell costs {2} less to cast if ..." (CR 601.2f).
                         if !crate::spell_costs::own_change_applies(self, card, s, cm, &ctx) {
                             continue;
@@ -2383,6 +2507,9 @@ impl Game {
         // Static cost modifiers from other permanents: increases first, then reductions.
         for (src, ctl, cm) in &self.statics.cost_modifiers {
             let mut ctx = Ctx::new(Some(*src), *ctl);
+            if self.obj(card).zone != Zone::Stack {
+                ctx.casting_card = Some(card);
+            }
             // "it" is the spell and "that player" its caster (see `kw/spell_cost_grammar`).
             ctx.event = Some(crate::object::EventInfo {
                 object: Some(card),
@@ -4860,11 +4987,10 @@ pub(crate) fn as_spell_filter(f: &Filter) -> Filter {
     }
 }
 
-/// Whether choices made while proposing a spell can change the qualities that
-/// prohibitions look at (CR 601.3a): the value of X changes its mana value.
-fn proposal_may_change_qualities(chars: &Characteristics) -> bool {
-    chars.mana_cost.as_ref().is_some_and(|m| m.has_x())
-}
+/// The largest value of X tried for a spell with {X} in its mana cost when deciding
+/// whether a prohibition stops its proposal (CR 601.3a): no prohibition compares mana
+/// values beyond it.
+const MAX_PROPOSED_X: u32 = 20;
 
 /// A cost as a player reads it: its mana cost ("{2}{U}"), with any other parts.
 pub(crate) fn cost_label(c: &Cost) -> String {

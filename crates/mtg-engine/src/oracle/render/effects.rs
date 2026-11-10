@@ -6469,7 +6469,12 @@ impl Renderer<'_> {
                 }
                 s
             }
-            Condition::Not(inner) if matches!(inner.as_ref(), Condition::PrevHappened) => {
+            Condition::Not(inner)
+                if matches!(
+                    inner.as_ref(),
+                    Condition::PrevHappened | Condition::PrevChosen
+                ) =>
+            {
                 self.if_effect(&Condition::PrevHappened, otherwise, then)
             }
             // "Sacrifice it" needs no "if you control it" (CR 701.21a), nor does "you may

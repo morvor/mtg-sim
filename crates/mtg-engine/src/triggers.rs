@@ -115,6 +115,11 @@ pub fn looks_back(cond: &TriggerCond, ev: &Event) -> bool {
         ) => true,
         // CR 603.10e: a spell being countered.
         (TriggerCond::SpellCountered(_), Event::Countered { .. }) => true,
+        // CR 603.10f: a player losing the game. The event is checked before the player's
+        // objects leave the game (CR 800.4a, `Game::player_loses`), so the losing player's
+        // objects still see it; the one exception is the ability of an object that leaves
+        // with the loser (`crate::leaves_with_loser`).
+        (TriggerCond::PlayerLoses, Event::PlayerLost { .. }) => true,
         // Keyword-defined triggers, e.g. exploiting (sacrificing) a creature.
         (TriggerCond::Custom(name), ev) => crate::kw::custom_trigger_looks_back(name, ev),
         // A spell or ability destroying a permanent or countering a spell (CR 603.10a,
@@ -713,6 +718,11 @@ impl Game {
             if lookback.is_some() && looks_back(&t.trigger, ev) {
                 continue;
             }
+            // A "loses the game" ability of an object that leaves the game with the losing
+            // player doesn't trigger (CR 603.10f, 800.4a; Share the Spoils ruling).
+            if crate::leaves_with_loser::suppressed(self, id, &t.trigger, ev) {
+                continue;
+            }
             // "Ward abilities of those creatures don't trigger." (Nowhere to Run)
             if a.text.as_str() == crate::keywords::KeywordKind::Ward.name()
                 && crate::kw::hexproof::ward_suppressed(self, id)
@@ -1246,6 +1256,11 @@ impl Game {
                         spell: Some(*spell),
                         player: Some(*player),
                         spell_targets: self.spell_object_targets(*spell),
+                        // The event's amount is the spell's mana value, as the trigger saw
+                        // it ("Whenever you cast a spell with mana value equal to the
+                        // number of doom counters on ~, ~ deals that much damage",
+                        // Imminent Doom: the counters as it triggered, CR 608.2h).
+                        amount: self.mana_value_of(*spell) as i32,
                         ..Default::default()
                     })
                 } else {

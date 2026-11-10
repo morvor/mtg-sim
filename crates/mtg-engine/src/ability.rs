@@ -1111,6 +1111,9 @@ pub mod vars {
     /// Objects the most recent "becomes"/"gets" instruction (`Effect::Modify`) applied to
     /// ("each artifact that became a creature this way").
     pub const MODIFIED: Var = USER + 14_020;
+    /// The object a [`Value::OfChosen`] had the controller choose ("the mana value of a
+    /// commander you own on the battlefield or in the command zone").
+    pub const CHOSEN_FOR_VALUE: Var = USER + 14_040;
 }
 
 /// Selects players and/or objects.
@@ -2004,6 +2007,20 @@ pub enum Value {
     /// the object in [`vars::TESTED`] ("the greatest power among creatures you control",
     /// "the lowest mana value among nonland permanents"); 0 if there are none.
     Extreme(Box<Value>, Box<Sel>, bool),
+    /// "The [characteristic] of a [object]" naming one object picked from several ("the
+    /// mana value of a commander you own on the battlefield or in the command zone",
+    /// Stinging Study): as the effect resolves, its controller chooses one of the objects
+    /// matching `filter` (CR 608.2d; with two commanders, CR 702.124e), and the value is
+    /// `of` measured with that object in [`vars::TESTED`]. The choice is made by the
+    /// instruction that defines X ([`Effect::StoreValue`], [`Effect::SetX`]) before the
+    /// value is evaluated (`crate::chosen_object_value`) and kept in `store`; evaluated
+    /// before it is made, the value is that of the first candidate (policy
+    /// `default-first-listed-choice`), and 0 with no candidate.
+    OfChosen {
+        filter: Filter,
+        of: Box<Value>,
+        store: Var,
+    },
     /// "the number of creatures that died under your control this turn", "the number of
     /// cards your opponents have drawn this turn", "for each opponent who lost life this
     /// turn", "for each 2 life your opponents have lost this turn": this turn's events a
@@ -2173,6 +2190,14 @@ pub enum Condition {
     WasCast,
     /// The previous "you may" / optional cost in this resolution was taken ("if you do").
     PrevHappened,
+    /// The previous "you may" in this resolution was taken, whether or not what it offered
+    /// then happened: the choice to apply a "you may [do this] instead" self-replacement
+    /// (CR 614.1a, 614.15) is final, so the replaced instruction is done only when the
+    /// player declines. (`PrevHappened` records what was done: "you may return it to the
+    /// battlefield instead" with an Aura nothing can be enchanted by leaves it where it
+    /// is, CR 303.4g, Emeria Shepherd's ruling; "you may sacrifice a creature. If you do"
+    /// needs the sacrifice.)
+    PrevChosen,
     /// The previous effect affected at least one object/did something ("if a creature died this way").
     PrevAffectedAny,
     /// The spell/ability was cast from the given zone.

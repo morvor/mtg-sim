@@ -120,6 +120,7 @@ impl Game {
                     };
                     self.exec(&each, ctx);
                     ctx.prev_happened = true;
+                    ctx.prev_chosen = true;
                 }
             }
             Effect::May { who, effect } => {
@@ -162,6 +163,9 @@ impl Game {
                         ctx.prev_happened = true;
                     }
                 }
+                // Set after the offered instruction ran, so a "you may" inside it doesn't
+                // stand in for this one (`Condition::PrevChosen`).
+                ctx.prev_chosen = yes;
             }
             Effect::PayOptional {
                 who,
@@ -291,6 +295,9 @@ impl Game {
                 ctx.vars.insert(*var, v);
             }
             Effect::StoreValue { var, value } => {
+                // A value about one object picked from several has the controller choose
+                // it now, as the effect resolves (CR 608.2d; "where X is ...").
+                crate::chosen_object_value::choose(self, value, ctx);
                 let n = self.eval_value(value, ctx);
                 ctx.nums.insert(*var, n);
             }
@@ -306,6 +313,9 @@ impl Game {
             }
             Effect::NoteManaSpent { amount } => crate::noted_mana::note(self, *amount, ctx),
             Effect::SetX { value } => {
+                // A value about one object picked from several has the controller choose
+                // it now, as the effect resolves (CR 608.2d).
+                crate::chosen_object_value::choose(self, value, ctx);
                 ctx.x = self.eval_value(value, ctx) as i32;
                 ctx.x_defined = true;
             }
@@ -2382,7 +2392,7 @@ impl Game {
                 let mut cast: Vec<Entity> = Vec::new();
                 // CR 601.3e: a choice of "a spell with [characteristics]" considers the
                 // spell each card could become, and it's cast as such.
-                let chosen = crate::spell_choice::choose_cards_to_cast(self, what, ctx);
+                let chosen = crate::spell_choice::choose_cards_to_cast(self, what, *free, ctx);
                 let mut objs: Vec<ObjectId> = match &chosen {
                     Some(v) => v.iter().map(|(o, _)| *o).collect(),
                     None => self.resolve_objects(what, ctx),
@@ -2406,7 +2416,8 @@ impl Game {
                 for (k, o) in objs.clone().into_iter().enumerate() {
                     // A card that can't be cast now (its own "cast only during combat",
                     // a prohibition, no legal target) isn't offered (CR 608.2g, 601.3).
-                    if *optional && !crate::casting::could_cast_during_resolution(self, p, o) {
+                    if *optional && !crate::casting::could_cast_during_resolution(self, p, o, *free)
+                    {
                         continue;
                     }
                     if *optional && !self.ask_yes_no(p, Some(o), "Cast this card?", true) {
