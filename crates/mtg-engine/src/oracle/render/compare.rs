@@ -7,7 +7,21 @@
 //! Wordings that differ but mean the same thing under the Comprehensive Rules are listed
 //! in ONE place, [`EQUIVALENCES`] (string rewrites applied to both sides, each with its
 //! justification) and [`IGNORED_WORDS`]. Keep the list small: an equivalence must never
-//! hide a real difference in meaning.
+//! hide a real difference in meaning. Each justification starts with the CR rule (or the
+//! ruling) that makes the two wordings the same, or with "Wording only" when no rules
+//! content differs (grammar, anaphora, word order, number, tense, contraction, synonym);
+//! the list was read as a whole against the CR on Nov 10, 2026 (item register-sweep-1).
+//! Two rules that hid a difference were removed then: "with the same name as ~" read as
+//! "named ~" (an object's current name and its printed name differ, CR 201.2a, 201.5:
+//! Spy Kit, clones), which had let the grandeur costs "Discard another card named ~",
+//! compiled as the current name, pass (the compiler now reads them as the printed name);
+//! and "at the beginning of the next upkeep" read as "the next turn's upkeep", which the
+//! parser compiles alike (`TriggerCond::BeginningOf { Upkeep, Any }`, the next upkeep step
+//! to begin) but which differ in a turn with an additional upkeep step (Paradox Haze:
+//! created during the first, "the next upkeep" is that turn's second, "the next turn's
+//! upkeep" the next turn's), so the "next turn's upkeep" cards are the loosely read ones.
+//! A token's following "It gains ..." is no longer read as its text (Timothar, Baron of
+//! Bats's ruling), only "It has ...".
 
 use super::{render_card, RenderedFace};
 use crate::card::CardDef;
@@ -30,330 +44,355 @@ pub const EQUIVALENCES: &[Equivalence] = &[
     Equivalence {
         pattern: r"\b(creatures?|permanents?) that (?:isn't|aren't|is not|are not) (enchanted|equipped)\b",
         replacement: "un$2 $1",
-        why: "\"A creature that isn't enchanted\" is an unenchanted creature (CR 303.4).",
+        why: "Wording only (grammar): \"a creature that isn't enchanted\" and \"an \
+              unenchanted creature\" negate the same quality, an Aura being attached to it \
+              (an Equipment, for \"equipped\").",
     },
     Equivalence {
         pattern: r"\b(artifact|creature|enchantment|land|planeswalker|instant|sorcery|battle) card or (non-?[a-z]+ [a-z]+|legendary [a-z]+) card\b",
         replacement: "$1 or $2 card",
-        why: "\"Artifact or non-Aura enchantment card\", \"a land or legendary Turtle card\": \
-              the noun after the last alternative names both alternatives (\"artifact card \
-              or non-Aura enchantment card\").",
+        why: "Wording only (grammar): \"artifact or non-Aura enchantment card\", \"a land or \
+              legendary Turtle card\": the noun after the last alternative names both \
+              alternatives (\"artifact card or non-Aura enchantment card\").",
     },
     Equivalence {
         pattern: r"\b(artifact|creature|enchantment|land|planeswalker|instant|sorcery|battle) spell or (non-?[a-z]+ [a-z]+) spell\b",
         replacement: "$1 or $2 spell",
-        why: "\"Artifact or non-Aura enchantment spell\": the noun after the last alternative \
-              names both alternatives (\"artifact spell or non-Aura enchantment spell\").",
+        why: "Wording only (grammar): \"artifact or non-Aura enchantment spell\": the noun \
+              after the last alternative names both alternatives (\"artifact spell or \
+              non-Aura enchantment spell\").",
     },
     Equivalence {
         pattern: r"\b(target|each|all) ([a-z ]*?)(creatures?) that(?:'s| is| are) attacking or blocking\b",
         replacement: "$1 attacking or blocking $2$3",
-        why: "\"Target creature that's attacking or blocking\" is an attacking or blocking \
-              creature (CR 506.4).",
+        why: "Wording only (grammar): a relative clause for the adjectives: \"target \
+              creature that's attacking or blocking\" is \"target attacking or blocking \
+              creature\".",
     },
     Equivalence {
         pattern: r"\bcan block an additional ([a-z ]*?creatures?) each combat this turn\b",
         replacement: "can block an additional $1 this turn",
-        why: "\"Can block an additional creature this turn\" applies in each combat that \
-              turn (CR 509.1b).",
+        why: "CR 509.1a, 611.2a: blockers are declared anew in each declare blockers step, \
+              each chosen creature blocking one attacking creature (509.1a); an effect that \
+              lasts \"this turn\" (611.2a) relaxes that limit at every declaration of the \
+              turn, so \"can block an additional creature this turn\" allows the same blocks \
+              as \"can block an additional creature each combat this turn\".",
     },
     Equivalence {
         pattern: r"\ba six-sided die\b",
         replacement: "a d6",
-        why: "A d6 is a six-sided die (CR 706.1a).",
+        why: "CR 706.1a: a d6 is a six-sided die.",
     },
     Equivalence {
         pattern: r"\bthe owner of ~",
         replacement: "~'s owner",
-        why: "\"The owner of ~\" is \"~'s owner\".",
+        why: "Wording only (grammar): \"the owner of ~\" is \"~'s owner\".",
     },
     Equivalence {
         pattern: r"\bif no creatures are on the battlefield\b",
         replacement: "if there are no creatures on the battlefield",
-        why: "The same condition, worded two ways.",
+        why: "Wording only (word order): the same condition, worded two ways.",
     },
     Equivalence {
         pattern: r"\b(adds?) an amount of (\{[a-z0-9]\}) equal to the number of ",
         replacement: "$1 $2 for each ",
-        why: "\"Add {R} for each card\" adds one {R} per card: an amount of {R} equal to \
-              the number of cards (CR 106.1).",
+        why: "Wording only (number): \"an amount of {R} equal to the number of cards\" and \
+              \"{R} for each card\" are the same amount of mana.",
     },
     Equivalence {
         pattern: r"(^|\n|[.:] )([a-z]+s) can't be blocked by ([a-z]+s)(\.|$)",
         replacement: "$1$3 can't block $2$4",
-        why: "\"Warriors can't be blocked by Cowards\" and \"Cowards can't block Warriors\" \
-              are the same blocking restriction (CR 509.1b).",
+        why: "Wording only (voice): \"Warriors can't be blocked by Cowards\" and \"Cowards \
+              can't block Warriors\" state one blocking restriction (CR 509.1b) from either \
+              side; the same declarations are legal.",
     },
     Equivalence {
         pattern: r"\b(cards? (?:you|they|that player|an opponent|your opponents))(?:'ve| have| has)? drawn this turn\b",
         replacement: "$1 drew this turn",
-        why: "\"Cards you've drawn this turn\" and \"cards you drew this turn\" are the \
-              same cards (present perfect and past tense of the same draws, CR 121.1).",
+        why: "Wording only (tense): \"cards you've drawn this turn\" and \"cards you drew \
+              this turn\" are the same cards.",
     },
     Equivalence {
         pattern: r"\bat least (\d+|x|one|two|three|four|five|six|seven|eight|nine|ten)\b",
         replacement: "$1 or more",
-        why: "\"At least N\" is \"N or more\".",
+        why: "Wording only (synonym): \"at least N\" is \"N or more\".",
     },
     Equivalence {
         pattern: r"(^|\n)it (has|have) ([^.\n]*) as long as ~ is on the battlefield\b",
         replacement: "$1~ $2 $3",
-        why: "\"As long as ~ is on the battlefield, it has ...\" is \"~ has ...\": the \
-              abilities of a permanent function only while it is on the battlefield \
-              (CR 113.6).",
+        why: "CR 113.6: the abilities of a permanent function only while it's on the \
+              battlefield, so \"as long as ~ is on the battlefield, it has ...\" adds \
+              nothing to \"~ has ...\".",
     },
     Equivalence {
         pattern: r#"\b(or (?:an)?other (?:creature|permanent)) with the same name( (?:deals?|enters?|dies|die|attacks?|blocks?|gets?|has|have)\b|[.,"])"#,
-        replacement: "$1 named ~$2",
-        why: "\"~ or another creature with the same name deals damage\": the same name as \
-              ~, which the sentence names (as below). Not \"two creatures with the same \
-              name\" (as each other).",
-    },
-    Equivalence {
-        pattern: r"\bwith the same name as ~(?:it\b)?",
-        replacement: "named ~",
-        why: "An object \"named ~\" is one with the same name as this object: a name used \
-              in an ability refers to the object that has it, whatever its name is \
-              (CR 201.5b), and objects share a name per CR 201.2a.",
+        replacement: "$1 with the same name as ~$2",
+        why: "Wording only (grammar): \"~ or another creature with the same name deals \
+              damage\" (Pirated Copy's granted ability) names no object to share the name \
+              with, so it's the same name as ~, the object the sentence names first, which \
+              the renderer spells out (\"with the same name as ~\"). Not \"named ~\": an \
+              object's current name and its printed name differ (CR 201.2a, 201.5), and this \
+              one follows the current name (a copy's).",
     },
     Equivalence {
         pattern: r"\bthe player ([a-z]+s)\b",
         replacement: "that player $1",
-        why: "Anaphora: \"Its controller reveals cards ... The player puts that card onto \
-              the battlefield\": \"the player\" and \"that player\" are the player just \
-              named.",
+        why: "Wording only (anaphora): \"Its controller reveals cards ... The player puts \
+              that card onto the battlefield\": \"the player\" and \"that player\" are the \
+              player just named.",
     },
     Equivalence {
         pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(target player|target opponent) ([a-z]+s)((?: [^.;",{]*?)?)(,? and|,? then|,? and then|,) ([a-z]+s)\b"#,
         replacement: "$1$2 $3$4$5 that player $6",
-        why: "As below, for a targeted player: \"target player draws three cards and \
-              loses 3 life\" is \"target player draws three cards and that player loses 3 \
-              life\" (the same player, CR 115.1).",
+        why: "Wording only (grammar): a clause without a subject after \"and\", \"then\" or \
+              a comma shares the subject of the clause before it; for a targeted player, \
+              \"target player draws three cards and loses 3 life\" is \"target player draws \
+              three cards and that player loses 3 life\" (the same player). Written out so \
+              that the subject isn't mistaken for the controller's (the next two entries).",
     },
     Equivalence {
         pattern: r#"(^|[.:—•,] |\n|\bthen |\band |\bif you do, )(each opponent|each player|each other player|target player|target opponent|that player|the player|defending player|its controller|its owner|an opponent|a player|\{alt:[^}]*player[^}]*\}) ([a-z]+s)((?: [^.;",{]*?)?)(,? and|,? then|,? and then|,) ([a-z]+s)\b"#,
         replacement: "$1$2 $3$4$5 $2 $6",
-        why: "A clause without a subject after \"and\", \"then\", or a comma shares the \
-              subject of the clause before it: \"each opponent sacrifices a creature and loses 3 life\" is \
-              \"each opponent sacrifices a creature and each opponent loses 3 life\". \
-              Written out, so that the subject isn't mistaken for the controller's \
-              (see the next entry).",
+        why: "Wording only (grammar): a clause without a subject after \"and\", \"then\" or \
+              a comma shares the subject of the clause before it: \"each opponent sacrifices \
+              a creature and loses 3 life\" is \"each opponent sacrifices a creature and \
+              each opponent loses 3 life\". Written out, so that the subject isn't mistaken \
+              for the controller's (see the next entry).",
     },
     Equivalence {
         pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(each opponent|each player|each other player|target player|target opponent|that player|they|defending player|its controller|its owner|that [a-z]+'s (?:controller|owner)|an opponent|a player|\{alt:[^}]*player[^}]*\}) may ([^.;"{]*?),? and may\b"#,
         replacement: "$1$2 may $3 and $2 may",
-        why: "As above, for \"may\": in \"that player may copy ~ and may choose new targets \
-              for the copy\", the player who may choose is that player, not the \
-              ability's controller (so \"may\" without a subject, which is the \
-              controller's after the next entry, isn't confused with it).",
+        why: "Wording only (grammar): as above, for \"may\": in \"that player may copy ~ and \
+              may choose new targets for the copy\", the player who may choose is that \
+              player, not the ability's controller (so \"may\" without a subject, which is \
+              the controller's after the next entry, isn't confused with it).",
     },
     Equivalence {
         pattern: r"\b(?:each|all) ([a-z-]+?)s? (?:other than|except for) ~(?:it\b)?",
         replacement: "each other $1",
-        why: "\"Other\" in an ability is other than the object it's on: \"all \
-              creatures other than ~\" and \"all creatures except for ~\" are \"each other \
-              creature\".",
+        why: "Wording only (synonym): \"all creatures other than ~\" and \"all creatures \
+              except for ~\" are \"each other creature\".",
     },
     Equivalence {
         pattern: r"\bwith an? (morph|megamorph|kicker|multikicker|cycling|flashback|suspend|ninjutsu|disguise|madness|evoke|echo|buyback|unearth|embalm|eternalize|escape|dash|blitz|bestow|prowl|outlast|equip|crew) ability\b",
         replacement: "with $1",
-        why: "A card \"with a morph ability\" is a card with morph: the keyword is the \
-              ability (CR 702.1).",
+        why: "Wording only (grammar): a card \"with a morph ability\" is a card with morph; \
+              the keyword names the ability (CR 702.1).",
     },
     Equivalence {
         pattern: r"\ba spell that's both (white|blue|black|red|green) and (white|blue|black|red|green)\b",
         replacement: "a $1 and $2 spell",
-        why: "A spell that's both white and black is a white and black spell (CR 105.2).",
+        why: "Wording only (grammar): \"a spell that's both white and black\" is \"a white \
+              and black spell\", one spell with both colors.",
     },
     Equivalence {
         pattern: r"\ba spell that's ((?:(?:white|blue|black|red|green), )+)or (white|blue|black|red|green)\b",
         replacement: "a ${1}or $2 spell",
-        why: "A clause saying what a spell is describes it as the adjectives do: \"a spell \
-              that's white, blue, black, or red\" is \"a white, blue, black, or red spell\".",
+        why: "Wording only (grammar): a clause saying what a spell is describes it as the \
+              adjectives do: \"a spell that's white, blue, black, or red\" is \"a white, \
+              blue, black, or red spell\".",
     },
     Equivalence {
         pattern: r"\b(creatures? or planeswalkers?) that's (white|blue|black|red|green) or (white|blue|black|red|green)\b",
         replacement: "$2 or $3 $1",
-        why: "The same for colors: \"target creature or planeswalker that's green or blue\" \
-              is \"target green or blue creature or planeswalker\".",
+        why: "Wording only (grammar): the same for colors: \"target creature or planeswalker \
+              that's green or blue\" is \"target green or blue creature or planeswalker\".",
     },
     Equivalence {
         pattern: r"\b(target (?:face-up )?)exiled card((?: with [a-z]+)?(?: you own)?)",
         replacement: "${1}card$2 in exile",
-        why: "An exiled card is a card in exile (CR 406.1).",
+        why: "Wording only (grammar): \"an exiled card\" is a card in the exile zone (CR \
+              406.1), the participle for the prepositional phrase.",
     },
     Equivalence {
         pattern: r"\bthe (owner|controller) of (target (?:[a-z-]+ ){0,3}?(?:creature|permanent|spell|artifact|land|enchantment|card)(?: you control| an opponent controls)?)\b",
         replacement: "$2's $1",
-        why: "\"The owner of target creature\" is \"target creature's owner\" (as \"the owner \
-              of ~\").",
+        why: "Wording only (grammar): \"the owner of target creature\" is \"target \
+              creature's owner\" (as \"the owner of ~\").",
     },
     Equivalence {
         pattern: r"\bif (\S+ or more) ([a-z ]+?cards?) (?:are|is) in (your|their|a) graveyard\b",
         replacement: "if there are $1 $2 in $3 graveyard",
-        why: "\"If twenty or more creature cards are in your graveyard\" and \"if there are \
-              twenty or more creature cards in your graveyard\" are the same condition.",
+        why: "Wording only (word order): \"if twenty or more creature cards are in your \
+              graveyard\" and \"if there are twenty or more creature cards in your \
+              graveyard\" are the same condition.",
     },
     Equivalence {
         pattern: r"\b(creatures?) that(?:'s| is| are) attacking\b",
         replacement: "$1 attacking",
-        why: "\"A creature that's attacking that player\" is \"a creature attacking that \
-              player\".",
+        why: "Wording only (grammar): \"a creature that's attacking that player\" is \"a \
+              creature attacking that player\".",
     },
     Equivalence {
         pattern: r"\bin addition to (its|their) other (?:creature|land) types\b",
         replacement: "in addition to $1 other types",
-        why: "Adding a creature type changes only creature types (CR 205.1a, 205.1b), and \
-              adding a land type only land types (CR 305.7: the land keeps its other land \
-              types when the type is added \"in addition\"): \"in addition to its other \
-              creature types\", \"... other land types\" and \"in addition to its other \
-              types\" keep the same types.",
+        why: "CR 205.1b, 305.7: an added creature type changes only the creature types, and \
+              a land type added \"in addition\" only the land types (305.7: the land keeps \
+              its land types and rules text); \"in addition to its other types\" keeps every \
+              prior type (205.1b). All three keep the same types.",
     },
     Equivalence {
         pattern: r"\b(white|blue|black|red|green|colorless) legendary\b",
         replacement: "legendary $1",
-        why: "Adjective order: \"red legendary creatures\" are \"legendary red creatures\".",
+        why: "Wording only (word order): \"red legendary creatures\" are \"legendary red \
+              creatures\".",
     },
     Equivalence {
         pattern: r"\bthe blocking creature\b",
         replacement: "thatit",
-        why: "Anaphora: \"Whenever ~ becomes blocked by a creature, the blocking creature \
-              gets -1/-1\": the creature the trigger event named.",
+        why: "Wording only (anaphora): \"Whenever ~ becomes blocked by a creature, the \
+              blocking creature gets -1/-1\": the creature the trigger event named. (Where \
+              the event names two creatures, \"Whenever a creature becomes blocked by a \
+              creature with lesser power, destroy the blocking creature\", No Quarter, which \
+              one the parser bound isn't caught by this comparison: see \"that creature\".)",
     },
     Equivalence {
         pattern: r"\bany other target\b",
         replacement: "another target",
-        why: "\"Another target\" is any target other than the earlier ones (CR 115.3).",
+        why: "Wording only (synonym): \"any other target\" is \"another target\", one other \
+              than the targets already named.",
     },
     Equivalence {
         pattern: r"\b(\d+)-(\d+)\b",
         replacement: "$1 $2",
-        why: "A range of die results in a table, \"1-9\" or \"1—9\" (CR 706).",
+        why: "Wording only (punctuation): a range of die results in a results table, \"1-9\" \
+              or \"1—9\".",
     },
     Equivalence {
         pattern: r"\b(?:have not|has not|haven't|hasn't) (cast|attacked|gained|lost)\b",
         replacement: "didn't $1",
-        why: "\"If you haven't cast a spell this turn\" and \"if you didn't cast a spell this \
-              turn\" ask the same thing about this turn.",
+        why: "Wording only (tense): \"if you haven't cast a spell this turn\" and \"if you \
+              didn't cast a spell this turn\" ask the same thing about this turn.",
     },
     Equivalence {
         pattern: r"\bthat (?:was|were) attached to\b",
         replacement: "attached to",
-        why: "Tense: \"gain control of all Equipment that were attached to it\" after it was \
-              destroyed names the Equipment attached to it then.",
+        why: "CR 608.2h: \"gain control of all Equipment that were attached to it\" after \
+              the creature left the battlefield uses its last known information, which is \
+              what \"attached to it\" says of a creature that has left (the engine evaluates \
+              a departed object by its last known information).",
     },
     Equivalence {
         pattern: r"\b(whenever|when) you play a card( from exile| from your graveyard)?,",
         replacement: "$1 you cast a spell$2 or play a land$2,",
-        why: "Playing a card is playing it as a land or casting it as a spell (CR 601.1a, \
-              701.18b).",
+        why: "CR 601.1a, 701.18b: playing a card is playing it as a land or casting it as a \
+              spell.",
     },
     Equivalence {
         pattern: r"\ba graveyard has (\S+ or (?:more|fewer)) cards in it\b",
         replacement: "a player has $1 cards in their graveyard",
-        why: "Each player has one graveyard (CR 404.1): a graveyard with twenty or more cards \
-              in it is a player's graveyard with twenty or more cards in it.",
+        why: "CR 404.1: each player has one graveyard, so a graveyard with twenty or more \
+              cards in it is a player's graveyard with twenty or more cards in it.",
     },
     Equivalence {
         pattern: r"\bcontrol creatures named ([^,.]+?) and ([^,.]+?),",
         replacement: "control a creature named $1 and a creature named $2,",
-        why: "Controlling creatures named A and B is controlling a creature named A and a \
-              creature named B.",
+        why: "Wording only (grammar): controlling creatures named A and B is controlling a \
+              creature named A and a creature named B.",
     },
     Equivalence {
         pattern: r"(^|\n|[.:] )(~|it) can't attack or block unless ([^.]+)(\.|$)",
         replacement: "$1$2 can't attack unless $3. $2 can't block unless $3$4",
-        why: "A cost to attack and a cost to block (CR 508.1d, 509.1d), stated together.",
+        why: "CR 508.1d, 509.1c: a condition or cost to attack is checked as attackers are \
+              declared and one to block as blockers are declared; stated together (\"can't \
+              attack or block unless ...\") or apart, the same declarations are legal.",
     },
     Equivalence {
         pattern: r"\bcontrolled by different players\b",
         replacement: "with different controllers",
-        why: "Targets controlled by different players are targets with different \
-              controllers.",
+        why: "Wording only (synonym): targets controlled by different players are targets \
+              with different controllers.",
     },
     Equivalence {
         pattern: r"\bis equal to\b",
         replacement: "is",
-        why: "\"Your maximum hand size is equal to X\" is \"is X\".",
+        why: "Wording only (synonym): \"your maximum hand size is equal to X\" is \"is X\".",
     },
     Equivalence {
         pattern: r"\bin a command zone\b",
         replacement: "in the command zone",
-        why: "There's one command zone (CR 408.1).",
+        why: "CR 400.1, 408.1: the command zone is one zone, shared by all players.",
     },
     Equivalence {
         pattern: r"\b(creatures?|permanents?) on the battlefield ((?:with|named) \S+)",
         replacement: "$1 $2 on the battlefield",
-        why: "The order of a noun's qualities: \"other creatures on the battlefield with \
-              flying\".",
+        why: "Wording only (word order): \"other creatures on the battlefield with flying\".",
     },
     Equivalence {
         pattern: r"\b(gets?) an additional poison counter\b",
         replacement: "$1 a poison counter",
-        why: "A player who gets an additional poison counter gets a poison counter \
-              (CR 122.1).",
+        why: "Wording only (synonym): a player who gets an additional poison counter gets a \
+              poison counter; \"additional\" says only that it's in addition to the counters \
+              another instruction gave.",
     },
     Equivalence {
         pattern: r"\bif your opponents would\b",
         replacement: "if an opponent would",
-        why: "A replacement effect for \"your opponents\" applies to each of them, as \"an \
-              opponent\" does.",
+        why: "Wording only (number): the renderer words a replacement effect that applies to \
+              each of your opponents as \"if your opponents would ...\" (Tainted Remedy, \
+              Plague Drone); a player's life gain, draw or the like is that player's own \
+              event, so the effect applies to each opponent's event, which is what the \
+              cards' \"if an opponent would ...\" says.",
     },
     Equivalence {
         pattern: r"\b(creature|permanent) that's one or more colors\b",
         replacement: "colored $1",
-        why: "A colored object is one that's one or more colors (CR 105.2).",
+        why: "CR 105.2: an object that is one or more of the five colors is colored (105.2a, \
+              105.2b; a colorless object has no color, 105.2c).",
     },
     Equivalence {
         pattern: r"\byour life total can't change\b",
         replacement: "you can't gain life and you can't lose life",
-        why: "A life total changes only by gaining or losing life, also when an effect sets \
-              it to a number (CR 119.5).",
+        why: "CR 119.3, 119.4, 119.5: a life total changes only by life gained or lost \
+              (119.3), which includes life paid (119.4) and a total set to a number (119.5).",
     },
     Equivalence {
         pattern: r"\b(put [^.]*?),? and the rest\b",
         replacement: "$1. put the rest",
-        why: "\"Put that card into your hand and the rest on the bottom of your library\": \
-              the verb is said once for both groups of cards.",
+        why: "Wording only (grammar): \"put that card into your hand and the rest on the \
+              bottom of your library\": the verb is said once for both groups of cards.",
     },
     Equivalence {
         pattern: r"\b(?:all )?other cards revealed this way\b|\bthe rest of the revealed cards\b",
         replacement: "the rest",
-        why: "Anaphora: after an instruction that takes some of the cards revealed, \
-              \"all other cards revealed this way\" and \"the rest of the revealed \
+        why: "Wording only (anaphora): after an instruction that takes some of the cards \
+              revealed, \"all other cards revealed this way\" and \"the rest of the revealed \
               cards\" are the rest of them.",
     },
     Equivalence {
         pattern: r"\b(?:is|are) put into your graveyard from the battlefield\b",
         replacement: "you own dies",
-        why: "A card goes to its owner's graveyard (CR 400.3), so a permanent put into your \
-              graveyard from the battlefield is one you own that dies (CR 700.4).",
+        why: "CR 400.3, 700.4: a card goes to its owner's graveyard, so a permanent put into \
+              your graveyard from the battlefield is one you own that dies.",
     },
     Equivalence {
         pattern: r"\bcycles? or discards? (a|another|one or more|two or more) ",
         replacement: "discard $1 ",
-        why: "Cycling a card discards it (CR 702.29a); an ability that triggers when a player \
-              \"cycles or discards\" a card triggers once when a card is cycled (CR 702.29d), \
-              as one that triggers on discarding does.",
+        why: "CR 702.29a, 702.29d: cycling a card discards it, and an ability that triggers \
+              when a player \"cycles or discards\" a card triggers once when a card is \
+              cycled, as one that triggers on discarding does.",
     },
     Equivalence {
         pattern: r"\bif (?:it|that spell) is countered this way, exile it instead of putting it into its owner's graveyard",
         replacement: "if it would be put into a graveyard from the stack, exile it instead",
-        why: "A spell countered by the instruction goes to its owner's graveyard from the \
-              stack (CR 701.6a); the replacement (CR 614.1a) applies to that event.",
+        why: "CR 701.6a, 614.1a: a countered spell goes to its owner's graveyard from the \
+              stack; the instruction's \"instead\" replaces that move with exile, as a \
+              replacement of the event \"if it would be put into a graveyard from the \
+              stack\" does.",
     },
     Equivalence {
         pattern: r"\bwhenever\b",
         replacement: "when",
-        why: "\"When\" and \"whenever\" both introduce a trigger condition (CR 603.1); the \
-              choice of word has no rules meaning.",
+        why: "Wording only (synonym): \"when\" and \"whenever\" both introduce a trigger \
+              condition (CR 603.1), and no rule tells them apart.",
     },
     Equivalence {
         pattern: r"\bwhen ~ (enters?) and when (?:it|~) ",
         replacement: "when ~ $1 or ",
-        why: "\"When ~ enters and whenever it attacks, ...\" is one triggered ability with two \
-              trigger conditions (CR 603.1b), which triggers when either event happens, as \
-              \"Whenever ~ enters or attacks, ...\" does (CR 603.2).",
+        why: "Wording only (grammar): \"When ~ enters and whenever it attacks, ...\" is one \
+              triggered ability with two trigger events, like \"Whenever ~ enters or \
+              attacks, ...\" (CR 603.1's form, \"[When/Whenever/At] [trigger condition or \
+              event]\"); it triggers when either event happens.",
     },
     Equivalence {
         pattern: r"\bis put into a graveyard from the battlefield\b",
@@ -368,423 +407,431 @@ pub const EQUIVALENCES: &[Equivalence] = &[
     Equivalence {
         pattern: r"\b(to|into|on top of|on the bottom of|onto) (your|its owner's|their owners'|their owner's|its owners'|that player's|their) (hands?|library|libraries|graveyards?)\b",
         replacement: "$1 owner's $3",
-        why: "A card always goes to its owner's hand, library, or graveyard (CR 400.3); \
-              \"your hand\" on a card you own is its owner's hand, and \"their hand\" or \"their \
-              library\" for the cards a player moves from their own zones is too.",
+        why: "CR 400.3: a card always goes to its owner's hand, library or graveyard, \
+              whichever player's zone the text names (\"your hand\" on a card you own, \
+              \"their hand\" for the cards a player moves from their own zones).",
     },
     Equivalence {
         pattern: r"\bfrom (your|a|an|their|its owner's|that player's|target player's|target opponent's|an opponent's|defending player's|enchanted player's|each|all|any) ((?:opponent's |player's )?)(graveyards?|hands?|library|libraries)\b",
         replacement: "in $1 $2$3",
-        why: "An object description says where the object is: \"a creature card from your \
-              graveyard\" and \"a creature card in your graveyard\" describe the same cards.",
+        why: "Wording only (grammar): an object description says where the object is: \"a \
+              creature card from your graveyard\" and \"a creature card in your graveyard\" \
+              describe the same cards.",
     },
     Equivalence {
         pattern: r"\b(discards?) all the cards in (your|their) hand\b",
         replacement: "$1 $2 hand",
-        why: "A player's hand is the cards they hold (CR 402.1): discarding all the cards \
-              in it is discarding that hand.",
+        why: "Wording only (synonym): a player's hand is the cards they hold (CR 402.1): \
+              discarding all the cards in it is discarding that hand.",
     },
     Equivalence {
         pattern: r"\byou had (an?|one or more|two or more|three or more) ([a-z]+) enter the battlefield under your control\b",
         replacement: "$1 $2 entered the battlefield under your control",
-        why: "\"If you had a land enter the battlefield under your control this turn\" asks \
-              whether a land entered the battlefield under your control this turn.",
+        why: "Wording only (grammar): \"if you had a land enter the battlefield under your \
+              control this turn\" asks whether a land entered the battlefield under your \
+              control this turn.",
     },
     Equivalence {
         pattern: r"(^|[.:—•] )if ([^,.]+), (~ (?:doesn't|does not) untap during your untap step)\b",
         replacement: "$1$3 as long as $2",
-        why: "A static ability's condition (\"~ doesn't untap during your untap step if it \
-              has a depletion counter on it\") applies whenever it's true, as \"as long as\" \
-              says (CR 604.1).",
+        why: "CR 604.1: a static ability's effect applies whenever its condition is true \
+              (\"~ doesn't untap during your untap step if it has a depletion counter on \
+              it\"), which is what \"as long as\" says.",
     },
     Equivalence {
         pattern: r"\b(defending player\b[^.;\n]*?)\bdefending player's\b",
         replacement: "${1}their",
-        why: "A pronoun for the player the sentence already named: \"defending player loses \
-              1 life for each card in their graveyard\" is defending player's graveyard.",
+        why: "Wording only (anaphora): a pronoun for the player the sentence already named: \
+              \"defending player loses 1 life for each card in their graveyard\" is \
+              defending player's graveyard.",
     },
     Equivalence {
         pattern: r"\b(defending player\b[^.;\n]*?)\bdefending player controls\b",
         replacement: "${1}they control",
-        why: "A pronoun for the player the sentence already named: \"... to defending \
-              player equal to the number of artifacts they control\".",
+        why: "Wording only (anaphora): a pronoun for the player the sentence already named: \
+              \"... to defending player equal to the number of artifacts they control\".",
     },
     Equivalence {
         pattern: r"\beach of your opponents\b",
         replacement: "each opponent",
-        why: "\"Each of your opponents\" is each opponent: a player's opponents are the \
-              players not on their team (CR 102.2, 102.3).",
+        why: "Wording only (grammar): \"each of your opponents\" is \"each opponent\".",
     },
     Equivalence {
         pattern: r"\bone or more of your opponents\b",
         replacement: "one or more opponents",
-        why: "\"One or more of your opponents\" is one or more opponents (CR 102.2, \
-              102.3).",
+        why: "Wording only (grammar): \"one or more of your opponents\" is \"one or more \
+              opponents\".",
     },
     Equivalence {
         pattern: r"\b(deals?) (combat )?damage to your opponents\b",
         replacement: "${1} ${2}damage to one or more opponents",
-        why: "\"Whenever one or more Pirates you control deal damage to your opponents\" \
-              triggers once for the damage dealt to one or more of them (CR 603.2c).",
+        why: "CR 603.2c; Malcolm, Keen-Eyed Navigator ruling (2020-11-10): \"Whenever one or \
+              more Pirates you control deal damage to your opponents\" triggers once for the \
+              damage event however many opponents it reaches (\"Malcolm's triggered ability \
+              will trigger even if Pirates you control deal damage to only a single \
+              opponent\"), and its effect counts \"each opponent dealt damage\" (Malcolm, \
+              Breeches): the same trigger as \"deal damage to one or more opponents\".",
     },
     Equivalence {
         pattern: r"\b(opponents?) you have\b",
         replacement: "$1",
-        why: "\"For each opponent you have\" counts your opponents (CR 102.2, 102.3).",
+        why: "Wording only (grammar): \"for each opponent you have\" counts your opponents.",
     },
     Equivalence {
         pattern: r"\bnon(artifact|creature|land|enchantment|legendary|token),? non(white|blue|black|red|green)\b",
         replacement: "non$2 non$1",
-        why: "The order of a noun's qualities doesn't change what it describes: a \
-              \"nonartifact, nonblack creature\" is a \"nonblack nonartifact creature\".",
+        why: "Wording only (word order): a \"nonartifact, nonblack creature\" is a \
+              \"nonblack nonartifact creature\".",
     },
     Equivalence {
         pattern: r"\b(creatures?|creature tokens?)((?: you control)?) that(?:'s| is| are) (enchanted|equipped)( get\b| gets\b| have\b| has\b|[.,])",
         replacement: "$3 $1$2$4",
-        why: "A clause saying what an object is describes it as the adjective does: \
-              \"creatures you control that are enchanted\" are \"enchanted creatures you \
-              control\".",
+        why: "Wording only (grammar): a clause saying what an object is describes it as the \
+              adjective does: \"creatures you control that are enchanted\" are \"enchanted \
+              creatures you control\".",
     },
     Equivalence {
         pattern: r"\b(creatures?|permanents?)((?: you control| your opponents control| an opponent controls)?) that(?:'s| is| are) (?:an? )?([a-z-]+),? (or|and/or) (?:an? )?([a-z-]+)\b",
         replacement: "$3 $4 $5 $1$2",
-        why: "The same for kinds: \"each creature you control that's a Wolf or a \
-              Werewolf\" is \"each Wolf or Werewolf creature you control\".",
+        why: "Wording only (grammar): the same for kinds: \"each creature you control that's \
+              a Wolf or a Werewolf\" is \"each Wolf or Werewolf creature you control\".",
     },
     Equivalence {
         pattern: r"\b(creatures?|permanents?)((?: you control| your opponents control| an opponent controls)?) that(?:'s| is| are) (?:an? )?([a-z-]+), (?:an? )?([a-z-]+), (or|and/or) (?:an? )?([a-z-]+)\b",
         replacement: "$3, $4, $5 $6 $1$2",
-        why: "The same with three kinds: \"each creature that's a Barbarian, a Warrior, or \
-              a Berserker\".",
+        why: "Wording only (grammar): the same with three kinds: \"each creature that's a \
+              Barbarian, a Warrior, or a Berserker\".",
     },
     Equivalence {
         pattern: r"\b(exiles?) (?:all|each) (?:the )?cards (?:in|from) ((?:all|each) graveyards|(?:target player|target opponent|that player)'s (?:hand|graveyard|library))\b",
         replacement: "$1 $2",
-        why: "As above, for all graveyards and another player's zones: exiling all cards \
-              from all graveyards is exiling all graveyards (CR 400.1).",
+        why: "Wording only (synonym): a zone and the cards in it (CR 400.1): exiling all \
+              cards from all graveyards is exiling all graveyards.",
     },
     Equivalence {
         pattern: r"(^|\s)(~|it) attacks or blocks each combat if able\b",
         replacement: "$1$2 attacks each combat if able. $2 blocks each combat if able",
-        why: "A requirement to attack each combat and one to block each combat (CR 508.1d, \
-              509.1c), stated together.",
+        why: "CR 508.1d, 509.1c: a requirement to attack each combat and one to block each \
+              combat, stated together or apart.",
     },
     Equivalence {
         pattern: r"\bactivate only (once each turn|as a sorcery|during your turn) and only if ([^.]+?)(\.|$)",
         replacement: "activate only if $2 and only $1$3",
-        why: "Restrictions on activating an ability all apply, in whatever order they're \
-              listed (CR 602.5).",
+        why: "Wording only (word order): both restrictions on activating the ability apply \
+              whichever is listed first.",
     },
     Equivalence {
         pattern: r"\byou have an? card in (your )?hand\b",
         replacement: "you have one or more cards in ${1}hand",
-        why: "Having a card in hand is having one or more.",
+        why: "Wording only (number): having a card in hand is having one or more.",
     },
     Equivalence {
         pattern: r"\bwith no ((?:[a-z+/0-9-]+ )?)counters on\b",
         replacement: "without ${1}counters on",
-        why: "\"With no counters on it\" and \"without counters on it\" are the same.",
+        why: "Wording only (synonym): \"with no counters on it\" and \"without counters on \
+              it\" are the same.",
     },
     Equivalence {
         pattern: r"\bprevent all (combat )?damage that would be dealt to and dealt by ([^.]+)\.",
         replacement: "prevent all ${1}damage that would be dealt to $2. prevent all ${1}damage that would be dealt by $2.",
-        why: "Damage dealt to an object and damage dealt by it are prevented alike (CR \
-              615.1a): the same as two prevention effects.",
+        why: "Wording only (grammar): one prevention effect naming damage dealt to the \
+              object and damage dealt by it, or two effects naming one each, prevent the \
+              same damage.",
     },
     Equivalence {
         pattern: r"\bprevent all (combat )?damage (?:that )?((?:~|target [^.{}|]+?|[a-z][^.{}|]*?)) would deal to ([^.{}|]+?)((?: this turn)?)\.",
         replacement: "prevent all ${1}damage that would be dealt to $3 by $2$4.",
-        why: "\"Prevent all damage X would deal to Y\" is the damage that would be dealt to Y \
-              by X (CR 615.1a).",
+        why: "Wording only (voice): \"prevent all damage X would deal to Y\" is the damage \
+              that would be dealt to Y by X.",
     },
     Equivalence {
         pattern: r"\bprevent all (combat )?damage (?:that )?((?:~|target [^.{}|]+?|[a-z][^.{}|]*?)) would deal\b",
         replacement: "prevent all ${1}damage that would be dealt by $2",
-        why: "\"Prevent all damage X would deal\" is the damage that would be dealt by X (CR \
-              615.1a).",
+        why: "Wording only (voice): \"prevent all damage X would deal\" is the damage that \
+              would be dealt by X.",
     },
     Equivalence {
         pattern: r"\bas long as it's your turn\b",
         replacement: "during your turn",
-        why: "A static ability that applies \"as long as it's your turn\" applies during \
-              your turn.",
+        why: "Wording only (synonym): a static ability that applies \"as long as it's your \
+              turn\" applies during your turn.",
     },
     Equivalence {
         pattern: r"\b(?:has|have) the chosen creature type in addition to (its|their) other types\b",
         replacement: "is the chosen type in addition to $1 other types",
-        why: "An object that has a creature type in addition to its other types is that \
-              subtype as well as what it was (CR 205.1b, 205.3).",
+        why: "Wording only (synonym): an object that has a creature type in addition to its \
+              other types is that subtype as well as what it was (CR 205.3).",
     },
     Equivalence {
         pattern: r"\bas long as it's an extra turn\b",
         replacement: "during extra turns",
-        why: "A static ability that applies \"as long as it's an extra turn\" applies during \
-              each extra turn (CR 500.7) and no other.",
+        why: "Wording only (synonym): a static ability that applies \"as long as it's an \
+              extra turn\" applies during each extra turn (CR 500.7) and no other.",
     },
     Equivalence {
         pattern: r"\byour life total is less than (\d+|[a-z]+)\b",
         replacement: "you have less than $1 life",
-        why: "A player's life total is the amount of life they have (CR 119.1).",
+        why: "Wording only (synonym): a player's life total is the amount of life they have \
+              (CR glossary, \"Life Total\").",
     },
     Equivalence {
         pattern: r"(^|[.:—•] |\n)for each (opponent|player), ([^.]+)\.",
         replacement: "$1$3 for each $2.",
-        why: "\"For each opponent, create a token\" and \"create a token for each \
-              opponent\" do the same thing once per opponent.",
+        why: "Wording only (word order): \"for each opponent, create a token\" and \"create \
+              a token for each opponent\" do the same thing once per opponent.",
     },
     Equivalence {
         pattern: r"\b(creatures?|permanents?)((?: you control| your opponents control| an opponent controls)?) that(?:'s| is| are) (?:an? )?((?:[a-z-]+, ){3,})(or|and/or) ([a-z-]+)\b",
         replacement: "$3$4 $5 $1$2",
-        why: "The same with a longer list of kinds: \"each other creature you control that's \
-              a Cat, Elemental, Nightmare, Dinosaur, or Beast\".",
+        why: "Wording only (grammar): the same with a longer list of kinds: \"each other \
+              creature you control that's a Cat, Elemental, Nightmare, Dinosaur, or Beast\".",
     },
     Equivalence {
         pattern: r"\bnontoken (white|blue|black|red|green)\b",
         replacement: "$1 nontoken",
-        why: "The same for a color and \"nontoken\": a \"nontoken blue creature\" is a \
-              \"blue nontoken creature\".",
+        why: "Wording only (word order): a \"nontoken blue creature\" is a \"blue nontoken \
+              creature\".",
     },
     Equivalence {
         pattern: r#"(^|[.:—•,] |\n|\bthen |\bif you do, )(~it|~|it) (gets|gains) ([^.;",{]*?)(,? and|,? then) (deals)\b"#,
         replacement: "$1$2 $3 $4$5 $2 $6",
-        why: "As for players above: \"~ gets +1/+0 until end of turn and deals 1 damage to \
-              you\" is \"~ gets +1/+0 until end of turn and ~ deals 1 damage to you\".",
+        why: "Wording only (grammar): a clause without a subject shares the subject of the \
+              clause before it: \"~ gets +1/+0 until end of turn and deals 1 damage to you\" \
+              is \"~ gets +1/+0 until end of turn and ~ deals 1 damage to you\".",
     },
     Equivalence {
         pattern: r"\b(puts?|plus) an additional\b",
         replacement: "$1 a",
-        why: "\"Put an additional +1/+1 counter on it\" puts one more counter: a counter \
-              (\"additional\" says that it's in addition to the counters it got from \
-              another instruction or event).",
+        why: "Wording only (synonym): \"put an additional +1/+1 counter on it\" puts one \
+              counter; \"additional\" says only that it's in addition to the counters \
+              another instruction or event gave.",
     },
     Equivalence {
         pattern: r"\b(draws?) (two|three|four|\d+) additional cards\b",
         replacement: "$1 $2 cards",
-        why: "\"That player draws two additional cards\" in their draw step: two more \
-              cards (in addition to the draw for the turn, CR 504.1).",
+        why: "Wording only (synonym): \"that player draws two additional cards\" draws two \
+              cards; \"additional\" says only that they're in addition to the draw for the \
+              turn (CR 504.1).",
     },
     Equivalence {
         pattern: r"\b(exiles?|shuffles?) (?:all|each) (?:the )?cards (?:in|from) (your|their|its owner's|its controller's|that player's) (hand|graveyard|library)\b",
         replacement: "$1 $2 $3",
-        why: "A hand, graveyard, or library is the cards in it (CR 400.1): exiling all the \
-              cards in your graveyard is exiling your graveyard.",
+        why: "Wording only (synonym): a hand, graveyard or library and the cards in it (CR \
+              400.1): exiling all the cards in your graveyard is exiling your graveyard.",
     },
     Equivalence {
         pattern: r"\bif you (?:don't|do not) put (?:it|that card|the card|thatit) onto the battlefield,",
         replacement: "if you don't,",
-        why: "\"You may put it onto the battlefield. If you don't put it onto the \
-              battlefield, ...\" repeats the optional instruction \"if you don't\" refers \
-              to.",
+        why: "Wording only (anaphora): \"You may put it onto the battlefield. If you don't \
+              put it onto the battlefield, ...\" repeats the optional instruction \"if you \
+              don't\" refers to.",
     },
     Equivalence {
         pattern: r"\b(controls?|targets?) one or more\b",
         replacement: "$1 a",
-        why: "Controlling or targeting one or more Eggs is controlling or targeting an Egg \
-              (a condition or quality, not a count of events).",
+        why: "Wording only (number): controlling or targeting one or more Eggs is \
+              controlling or targeting an Egg (a condition, not a count of events).",
     },
     Equivalence {
         pattern: r"\b(gains?) x life, where x is the damage dealt this way\b",
         replacement: "$1 that many life",
-        why: "\"You gain life equal to the damage dealt this way\": as much life as that \
-              damage.",
+        why: "Wording only (synonym): \"you gain life equal to the damage dealt this way\" \
+              is \"that many life\".",
     },
     Equivalence {
         pattern: r"\b(enters?|entered|entering) the battlefield\b",
         replacement: "$1",
-        why: "\"Enters the battlefield\" has been shortened to \"enters\" in rules text \
-              (CR glossary, \"Enters the Battlefield\"; CR 603.6a).",
+        why: "CR 603.6a (and the glossary, \"Enters the Battlefield\"): rules text now says \
+              \"enters\" for \"enters the battlefield\".",
     },
     Equivalence {
         pattern: r"\bthis turn (as though (?:it|they) (?:had|were|weren't|wasn't) [^.,;{}|]+?)(\.|$)",
         replacement: "$1 this turn$2",
-        why: "Word order of the duration: \"you may cast spells this turn as though they had \
-              flash\" is \"... as though they had flash this turn\".",
+        why: "Wording only (word order): the duration's place: \"you may cast spells this \
+              turn as though they had flash\" is \"... as though they had flash this turn\".",
     },
     Equivalence {
         pattern: r"\b(return|put) (?:in)?to (your|owner's|its owner's|their owners') hands? (each|all|target) ([^.;]+?)(\.|;|$)",
         replacement: "$1 $3 $4 to $2 hand$5",
-        why: "Word order: \"return to your hand all creature cards in your graveyard that \
-              ...\" (the long object last) is \"return all creature cards ... to your hand\".",
+        why: "Wording only (word order): \"return to your hand all creature cards in your \
+              graveyard that ...\" (the long object last) is \"return all creature cards ... \
+              to your hand\".",
     },
     Equivalence {
         pattern: r"\bif you have ([^.,;]+? in your (?:graveyard|library|hand))\b",
         replacement: "if there are $1",
-        why: "\"If you have four or more creature cards in your graveyard\" asks whether \
-              there are that many there.",
+        why: "Wording only (grammar): \"if you have four or more creature cards in your \
+              graveyard\" asks whether there are that many there.",
     },
     Equivalence {
         pattern: r"\b(cards?|spells?|creatures?|permanents?) that (?:have|has) ",
         replacement: "$1 with ",
-        why: "\"A creature that has a -1/-1 counter on it\" is \"a creature with a -1/-1 \
-              counter on it\".",
+        why: "Wording only (grammar): \"a creature that has a -1/-1 counter on it\" is \"a \
+              creature with a -1/-1 counter on it\".",
     },
     Equivalence {
         pattern: r"\b(creatures?) with ([a-z]+) (your opponents control|you control|an opponent controls)\b",
         replacement: "$1 $3 with $2",
-        why: "The order of a noun's qualities: \"creatures with flying your opponents \
-              control\" are \"creatures your opponents control with flying\".",
+        why: "Wording only (word order): \"creatures with flying your opponents control\" \
+              are \"creatures your opponents control with flying\".",
     },
     Equivalence {
         pattern: r"\bexiled with (~it|~|it) with mana value ([^ .,|{}]+)",
         replacement: "with mana value $2 exiled with $1",
-        why: "The order of a noun's qualities: \"a creature card with mana value X exiled \
-              with ~\".",
+        why: "Wording only (word order): \"a creature card with mana value X exiled with \
+              ~\".",
     },
     Equivalence {
         pattern: r"\bactivate no more than\b",
         replacement: "activate only",
-        why: "\"Activate no more than twice each turn\" and \"Activate only twice each \
-              turn\" state the same restriction on activating the ability (CR 602.5b).",
+        why: "Wording only (synonym): \"activate no more than twice each turn\" and \
+              \"activate only twice each turn\" state the same limit on activating the \
+              ability.",
     },
     Equivalence {
         pattern: r"\bone of your opponents\b",
         replacement: "an opponent",
-        why: "Your opponents are the players you're playing against (CR 102.2, 102.3): \
-              \"one of your opponents\" is \"an opponent\".",
+        why: "Wording only (grammar): \"one of your opponents\" is \"an opponent\".",
     },
     Equivalence {
         pattern: r"\b(if [^.,;]+?) or if\b",
         replacement: "$1 or",
-        why: "\"Activate only if A or if B\" is \"only if A or B\": the second \"if\" \
-              repeats the conjunction's condition word.",
+        why: "Wording only (grammar): \"activate only if A or if B\" is \"only if A or B\"; \
+              the second \"if\" repeats the conjunction's condition word.",
     },
     Equivalence {
         pattern: r"\b(discards?|draws?|mills?) x cards, where x is the number of ([^.;]+)",
         replacement: "$1 a card for each $2",
-        why: "\"Discard a card for each Swamp you control\" is discarding X cards, where X \
-              is the number of Swamps you control (the number is counted once, as the \
-              instruction is followed, CR 608.2h).",
+        why: "CR 608.2h: the number an instruction needs is determined once as it's \
+              followed, so \"discard a card for each Swamp you control\" discards X cards, \
+              where X is the number of Swamps you control.",
     },
     Equivalence {
         pattern: r"\bx times, where x is the number of ([^.;]+)",
         replacement: "for each $1",
-        why: "Doing something X times, where X is the number of things, is doing it once \
-              for each of them: \"copy it for each time you've cast your commander\", \
-              \"unless you pay {1} for each card in your hand\".",
+        why: "Wording only (number): doing something X times, where X is the number of \
+              things, is doing it once for each of them: \"copy it for each time you've cast \
+              your commander\", \"unless you pay {1} for each card in your hand\".",
     },
     Equivalence {
         pattern: r"\bx cards?,? where x is that many plus (\d+|one|two|three)\b",
         replacement: "that many cards plus $1",
-        why: "\"Draw that many cards plus one\": X cards, where X is that many plus 1.",
+        why: "Wording only (number): \"draw that many cards plus one\" is X cards, where X \
+              is that many plus 1.",
     },
     Equivalence {
         pattern: r"\bfrom graveyards\b",
         replacement: "in graveyards",
-        why: "See \"from your graveyard\".",
+        why: "Wording only (grammar), see \"from your graveyard\".",
     },
     Equivalence {
         pattern: r"\bfrom exile\b",
         replacement: "in exile",
-        why: "See \"from your graveyard\".",
+        why: "Wording only (grammar), see \"from your graveyard\".",
     },
     Equivalence {
         pattern: r"\b(you|they)'ve\b",
         replacement: "$1",
-        why: "\"If you've gained life this turn\" and \"if you gained life this turn\" ask \
-              the same thing. (Before the subject \"you\" is dropped, so \"you've cast\" and \
-              \"you cast\" are normalized alike, and normalizing a normalized alternative of a \
-              rendering gives the same tokens.)",
+        why: "Wording only (tense): \"if you've gained life this turn\" and \"if you gained \
+              life this turn\" ask the same thing. (Before the subject \"you\" is dropped, \
+              so \"you've cast\" and \"you cast\" are normalized alike, and normalizing a \
+              normalized alternative of a rendering gives the same tokens.)",
     },
     Equivalence {
         pattern: r"\byou (draw|discard|mill|scry|surveil|sacrifice|create|put|return|exile|search|reveal|look|shuffle|tap|untap|destroy|investigate|proliferate|seek|conjure|venture|explore|amass|populate|manifest|cloak|choose|add|counter|attach|transform|gain|lose|get|become|take|may|cast|pay|play|win|skip)\b",
         replacement: "$1",
-        why: "An instruction without a subject is performed by the ability's controller \
-              (CR 608.2c, 113.8): \"draw a card\" and \"you draw a card\" mean the same. \
-              (A subject another player shares with an earlier clause is written out \
-              first, see above.)",
+        why: "CR 109.5, 608.2c: \"you\" is the object's controller and the controller \
+              follows the instructions, so an instruction with no subject, \"draw a card\", \
+              is \"you draw a card\". (A subject another player shares with an earlier \
+              clause is written out first, see above.)",
     },
     Equivalence {
         pattern: r"(sacrifices? [^.]*?) of (?:their|his or her) choice\b|(sacrifice [^.]*?) of your choice\b",
         replacement: "$1$2",
-        why: "The player who sacrifices chooses what to sacrifice (CR 701.21a); \"of their \
-              choice\" restates it (another player's sacrifice \"of your choice\" doesn't, \
-              and stays).",
+        why: "Wording only (restatement): the player who sacrifices a permanent chooses \
+              which (CR 701.21a: its controller moves it); \"of their choice\" restates it. \
+              Another player's sacrifice \"of your choice\" isn't a restatement and stays.",
     },
     Equivalence {
         pattern: r"\bthat spell or ability\b",
         replacement: "it",
-        why: "Anaphora: \"that spell or ability\" refers back to the one already named.",
+        why: "Wording only (anaphora): \"that spell or ability\" refers back to the one \
+              already named.",
     },
     Equivalence {
         pattern: r"\bwould be dealt((?: to (?:[^.{}|]|\{[^{}]*\})+?)?) this turn (by|to) ((?:[^.{}|]|\{[^{}]*\})+?)(\.|$)",
         replacement: "would be dealt$1 $2 $3 this turn$4",
-        why: "Word order of the duration in a prevention effect.",
+        why: "Wording only (word order): the duration's place in a prevention effect.",
     },
     Equivalence {
         pattern: r"\bthat (creature|permanent|card|spell|land|artifact|enchantment|planeswalker|token|aura|equipment|vehicle|battle|ability|object|source)s?'s\b",
         replacement: "thatit's",
-        why: "Anaphora: \"that creature's\" and \"its\" both refer back to the object the \
-              text already named; the renderer always uses the pronoun. Kept apart from a \
-              plain \"its\" as `thatit`, which doesn't match the object itself (see \
-              [`token_eq`]).",
+        why: "Wording only (anaphora): \"that creature's\" and \"its\" both refer back to \
+              the object the text already named; the renderer always uses the pronoun. Kept \
+              apart from a plain \"its\" as `thatit`, which doesn't match the object itself \
+              (see [`token_eq`]).",
     },
     Equivalence {
         pattern: r"\bthat (creature or planeswalker|creature or vehicle|artifact or creature|spell or ability)\b",
         replacement: "it",
-        why: "Anaphora, as below: \"that creature or planeswalker\" refers back to the \
+        why: "Wording only (anaphora): \"that creature or planeswalker\" refers back to the \
               target already named.",
     },
     Equivalence {
         pattern: r"\b(that|the) (creature|permanent|card|spell|land|artifact|enchantment|planeswalker|token|aura|equipment|vehicle|battle|ability|object|source|copy)\b",
         replacement: "thatit",
-        why: "Anaphora: \"that creature\" and \"it\" refer back to the object already named \
-              (`thatit` matches \"it\", see [`token_eq`]).",
+        why: "Wording only (anaphora): \"that creature\" and \"it\" refer back to the object \
+              already named (`thatit` matches \"it\", see [`token_eq`]). A pronoun the \
+              parser bound to the wrong one of two objects other than ~ isn't caught by this \
+              comparison (docs/agents/items/roundtrip-probe-1.md).",
     },
     Equivalence {
         pattern: r"\b(?:the|that|those) (?:exiled|discarded|revealed) (card|creature|permanent|artifact|spell)s?\b",
         replacement: "thatit",
-        why: "Anaphora: \"Exile target creature. Return the exiled card ...\": \"the exiled \
-              card\" and \"it\" refer back to the object the exile instruction just moved \
-              (CR 400.7: that object is the card in exile); \"Discard a card. If the \
-              discarded card was a land card, ...\" and \"Reveal a card at random from \
-              your hand. ... where X is the revealed card's mana value\" likewise.",
+        why: "Wording only (anaphora): \"Exile target creature. Return the exiled card \
+              ...\": \"the exiled card\" and \"it\" refer back to the object the exile \
+              instruction moved (the card in exile, CR 400.7); \"Discard a card. If the \
+              discarded card was a land card, ...\" and \"Reveal a card at random from your \
+              hand. ... where X is the revealed card's mana value\" likewise.",
     },
     Equivalence {
         pattern: r"\bthe (mana value|power|toughness) of (thatit|it)\b",
         replacement: "$2 $1",
-        why: "Possessive: \"the mana value of the discarded card\" is that card's mana \
-              value.",
+        why: "Wording only (grammar): possessive: \"the mana value of the discarded card\" \
+              is that card's mana value.",
     },
     Equivalence {
         pattern: r"\bif (it|thatit|that-object|~it|~) had\b",
         replacement: "if $1 has",
-        why: "As \"if it was\" below (here after \"that creature\" is `thatit`): whether \
-              an object that left the battlefield had counters on it is judged by its last \
-              known information (CR 608.2h), which is what \"if it has\" asks of it.",
+        why: "CR 608.2h: whether an object that left the battlefield had counters on it is \
+              judged by its last known information, which is what \"if it has\" asks of it \
+              (as \"if it was\", below; here after \"that creature\" is `thatit`).",
     },
     Equivalence {
         pattern: r"\b(those|the) (creatures|permanents|cards|spells|lands|artifacts|tokens|objects)\b",
         replacement: "them",
-        why: "Anaphora (plural).",
+        why: "Wording only (anaphora, plural).",
     },
     Equivalence {
         pattern: r"(\bon |\bto |^|[.,:—] |\{alt:|\|)each of them\b",
         replacement: "${1}them",
-        why: "An instruction about a group of objects is about each of them: \"put a +1/+1 \
-              counter on each of them\" and \"put a +1/+1 counter on them\" put one counter on \
-              every object of the group (a counter is put on an object, CR 122.1), and \"each \
-              of them gets +1/+1\" is \"they get +1/+1\" (CR 611.2c: each affected object).",
+        why: "Wording only (grammar): an instruction about a group of objects is about each \
+              of them: \"put a +1/+1 counter on each of them\" and \"put a +1/+1 counter on \
+              them\" put a counter on every object of the group, and \"each of them gets \
+              +1/+1\" is \"they get +1/+1\".",
     },
     Equivalence {
         pattern: r#"(^|[.:—•] |\n)it ((?:[^."]|"[^"]*")*?) as long as (enchanted creature|enchanted permanent|equipped creature|enchanted land|enchanted artifact) is "#,
         replacement: "${1}$3 $2 as long as $3 is ",
-        why: "\"Enchanted permanent gets -1/-1 as long as it's a creature\" and \"As long as \
-              enchanted permanent is a creature, it gets -1/-1\": the noun and the pronoun \
-              name the same object, one way or the other.",
-    },
-    Equivalence {
-        pattern: r"\bat the beginning of the next upkeep\b",
-        replacement: "at the beginning of the next turn's upkeep",
-        why: "Each turn has one upkeep (CR 500.1), and an effect can't be created during \
-              a turn's untap step before its upkeep (no player gets priority then, CR \
-              502.4), so the next upkeep is the next turn's.",
+        why: "Wording only (anaphora): \"Enchanted permanent gets -1/-1 as long as it's a \
+              creature\" and \"As long as enchanted permanent is a creature, it gets \
+              -1/-1\": the noun and the pronoun name the same object, one way or the other.",
     },
     Equivalence {
         pattern: r"\bat the beginning of each of your postcombat main phases\b",
         replacement: "at the beginning of your postcombat main phase",
         why: "CR 505.1a: every main phase of a turn after the first is a postcombat main \
-              phase, so an ability that triggers at the beginning of your postcombat main \
-              phase triggers at each of them.",
+              phase, so the ability triggers at each of them either way.",
     },
     Equivalence {
         pattern: r"\b(until end of turn|this turn)\. (?:it's|it is|they're|they are) still (?:an? )?(?:legendary |snow |basic )?(?:(?:artifact|enchantment|creature|planeswalker|kindred|battle|land) )*(?:artifact|enchantment|creature|planeswalker|kindred|battle|land)s?\b",
@@ -802,230 +849,263 @@ pub const EQUIVALENCES: &[Equivalence] = &[
     Equivalence {
         pattern: r"\buntil end of turn\b",
         replacement: "this turn",
-        why: "\"Until end of turn\" and \"this turn\" effects both end in the cleanup step \
-              (CR 514.2).",
+        why: "CR 514.2: \"until end of turn\" and \"this turn\" effects both end in the \
+              cleanup step.",
     },
     Equivalence {
-        pattern: r#"\. (it has|thatit has|they have|it gains|thatit gains|they gain|it \{alt:gains\|has\}) ""#,
+        pattern: r#"\bit \{alt:gains\|has\} ""#,
+        replacement: "it has \"",
+        why: "CR 611.2a, 613.1f: an ability an effect gives an object for a duration (\"For \
+              as long as that creature has a bounty counter on it, it has '...'\": Mathas, \
+              Fiend Seeker; Obsidian Fireheart; Makeshift Mannequin) is one continuous \
+              effect in layer 6 whether the text says \"has\" or \"gains\", so the renderer \
+              marks such a grant `{alt:gains|has}`. (A token's \"It has\" is its text, CR \
+              111.3, the next entry; \"It gains\" of a following sentence with no duration \
+              isn't rewritten: Timothar, Baron of Bats's ruling of 2021-11-19.)",
+    },
+    Equivalence {
+        pattern: r#"\. (it has|thatit has|they have) ""#,
         replacement: " with \"",
-        why: "A token created \"with\" an ability and one that \"has\" it (a following \
-              sentence) are the same token (CR 111.1).",
+        why: "CR 111.3: the ability that creates a token defines its text, so a token \
+              created \"with\" an ability and one that \"has\" it in the next sentence of \
+              the same ability have the same copiable text. (\"It gains ...\" in a following \
+              sentence is an effect, not the token's text: a copy of the Bat token Timothar, \
+              Baron of Bats creates doesn't have the granted ability, its ruling of \
+              2021-11-19, so \"gains\" isn't rewritten.)",
     },
     Equivalence {
         pattern: r"\breturn(s?)\b",
         replacement: "put$1",
-        why: "\"Return\" has no rules meaning of its own: it's a zone change like \
-              \"put\" (CR 400.6), described by its destination.",
+        why: "Wording only (synonym): \"return\" and \"put\" describe the same zone change, \
+              named by its destination (\"return it to your hand\", \"put it into your \
+              hand\"); \"return\" has no rules meaning of its own.",
     },
     Equivalence {
         pattern: r"\b(into|onto)\b",
         replacement: "to",
-        why: "Prepositions of a destination zone (\"into your hand\", \"onto the \
-              battlefield\").",
+        why: "Wording only (grammar): prepositions of a destination zone (\"into your \
+              hand\", \"onto the battlefield\").",
     },
     Equivalence {
-        pattern: r"\bwith (x|\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten) additional\b",
-        replacement: "with $1",
-        why: "Counters an object enters with are put on it in addition to any others it \
-              would enter with (CR 614.1c, 122.6).",
+        pattern: r"\bwith (x|\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten) additional ((?:[a-z+/0-9-]+ ){0,2}counters?)\b",
+        replacement: "with $1 $2",
+        why: "CR 614.1c, 616.1: \"enters with two additional +1/+1 counters\" and \"enters \
+              with two +1/+1 counters\" are each a replacement effect on the entering event, \
+              applied along with any other \"enters with\" effect, so the permanent enters \
+              with the counters of both. Only counters: \"you start the game with an \
+              additional 7 life\" (The Slayer) isn't 7 life.",
     },
     Equivalence {
         pattern: r"\balso\b ",
         replacement: "",
-        why: "\"Also\" has no rules meaning.",
+        why: "Wording only: \"also\" has no rules meaning.",
     },
     Equivalence {
         pattern: r"\beach player's (upkeep|draw step|end step)\b",
         replacement: "each $1",
-        why: "Each player has one upkeep (draw step, end step) per turn: \"each upkeep\" \
-              and \"each player's upkeep\" are the same steps (CR 501–503, 513).",
+        why: "Wording only (synonym): each turn has one upkeep, one draw step and one end \
+              step (CR 500.1), the active player's, so \"each player's upkeep\" and \"each \
+              upkeep\" are the same steps.",
     },
     Equivalence {
         pattern: r"\bnumber of of\b",
         replacement: "number of",
-        why: "\"For each of its colors\" rewritten to the \"where X is the number of\" form.",
+        why: "Wording only: an artifact of rewriting \"for each of its colors\" to the \
+              \"where X is the number of\" form.",
     },
     Equivalence {
         pattern: r"\bat the beginning of the end step\b",
         replacement: "at the beginning of each end step",
-        why: "Older wording: \"the end step\" in a trigger condition means every end step \
-              (CR 513.1a).",
+        why: "CR 513.1a; Ball Lightning ruling (2007-02-01): \"at the beginning of the end \
+              step\" (the errata for \"at end of turn\") triggers in every turn's end step: \
+              \"The creature is sacrificed at the end of every turn in which it is on the \
+              battlefield.\"",
     },
     Equivalence {
         pattern: r"\b(gets?) an additional ([+-])",
         replacement: "$1 $2",
-        why: "P/T modifications add up (CR 613.4c); \"an additional +2/-2\" is +2/-2.",
+        why: "CR 613.4c: P/T modifications add up; \"an additional +2/-2\" is +2/-2.",
     },
     Equivalence {
         pattern: r"\b(is|are|was|were|do|does|has|have)n't\b",
         replacement: "$1 not",
-        why: "Contraction.",
+        why: "Wording only (contraction).",
     },
     Equivalence {
         pattern: r"\ba player taps (an? [^.,]+?) for mana\b",
         replacement: "$1 is tapped for mana",
-        why: "Only a player can tap a permanent for mana (CR 106.12): \"a player taps a \
-              land for mana\" and \"a land is tapped for mana\" are the same event.",
+        why: "CR 106.12, 106.12a: only a player taps a permanent for mana (activating a mana \
+              ability with {T} in its cost), so \"a player taps a land for mana\" and \"a \
+              land is tapped for mana\" are the same event.",
     },
     Equivalence {
         pattern: r"\b(?:has|have) cast ([^.,;]*?) this turn\b",
         replacement: "cast $1 this turn",
-        why: "\"If an opponent cast a blue spell this turn\" and \"if an opponent has cast a \
-              blue spell this turn\" ask the same thing (as \"you've\" above).",
+        why: "Wording only (tense): \"if an opponent cast a blue spell this turn\" and \"if \
+              an opponent has cast a blue spell this turn\" ask the same thing.",
     },
     Equivalence {
         pattern: r"\b(draws?) an additional card\b",
         replacement: "$1 a card",
-        why: "A triggered draw is in addition to the normal draw anyway (CR 504.1).",
+        why: "Wording only (synonym): a triggered draw is in addition to the turn's draw (CR \
+              504.1) whether or not it says so.",
     },
     Equivalence {
         pattern: r"(^|\. )([^.]+?) can't block (~|it)(\.|$)",
         replacement: "$1~ can't be blocked by $2$4",
-        why: "\"Creatures with power less than ~'s power can't block it\" and \"~ can't be \
-              blocked by creatures with power less than its power\" are the same \
-              blocking restriction (CR 509.1b).",
+        why: "Wording only (voice): \"creatures with power less than ~'s power can't block \
+              it\" and \"~ can't be blocked by creatures with power less than its power\" \
+              state one blocking restriction (CR 509.1b).",
     },
     Equivalence {
         pattern: r"\bthe exiled (card|creature|permanent)s\b",
         replacement: "the exiled $1",
-        why: "Grammatical number.",
+        why: "Wording only (number).",
     },
     Equivalence {
         pattern: r"\bremove any number of (\S+) counters\b",
         replacement: "remove x $1 counters",
-        why: "A cost of X counters is paid with any number of them (CR 107.3).",
+        why: "CR 107.3: a cost of \"any number of\" counters is paid with a number its \
+              controller chooses, which is what X in a cost is.",
     },
     Equivalence {
         pattern: r"\b(a|an|another) ([a-z]+) and/or ([a-z]+)\b",
         replacement: "$1 $2 or $3",
-        why: "One object that's \"a Villain and/or artifact\" is one that's a Villain or an \
-              artifact (or both).",
+        why: "Wording only (synonym): one object that's \"a Villain and/or artifact\" is one \
+              that's a Villain or an artifact (or both).",
     },
     Equivalence {
         pattern: r"\band/or\b",
         replacement: "and",
-        why: "In a list of object kinds, \"artifacts and/or enchantments\" and \"artifacts \
-              and enchantments\" both mean objects that are either.",
+        why: "Wording only (synonym): in a list of kinds, \"artifacts and/or enchantments\" \
+              and \"artifacts and enchantments\" both mean the objects that are either.",
     },
     Equivalence {
         pattern: r"\b(they|you|we)'re\b",
         replacement: "$1 are",
-        why: "Contraction.",
+        why: "Wording only (contraction).",
     },
     Equivalence {
         pattern: r"(^|[^~\w])(it|that|there|what|he|she)'s\b",
         replacement: "$1$2 is",
-        why: "Contraction.",
+        why: "Wording only (contraction).",
     },
     Equivalence {
         pattern: r"\bif (it|its|thatit|thatit's|that-object|~it|~it's|~|~'s|the sacrificed (?:creature|permanent|artifact)(?:'s)?|\{alt:the sacrificed [^}]*\})((?: power| toughness| mana value)?) was\b",
         replacement: "if $1$2 is",
-        why: "A condition about an object checked after it left its zone (\"Destroy target \
-              creature. If it was attacking, ...\", \"When ~ dies, if it was a Human\") is \
-              judged by the object's last known information (CR 608.2h, 400.7), which is \
-              what the past tense describes; the ability language has one condition for both \
-              and the engine evaluates a moved object by its last known information.",
+        why: "CR 608.2h, 400.7: a condition about an object checked after it left its zone \
+              (\"Destroy target creature. If it was attacking, ...\", \"When ~ dies, if it \
+              was a Human\") is judged by the object's last known information, which is what \
+              the past tense describes; the ability language has one condition for both, and \
+              the engine evaluates a moved object by its last known information.",
     },
     Equivalence {
         pattern: r"\b(spells?) in your (hand|graveyard) ((?:with|that shares?) [^.,]+?) without paying\b",
         replacement: "$1 $3 in your $2 without paying",
-        why: "\"Cast a spell in your hand with mana value 4 or less\" and \"... a spell with \
-              mana value 4 or less in your hand\": the same qualities, in either order.",
+        why: "Wording only (word order): \"cast a spell in your hand with mana value 4 or \
+              less\" and \"... a spell with mana value 4 or less in your hand\".",
     },
     Equivalence {
         pattern: r"\b(adds?) an additional\b",
         replacement: "$1",
-        why: "A triggered mana ability's mana is added in addition to the mana the \
-              permanent produced (CR 605.1b, 106.12a); \"additional\" restates it.",
+        why: "Wording only (synonym): \"whenever a Forest is tapped for mana, add an \
+              additional {G}\" adds {G}; \"additional\" says only that it's in addition to \
+              the land's own mana (a triggered mana ability, CR 605.1b).",
     },
     Equivalence {
         pattern: r"\bx life,? where x is the life lost this way\b",
         replacement: "that many life",
-        why: "\"Life equal to the life lost this way\" is the amount of life the previous \
-              instruction made players lose: \"that many life\" (CR 608.2c).",
+        why: "Wording only (synonym): \"life equal to the life lost this way\" is the amount \
+              of life the previous instruction made players lose, \"that many life\".",
     },
     Equivalence {
         pattern: r"\{x\} (less|more) to (cast|activate),? where x is the number of ([^.]+)",
         replacement: "{1} $1 to $2 for each $3",
-        why: "A cost reduced or increased by {X}, where X is a number of objects, changes by \
-              {1} for each of them.",
+        why: "Wording only (number): a cost reduced or increased by {X}, where X is a number \
+              of objects, changes by {1} for each of them.",
     },
     Equivalence {
         pattern: r"\bthe number of (white|blue|black|red|green) mana symbols in the mana costs of permanents you control\b",
         replacement: "your devotion to $1",
-        why: "CR 700.5: devotion to a color is the number of mana symbols of that color among \
-              the mana costs of permanents that player controls.",
+        why: "CR 700.5: devotion to a color is the number of mana symbols of that color \
+              among the mana costs of permanents that player controls.",
     },
     Equivalence {
         pattern: r"\banother\b",
         replacement: "other",
-        why: "\"Another creature\" and \"other creatures\" both exclude the object itself; the \
-              article and grammatical number are ignored elsewhere.",
+        why: "Wording only (number): \"another creature\" and \"other creatures\" both \
+              exclude the object itself; the article and grammatical number are ignored \
+              elsewhere.",
     },
     Equivalence {
         pattern: r"\byour (commanders?)\b",
         replacement: "$1 you own",
-        why: "A player's commander is the commander they own (CR 903.3); \"your commander\" \
-              and \"a commander you own\" are the same objects.",
+        why: "CR 903.3; Myth Unbound ruling (2018-12-07): a player's commander is a card of \
+              their deck, an attribute of the card that stays whoever controls it (\"If \
+              another player is somehow able to cast your commander, Myth Unbound's first \
+              ability applies to that player's spell\"), so \"your commander\" is a \
+              commander you own.",
     },
     Equivalence {
         pattern: r"\bthey\b",
         replacement: "them",
-        why: "Pronoun case: \"they\"/\"them\" refer to the same objects.",
+        why: "Wording only (case): \"they\" and \"them\" refer to the same objects.",
     },
     Equivalence {
         pattern: r"\b(he|she|him)\b",
         replacement: "~it",
-        why: "Oracle text of named characters refers to the permanent by a gendered \
-              pronoun where other cards say \"it\"; the referent is the same object, the \
-              character the card names (itself), which is why such a card can say \"him\" \
-              right after naming another creature (\"~ becomes a copy of target creature. \
-              Prevent all damage that would be dealt to him\"): `~it`, the object itself.",
+        why: "Wording only (anaphora): Oracle text of named characters refers to the \
+              permanent by a gendered pronoun where other cards say \"it\". On every card \
+              legal in some format that does so (126 cards, checked Nov 10, 2026) the \
+              pronoun refers to the card itself, as \"him\" right after naming another \
+              creature shows (\"~ becomes a copy of target creature. Prevent all damage that \
+              would be dealt to him\"): `~it`, the object itself.",
     },
     Equivalence {
         pattern: r"\bher(\.|,|$| deal\b)",
         replacement: "~it$1",
-        why: "See \"he\": \"her\" as an object (\"put a +1/+1 counter on her\"), not the \
-              possessive.",
+        why: "Wording only (anaphora): see \"he\": \"her\" as an object (\"put a +1/+1 \
+              counter on her\"), not the possessive.",
     },
     Equivalence {
         pattern: r"\bhis\b",
         replacement: "~it's",
-        why: "See \"he\".",
+        why: "Wording only (anaphora): see \"he\".",
     },
     Equivalence {
         pattern: r"\bthem\b",
         replacement: "it",
-        why: "Pronoun number (grammatical number is ignored).",
+        why: "Wording only (number): grammatical number is ignored.",
     },
     Equivalence {
         pattern: r"\btheir\b",
         replacement: "its",
-        why: "Pronoun number: \"their\" and \"its\" (grammatical number is ignored, see \
-              singularization).",
+        why: "Wording only (number): \"their\" and \"its\" (grammatical number is ignored, \
+              see singularization).",
     },
     Equivalence {
         pattern: r"\bchoose ((?:up to \w+ )?target [^.;:]+?)\. (put|exile|destroy|tap|untap) (?:it|thatit)\b",
         replacement: "$2 $1",
-        why: "\"Choose target creature card in your graveyard. Return it to the \
-              battlefield.\" is \"Return target creature card in your graveyard to the \
-              battlefield.\": a target is chosen as the spell or ability is put on the \
-              stack (CR 601.2c, 602.2b, 115.1), and \"it\" is that target.",
+        why: "CR 601.2c, 602.2b: a target is chosen as the spell or ability is put on the \
+              stack, whether the text says \"Choose target creature card in your graveyard. \
+              Return it to the battlefield.\" or \"Return target creature card in your \
+              graveyard to the battlefield.\"; \"it\" is that target.",
     },
     Equivalence {
         pattern: r"\bwhen you spend this mana to\b",
         replacement: "when that mana is spent to",
-        why: "Mana goes to the pool of the player its ability's effect names, here the \
-              ability's controller (\"you\", CR 106.4), so \"when you spend this mana\" is \
-              when that mana is spent (CR 106.6).",
+        why: "CR 106.4, 106.6: mana an ability adds goes to the pool of the player its \
+              effect names, here \"you\", and only that player spends it, so \"when you \
+              spend this mana\" is when that mana is spent (a delayed trigger on the mana \
+              being spent, 106.6).",
     },
     Equivalence {
         pattern: r"\bthe base power and toughness of ([^.,]+?) become (\d+/\d+)",
         replacement: "$1 has base power and toughness $2",
-        why: "\"The base power and toughness of each creature ... become 0/2\" and \"each \
-              creature ... has base power and toughness 0/2\" set the same characteristics \
-              in layer 7b (CR 613.4b); either way, an effect of a resolving ability with no \
-              duration stated lasts until the end of the game (CR 611.2a).",
+        why: "CR 613.4b, 611.2a: \"the base power and toughness of each creature ... become \
+              0/2\" and \"each creature ... has base power and toughness 0/2\" set the same \
+              characteristics in layer 7b; either way, an effect of a resolving ability with \
+              no duration stated lasts until the end of the game.",
     },
 ];
 
@@ -1034,39 +1114,39 @@ pub const EQUIVALENCES: &[Equivalence] = &[
 pub const SENTENCE_FORMS: &[(&str, &str)] = &[
     (
         "\"Until end of turn, X.\" / \"As long as C, X.\" / \"At the beginning of the next end step, X.\" -> \"X until end of turn.\" ...",
-        "A leading duration, condition or delayed time applies to the whole sentence wherever it's written.",
+        "Wording only (word order): a leading duration, condition or delayed time applies to the whole sentence wherever it's written.",
     ),
     (
         "\"Choose a creature type. [Instruction] ... the chosen type.\" -> \"[Instruction] ... the creature type of your choice.\" (also colors, card types, basic land types; when the next instruction uses the choice and nothing later does)",
-        "The same choice, made as the instruction that uses it is followed (CR 608.2c).",
+        "CR 608.2c: the same choice, made as the instruction that uses it is followed.",
     ),
     (
         "\"If C, you may put/cast Y. Otherwise, X.\" and \"You may put/cast Y if C. Otherwise, X.\" -> \"If C, you may put/cast Y. If you don't, X.\"",
-        "\"Otherwise\" after an optional instruction also covers not doing it (Fecund Greenshell, Treasure Chest and Aid from the Cowl rulings; Bre of Clan Stoutarm).",
+        "Treasure Chest ruling (2021-07-23): \"The ‘otherwise’ in the last ability refers to whether or not you put it onto the battlefield, not whether or not it's an artifact card. You may put it into your hand even if it's an artifact card.\"; Fecund Greenshell (2024-07-26) and Aid from the Cowl (2017-02-09) rule the same of their \"Otherwise\": after an optional instruction it also covers not doing it (so for Bre of Clan Stoutarm too).",
     ),
     (
         "\"If C, Y. Otherwise, X.\" and \"Y if C. Otherwise, X.\" -> \"X. If C, Y instead.\" (not after \"If you do\", whose \"Otherwise\" is \"If you don't\")",
-        "Both state the same choice between two instructions.",
+        "Wording only (grammar): both state the same choice between two instructions.",
     ),
     (
         "\"X if C.\" -> \"If C, X.\" (not \"if able\", \"only if\", \"unless\")",
-        "A trailing condition is the same condition.",
+        "Wording only (word order): a trailing condition is the same condition.",
     ),
     (
         "\"You may pay P. If you don't, X.\" -> \"X unless you pay P.\"",
-        "The same optional payment (CR 118.12).",
+        "CR 118.12a: \"[Do something] unless [a player does something else]\" means the same thing as \"[A player may do something else]. If [that player doesn't], [do something].\"",
     ),
     (
         "\"N damage equal to V\", \"N life for each F\", \"+1/+1 for each F\", \"a card for each F\", ... -> \"X ..., where X is V\"",
-        "CR 107.3: X is defined by the text; both describe the same number.",
+        "Wording only (number): both describe the same number (CR 107.3: X defined by the text).",
     ),
     (
         "\"+2/+2 for each F\", \"2 damage to P for each F\", \"two cards for each F\" -> \"X ..., where X is 2 times the number of F\"",
-        "CR 107.3: the same number, as above.",
+        "Wording only (number): the same number, as above.",
     ),
     (
         "\"When C, at end of combat, X.\" -> \"When C, X at end of combat.\" (a single instruction ending the ability)",
-        "A delayed trigger's time applies to the instruction wherever it's written (CR 603.7).",
+        "Wording only (word order): a delayed trigger's time applies to the instruction wherever it's written (CR 603.7).",
     ),
     (
         "\"Choose target T. [Instruction] it ...\" -> \"[Instruction] target T ...\" (an instruction acting on it, not a condition)",
@@ -1074,11 +1154,11 @@ pub const SENTENCE_FORMS: &[(&str, &str)] = &[
     ),
     (
         "\"up to X target T ..., where X is V\" -> \"up to V target T ...\"",
-        "CR 107.3: the same number of targets.",
+        "CR 601.2c: when the text defines the number of targets, that number is determined as the spell is cast, from the text's value or from an X standing for it alike.",
     ),
     (
         "\"with mana value X or less ..., where X is V\" -> \"with mana value less than or equal to V ...\"",
-        "CR 107.3: the same comparison, with the number X stands for named in place.",
+        "Wording only (number): the same comparison, with the number X stands for named in place (CR 107.3).",
     ),
 ];
 
@@ -1088,11 +1168,13 @@ pub const IGNORED_WORDS: &[(&str, &str)] = &[
         "and",
         "Joins clauses and list items; instructions are followed in order (CR 608.2c) \
          whether they're joined by \"and\", \"then\", or a period. A list of alternatives \
-         still says \"or\".",
+         still says \"or\". (Dropping it also makes \"all artifacts and creatures\" and \
+         \"all artifact creatures\" compare alike, a known limit of this comparison; the \
+         union is checked in play, see the tests of the roundtrip items.)",
     ),
     (
         "then",
-        "Sequencing word: CR 608.2c, instructions are followed in the order written.",
+        "Wording only (sequencing): instructions are followed in the order written whether or not \"then\" says so (CR 608.2c).",
     ),
 ];
 

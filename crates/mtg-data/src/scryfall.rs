@@ -141,6 +141,77 @@ pub const PAPER_FORMATS: &[&str] = &[
 /// sticker) and is listed legal in Commander; _____ Goblin itself stays a paper card.
 pub const DIGITAL_VERSIONS: &[&str] = &["\"Name Sticker\" Goblin"];
 
+/// The words of the two dexterity cards (Chaos Orb, Falling Star), which are deferred
+/// (`docs/DEFERRED.md`): "Flip this artifact onto the playing area from a height of at
+/// least one foot" (lowercase, for [`ScryfallCard::deferred_reason`]).
+pub const DEXTERITY_TEXT: &str = "from a height of at least one foot";
+
+/// The Conspiracy cards whose draft abilities need a simulated draft table in which each
+/// player sees different booster packs (`docs/DEFERRED.md`, "Conspiracy face-down draft
+/// cards"); `FACE_DOWN_DRAFT_CARDS` in `scripts/rulings_batches.py` mirrors this list.
+pub const FACE_DOWN_DRAFT_CARDS: &[&str] = &[
+    "Agent of Acquisitions",
+    "Archdemon of Paliano",
+    "Deal Broker",
+    "Illusionary Informant",
+    "Whispergear Sneak",
+];
+
+/// Cards whose sticker abilities need sticker sheets and are deferred with them
+/// (`docs/DEFERRED.md`, "Cards deferred with the sheets"); `STICKER_DEFERRED_CARDS` in
+/// `scripts/rulings_batches.py` mirrors this list.
+pub const STICKER_DEFERRED_CARDS: &[&str] = &[
+    "Wizards of the _____",
+    "_____ Goblin",
+    "Wolf in _____ Clothing",
+    "Last Voyage of the _____",
+    "_____ _____ Rocketship",
+    "Pin Collection",
+    "Roxi, Publicist to the Stars",
+    "Done for the Day",
+    "Goblin Airbrusher",
+    "Wee Champion",
+    "A Good Day to Pie",
+    "_____ Balls of Fire",
+    "Make a _____ Splash",
+    "Tusk and Whiskers",
+    "Unlawful Entry",
+    "Fight the _____ Fight",
+    "Ambassador Blorpityblorpboop",
+    "Clandestine Chameleon",
+    "Scampire",
+    "Lineprancers",
+    "Proficient Pyrodancer",
+    "Baaallerina",
+    "_____ _____ _____ Trespasser",
+    "Sword-Swallowing Seraph",
+];
+
+/// True if `text` contains `word` as a whole word, ignoring case (ASCII letters and
+/// digits count as word characters).
+fn has_word_ci(text: &str, word: &str) -> bool {
+    let lower = text.to_lowercase();
+    let word = word.to_lowercase();
+    let mut from = 0;
+    while let Some(pos) = lower[from..].find(&word) {
+        let start = from + pos;
+        let end = start + word.len();
+        let before_ok = lower[..start]
+            .chars()
+            .next_back()
+            .is_none_or(|c| !c.is_alphanumeric());
+        let after_ok = lower[end..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_alphanumeric());
+        if before_ok && after_ok {
+            return true;
+        }
+        from = end;
+    }
+    false
+}
+
 impl ScryfallCard {
     /// True for a paper card: one with a paper printing. Every tool decides "paper" by this
     /// one rule (and `deferred()` in `scripts/rulings_batches.py` mirrors it in Python).
@@ -180,6 +251,70 @@ impl ScryfallCard {
     /// leave them out and count them separately.
     pub fn is_sticker_sheet(&self) -> bool {
         self.type_line.as_deref() == Some("Stickers")
+    }
+
+    /// Why this card is out of scope for the project by owner decision, if it is
+    /// (`docs/DEFERRED.md`): a Contraption or a card that assembles them, or a host or
+    /// augment card. `out_of_scope` in `scripts/rulings_batches.py` mirrors this; the
+    /// rulings counts of the two tools are compared by `crates/mtg-tools/tests`.
+    pub fn out_of_scope_reason(&self) -> Option<&'static str> {
+        if matches!(self.layout.as_str(), "host" | "augment") {
+            return Some("host/augment");
+        }
+        let text: String = self
+            .faces()
+            .iter()
+            .map(|f| {
+                format!(
+                    "{} {}",
+                    f.type_line.as_deref().unwrap_or(""),
+                    f.oracle_text.as_deref().unwrap_or("")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        if text.contains("Contraption") || has_word_ci(&text, "assemble") {
+            return Some("Contraptions");
+        }
+        None
+    }
+
+    /// Why this card is deferred, if it is (`docs/DEFERRED.md`): a digital-only card, a
+    /// sticker sheet, a card legal in no format, one of the two dexterity cards, a
+    /// Conspiracy face-down draft card, or a card deferred with the sticker sheets.
+    /// `deferred` in `scripts/rulings_batches.py` mirrors this.
+    pub fn deferred_reason(&self) -> Option<&'static str> {
+        if !self.is_paper() {
+            return Some("digital-only");
+        }
+        if self
+            .type_line
+            .as_deref()
+            .is_some_and(|t| t.contains("Stickers"))
+        {
+            return Some("sticker sheet");
+        }
+        if !self.is_legal_somewhere() {
+            return Some("not legal in any format");
+        }
+        // A physical flip onto the table. Of the cards that get here (legal or restricted
+        // somewhere) this matches exactly Chaos Orb and Falling Star; the other cards with
+        // these words (Cover the Spot, Landfill, Orcish Paratroopers, Trapeze Artist) are
+        // legal in no format.
+        if self.faces().iter().any(|f| {
+            f.oracle_text
+                .as_deref()
+                .is_some_and(|t| t.to_lowercase().contains(DEXTERITY_TEXT))
+        }) {
+            return Some("dexterity card");
+        }
+        if FACE_DOWN_DRAFT_CARDS.contains(&self.name.as_str()) {
+            return Some("Conspiracy face-down draft card");
+        }
+        if STICKER_DEFERRED_CARDS.contains(&self.name.as_str()) {
+            return Some("deferred with the sticker sheets");
+        }
+        None
     }
 
     /// True if the card is legal (or restricted) in at least one format.
