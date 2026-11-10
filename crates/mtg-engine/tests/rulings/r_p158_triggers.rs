@@ -1,8 +1,8 @@
 //! Rulings batch P158 — triggered abilities with self-replacement effects: when they
 //! trigger (once per event, CR 603.2c; not for a teammate's life gain, CR 810.9; not for a
 //! permanent that entered during the step, CR 603.2b), the order they resolve in relative
-//! to the spell that caused them (CR 603.3, 117.3b), what they check as they resolve
-//! (CR 608.2h, 603.10a), full parties (CR 700.9), the Necrobloom's landfall and dredge
+//! to the spell that caused them (CR 603.3, 405.5), what they check as they resolve
+//! (CR 608.2h), full parties (CR 700.8), the Necrobloom's landfall and dredge
 //! (CR 702.52a, 121.2, 614.11a), dice (CR 706.2) and a reflexive trigger (CR 603.12).
 
 use crate::r_p158_common::*;
@@ -24,9 +24,14 @@ fn mage_triggers(t: &TestGame) -> usize {
 #[test]
 fn white_mage_triggers_once_per_life_gain_event() {
     cr!("603.2c", "119.9");
+    interp!("ruling-contradicting-oracle-gives-way");
+    // The ruling calls the life-gain trigger the White Mage's "second ability"; it is its
+    // third (Lifelink; "{W}, {T}: ..."; "Whenever you gain life, ..."), as the card's other
+    // rulings say: that ordinal gives way to the Oracle text (exempt in
+    // docs/rulings-exemptions/rulings-P158.tsv, logged in docs/RULING_DISCREPANCIES.md).
     ruling!(
         "The Destined White Mage",
-        "The Destined White Mage's second ability triggers just once for each life-gaining event, whether it's 1 life from Al Bhed Salvagers or 3 life from Balamb T-Rexaur."
+        "triggers just once for each life-gaining event, whether it's 1 life from Al Bhed Salvagers or 3 life from Balamb T-Rexaur."
     );
     ruling!(
         "The Destined White Mage",
@@ -78,26 +83,35 @@ fn white_mage_doesnt_trigger_on_a_teammates_life_gain() {
 #[test]
 fn white_mage_cant_save_a_creature_dealt_lethal_damage_as_the_life_is_gained() {
     cr!("704.3", "704.5g", "510.2", "702.15b");
+    interp!("ruling-contradicting-oracle-gives-way");
+    // The ruling's "second ability" is the White Mage's third (see
+    // `white_mage_triggers_once_per_life_gain_event`); the rest is cited.
     ruling!(
         "The Destined White Mage",
-        "If a creature you control is dealt lethal damage at the same time that you gain life, it can't receive a counter from The Destined White Mage's second ability in time to save it."
+        "If a creature you control is dealt lethal damage at the same time that you gain life, it can't receive a counter from"
     );
     supported(WHITE_MAGE);
     // The Mage (2/3 lifelink) attacks into a Hill Giant: it deals 2 (P0 gains 2) and is
-    // dealt 3 at the same time. It dies to state-based actions before its trigger (which
-    // can't target it anyway) resolves.
+    // dealt 3 at the same time. It dies to state-based actions before its trigger is put
+    // on the stack, so the trigger can only target the Bears, which get the counter.
     let mut t = TestGame::new(2);
     let mage = t.battlefield(P0, WHITE_MAGE);
+    let bears = t.battlefield(P0, "Grizzly Bears");
     let giant = t.battlefield(P1, "Hill Giant");
     let from = t.asked().len();
     t.attack(&[(mage, pl(P1))], &[(giant, mage)]);
+    t.resolve_all();
     assert_eq!(t.life(P0), 22);
     assert!(!t.on_battlefield(mage));
     assert!(t.in_graveyard(P0, WHITE_MAGE));
-    // The trigger's target choices never offered the Mage.
-    for cands in target_choices(&t, P0, from, "") {
-        assert!(!cands.contains(&obj(mage)) && !cands.contains(&obj(t.g.current(mage))));
+    // The trigger was put on the stack with the Bears as its only choice.
+    let choices = target_choices(&t, P0, from, "");
+    assert!(!choices.is_empty(), "the trigger was put on the stack");
+    for cands in &choices {
+        assert!(cands.contains(&obj(bears)), "{cands:?}");
+        assert!(!cands.contains(&obj(mage)) && !cands.contains(&obj(t.g.current(mage))), "{cands:?}");
     }
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
 }
 
 #[test]
@@ -196,7 +210,7 @@ fn a_full_party_is_four_creatures_in_the_party() {
 
 #[test]
 fn mila_triggers_once_per_attack_and_resolves_before_the_spell() {
-    cr!("603.2c", "508.4", "603.3", "117.3b");
+    cr!("603.2c", "508.3d", "603.3", "405.5");
     ruling!(
         "Mila, Crafty Companion // Lukka, Wayward Bonder",
         "Mila’s first ability triggers only once no matter how many creatures are attacking or how many planeswalkers are being attacked."
@@ -241,7 +255,7 @@ fn mila_triggers_once_per_attack_and_resolves_before_the_spell() {
 
 #[test]
 fn cast_triggers_resolve_before_the_spell_even_if_it_is_countered() {
-    cr!("603.3", "117.3b", "603.2");
+    cr!("603.3", "405.5", "601.2i");
     ruling!(
         "Prismari Pianist",
         "Prismari Pianist's ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered or otherwise leaves the stack without resolving."
@@ -326,7 +340,7 @@ fn cycle(t: &mut TestGame, card: ObjectId) {
 
 #[test]
 fn yidaros_trigger_without_yidaro_in_the_graveyard_still_shuffles_unless_the_fourth_time() {
-    cr!("702.29c", "701.24c", "608.2b", "614.1a");
+    cr!("702.29c", "701.24c", "400.7", "614.1a");
     ruling!(
         "Yidaro, Wandering Monster",
         "If you cycle Yidaro but it isn't in your graveyard as the triggered ability resolves, you can't put it onto the battlefield or shuffle it into your library. You'll still shuffle your library if you haven't cycled Yidaro four times this game."
@@ -373,7 +387,7 @@ fn yidaros_trigger_without_yidaro_in_the_graveyard_still_shuffles_unless_the_fou
 
 #[test]
 fn shilgengar_uses_the_sacrificed_angels_toughness_as_it_last_existed() {
-    cr!("603.10a", "608.2h");
+    cr!("608.2h", "701.21a");
     ruling!(
         "Shilgengar, Sire of Famine",
         "If you sacrificed an Angel to pay the cost of Shilgengar's second ability, use the toughness of that Angel as it last existed on the battlefield to determine how many Blood tokens to create."

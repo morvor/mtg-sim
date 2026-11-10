@@ -1,8 +1,8 @@
 //! Rulings batch P158 — copies of spells and self-replacement effects: a copy of a spell
 //! wasn't cast (CR 707.10), so "if you cast this spell during your main phase", "if this
 //! spell was cast from ...", and "if {R}{G} was spent to cast this spell" are false for
-//! the copy; copies keep the original's X and modes (CR 707.10, 707.10b); copy effects
-//! copy any instant or sorcery spell, and one that has left the stack (CR 707.10e).
+//! the copy; copies keep the original's X and modes (CR 707.10, 707.2); copy effects
+//! copy any instant or sorcery spell, and one that has left the stack (CR 608.2h).
 
 use crate::r_p158_common::*;
 use mtg_engine::mana::ManaType;
@@ -116,7 +116,7 @@ const FIGHT: &str = "fights up to one target creature";
 
 #[test]
 fn mythos_of_illuna_checks_the_mana_spent_and_a_copy_spent_none() {
-    cr!("707.10", "614.1a", "601.2g");
+    cr!("707.10", "614.1a", "601.2h", "707.9b");
     ruling!(
         "Mythos of Illuna",
         "If an effect copies the Mythos spell, no mana was spent to cast the copy, so the copy won't receive the bonus."
@@ -163,7 +163,7 @@ fn mythos_of_illuna_checks_the_mana_spent_and_a_copy_spent_none() {
 
 #[test]
 fn copies_keep_the_originals_x() {
-    cr!("707.10", "707.10b");
+    cr!("707.10", "707.2");
     ruling!(
         "Increasing Vengeance",
         "If the spell Increasing Vengeance copies has an X whose value was determined as it was cast (like Earthquake does), the copy has the same value of X."
@@ -203,7 +203,7 @@ fn copies_keep_the_originals_x() {
 
 #[test]
 fn copies_keep_the_originals_modes() {
-    cr!("707.10", "707.10b");
+    cr!("707.10", "707.2");
     ruling!(
         "Increasing Vengeance",
         "If the spell Increasing Vengeance copies is modal (that is, it says “Choose one —” or the like), the copies will have the same mode(s). You can't choose different ones."
@@ -276,7 +276,7 @@ fn copy_effects_copy_spells_without_targets_too() {
 
 #[test]
 fn tomb_of_horrors_adventurer_copies_a_spell_that_was_countered() {
-    cr!("707.10e", "707.10", "603.2");
+    cr!("707.10", "608.2h", "603.2");
     ruling!(
         "Tomb of Horrors Adventurer",
         "The triggered ability will copy the spell that caused it to trigger even if that spell has been countered by the time that ability resolves."

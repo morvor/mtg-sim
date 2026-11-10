@@ -120,6 +120,7 @@ impl Game {
                     };
                     self.exec(&each, ctx);
                     ctx.prev_happened = true;
+                    ctx.prev_chosen = true;
                 }
             }
             Effect::May { who, effect } => {
@@ -134,7 +135,6 @@ impl Game {
                         true,
                     );
                 ctx.prev_happened = yes;
-                ctx.prev_chosen = yes;
                 if yes {
                     // Effects that can fail to do what they say (sacrificing, paying,
                     // countering) record whether they did it ("if you do", "when you do").
@@ -163,6 +163,9 @@ impl Game {
                         ctx.prev_happened = true;
                     }
                 }
+                // Set after the offered instruction ran, so a "you may" inside it doesn't
+                // stand in for this one (`Condition::PrevChosen`).
+                ctx.prev_chosen = yes;
             }
             Effect::PayOptional {
                 who,

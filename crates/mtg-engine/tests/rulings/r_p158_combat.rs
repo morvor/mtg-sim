@@ -1,8 +1,8 @@
 //! Rulings batch P158 — combat: first strike gained after the first combat damage step
 //! (CR 510.4), pump spells affecting only the creatures controlled as they resolve
-//! (CR 611.2c), a creature that blocked stays blocking (CR 506.4), a blocked creature stays
+//! (CR 611.2c), a creature that blocked stays blocking (CR 509.1g), a blocked creature stays
 //! blocked (CR 509.1h), and sacrifices chosen by the affected player as the spell resolves
-//! in APNAP order and performed at once (CR 608.2c, 101.4, 701.17).
+//! in APNAP order and performed at once (CR 608.2d, 101.4, 701.21a).
 
 use crate::r_p158_common::*;
 use mtg_engine::decision::Decision;
@@ -28,7 +28,7 @@ fn after_first_strike_damage(t: &mut TestGame) {
 
 #[test]
 fn first_strike_gained_after_first_strike_damage_still_deals_regular_damage() {
-    cr!("510.4", "702.7b", "702.33a");
+    cr!("510.4", "702.7b", "702.7c", "702.33a");
     ruling!(
         "Bold Defense",
         "If a creature doesn't have first strike, granting it first strike after combat damage has been dealt in the first combat damage step won't prevent it from dealing combat damage. It will still assign and deal its combat damage in the second combat damage step."
@@ -93,7 +93,7 @@ fn team_pumps_affect_only_the_creatures_controlled_as_they_resolve() {
 
 #[test]
 fn a_creature_that_blocked_stays_blocking_after_the_attacker_dies() {
-    cr!("506.4", "509.1h");
+    cr!("509.1g", "506.4");
     ruling!(
         "Will of the All-Hunter",
         "Once a creature blocks, it remains a blocking creature through the end of combat step, even if the attacking creature dies or leaves combat."
@@ -122,7 +122,7 @@ fn a_creature_that_blocked_stays_blocking_after_the_attacker_dies() {
 
 #[test]
 fn the_destined_thief_cant_unblock_a_blocked_creature() {
-    cr!("509.1h", "506.4");
+    cr!("509.1h");
     ruling!(
         "The Destined Thief",
         "Once a creature you control has been blocked, activating The Destined Thief's second ability targeting that creature won't cause it to become unblocked."
@@ -143,7 +143,7 @@ fn the_destined_thief_cant_unblock_a_blocked_creature() {
 
 #[test]
 fn dispense_justice_lets_the_target_player_choose_as_it_resolves() {
-    cr!("608.2c", "701.17a");
+    cr!("608.2c", "608.2d", "701.21a");
     ruling!(
         "Dispense Justice",
         "The targeted player chooses which attacking creature(s) to sacrifice as Dispense Justice resolves."
@@ -195,7 +195,7 @@ fn extract(t: &mut TestGame, evidence: bool) {
 
 #[test]
 fn extract_a_confession_ties_are_broken_by_the_sacrificing_player() {
-    cr!("608.2c", "701.17a", "701.59a", "701.59c");
+    cr!("608.2c", "608.2d", "701.21a", "701.59a", "701.59c");
     ruling!(
         "Extract a Confession",
         "If evidence was collected and an opponent has multiple creatures tied for the greatest power, that player chooses which one to sacrifice."
@@ -224,7 +224,7 @@ fn extract_a_confession_ties_are_broken_by_the_sacrificing_player() {
 
 #[test]
 fn extract_a_confession_opponents_choose_in_turn_order_then_sacrifice_at_once() {
-    cr!("101.4", "101.4a", "608.2c", "701.17a");
+    cr!("101.4", "608.2d", "701.21a");
     ruling!(
         "Extract a Confession",
         "Starting with the next opponent in turn order (or, if you cast Extract a Confession on an opponent's turn, starting with the opponent whose turn it is) and proceeding in turn order, each opponent chooses a creature they control to sacrifice. Then those creatures are sacrificed at the same time."
@@ -240,9 +240,11 @@ fn extract_a_confession_opponents_choose_in_turn_order_then_sacrifice_at_once() 
         }
         let p1s = t.battlefield(P1, "Grizzly Bears");
         let p2s = t.battlefield(P2, "Hill Giant");
+        // The opponent who chooses last.
+        let last = if active == P0 { P2 } else { P1 };
         let seen = crate::r_s01_common::watch(
             &mut t,
-            P2,
+            last,
             |d| matches!(d, Decision::ChooseEntities { .. }),
             |g| g.battlefield.iter().filter(|o| g.obj(**o).is(CardType::Creature)).count(),
         );
@@ -257,8 +259,8 @@ fn extract_a_confession_opponents_choose_in_turn_order_then_sacrifice_at_once() 
         let expected = if active == P0 { vec![P1, P2] } else { vec![P2, P1] };
         assert_eq!(order, expected, "active {active:?}");
         assert!(!t.on_battlefield(p1s) && !t.on_battlefield(p2s), "active {active:?}");
-        // Both creatures were still there when P2 chose: nothing is sacrificed until
-        // everyone has chosen.
+        // Both creatures were still there when the last opponent chose: nothing is
+        // sacrificed until everyone has chosen.
         assert_eq!(*seen.lock().unwrap(), vec![2], "active {active:?}");
     }
 }

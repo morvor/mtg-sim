@@ -82,13 +82,18 @@ fn sanctuaries_give_one_amount_or_the_other_never_both() {
         t.resolve_all();
         assert_eq!(t.life(P1), 20 - lost, "Necra {others:?}");
     }
-    // Ceta (red or green: draw one then discard; both: draw two then discard), relative
-    // to the hand with neither (the turns' draws on the way to the upkeep are the same).
-    let t = sanctuary("Ceta Sanctuary", &[]);
-    let base = t.hand_size(P0);
-    for (others, drawn) in [(&["Gray Ogre"][..], 1), (&["Gray Ogre", "Grizzly Bears"][..], 2)] {
+    // Ceta (red or green: draw a card, then discard one; both: draw two, then discard
+    // one; neither: nothing): the cards drawn and discarded in P0's upkeep, before the
+    // turn's draw. Doing both would draw three and discard two.
+    for (others, drawn) in [
+        (&[][..], 0),
+        (&["Gray Ogre"][..], 1),
+        (&["Gray Ogre", "Grizzly Bears"][..], 2),
+    ] {
         let t = sanctuary("Ceta Sanctuary", others);
-        assert_eq!(t.hand_size(P0), base + drawn - 1, "Ceta {others:?}");
+        assert_eq!(crate::r_p051_common::drawn_this_turn(&t, P0), drawn, "Ceta {others:?}");
+        assert_eq!(t.graveyard_size(P0), drawn.min(1) as usize, "Ceta {others:?}: discarded");
+        assert_eq!(t.hand_size(P0), drawn.saturating_sub(1) as usize, "Ceta {others:?}");
     }
     // Ana (blue or black: +1/+1; both: +5/+5) on the Bears.
     for (others, bonus) in [(&["Storm Crow"][..], 1), (&["Storm Crow", "Cabal Evangel"][..], 5)] {
@@ -337,7 +342,7 @@ fn emiel_still_charges_for_a_unicorns_two_counters() {
 
 #[test]
 fn expel_from_orazca_returns_to_hand_when_you_decline_the_library() {
-    cr!("614.1a", "702.131a");
+    cr!("614.1a", "608.2d", "702.131c");
     ruling!(
         "Expel from Orazca",
         "If you have the city’s blessing and choose not to put the target nonland permanent on top of its owner’s library, it’s returned to its owner’s hand."
@@ -364,7 +369,7 @@ fn expel_from_orazca_returns_to_hand_when_you_decline_the_library() {
 
 #[test]
 fn nissas_pilgrimage_puts_a_lone_forest_onto_the_battlefield() {
-    cr!("608.2c", "701.20a");
+    cr!("608.2c", "701.23a");
     ruling!(
         "Nissa's Pilgrimage",
         "If you only find one basic Forest card, you’ll put it onto the battlefield tapped. You won’t be able to put it into your hand, even if you want to."
@@ -392,20 +397,26 @@ fn goblin_charbelcher_without_a_land_counts_every_card_revealed() {
     let belcher = t.battlefield(P0, "Goblin Charbelcher");
     let lib = crate::r_p189_common::set_library(&mut t, P0, &["Shock", "Grizzly Bears", "Hill Giant"]);
     t.lands(P0, "Plains", 3);
+    // The whole library was revealed: P0 orders it as they like (here the Giant, the
+    // Shock, then the Bears, top first).
+    let from = t.asked().len();
+    t.answer(P0, DecisionKind::Order, mtg_engine::decision::Answer::Indices(vec![2, 0, 1]));
     act(&mut t, P0, belcher, 0, &[pl(P1)]);
     assert_eq!(t.life(P1), 17);
-    assert_eq!(t.library_size(P0), 3);
-    let now: Vec<ObjectId> = lib.iter().map(|id| t.g.current(*id)).collect();
-    let mut sorted = crate::r_s33_common::library_top_first(&t, P0);
-    sorted.sort();
-    let mut expected = now;
-    expected.sort();
-    assert_eq!(sorted, expected, "the cards are back in the library");
+    assert!(
+        asked_since(&t, from)
+            .iter()
+            .any(|(p, d)| *p == P0 && matches!(d, Decision::Order { .. })),
+        "{:?}",
+        asked_since(&t, from)
+    );
+    let chosen: Vec<ObjectId> = [2, 0, 1].iter().map(|i| t.g.current(lib[*i])).collect();
+    assert_eq!(crate::r_s33_common::library_top_first(&t, P0), chosen);
 }
 
 #[test]
 fn rix_maadi_reveler_with_no_cards_in_hand_just_draws() {
-    cr!("608.2c", "701.8b", "702.137a");
+    cr!("608.2c", "701.9a", "702.137a");
     ruling!(
         "Rix Maadi Reveler",
         "If you have no cards in hand, you won't discard any cards, and then you'll draw one or three cards as appropriate."
@@ -433,7 +444,7 @@ fn rix_maadi_reveler_with_no_cards_in_hand_just_draws() {
 
 #[test]
 fn increasing_confusion_mills_the_target_from_either_zone() {
-    cr!("614.1a", "702.34a", "701.13a");
+    cr!("614.1a", "702.34a", "701.17a");
     ruling!(
         "Increasing Confusion",
         "Regardless of which zone Increasing Confusion is cast from, it puts cards from the top of target player's library into that player's graveyard."
@@ -463,7 +474,7 @@ fn increasing_confusion_mills_the_target_from_either_zone() {
 
 #[test]
 fn see_the_unwritten_puts_an_x_creature_onto_the_battlefield_with_x_zero() {
-    cr!("107.3", "608.2c", "704.5f");
+    cr!("107.3g", "608.2c", "704.5f");
     ruling!(
         "See the Unwritten",
         "If a card you put onto the battlefield this way has {X} in its mana cost, X is considered to be 0."

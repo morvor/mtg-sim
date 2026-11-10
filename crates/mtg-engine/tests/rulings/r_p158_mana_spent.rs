@@ -1,5 +1,5 @@
 //! Rulings batch P158 — what was spent to cast a spell: a spell cast "without paying its
-//! mana cost" can't be paid for instead (CR 118.9a, 601.2f), cost reductions can't be
+//! mana cost" can't be paid for instead (CR 118.9, 601.2f), cost reductions can't be
 //! waived, "as though it were mana of any color" doesn't change what mana was spent
 //! (CR 609.4b), mana value ignores alternative costs (CR 202.3), and cost reductions
 //! that reduce only generic mana (CR 601.2f) and apply once per spell.
@@ -47,7 +47,7 @@ const FIGHT: &str = "fights up to one target creature";
 
 #[test]
 fn cast_without_paying_its_mana_cost_cant_be_paid_for_instead() {
-    cr!("118.9a", "601.2f", "601.2g");
+    cr!("118.9", "601.2f", "601.2h");
     ruling!(
         "Sundering Stroke",
         "If an effect allows you to cast Sundering Stroke without paying its mana cost, you can't choose to cast it and pay its cost unless another rule or effect allows you to cast it for a cost."
@@ -106,7 +106,7 @@ fn cast_without_paying_its_mana_cost_cant_be_paid_for_instead() {
 
 #[test]
 fn spending_mana_as_though_another_color_doesnt_change_what_was_spent() {
-    cr!("609.4b", "601.2g");
+    cr!("609.4b", "601.2h");
     ruling!(
         "Sundering Stroke",
         "Sundering Stroke checks what mana was actually spent to cast it. If an effect allows you to spend mana “as though it were mana” of any color or type, that will allow you to spend mana you couldn't otherwise spend, but it won't change what mana you spent to cast the spell."
@@ -152,7 +152,7 @@ fn spending_mana_as_though_another_color_doesnt_change_what_was_spent() {
 
 #[test]
 fn horribly_awry_checks_the_mana_value_not_the_cost_paid() {
-    cr!("202.3", "118.9", "115.5");
+    cr!("202.3", "118.9", "601.2c");
     ruling!(
         "Horribly Awry",
         "The mana value of a spell doesn't change if its controller paid an alternative cost (such as an evoke cost) to cast it."
@@ -235,6 +235,9 @@ fn the_destined_warrior_reduces_generic_mana_once_per_party_spell() {
     let warrior = |t: &mut TestGame| {
         t.battlefield(P0, "The Destined Warrior");
     };
+    // Imoen, Mystic Trickster ({2}{U}, a Rogue Wizard): {1}{U}, not {U} (reduced once).
+    supported("Imoen, Mystic Trickster");
+    crate::r_p194_common::assert_total_cost(&warrior, P0, "Imoen, Mystic Trickster", &[(ManaType::U, 1)], 1);
     // Samut, Hazoret's Champion ({1}{R}, a Warrior Cleric): {R}, not free.
     crate::r_p194_common::assert_total_cost(&warrior, P0, "Samut, Hazoret's Champion", &[(ManaType::R, 1)], 0);
     // Fugitive Wizard ({U}): still {U}; Cabal Evangel ({1}{B}, a Cleric): {B}.
@@ -246,7 +249,7 @@ fn the_destined_warrior_reduces_generic_mana_once_per_party_spell() {
 
 #[test]
 fn eowyn_reduces_equip_abilities_but_not_reconfigure() {
-    cr!("702.6a", "702.151a", "601.2f");
+    cr!("702.6a", "702.151a", "601.2f", "602.2b");
     ruling!(
         "Éowyn, Lady of Rohan",
         "Some Equipment creature cards in other sets have reconfigure, a different ability that attaches them to a creature. Reconfigure is not an equip ability, and reconfigure costs are not reduced by Éowyn, Lady of Rohan's last ability. Equip variants or equip abilities with restrictions, like the \"equip Human\" ability of Dúnedain Blade, are still equip abilities, and their costs will be reduced by Éowyn, Lady of Rohan's last ability."

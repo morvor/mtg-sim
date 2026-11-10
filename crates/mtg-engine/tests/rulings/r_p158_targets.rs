@@ -170,7 +170,7 @@ fn spell_crumple_with_an_illegal_target_goes_to_the_graveyard() {
 
 #[test]
 fn a_spell_targeting_only_fblthp_doesnt_resolve() {
-    cr!("608.2b", "603.2", "701.20a");
+    cr!("608.2b", "603.2", "701.24a");
     ruling!(
         "Fblthp, the Lost",
         "If the spell that targets Fblthp has no other targets, it won't resolve (because it no longer has a legal target after Fblthp has gotten totally lost in your library)."
@@ -233,7 +233,7 @@ fn mythos_token(t: &mut TestGame, target: ObjectId, fight: Option<ObjectId>) -> 
 
 #[test]
 fn mythos_tokens_fight_trigger_checks_its_target_and_the_token_on_resolution() {
-    cr!("608.2b", "603.4", "608.2h", "701.12b");
+    cr!("608.2b", "603.4", "608.2h", "701.14b");
     ruling!(
         "Mythos of Illuna",
         "If the target creature is an illegal target or if the token is no longer a creature when the token's granted ability tries to resolve, the ability doesn't resolve. If it's a legal target but the token is no longer on the battlefield when the ability resolves, the target creature won't deal or be dealt damage."
@@ -411,14 +411,16 @@ fn x_of_consult_the_star_charts_and_the_final_days_is_computed_as_they_resolve()
     assert_eq!(offered, vec![2], "{:?}", asked_since(&t, from));
     assert_eq!(t.hand_size(P0), 1);
     assert_eq!(t.library_size(P0), library - 1);
-    // The Final Days flashed back with one creature card in the graveyard as it's cast
-    // and two as it resolves: two Horrors.
+    // The Final Days flashed back with two creature cards in the graveyard as it's cast
+    // and three as it resolves: three Horrors (X as it was cast, or the instruction it
+    // replaces, would make two).
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     t.graveyard(P0, "Grizzly Bears");
+    t.graveyard(P0, "Gray Ogre");
     let fd = t.graveyard(P0, "The Final Days");
     cast_from_graveyard(&mut t, P0, fd, &[]);
     t.graveyard(P0, "Hill Giant");
     t.resolve_all();
-    assert_eq!(with_subtype(&t, P0, "Horror").len(), 2);
+    assert_eq!(with_subtype(&t, P0, "Horror").len(), 3);
 }

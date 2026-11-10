@@ -6,7 +6,6 @@
 //! by subtype (CR 205.3d) and card types (CR 205.2a), and a countered delayed trigger.
 
 use crate::r_p158_common::*;
-use crate::r_s01_common::custom_card;
 use mtg_engine::decision::Decision;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::mana::ManaType;
@@ -18,7 +17,7 @@ use mtg_engine::*;
 
 #[test]
 fn fblthp_cast_from_exile_was_not_cast_from_the_library() {
-    cr!("601.1a", "400.7", "614.1a");
+    cr!("601.2a", "400.7", "614.1a");
     ruling!(
         "Fblthp, the Lost",
         "If an effect exiles Fblthp from your library and then lets you cast that card, it's cast from exile, not from your library."
@@ -147,12 +146,6 @@ fn talent_of_the_telepath_casts_from_the_revealed_cards_and_the_rest_go_to_their
     // Shock among the seven: cast at P1, it resolves and goes to P1's graveyard with the
     // other six.
     let mut t = TestGame::new(2);
-    let top = stack_library(
-        &mut t,
-        P0,
-        &["Grizzly Bears"],
-    );
-    let _ = top;
     let seven = stack_library(
         &mut t,
         P1,
@@ -166,6 +159,27 @@ fn talent_of_the_telepath_casts_from_the_revealed_cards_and_the_rest_go_to_their
     assert_eq!(t.life(P1), 18);
     assert!(seven.iter().all(|c| t.zone(*c) == Zone::Graveyard(P1)), "all in P1's graveyard");
     assert_eq!(t.graveyard_size(P0), 1, "only the Talent");
+    // P0 chooses not to cast the Shock: the Talent finishes resolving, all seven go to
+    // P1's graveyard.
+    let mut t = TestGame::new(2);
+    let seven = stack_library(
+        &mut t,
+        P1,
+        &["Grizzly Bears", "Shock", "Hill Giant", "Gray Ogre", "Forest", "Island", "Plains"],
+    );
+    let shock = seven[1];
+    let from = t.asked().len();
+    t.answer(P0, DecisionKind::Entities, mtg_engine::decision::Answer::Entities(vec![]));
+    cast_at(&mut t, P0, "Talent of the Telepath", &[pl(P1)]);
+    t.resolve_all();
+    assert!(
+        asked_since(&t, from).iter().any(|(p, d)| *p == P0
+            && matches!(d, Decision::ChooseEntities { candidates, .. } if candidates.contains(&obj(shock)))),
+        "the Shock was offered: {:?}",
+        asked_since(&t, from)
+    );
+    assert_eq!(t.life(P1), 20, "the Shock wasn't cast");
+    assert!(seven.iter().all(|c| t.zone(*c) == Zone::Graveyard(P1)), "all in P1's graveyard");
     // No instant or sorcery among them: nothing is cast, all seven go to the graveyard.
     let mut t = TestGame::new(2);
     let seven = stack_library(
@@ -188,7 +202,7 @@ fn talent_of_the_telepath_casts_from_the_revealed_cards_and_the_rest_go_to_their
 
 #[test]
 fn shepherds_returning_an_aura_choose_what_it_enchants_without_targeting() {
-    cr!("303.4f", "303.4", "702.11b", "702.16b");
+    cr!("303.4f", "303.4g", "702.11b", "702.16c");
     ruling!(
         "Emeria Shepherd",
         "If you return an Aura to the battlefield this way, you choose what it will enchant as it enters the battlefield. This doesn't target any player or permanent, so you could attach an Aura to a permanent with hexproof controlled by an opponent, for example. If there's nothing the Aura can legally enchant, it stays in the graveyard."
@@ -269,7 +283,7 @@ fn ilysian_caryatids_ability_is_a_mana_ability() {
 
 #[test]
 fn incubation_druids_mana_has_no_restrictions_of_the_land() {
-    cr!("609.4", "605.1a", "106.6");
+    cr!("106.7", "605.1a", "106.6");
     ruling!(
         "Incubation Druid",
         "Incubation Druid doesn't care about any restrictions or riders your lands put on the mana they produce, such as those of Unclaimed Territory and Guildmages' Forum. It just produces one mana of the appropriate type, with no restrictions or riders."
@@ -391,7 +405,7 @@ fn only_the_bestowed_emissarys_controller_activates_its_ability() {
 
 #[test]
 fn river_of_tears_counts_lands_played_not_lands_put_onto_the_battlefield() {
-    cr!("305.1", "305.9", "614.1a");
+    cr!("305.1", "305.4", "614.1a");
     ruling!(
         "River of Tears",
         "River of Tears produces {B} only after you've played a land, not after you've put a land onto the battlefield (such as with Evolving Wilds)."
@@ -427,7 +441,7 @@ fn river_of_tears_counts_lands_played_not_lands_put_onto_the_battlefield() {
 
 #[test]
 fn see_the_truth_gives_no_permission_to_cast_it_from_elsewhere() {
-    cr!("601.1a", "601.3");
+    cr!("601.3");
     ruling!(
         "See the Truth",
         "See the Truth doesn't give you permission to cast it from a zone other than your hand. You'll need to find another way to do so."
@@ -446,19 +460,17 @@ fn see_the_truth_gives_no_permission_to_cast_it_from_elsewhere() {
 
 #[test]
 fn the_five_doctors_finds_cards_with_the_doctor_type_not_the_word() {
-    cr!("205.3d", "701.23a");
+    cr!("205.3m", "109.2a", "701.23a");
     ruling!(
         "The Five Doctors",
         "The Five Doctors can find any card with the Doctor creature type, not cards with the word \"Doctor\" in the name."
     );
     supported("The Five Doctors");
     supported("Doctor Spectrum");
+    supported("Cult Healer");
+    // Cult Healer is a Human Doctor; Doctor Spectrum, a Human Hero.
     let mut t = TestGame::new(2);
-    let typed = t.custom(
-        P0,
-        custom_card("Time Lord", "Creature — Time Lord Doctor", "{1}{U}", Some((1, 1)), ""),
-        Zone::Library(P0),
-    );
+    let typed = t.library_top(P0, "Cult Healer");
     let named = t.library_top(P0, "Doctor Spectrum");
     let from = t.asked().len();
     t.answer_choose(P0, &[obj(typed)]);
@@ -466,7 +478,7 @@ fn the_five_doctors_finds_cards_with_the_doctor_type_not_the_word() {
     let s = t.hand(P0, "The Five Doctors");
     t.cast(P0, s).kicked(false).go();
     t.resolve_all();
-    assert!(t.in_hand(P0, "Time Lord"));
+    assert!(t.in_hand(P0, "Cult Healer"));
     assert!(!t.in_hand(P0, "Doctor Spectrum"));
     for (p, d) in asked_since(&t, from) {
         if let Decision::ChooseEntities { candidates, .. } = d {
@@ -509,7 +521,7 @@ fn traverse_the_ulvenwald_counts_card_types_only() {
     assert_eq!(offered(&["Sythis, Harvest's Hand", "Forest", "Cabal Evangel"]), (true, false));
     // Kindred instant (two types), artifact creature (two types): four types.
     assert_eq!(offered(&["Eyeblight's Ending", "Ornithopter"]), (true, true));
-    // Legendary creature, basic land, instant: three types, however many supertypes.
+    // Legendary enchantment creature, basic land, instant: four types.
     assert_eq!(offered(&["Sythis, Harvest's Hand", "Forest", "Shock"]), (true, true));
 }
 
@@ -549,20 +561,55 @@ fn forsaken_crossroads_may_untap_only_for_a_player_who_didnt_start() {
     // which its "instead" needs: the starting player's Crossroads stays tapped, another
     // player's may untap.
     supported("Forsaken Crossroads");
-    for (p, untaps) in [(P0, false), (P1, true)] {
+    // (the player, whether they take the untap if offered, untapped, scried): the untap
+    // replaces the scry when taken; declined, the scry happens.
+    for (p, take, untapped, scried) in [
+        (P0, true, false, true),
+        (P1, true, true, false),
+        (P1, false, false, true),
+    ] {
         let mut t = TestGame::new(2);
         assert_eq!(t.g.turn.starting_player, P0);
         t.set_step(p, Step::PrecombatMain);
         let from = t.asked().len();
         crate::r_p198_common::choose_words(&mut t, p, &["Blue"]);
-        t.answer_yes(p, true);
+        t.answer_yes(p, take);
         let c = t.hand(p, "Forsaken Crossroads");
         t.play_land(p, c).expect("land");
         t.resolve_all();
-        assert_eq!(!t.obj_now(c).tapped, untaps, "{p:?}");
-        let offered = asked_since(&t, from)
+        let asked = asked_since(&t, from);
+        let case = format!("{p:?} take {take}: {asked:?}");
+        assert_eq!(!t.obj_now(c).tapped, untapped, "{case}");
+        let offered = asked
             .iter()
             .any(|(q, d)| *q == p && matches!(d, Decision::YesNo { .. }));
-        assert_eq!(offered, untaps, "{p:?}: {:?}", asked_since(&t, from));
+        assert_eq!(offered, p != P0, "{case}");
+        let scry = asked
+            .iter()
+            .any(|(q, d)| *q == p && matches!(d, Decision::Scry { .. }));
+        assert_eq!(scry, scried, "{case}");
     }
+}
+
+#[test]
+fn emeria_shepherd_declining_the_battlefield_still_offers_the_hand() {
+    cr!("614.15", "614.1a", "608.2c");
+    // The other side of `shepherds_returning_an_aura_choose_what_it_enchants_without_targeting`
+    // (taking "you may return that card to the battlefield instead" is final): declining it
+    // leaves the original "you may return target nonland permanent card ... to your hand".
+    supported("Emeria Shepherd");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Emeria Shepherd");
+    // A creature Betrayal could enchant.
+    t.battlefield(P1, "Gladecover Scout");
+    let aura = t.graveyard(P0, "Betrayal");
+    t.answer_targets(P0, &[obj(aura)]);
+    t.answer_yes(P0, false); // not to the battlefield
+    t.answer_yes(P0, true); // to the hand
+    let plains = t.hand(P0, "Plains");
+    t.play_land(P0, plains).expect("land");
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Betrayal"));
+    assert!(t.named_on_battlefield("Betrayal").is_empty());
 }
