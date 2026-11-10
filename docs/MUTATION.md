@@ -20,9 +20,14 @@ RERUN=1 scripts/mutants.sh sba                # re-test only that file's survivo
 
 ```sh
 cargo mutants --in-place -d target/mutsrc -f crates/mtg-engine/src/<stem>.rs \
-  --timeout 300 --build-timeout 900 --cap-lints true --test-package mtg-engine \
+  --timeout 600 --build-timeout 900 --cap-lints true --test-package mtg-engine \
   --shard 0/10 --sharding round-robin -o target/mutants/<stem>
 ```
+
+(`TIMEOUT=<seconds>` overrides the 600 s test timeout. It was 300 s until November 2026,
+when the unmutated `mtg-engine` suite, ~105 s in October, had grown to ~290 s: cards 66 s,
+cr 49 s, properties 42 s, rulings 109 s, plus the unit, actions, keywords and smoke binaries.
+A baseline that doesn't fit the timeout means no mutant is tested at all.)
 
 - `target/mutsrc` is a copy of the committed tree (`git archive HEAD`, so commit the tests
   first; uncommitted changes aren't measured) refreshed before each file, so one
@@ -33,8 +38,9 @@ cargo mutants --in-place -d target/mutsrc -f crates/mtg-engine/src/<stem>.rs \
   `mtg-engine` suite ~105 s), i.e. a week. So each file is **sampled**: round-robin shard
   `0/10` takes every tenth mutant in source order, which spreads the sample evenly across
   the file. Files with fewer than 60 mutants run in full.
-- `--timeout 300` bounds a mutant's test run (the unmutated suite takes ~105 s), so a
-  mutant that makes the engine loop counts as `timeout`, which is a detection.
+- `--timeout 600` (300 before November 2026) bounds a mutant's test run (the unmutated
+  suite took ~105 s in October and ~290 s in November), so a mutant that makes the engine
+  loop counts as `timeout`, which is a detection.
 - The re-run after adding tests (`RERUN=1`) finds each survivor again in the file's
   current mutant list (same function and mutation whose diff, the mutated line with the
   lines around it as saved in the earlier run's `mutants.out/diff/`, matches best; then
@@ -43,7 +49,7 @@ cargo mutants --in-place -d target/mutsrc -f crates/mtg-engine/src/<stem>.rs \
   mutation once code had moved by more than the distance between them. cargo-mutants
   27.1 applies neither `-F` nor `-E` to "delete field" mutants (it selected every one of
   them, 163 for triggers.rs), so the re-run applies each survivor's diff to
-  `target/mutsrc` itself and runs the same build and `cargo test -p mtg-engine` (300 s
+  `target/mutsrc` itself and runs the same build and `cargo test -p mtg-engine` (the same
   timeout), recording caught/missed/timeout/unviable in `target/mutants/<stem>-rerun/`.
   `ONLY=<regex>` re-runs just the matching survivors, keeping the others' results.
 
@@ -76,6 +82,7 @@ Each surviving mutant is classified as
 | resolve.rs | 314 | 32 (1/10) | 22 | 8 | 0 | 2 | 73.3% | 86.7% (26/30) |
 | actions.rs | 390 | 39 (1/10) | 27 | 5 | 3 | 4 | 85.7% | 85.7% (no new tests: no killable survivor found) |
 | layers.rs | 423 | 43 (1/10) | 34 | 5 | 1 | 3 | 87.5% | 87.5% (no killable survivor) |
+| layers.rs (2026-11-10, after the layers audit; 43 of the 53 tested, see below) | 524 | 53 (1/10) | 35 | 6 | 2 | 0 | 86.0% | 86.0% (no killable survivor) |
 | casting.rs | 841 | 85 (1/10) | 74 | 9 | 0 | 2 | 89.2% | 96.4% (80/83) |
 | combat.rs | 876 | 88 (1/10) | 68 | 13 | 0 | 7 | 84.0% | 93.8% (76/81) |
 | **all 15** | 5,281 | 551 | 423 | 93 | 4 | 31 | **82.1%** | **88.3%** (459/520) |
@@ -485,6 +492,65 @@ Run 2026-10-14, 43 of 423 mutants (round-robin 0/10), 72 minutes. One mutant (`7
   No card found gives a copy of a noncreature permanent all creature types as a copy
   exception.
 
+### layers.rs, second run (2026-11-10)
+
+Run after the `engine-audit-1/layers` tests (65 new tests in `tests/cr/r613_audit_*.rs`)
+against the current file: 53 of 524 mutants (round-robin 0/10). The run took two passes:
+cargo-mutants' 300 s test timeout no longer fit the unmutated suite (~290 s), so
+`scripts/mutants.sh` now takes `TIMEOUT` (default 600 s); the first 37 mutants ran in one
+2-hour `cargo mutants` invocation, the remaining 16 one at a time the way the RERUN path
+does (apply the diff in `target/mutsrc`, build, run the suite), six of them before time ran
+out. Of the 43 mutants tested: 35 caught, 6 missed, 2 timeouts, 0 unviable, kill rate
+**86.0%**; every survivor is equivalent, so no re-run was needed. The 10 sampled mutants
+not reached are listed at the end.
+
+- `layers.rs:408:25: delete field rules_text from struct Characteristics expression in
+  Game::compute_characteristics` (the characteristics of a card exiled face down):
+  **(a) equivalent**. `Characteristics` derives `Default`, and the default `Arc<str>` is the
+  empty string the field was set to.
+- `layers.rs:766:48: replace || with && in Game::expire_dependent_effects` (removing a
+  `Duration::UntilHostLeaves` effect whose objects have all left the battlefield): **(a)
+  equivalent (dead path)**. `Duration::UntilHostLeaves` is defined and rendered but never
+  constructed, so the branch never runs.
+- `layers.rs:1256:28: delete ! in Game::apply_effect_in_layer` (recording the objects a
+  resolved effect started applying to, CR 613.6): **(a) equivalent (dead path)**, the same
+  site as `1092:28` in the first run. A resolved effect's `Affected::Objects` set is already
+  locked (CR 611.2c), so recording it on trial applications instead of real ones changes
+  nothing; it would matter only for `Affected::Filter`, which is never constructed.
+- `layers.rs:1696:49: replace + with * in Game::compute_player_effects`: **(a) equivalent**,
+  the same site as `1489:49` in the first run. It changes only the tie-break key among
+  effects with identical timestamps; the sort is stable, the key stays monotonic in the
+  effect's index, and a resolved player effect never shares a timestamp with a static one
+  (each comes from its own `new_timestamp()` call).
+- Timeouts (detections): `layers.rs:896:17: replace && with || in Game::layer_candidates`
+  (layer-1 effects become candidates in every layer on every pass) and `layers.rs:931:40:
+  replace || with && in Game::layer_candidates` (an applied static ability is gathered
+  again every pass); both make `apply_layer` run to its iteration cap.
+- The 16 sampled mutants the run didn't reach, in `filter_is_self`, `key_order`,
+  `mod_values`, `parse_pt_counter`, `keyword_counter` (the "flying" and "menace" arms),
+  `apply_mod` (four), `acquired_ability`, `copied_link`, `drop_ungainable_subtypes`,
+  `subtype_still_valid`, `intrinsic_mana_ability` (the "Forest" arm) and `qualities_among`,
+  were tested afterwards one at a time (results in `target/mutants/layers-rest/`; the loop
+  was still running when this was written, so that directory may hold later outcomes). Six
+  were reached: `mod_values` (`==` with `!=`), `parse_pt_counter` (`Some((1, 1))`) and the
+  two `keyword_counter` arms were caught; the two below survived. Not reached (untested):
+  `1899:5 replace apply_mod with ()`, `1985:20 delete ! in apply_mod`, `2099:25 replace &&
+  with || in apply_mod`, `2179:20 replace += with *= in apply_mod`, `2218:55 replace + with
+  * in acquired_ability`, `2273:12 replace | with & in copied_link`, `2282:5 replace
+  drop_ungainable_subtypes with ()`, `2299:52 replace || with && in subtype_still_valid`,
+  `2354:9 delete match arm "Forest" in intrinsic_mana_ability` and `2393:37 replace match
+  guard matches!(**sel, Sel::All(_)) with true in qualities_among`.
+- `layers.rs:1749:5: replace filter_is_self -> bool with true` (`static_affected` then
+  includes an ability's own source in its effect even when the source isn't on the
+  battlefield): **(a) equivalent in practice**. It can only reach a static ability that
+  functions outside the battlefield with a filter that isn't zone-bound, such as Wonder's
+  "creatures you control have flying" while it's in a graveyard, where the card would give
+  itself flying in the graveyard; nothing reads abilities of a graveyard card.
+- `layers.rs:1759:50: replace << with >> in key_order`: **(a) equivalent**, like `1550:56`
+  in the first run. The key only breaks ties between static effects with identical
+  timestamps: abilities of one object still sort by uid, and two objects never share a
+  timestamp (each gets its own `new_timestamp()`; the sort is stable).
+
 ### casting.rs
 
 Run 2026-10-14/15, 85 of 841 mutants (round-robin 0/10), about 3 hours. Tests for the
@@ -623,3 +689,7 @@ equivalent (a), or behavior no card in the pool reaches yet (b, "not killed", wi
 test would need). One engine bug was found and fixed (multi-player search moves,
 simultaneous.rs). Re-running a file later: `scripts/mutants.sh <stem>` for a new sample,
 `RERUN=1 scripts/mutants.sh <stem>` for the survivors.
+
+2026-11-10: `layers.rs` was re-sampled after the `engine-audit-1/layers` tests (65 new
+tests, see "layers.rs, second run" above): 43 of 53 sampled mutants tested, 35 killed and 2
+timeouts (**86.0%**), 6 equivalent survivors, 10 not reached in the time available.
