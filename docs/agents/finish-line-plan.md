@@ -495,6 +495,19 @@ by a compiler that has stopped changing under them (item C3). "Done" (item C2) i
 the data of 2026-09-24 that the engine was built against; C3 then re-runs the incremental
 refresh for the new cards.
 
+### The user's answers (Nov 10)
+
+- **D1:** follow the ruling. The user: "Thieving Amalgam and Grismold the Dreadsower are permanents YOU own, trigger from something happening to a creature your opponent owns as they leave the game. Whereas with Share the Spoils, the permanent WITH the trigger is the one that is leaving the game." It is not a discrepancy. Item user-decisions-nov10, part A.
+- **D2:** postponed until the project is done. Review the log and report to Wizards then.
+- **D3:** the user asked what "verified" means here (answered in chat on Nov 10); undecided, report the count meanwhile.
+- **D4:** loops are an open action item. Build a robust system later (post-finish item C4); keep the current behavior until then.
+- **D5:** the definition of done (§1) is accepted.
+- **D6:** no data refresh until the project is in a settled state.
+- **Also decided:**
+  - Plasma Caster (`target-restriction-source-attachment-as-announced`): accepted.
+  - Tarmogoyf under Dress Down (`star-without-defining-ability-is-zero`): accepted.
+  - Stinging Study: the player chooses the commander (item user-decisions-nov10, part B).
+
 ### Already decided, not re-asked
 
 All 128 register entries (Oct 21, Nov 4, 5, 7 and 9); the Nov 5 conflict cases (template and
