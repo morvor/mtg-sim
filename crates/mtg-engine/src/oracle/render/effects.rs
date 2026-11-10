@@ -6608,14 +6608,14 @@ impl Renderer<'_> {
                             && !s.contains("enchanted ")
                             && !s.contains("equipped ")
                     };
-                    if !plain(&c) || !plain(&t) {
-                        if trigger_body {
-                            return format!("{t} if {c}");
-                        }
-                        return format!("if {c}, {t}");
-                    }
+                    // The first clause of a triggered ability's body says its condition
+                    // after the instruction only: "When ~ enters, if ..., draw a card" is
+                    // an intervening "if" clause, checked as it triggers too (CR 603.4).
                     if trigger_body {
-                        return format!("{{alt:{t} if {c}|if {c}, {t}}}");
+                        return format!("{t} if {c}");
+                    }
+                    if !plain(&c) || !plain(&t) {
+                        return format!("if {c}, {t}");
                     }
                     format!("{{alt:if {c}, {t}|{t} if {c}}}")
                 };
