@@ -278,3 +278,44 @@ fn x_may_be_announced_higher_than_the_mana_available_when_convoke_pays_for_it() 
     assert!(bears.iter().all(|b| !is_tapped(&t, *b)));
     assert!(t.in_hand(P0, "Chord of Calling"));
 }
+
+#[test]
+fn an_unannounced_x_of_an_activation_cost_paid_with_counters_is_the_least_payable_value() {
+    cr!("602.2b", "107.3a", "118.3");
+    interp!("default-numbers");
+    supported("Moxite Refinery");
+    // Moxite Refinery: "{2}, {T}, Remove X counters from an artifact or creature you
+    // control: Choose one — Put X charge counters on target artifact; or put X +1/+1
+    // counters on target creature." With no value announced, X is the least value the
+    // cost can be paid at: 0 (removing no counters is payable whatever the permanents
+    // carry), so the Bears keep their two counters and the Bonesplitter gets none. (A
+    // payability check that found X = 0 unpayable would announce 1 instead.)
+    let mut t = TestGame::new(2);
+    let refinery = t.battlefield(P0, "Moxite Refinery");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let rock = t.battlefield(P0, "Bonesplitter");
+    t.g.add_counters(Entity::Object(bears), "+1/+1", 2, None);
+    t.lands(P0, "Plains", 2);
+    t.answer(P0, DecisionKind::X, Answer::Default);
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
+    t.activate(P0, refinery, 0, &[Entity::Object(rock)])
+        .unwrap();
+    assert_eq!(t.counters(bears, "+1/+1"), 2);
+    assert_eq!(untapped_lands(&t, P0), 0);
+    t.resolve();
+    assert_eq!(t.counters(rock, "charge"), 0);
+    // Announced, X = 2 removes the Bears' two counters and puts two charge counters.
+    let mut t = TestGame::new(2);
+    let refinery = t.battlefield(P0, "Moxite Refinery");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let rock = t.battlefield(P0, "Bonesplitter");
+    t.g.add_counters(Entity::Object(bears), "+1/+1", 2, None);
+    t.lands(P0, "Plains", 2);
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0]));
+    t.activate(P0, refinery, 0, &[Entity::Object(rock)])
+        .unwrap();
+    assert_eq!(t.counters(bears, "+1/+1"), 0);
+    t.resolve();
+    assert_eq!(t.counters(rock, "charge"), 2);
+}
