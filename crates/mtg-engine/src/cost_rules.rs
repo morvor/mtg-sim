@@ -372,12 +372,41 @@ pub fn choose_payment_ways_for(
     let Some(mana) = cost.mana.as_mut() else {
         return;
     };
+    // The ways announced for the cost's Phyrexian symbols as the spell was proposed
+    // (CR 601.2b), in order. A colored cost reduction may have removed some of those
+    // symbols since (`phyrexian-symbol-colored-reduction`): the symbols removed are taken
+    // to be ones announced to be paid with mana, so the announcements of mana payments are
+    // dropped first and the rest apply to the remaining symbols in order.
+    let mut ways: Vec<usize> = (0u16..)
+        .map_while(|k| announced_phyrexian(g, announced, k))
+        .collect();
+    let phyrexian_left = mana
+        .symbols
+        .iter()
+        .filter(|s| matches!(payment_options(**s), Some((_, true))))
+        .count();
+    if ways.len() > phyrexian_left {
+        let life_pick = mana.symbols.iter().find_map(|s| match payment_options(*s) {
+            Some((o, true)) => Some(o.len() + 1),
+            _ => None,
+        });
+        let mut extra = ways.len() - phyrexian_left;
+        ways.retain(|w| {
+            if extra > 0 && Some(*w) != life_pick {
+                extra -= 1;
+                false
+            } else {
+                true
+            }
+        });
+        ways.truncate(phyrexian_left);
+    }
     // Life paid for Phyrexian symbols (CR 107.4f), and for other symbols an effect lets
     // the player pay with life.
     let mut life = 0;
     let mut other_life = 0;
     let mut out: Vec<ManaSymbol> = Vec::new();
-    let mut k = 0u16;
+    let mut k = 0usize;
     for s in mana.symbols.clone() {
         let instead = life_instead(s, &life_for);
         let options = payment_options(s).or_else(|| match (s, instead) {
@@ -393,7 +422,7 @@ pub fn choose_payment_ways_for(
         let n = labels.len();
         let before = if phyrexian {
             k += 1;
-            announced_phyrexian(g, announced, k - 1).filter(|i| *i < n)
+            ways.get(k - 1).copied().filter(|i| *i < n)
         } else {
             None
         };

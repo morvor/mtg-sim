@@ -77,8 +77,14 @@ fn phyrexian_symbols_may_be_split_between_mana_and_life_and_count_toward_mana_va
     let spell = t.cast(P0, dismember).target(giant).go();
     // How each Phyrexian symbol is paid is announced before the targets (CR 601.2b).
     let labels = decision_labels(&t, P0);
-    let announced = labels.iter().position(|l| *l == "option").expect("asked how to pay");
-    let targets = labels.iter().position(|l| *l == "targets").expect("asked for targets");
+    let announced = labels
+        .iter()
+        .position(|l| *l == "option")
+        .expect("asked how to pay");
+    let targets = labels
+        .iter()
+        .position(|l| *l == "targets")
+        .expect("asked for targets");
     assert!(announced < targets, "{labels:?}");
     assert_eq!(untapped_lands(&t, P0), 0);
     assert_eq!(t.life(P0), 18);
@@ -208,6 +214,57 @@ fn a_colored_reduction_reduces_a_phyrexian_symbol_of_its_color() {
     let skirge = t.hand(P0, "Vault Skirge");
     t.cast(P0, skirge).go();
     assert_eq!(t.life(P0), 18);
+}
+
+#[test]
+fn a_colored_reduction_removes_the_phyrexian_symbol_announced_to_be_paid_with_mana() {
+    cr!("107.4f", "118.7c", "601.2b", "601.2f");
+    interp!("phyrexian-symbol-colored-reduction");
+    supported("Thundering Tanadon");
+    // Thundering Tanadon {4}{G/P}{G/P} (a Beast) under Morophon naming Beast: the {G} of
+    // the reduction removes one {G/P}. Its controller announced {G} for one symbol and 2
+    // life for the other: the reduction takes the symbol they'd pay with mana, and the
+    // other is paid with 2 life as announced, whichever was announced first. Four Wastes
+    // and 2 life pay it.
+    let beast = || {
+        subtype_lists()
+            .creature
+            .iter()
+            .position(|x| x == "Beast")
+            .expect("a creature type")
+    };
+    for (first, second) in [(1, 2), (2, 1)] {
+        let mut t = TestGame::new(2);
+        t.answer(P0, DecisionKind::Option, Answer::Index(beast()));
+        t.enter(P0, "Morophon, the Boundless");
+        t.lands(P0, "Wastes", 4);
+        let tanadon = t.hand(P0, "Thundering Tanadon");
+        // "How will you pay {G/P}?": 0 either way, 1 {G}, 2 two life.
+        choose_option(&mut t, P0, first);
+        choose_option(&mut t, P0, second);
+        t.cast(P0, tanadon).go();
+        assert_eq!(untapped_lands(&t, P0), 0, "{first} then {second}");
+        assert_eq!(t.life(P0), 18, "{first} then {second}");
+    }
+    // Both announced paid with {G}: the one left needs {G}, which four Wastes can't make;
+    // nothing is paid.
+    let mut t = TestGame::new(2);
+    t.answer(P0, DecisionKind::Option, Answer::Index(beast()));
+    t.enter(P0, "Morophon, the Boundless");
+    t.lands(P0, "Wastes", 4);
+    let tanadon = t.hand(P0, "Thundering Tanadon");
+    choose_option(&mut t, P0, 1);
+    choose_option(&mut t, P0, 1);
+    assert!(t.cast(P0, tanadon).try_go().is_err());
+    assert_eq!(untapped_lands(&t, P0), 4);
+    assert_eq!(t.life(P0), 20);
+    t.lands(P0, "Forest", 1);
+    let tanadon = t.g.current(tanadon);
+    choose_option(&mut t, P0, 1);
+    choose_option(&mut t, P0, 1);
+    t.cast(P0, tanadon).go();
+    assert_eq!(untapped_lands(&t, P0), 0);
+    assert_eq!(t.life(P0), 20);
 }
 
 #[test]
