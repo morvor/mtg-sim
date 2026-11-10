@@ -167,17 +167,20 @@ clusters, then the untriaged two-card clusters, then single-card clusters in the
 
 ## Result
 
-28,460 of 32,076 fully supported cards passed at the start (ad23a7a); 28,601 of 32,076 after.
-88 of the 150 taken cards pass; `roundtrip --check` passes.
+28,460 of 32,076 fully supported cards passed at the start (ad23a7a); 28,602 of 32,076 after
+(28,601 before the review's Rakdos fix). 89 of the 150 taken cards pass; `roundtrip --check`
+passes.
 
-Parser and engine: no misreading found (see "Parser bugs found"); every mismatch of the
-taken cards was the renderer's wording or a construct it can't word.
+Parser and engine: two bugs, both found in review (see "Parser bugs found"): Rakdos, the
+Showstopper destroyed the creatures one flip at a time, and Counterbalance could reveal from
+an empty library; every other mismatch of the taken cards was the renderer's wording or a
+construct it can't word.
 
 Renderer (most in the new `oracle/render/pairs6_terms.rs`, hooks in the existing files):
 "Whenever you become the monarch" (the player action named `monarch`); "with the same name
 as one another"; "Modular—Sunburst" (the keyword variant, as megamorph); "Spells and
 abilities can't be countered" (`CantBeCountered(Any)`); "a mana ability of each land they
-control" (CR 605.3a); "As long as it's your turn and X, E" / "During your turn, as long as
+control" (CR 602.2); "As long as it's your turn and X, E" / "During your turn, as long as
 X, E" (the effect first, so the comparison can reorder it); "artifacts and creatures target
 opponent controls don't untap during that player's next untap step" and "Creatures don't
 untap during target player's next untap step"; "opponents whose life total is less than
@@ -236,10 +239,36 @@ more colors without {X} in its mana cost".
 
 ## Parser bugs found
 
-None. Each taken card whose mismatch could have meant a different behavior was checked
-against the AST, and in play where the AST alone didn't settle it (tests in
-`crates/mtg-engine/tests/cards/roundtrip_pairs_6.rs`, all passing on the old code too, so
-wording only): Spider-Punk ("Spells and abilities can't be countered" compiled as a
+Two, both found in review among the "Remaining" cards (tests in
+`crates/mtg-engine/tests/cards/roundtrip_pairs_6.rs`, rows in the FINDINGS table of
+`crates/mtg-tools/src/roundtrip.rs`):
+
+- Rakdos, the Showstopper (compiler): "Destroy each creature whose coin comes up tails" was
+  compiled into each flip's result, so the creatures were destroyed one at a time as their
+  coins came up tails; the ruling says all of them at the same time (CR 608.2f), which
+  matters when one of them gives another indestructible (Knight Exemplar died, and the
+  Knight it protected died with it). Each flip now adds its object to a collected set and
+  one destroy follows the flips (`dice_coin_ext::f_whose_coin_objects`;
+  `simultaneous::adds_to_collected` reaches a flip's results, so the set is shared across
+  the flips). The renderer words the new shape (`pairs6_seq`), so Rakdos passes.
+- Counterbalance (engine): "you may reveal the top card of your library. If you do, counter
+  that spell if it has the same mana value as the revealed card" could be chosen with an
+  empty library, so a spell with mana value 0 was countered. A player can't choose an
+  impossible option (CR 608.2d): `draw_rules::can_choose` refuses a look at or reveal of
+  the top cards of an empty library.
+
+The review also checked in play, all as the cards say: Princess Yue (dying as the land Moon
+doesn't bring her back: the intervening "if" looks at her as she last existed), Ogre
+Battlecaster (no bonus when the spell isn't cast; the spell exiled instead of going to the
+graveyard), Kalitas (the token's power and toughness as the creature last existed on the
+battlefield; no token for an indestructible creature), Rashmi (a revealed land goes to
+hand). It also removed a renderer alternative the AST doesn't mean ("isn't a land" for
+"is a nonland creature") and corrected four CR numbers in renderer comments (602.2 for
+who may activate a mana ability, 701.6a countering, 701.9a discarding, 725.1 the monarch).
+
+Each other taken card whose mismatch could have meant a different behavior was checked
+against the AST, and in play where the AST alone didn't settle it (the first six tests of
+the same file, all passing on the old code too, so wording only): Spider-Punk ("Spells and abilities can't be countered" compiled as a
 restriction on every object, rendered "permanents": an ability on the stack can't be
 countered either), Aura Graft (no legal place to move the Aura: it stays, and you control
 it — its open ruling), Galvanoth (a top card that isn't an instant or sorcery card stays on
@@ -296,7 +325,7 @@ the text says (wording only) unless noted:
   player may cast the copy"), Sworn Defender, New Blood ("with Vampire" compiled as every
   other type excluded), Green Sun's Twilight, Ravenous Gigantotherium ("Each of those
   creatures deals damage equal to its power"), Mindblade Render ("if any of that damage was
-  dealt by a Warrior"), Rakdos, the Showstopper ("whose coin comes up tails"), Eye of
+  dealt by a Warrior"), Eye of
   Duskmantle (word order; "rather than paying"), Strongarm Tactics ("each player who didn't
   discard a creature card this way"), Call Forth the Tempest ("other spells you've cast this
   turn"), Giant Oyster, Ecological Appreciation (the chosen cards shuffled before the rest
