@@ -1110,6 +1110,17 @@ impl Renderer<'_> {
             }
             Condition::Compare(a, cmp, b) => self.compare_condition(a, *cmp, b),
             Condition::Exists(f) => self.exists(f, false),
+            // "If it's a creature card" about the cards a linked ability exiled, which
+            // holds if at least one of them is (`conditions_referents::any_of_the_group`):
+            // said of "it", as the card does.
+            Condition::SelNonEmpty(Sel::Matching(s, f))
+                if matches!(&**s, Sel::All(g) if crate::oracle::patterns::statics::filter_mentions(
+                    g,
+                    &|x| matches!(x, Filter::In(l) if matches!(**l, Sel::Linked))
+                )) =>
+            {
+                self.condition(&Condition::SelMatches((**s).clone(), f.clone()))
+            }
             Condition::SelNonEmpty(s) => {
                 if let Some(h) = self.attempt(|r| r.some_of_them_history(std::slice::from_ref(c))) {
                     return h;

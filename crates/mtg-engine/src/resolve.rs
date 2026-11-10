@@ -2393,6 +2393,11 @@ impl Game {
                 let limit = crate::spell_choice::total_mana_value_limit(self, what, ctx);
                 let mut spent = 0i64;
                 for (k, o) in objs.clone().into_iter().enumerate() {
+                    // A card that can't be cast now (its own "cast only during combat",
+                    // a prohibition, no legal target) isn't offered (CR 608.2g, 601.3).
+                    if *optional && !crate::casting::could_cast_during_resolution(self, p, o) {
+                        continue;
+                    }
                     if *optional && !self.ask_yes_no(p, Some(o), "Cast this card?", true) {
                         continue;
                     }

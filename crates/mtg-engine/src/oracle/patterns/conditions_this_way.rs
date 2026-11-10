@@ -51,6 +51,9 @@ pub fn cond_subject(c: &Condition) -> Option<Sel> {
     }
     let s = match c {
         Condition::SelMatches(s, _) => Some(s.clone()),
+        // "if at least one of them is ..." (a group of exiled cards, see
+        // `conditions_referents::any_of_the_group`): the group.
+        Condition::SelNonEmpty(Sel::Matching(s, _)) => Some((**s).clone()),
         Condition::Compare(a, _, b) => of_value(a).or_else(|| of_value(b)),
         Condition::Not(x) => cond_subject(x),
         Condition::And(v) | Condition::Or(v) => v.iter().find_map(cond_subject),

@@ -520,6 +520,29 @@ fn player_verb(s: &str) -> bool {
     )
 }
 
+/// Whether "it" names the cards an ability's linked ability exiled ("Turn the exiled card
+/// face up. If it's a creature card, ..."): a group that usually holds one card, but may
+/// hold several (the exiling ability copied or triggered twice).
+fn linked_exile_group(sel: &Sel) -> bool {
+    match sel {
+        Sel::All(f) => super::statics::filter_mentions(f, &|x| {
+            matches!(x, Filter::In(s) if matches!(**s, Sel::Linked))
+        }),
+        _ => false,
+    }
+}
+
+/// A condition about "it" where "it" is a group of exiled cards holds if at least one of
+/// them satisfies it (The Creation of Avacyn's rulings: "if at least one of the exiled
+/// cards is a creature card, you'll lose life equal to the combined mana value of all the
+/// exiled cards"), rather than only if all of them do.
+fn any_of_the_group(cond: Condition) -> Condition {
+    match cond {
+        Condition::SelMatches(sel, f) => Condition::SelNonEmpty(Sel::Matching(Box::new(sel), f)),
+        c => c,
+    }
+}
+
 /// The subject-predicate grammar.
 fn referent_condition(c: &str, b: &mut Builder) -> Option<Condition> {
     let c = end(c.trim());
@@ -527,11 +550,15 @@ fn referent_condition(c: &str, b: &mut Builder) -> Option<Condition> {
         return Some(cond);
     }
     let r = subject(c, b).and_then(|(subj, rest)| match subj {
-        Subject::Object(sel) => object_predicate(&sel, &rest, b).or_else(|| {
-            // The static-condition grammar's states of "it".
-            let f = super::statics_conditions::pronoun_state(c)?;
-            Some(Condition::SelMatches(sel, f))
-        }),
+        Subject::Object(sel) => {
+            let group = linked_exile_group(&sel);
+            let cond = object_predicate(&sel, &rest, b).or_else(|| {
+                // The static-condition grammar's states of "it".
+                let f = super::statics_conditions::pronoun_state(c)?;
+                Some(Condition::SelMatches(sel, f))
+            })?;
+            Some(if group { any_of_the_group(cond) } else { cond })
+        }
         Subject::Player(p) => player_condition(&p, rest.trim(), b),
     });
     // What happened earlier, and how a spell was cast ("if it was cast", "if that

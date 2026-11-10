@@ -218,6 +218,25 @@ pub fn cast_during_resolution(
 /// resolved, producing `amount` mana.
 pub const MANA_ABILITY_RESOLVED: &str = "mana ability resolved";
 
+/// Whether `p` could begin casting `card` while an effect resolves (CR 608.2g): the
+/// timing permissions of its types are ignored, but the card's own restrictions ("Cast
+/// this spell only during combat"), prohibitions and the need for legal targets aren't
+/// (CR 601.3, 601.2c). Costs aren't judged, so an offer isn't withheld for want of mana.
+/// A "you may cast it" effect doesn't offer a card this says can't be cast (rulings of
+/// Rashmi, Eternities Crafter and Sunbird's Invocation).
+pub fn could_cast_during_resolution(g: &Game, p: PlayerId, card: ObjectId) -> bool {
+    if g.split_second_on_stack() {
+        return false;
+    }
+    castable_faces(g, card).into_iter().any(|face| {
+        let mut opt = CastOption::normal(face);
+        opt.method = face_method(face);
+        opt.alt_cost = Some(Cost::free());
+        opt.any_time = true;
+        g.can_begin_cast(p, card, &opt)
+    })
+}
+
 /// Like [`cast_during_resolution`], cast as one of the faces or halves `only` (those with
 /// the characteristics the effect allows, CR 601.3e), if given.
 pub fn cast_during_resolution_as(

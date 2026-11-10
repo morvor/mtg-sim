@@ -199,6 +199,7 @@ fn becomes(l: &str, b: &mut Builder) -> Option<Effect> {
         return None;
     }
     let mut mods = type_predicate_mods(pred, &subj_info)?;
+    super::becomes_grammar::its_mana_value_is_its(&mut mods, b);
     if still {
         mods = retain_prior_types(mods)?;
     }

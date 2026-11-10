@@ -2409,6 +2409,12 @@ pub(crate) fn named_referents(trigger: &TriggerCond) -> Vec<(String, Sel)> {
             );
         }
     }
+    // "When an opponent casts a spell, if ~ is an enchantment, it becomes an Illusion
+    // creature with power and toughness each equal to that spell's mana value" (Veiled
+    // Sentry): "that spell" is the spell cast, even where the body's "it" is the source.
+    if matches!(trigger, TriggerCond::CastSpell { .. }) {
+        push("that spell", Sel::TriggerSpell);
+    }
     match trigger {
         TriggerCond::Where { trigger, .. }
         | TriggerCond::FirstTimeEachTurn(trigger)
