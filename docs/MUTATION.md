@@ -82,7 +82,7 @@ Each surviving mutant is classified as
 | resolve.rs | 314 | 32 (1/10) | 22 | 8 | 0 | 2 | 73.3% | 86.7% (26/30) |
 | actions.rs | 390 | 39 (1/10) | 27 | 5 | 3 | 4 | 85.7% | 85.7% (no new tests: no killable survivor found) |
 | layers.rs | 423 | 43 (1/10) | 34 | 5 | 1 | 3 | 87.5% | 87.5% (no killable survivor) |
-| layers.rs (2026-11-10, after the layers audit; 43 of the 53 tested, see below) | 524 | 53 (1/10) | 35 | 6 | 2 | 0 | 86.0% | 86.0% (no killable survivor) |
+| layers.rs (2026-11-10, after the layers audit; all 53 tested, see below) | 524 | 53 (1/10) | 45 | 6 | 2 | 0 | 88.7% | 88.7% (no killable survivor) |
 | casting.rs | 841 | 85 (1/10) | 74 | 9 | 0 | 2 | 89.2% | 96.4% (80/83) |
 | combat.rs | 876 | 88 (1/10) | 68 | 13 | 0 | 7 | 84.0% | 93.8% (76/81) |
 | **all 15** | 5,281 | 551 | 423 | 93 | 4 | 31 | **82.1%** | **88.3%** (459/520) |
@@ -499,10 +499,10 @@ against the current file: 53 of 524 mutants (round-robin 0/10). The run took two
 cargo-mutants' 300 s test timeout no longer fit the unmutated suite (~290 s), so
 `scripts/mutants.sh` now takes `TIMEOUT` (default 600 s); the first 37 mutants ran in one
 2-hour `cargo mutants` invocation, the remaining 16 one at a time the way the RERUN path
-does (apply the diff in `target/mutsrc`, build, run the suite), six of them before time ran
-out. Of the 43 mutants tested: 35 caught, 6 missed, 2 timeouts, 0 unviable, kill rate
-**86.0%**; every survivor is equivalent, so no re-run was needed. The 10 sampled mutants
-not reached are listed at the end.
+does (apply the diff in `target/mutsrc`, build, run the suite), the loop finishing during the
+review. Of the 53 mutants tested: 45 caught, 6 missed, 2 timeouts, 0 unviable, kill rate
+**88.7%**; every survivor is equivalent, so no re-run was needed. Every sampled mutant
+was reached.
 
 - `layers.rs:408:25: delete field rules_text from struct Characteristics expression in
   Game::compute_characteristics` (the characteristics of a card exiled face down):
@@ -530,16 +530,13 @@ not reached are listed at the end.
   `mod_values`, `parse_pt_counter`, `keyword_counter` (the "flying" and "menace" arms),
   `apply_mod` (four), `acquired_ability`, `copied_link`, `drop_ungainable_subtypes`,
   `subtype_still_valid`, `intrinsic_mana_ability` (the "Forest" arm) and `qualities_among`,
-  were tested afterwards one at a time (results in `target/mutants/layers-rest/`; the loop
-  was still running when this was written, so that directory may hold later outcomes). Six
-  were reached: `mod_values` (`==` with `!=`), `parse_pt_counter` (`Some((1, 1))`) and the
-  two `keyword_counter` arms were caught; the two below survived. Not reached (untested):
-  `1899:5 replace apply_mod with ()`, `1985:20 delete ! in apply_mod`, `2099:25 replace &&
-  with || in apply_mod`, `2179:20 replace += with *= in apply_mod`, `2218:55 replace + with
-  * in acquired_ability`, `2273:12 replace | with & in copied_link`, `2282:5 replace
-  drop_ungainable_subtypes with ()`, `2299:52 replace || with && in subtype_still_valid`,
-  `2354:9 delete match arm "Forest" in intrinsic_mana_ability` and `2393:37 replace match
-  guard matches!(**sel, Sel::All(_)) with true in qualities_among`.
+  were tested afterwards one at a time (results in `target/mutants/layers-rest/`); the loop
+  finished during the review. All 16 were reached: 14 were caught (`mod_values` `==` with
+  `!=`, `parse_pt_counter` `Some((1, 1))`, the "flying" and "menace" `keyword_counter`
+  arms, the four `apply_mod` mutants `1899:5`, `1985:20`, `2099:25` and `2179:20`,
+  `acquired_ability` `2218:55`, `copied_link` `2273:12`, `drop_ungainable_subtypes`
+  `2282:5`, `subtype_still_valid` `2299:52`, the "Forest" arm of `intrinsic_mana_ability`
+  `2354:9` and the `qualities_among` guard `2393:37`); the two below survived.
 - `layers.rs:1749:5: replace filter_is_self -> bool with true` (`static_affected` then
   includes an ability's own source in its effect even when the source isn't on the
   battlefield): **(a) equivalent in practice**. It can only reach a static ability that
@@ -690,6 +687,6 @@ test would need). One engine bug was found and fixed (multi-player search moves,
 simultaneous.rs). Re-running a file later: `scripts/mutants.sh <stem>` for a new sample,
 `RERUN=1 scripts/mutants.sh <stem>` for the survivors.
 
-2026-11-10: `layers.rs` was re-sampled after the `engine-audit-1/layers` tests (65 new
-tests, see "layers.rs, second run" above): 43 of 53 sampled mutants tested, 35 killed and 2
-timeouts (**86.0%**), 6 equivalent survivors, 10 not reached in the time available.
+2026-11-10: `layers.rs` was re-sampled after the `engine-audit-1/layers` tests (66 tests after
+the review, see "layers.rs, second run" above): 53 of 53 sampled mutants tested, 45 killed and 2
+timeouts (**88.7%**), 6 equivalent survivors.

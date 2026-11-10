@@ -262,6 +262,39 @@ fn opalescence_waits_for_enchanted_evening_so_lands_become_0_0_creatures() {
 }
 
 #[test]
+fn humility_and_opalescence_animate_and_set_in_timestamp_order_across_layers() {
+    // CR 613.6: Opalescence's effect starts in layer 4 (Humility and Worship become
+    // creatures), so it still sets their base power and toughness in layer 7b after
+    // Humility's effect removed their abilities in layer 6 (Humility's own included, so
+    // its 7b part continues the same way); the two settings apply in timestamp order.
+    cr!("613.6", "613.1d", "613.1f", "613.4b", "613.7", "613.7a");
+    ruling!("Humility", "This is the current interaction between Humility and Opalescence");
+    ruling!("Opalescence", "This is the current interaction between Humility and Opalescence");
+    for humility_first in [false, true] {
+        let mut t = TestGame::new(2);
+        let (humility, opal) = if humility_first {
+            let h = t.battlefield(P1, "Humility");
+            (h, t.battlefield(P0, "Opalescence"))
+        } else {
+            let o = t.battlefield(P0, "Opalescence");
+            (t.battlefield(P1, "Humility"), o)
+        };
+        let worship = t.battlefield(P0, "Worship");
+        t.settle();
+        t.g.recompute();
+        let want = if humility_first { (4, 4) } else { (1, 1) };
+        for id in [humility, worship] {
+            assert!(t.obj_now(id).is_creature(), "humility_first={humility_first}");
+            assert!(is_type(&t, id, CardType::Enchantment));
+            assert_eq!(ability_count(&t, id), 0, "humility_first={humility_first}");
+            assert_eq!(t.pt(id), want, "humility_first={humility_first}");
+        }
+        assert!(!t.obj_now(opal).is_creature(), "\"each other\"");
+        assert!(has_ability_text(&t, opal, "non-Aura enchantment"), "keeps its ability");
+    }
+}
+
+#[test]
 fn humility_removes_a_creature_lords_ability_before_its_effect_applies() {
     // Archetype of Imagination's "creatures you control have flying" (layer 6) depends on
     // Humility's "all creatures lose all abilities" (layer 6): applying Humility's effect

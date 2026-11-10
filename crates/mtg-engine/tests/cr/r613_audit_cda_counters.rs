@@ -311,6 +311,7 @@ fn transguild_couriers_color_defining_ability_applies_first_in_layer_5() {
         "Painter's Servant",
         "an effect that changes an object's colors will overwrite Painter's Servant's effect"
     );
+    ruling!("Mycosynth Lattice", "makes everything, in every zone of the game, colorless");
     let mut t = TestGame::new(2);
     let lattice = t.battlefield(P1, "Mycosynth Lattice");
     let courier = t.battlefield(P0, "Transguild Courier");

@@ -101,6 +101,32 @@ fn a_text_change_in_layer_3_feeds_type_changes_in_layer_4() {
     let tower = t.battlefield(P0, "Reliquary Tower");
     t.g.recompute();
     assert!(has_subtype(&t, tower, "Forest"));
+    // The displayed plural: "Plains" is its own plural, so "Islands" becomes "Plains"; a
+    // word the basic land type only starts isn't changed; landwalk is.
+    use mtg_engine::text_change::replace_words;
+    assert_eq!(replace_words("Islands you control", "Island", "Plains"), "Plains you control");
+    assert_eq!(replace_words("Mountains", "Mountain", "Forest"), "Forests");
+    assert_eq!(replace_words("Mountainside", "Mountain", "Forest"), "Mountainside");
+    assert_eq!(replace_words("Forestwalk", "Forest", "Plains"), "Plainswalk");
+    // Island Fish Jasconius's "When you control no Islands, sacrifice this creature" reads
+    // "no Plains" and its state trigger watches Plains: losing the Plains sacrifices it.
+    let mut t = TestGame::new(2);
+    let fish = t.battlefield(P0, "Island Fish Jasconius");
+    let plains = t.battlefield(P0, "Plains");
+    t.battlefield(P0, "Island");
+    // Island, then Plains among the other basic land types (Plains, Swamp, Mountain, Forest).
+    t.answer(P0, DecisionKind::Option, Answer::Index(6));
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    cast_resolve(&mut t, P0, "Mind Bend", &[Entity::Object(fish)]);
+    t.g.recompute();
+    let text = t.obj_now(fish).chars.rules_text.to_string();
+    assert!(text.contains("no Plains,"), "{text}");
+    assert!(!text.contains("Island"), "{text}");
+    assert!(t.on_battlefield(fish), "a Plains is controlled");
+    t.g.destroy(plains, None);
+    t.settle();
+    t.resolve_all();
+    assert!(!t.on_battlefield(fish), "no Plains: sacrificed");
 }
 
 #[test]
@@ -187,11 +213,11 @@ fn a_resolved_animation_is_locked_to_the_artifacts_it_applied_to() {
 #[test]
 fn a_creature_turned_into_a_land_loses_its_creature_types_until_the_effect_ends() {
     // Imprisoned in the Moon: a colorless land with "{T}: Add {C}" that loses all other
-    // card types and abilities. Without the creature type its creature subtypes don't
-    // correspond to any of its types (CR 205.3d), it has no power or toughness
-    // (CR 208.3), and a type-adding effect can't make it a Goblin either; everything
-    // comes back when the Aura leaves.
-    cr!("613.1d", "613.1e", "613.1f", "205.3d", "208.3", "611.3a");
+    // card types and abilities. With the creature type removed its creature subtypes are
+    // removed too (CR 205.1a), it has no power or toughness (CR 208.3), and "creatures you
+    // control are Goblins" no longer applies to it; everything comes back when the Aura
+    // leaves.
+    cr!("613.1d", "613.1e", "613.1f", "205.1a", "208.3", "611.3a");
     ruling!(
         "Imprisoned in the Moon",
         "The permanent will keep any supertypes it previously had"

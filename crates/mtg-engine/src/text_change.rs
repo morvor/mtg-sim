@@ -287,6 +287,9 @@ pub fn replace_words(text: &str, from: &str, to: &str) -> String {
         let boundary = before.is_none_or(|c| !c.is_alphanumeric())
             && after
                 .is_none_or(|c| !c.is_alphabetic() || lower[end..].starts_with("walk") || plural);
+        // A replacement that already ends in "s" ("Plains") is its own plural: "Islands"
+        // becomes "Plains", not "Plainss".
+        let eat_s = boundary && plural && to.to_lowercase().ends_with('s');
         out.push_str(&text[i..start]);
         if boundary {
             let upper = text[start..]
@@ -305,7 +308,7 @@ pub fn replace_words(text: &str, from: &str, to: &str) -> String {
         } else {
             out.push_str(&text[start..end]);
         }
-        i = end;
+        i = if eat_s { end + 1 } else { end };
     }
     out.push_str(&text[i..]);
     out

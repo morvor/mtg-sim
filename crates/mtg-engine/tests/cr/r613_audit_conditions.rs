@@ -16,7 +16,11 @@ fn a_conditional_static_keeps_its_objects_timestamp_when_its_condition_becomes_t
     // Nocturnus's timestamp (CR 613.7a) even if its condition becomes true only after
     // Gravity Sphere ("All creatures lose flying") entered, so the Sphere's later effect
     // still removes the flying while the +2/+1 (layer 7c) applies.
-    cr!("613.7a", "613.7", "613.1f", "613.4c", "613.9");
+    cr!("613.7a", "613.7", "613.1f", "613.4c", "613.9", "613.7e");
+    ruling!(
+        "Colossus Hammer",
+        "If an ability of the equipped creature states that it has flying \"as long as\" a particular condition is true, that condition becoming true will not cause that creature to gain flying"
+    );
     let mut t = TestGame::new(2);
     let nocturnus = t.battlefield(P0, "Vampire Nocturnus");
     t.g.recompute();
@@ -38,6 +42,19 @@ fn a_conditional_static_keeps_its_objects_timestamp_when_its_condition_becomes_t
     t.g.recompute();
     assert!(!has_kw(&t, nocturnus, KeywordKind::Flying));
     assert_eq!(t.pt(nocturnus), (5, 4));
+    // Colossus Hammer attached after Nocturnus entered (CR 613.7e): its "loses flying" is
+    // later than Nocturnus's effect, so the condition becoming true gives no flying.
+    let mut t = TestGame::new(2);
+    let nocturnus = t.battlefield(P0, "Vampire Nocturnus");
+    let hammer = t.battlefield(P0, "Colossus Hammer");
+    assert!(t.g.attach(hammer, Entity::Object(nocturnus)));
+    t.g.recompute();
+    assert_eq!(t.pt(nocturnus), (13, 13));
+    assert!(!has_kw(&t, nocturnus, KeywordKind::Flying));
+    t.library_top(P0, "Doom Blade");
+    t.g.recompute();
+    assert_eq!(t.pt(nocturnus), (15, 14), "the +2/+1 applies");
+    assert!(!has_kw(&t, nocturnus, KeywordKind::Flying), "the Hammer is later");
 }
 
 #[test]

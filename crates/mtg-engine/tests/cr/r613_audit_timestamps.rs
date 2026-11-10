@@ -103,6 +103,10 @@ fn rune_of_flight_on_colossus_hammer_with_real_cards() {
     // flying"; when the Hammer is attached to another creature both abilities get new
     // timestamps in the same relative order (CR 613.7e).
     cr!("613.7a", "613.7e", "613.1f", "613.9");
+    ruling!(
+        "Colossus Hammer",
+        "If the equipped creature gains flying after Colossus Hammer became attached to it, it will keep flying"
+    );
     let mut t = TestGame::new(2);
     let drake = t.battlefield(P0, "Wind Drake");
     let bears = t.battlefield(P0, "Grizzly Bears");

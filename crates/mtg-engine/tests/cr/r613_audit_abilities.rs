@@ -245,6 +245,10 @@ fn kwende_waits_for_the_effect_giving_first_strike_whatever_the_timestamps() {
     // "enchanted creature has first strike" (CR 613.8a: it changes what Kwende's effect
     // applies to), so it applies after it even though Kwende is older (CR 613.8b).
     cr!("613.8", "613.8a", "613.8b", "613.1f");
+    ruling!(
+        "Kwende, Pride of Femeref",
+        "If a creature you control gains first strike after Kwende has entered the battlefield, that creature also gains double strike"
+    );
     let mut t = TestGame::new(2);
     let kwende = t.battlefield(P0, "Kwende, Pride of Femeref");
     let bears = t.battlefield(P0, "Grizzly Bears");

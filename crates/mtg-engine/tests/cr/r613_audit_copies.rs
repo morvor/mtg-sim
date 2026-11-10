@@ -58,6 +58,8 @@ fn a_clone_of_an_animated_land_is_just_the_land() {
 
 #[test]
 fn mirrorweave_on_an_animated_land_turns_the_other_creatures_into_unanimated_lands() {
+    // Inkmoth Nexus stands in for the ruling's Mutavault (the card data has Mutavault only
+    // as a token printing).
     cr!("707.2", "613.1a", "613.2c", "613.1d", "208.3");
     ruling!("Mirrorweave", "Each other creature will become an unanimated Mutavault");
     let mut t = TestGame::new(2);
