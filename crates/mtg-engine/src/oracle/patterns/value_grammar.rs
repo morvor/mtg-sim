@@ -408,7 +408,7 @@ pub(crate) fn stat_word(s: &str) -> Option<(Stat, &str)> {
 /// "The [characteristic] of a [object]" naming one object of several ("the mana value of
 /// a commander you own on the battlefield or in the command zone", Stinging Study): the
 /// controller picks one of the objects the description matches as the effect resolves (CR
-/// 608.2c; with two commanders, CR 702.124e; interpretation `a-commander-you-own-is-chosen`).
+/// 608.2d; with two commanders, CR 702.124e; interpretation `a-commander-you-own-is-chosen`).
 /// Not "the total ..." or "the greatest ...", which take them all.
 fn one_of_several(stat: Stat, r: &str, b: &mut Builder) -> Option<(Value, String)> {
     let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;

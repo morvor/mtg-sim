@@ -55,7 +55,7 @@ fn a_commander_another_player_controls_still_sets_x() {
 
 #[test]
 fn stinging_study_with_two_commanders_lets_you_choose_which() {
-    cr!("903.3", "702.124e", "608.2c");
+    cr!("903.3", "702.124e", "608.2d");
     interp!("a-commander-you-own-is-chosen");
     ruling!(
         "Stinging Study",
@@ -63,7 +63,8 @@ fn stinging_study_with_two_commanders_lets_you_choose_which() {
     );
     supported("Stinging Study");
     // Partners: Thrasios (mana value 2) in the command zone and Tymna (3) on the
-    // battlefield. Both are offered as the spell resolves; choosing Thrasios, the smaller,
+    // battlefield. Both are offered as the spell resolves (not as it's cast: a choice the
+    // effect offers is made while applying it, CR 608.2d); choosing Thrasios, the smaller,
     // X is 2.
     let mut t = commander_game();
     let thrasios = commander(&mut t, P0, "Thrasios, Triton Hero");
@@ -71,7 +72,13 @@ fn stinging_study_with_two_commanders_lets_you_choose_which() {
     let hand = t.hand_size(P0);
     let from = t.asked().len();
     t.answer_choose(P0, &[obj(thrasios)]);
-    cast_resolve(&mut t, P0, "Stinging Study", "4B", &[]);
+    cast(&mut t, P0, "Stinging Study", "4B", &[]);
+    assert!(
+        entity_candidates(&t, P0, from).is_empty(),
+        "no commander is chosen as the spell is cast: {:?}",
+        asked_of(&t, P0, from)
+    );
+    t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 2);
     assert_eq!(t.life(P0), 38);
     let offered = entity_candidates(&t, P0, from);

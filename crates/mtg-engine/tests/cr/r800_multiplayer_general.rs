@@ -324,15 +324,28 @@ fn an_object_whose_default_controller_left_is_exiled_when_a_control_effect_ends(
 
 #[test]
 fn nothing_is_created_for_or_triggers_for_a_player_who_left() {
-    cr!("800.4d");
+    cr!("800.4d", "603.3a", "603.10f");
+    interp!("loses-the-game-trigger-leaves-with-the-loser");
     let mut t = ffa(4);
-    // Blood Tyrant (P1): "Whenever a player loses the game, put five +1/+1 counters on
-    // this creature." P1 conceding makes P1 lose, but P1's triggered ability isn't put on
-    // the stack.
-    t.battlefield(P1, "Blood Tyrant");
+    // Blood Tyrant: "Whenever a player loses the game, put five +1/+1 counters on this
+    // creature." P1 controls P0's Tyrant through a control effect of P1's and concedes:
+    // the ability triggers, looking back in time (CR 603.10f) at P1 as its controller (CR
+    // 603.3a), so the trigger would be P1's and isn't put on the stack (CR 800.4d). The
+    // control effect ends as P1 leaves (CR 800.4a): the Tyrant is P0's again, and gets no
+    // counters.
+    let tyrant = t.battlefield(P0, "Blood Tyrant");
+    steal(&mut t, P1, tyrant, Duration::Permanent);
+    assert_eq!(t.obj_now(tyrant).controller, P1);
+    // P1's own Tyrant leaves the game with P1, and its ability doesn't trigger at all
+    // (interpretation `loses-the-game-trigger-leaves-with-the-loser`).
+    let own = t.battlefield(P1, "Blood Tyrant");
     concede(&mut t, P1);
     t.settle();
-    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.stack_len(), 0, "{}", t.dump_log());
+    assert!(on_bf(&t, tyrant) && !t.g.is_live(own), "{}", t.dump_log());
+    assert_eq!(t.obj_now(tyrant).controller, P0);
+    t.resolve_all();
+    assert_eq!(t.counters(tyrant, "+1/+1"), 0);
     // A token that P1 would own isn't created.
     let spec = mtg_engine::replacement::TokenCreate {
         chars: mtg_engine::object::Characteristics {

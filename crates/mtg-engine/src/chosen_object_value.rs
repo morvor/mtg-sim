@@ -1,10 +1,12 @@
 //! [`crate::ability::Value::OfChosen`]: "the [characteristic] of a [object]" naming one object picked from
 //! several ("the mana value of a commander you own on the battlefield or in the command
 //! zone", Stinging Study). Its controller chooses the object as the effect resolves (CR
-//! 608.2c: "the controller of the spell or ability follows its instructions in the order
-//! written ... choices made as the spell or ability resolves"; with two commanders, CR
-//! 702.124e: "If an effect refers to your commander while you have two commanders, it
-//! refers to either one."), and the value is a characteristic of that object. Stinging
+//! 608.2d: "If an effect of a spell or ability offers any choices other than choices
+//! already made as part of casting the spell, activating the ability, or otherwise putting
+//! the spell or ability on the stack, the player announces these while applying the
+//! effect."; with two commanders, CR 702.124e: "If an effect refers to your commander
+//! while you have two commanders, it refers to either one."), and the value is a
+//! characteristic of that object. Stinging
 //! Study's ruling (2021-04-16): "If you own multiple commanders on the battlefield and/or in
 //! the command zone, you choose one of them as Stinging Study resolves to determine the
 //! value of X." Decided by the user, Nov 10 (interpretation `a-commander-you-own-is-chosen`).
@@ -46,8 +48,15 @@ pub fn choose(g: &mut Game, v: &Value, ctx: &mut Ctx) {
         if cands.is_empty() {
             continue;
         }
-        let picked =
-            crate::zones::choose_objects(g, ctx.controller, ctx.source, "Choose", cands, 1, 1);
+        let picked = crate::zones::choose_objects(
+            g,
+            ctx.controller,
+            ctx.source,
+            "Choose the object whose characteristic is used",
+            cands,
+            1,
+            1,
+        );
         ctx.vars
             .insert(store, picked.into_iter().map(Entity::Object).collect());
     }

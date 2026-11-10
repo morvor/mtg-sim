@@ -2010,7 +2010,7 @@ pub enum Value {
     /// "The [characteristic] of a [object]" naming one object picked from several ("the
     /// mana value of a commander you own on the battlefield or in the command zone",
     /// Stinging Study): as the effect resolves, its controller chooses one of the objects
-    /// matching `filter` (CR 608.2c; with two commanders, CR 702.124e), and the value is
+    /// matching `filter` (CR 608.2d; with two commanders, CR 702.124e), and the value is
     /// `of` measured with that object in [`vars::TESTED`]. The choice is made by the
     /// instruction that defines X ([`Effect::StoreValue`], [`Effect::SetX`]) before the
     /// value is evaluated (`crate::chosen_object_value`) and kept in `store`; evaluated
