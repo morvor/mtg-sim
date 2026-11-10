@@ -319,3 +319,30 @@ fn an_unannounced_x_of_an_activation_cost_paid_with_counters_is_the_least_payabl
     t.resolve();
     assert_eq!(t.counters(rock, "charge"), 2);
 }
+
+#[test]
+fn an_x_greater_than_the_counters_the_source_carries_cant_be_paid() {
+    cr!("602.2b", "601.2h", "118.3", "107.3a");
+    supported("Calciform Pools");
+    // Calciform Pools: "{1}, Remove X storage counters from this land: Add X mana in any
+    // combination of {W} and/or {U}." With three storage counters, X = 5 can't be paid:
+    // removing the three there is a partial payment (CR 601.2h), so the activation is
+    // illegal and reversed, the counters stay and nothing is added. X = 3 is paid.
+    let mut t = TestGame::new(2);
+    let pools = t.battlefield(P0, "Calciform Pools");
+    t.g.add_counters(Entity::Object(pools), "storage", 3, None);
+    let plains = t.lands(P0, "Plains", 1)[0];
+    t.answer(P0, DecisionKind::X, Answer::Number(5));
+    assert!(t.activate(P0, pools, 2, &[]).is_err());
+    assert_eq!(t.counters(pools, "storage"), 3);
+    assert_eq!(pool_total(&t, P0), 0);
+    assert!(!is_tapped(&t, plains));
+    t.clear_answers();
+    t.answer(P0, DecisionKind::X, Answer::Number(3));
+    assert!(t.activate(P0, pools, 2, &[]).is_ok());
+    assert_eq!(t.counters(pools, "storage"), 0);
+    assert_eq!(pool_total(&t, P0), 3);
+    // The {1} came from the Plains or from the Pools' own "{T}: Add {C}" (the ability
+    // doesn't tap it), not both.
+    assert!(is_tapped(&t, plains) != is_tapped(&t, pools));
+}
