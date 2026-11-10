@@ -13,9 +13,11 @@ use mtg_engine::testing::*;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
-pub use crate::r_p154_common::*;
 pub use crate::r_p016_common::{cast_at, lots, stack_targets, target_choices};
-pub use crate::r_p153_common::{answer_x, cast_blaze, cast_simple, mana_for, mv, trigger_sources, x_asked};
+pub use crate::r_p153_common::{
+    answer_x, cast_blaze, cast_simple, mana_for, mv, trigger_sources, x_asked,
+};
+pub use crate::r_p154_common::*;
 pub use crate::r_p195_common::{on_stack, top_is_trigger_of, top_name};
 pub use crate::r_s04_common::{graveyard_names, hand_names, stack_items, top_of_stack};
 pub use crate::r_s05_common::move_to;
@@ -125,5 +127,5 @@ pub fn brisela(t: &mut TestGame, p: PlayerId) -> ObjectId {
 }
 
 pub use crate::r_p003_common::activate;
-pub use crate::r_s02_common::can_play_land;
 pub use crate::r_s01_common::with_subtype;
+pub use crate::r_s02_common::can_play_land;

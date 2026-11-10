@@ -44,7 +44,11 @@ fn narset_discards_and_the_reflexive_ability_triggers_after_she_left() {
     assert!(t.in_graveyard(P0, "Hill Giant"), "{}", t.dump_log());
     assert_eq!(t.stack_len(), 1, "the reflexive ability: {}", t.dump_log());
     t.resolve_all();
-    assert!(t.in_graveyard(P1, "Air Elemental"), "4 damage: {}", t.dump_log());
+    assert!(
+        t.in_graveyard(P1, "Air Elemental"),
+        "4 damage: {}",
+        t.dump_log()
+    );
 }
 
 #[test]
@@ -204,7 +208,11 @@ fn arni_metalbrow_decides_whether_to_pay_as_the_ability_resolves() {
     mana(&mut t, P0, "1R");
     assert_eq!(pool(&t, P0), 2);
     t.resolve_all();
-    assert!(yes_nos_asked(&t, P0, from) >= 1, "{:?}", asked_of(&t, P0, from));
+    assert!(
+        yes_nos_asked(&t, P0, from) >= 1,
+        "{:?}",
+        asked_of(&t, P0, from)
+    );
     assert_eq!(pool(&t, P0), 0, "{{1}}{{R}} paid");
     assert!(t.on_battlefield(bears), "{}", t.dump_log());
     assert!(t.obj_now(bears).tapped);
@@ -235,7 +243,12 @@ fn scattering_stroke_adds_all_the_mana_or_none_as_the_delayed_ability_resolves()
         assert!(t.in_graveyard(P1, "Hill Giant"));
         // Craw Wurm (6) beats Forest (0): the delayed trigger waits for P0's next main
         // phase; nothing is asked of P0 but the clash's choice until then.
-        assert_eq!(yes_nos_asked(&t, P0, from), 1, "{:?}", asked_of(&t, P0, from));
+        assert_eq!(
+            yes_nos_asked(&t, P0, from),
+            1,
+            "{:?}",
+            asked_of(&t, P0, from)
+        );
         t.answer_yes(P0, add);
         t.advance_to(P0, Step::PrecombatMain);
         t.settle();
@@ -245,7 +258,9 @@ fn scattering_stroke_adds_all_the_mana_or_none_as_the_delayed_ability_resolves()
         assert_eq!(yes_nos_asked(&t, P0, from), 2);
         assert_eq!(pool(&t, P0), if add { 4 } else { 0 }, "add: {add}");
         assert!(
-            !asked_of(&t, P0, from).iter().any(|d| matches!(d, Decision::ChooseNumber { .. })),
+            !asked_of(&t, P0, from)
+                .iter()
+                .any(|d| matches!(d, Decision::ChooseNumber { .. })),
             "all or none: no amount asked"
         );
     }
@@ -289,7 +304,9 @@ fn cemetery_desecrator_removes_x_counters_of_chosen_kinds() {
     t.resolve_all();
     assert_eq!(t.counters(bears, counters::PLUS1), 0);
     assert!(
-        !asked_of(&t, P0, from).iter().any(|d| matches!(d, Decision::ChooseOption { .. })),
+        !asked_of(&t, P0, from)
+            .iter()
+            .any(|d| matches!(d, Decision::ChooseOption { .. })),
         "{:?}",
         asked_of(&t, P0, from)
     );
@@ -316,7 +333,12 @@ fn jade_seedstones_chooses_its_targets_and_the_division_as_it_goes_on_the_stack(
         .iter()
         .filter(|(p, d)| *p == P0 && matches!(d, Decision::Divide { .. }))
         .count();
-    assert_eq!(divided, 1, "divided as it was put on the stack: {:?}", asked_of(&t, P0, from));
+    assert_eq!(
+        divided,
+        1,
+        "divided as it was put on the stack: {:?}",
+        asked_of(&t, P0, from)
+    );
     t.resolve_all();
     assert_eq!(t.counters(bears, counters::PLUS1), 2);
     assert_eq!(t.counters(giant, counters::PLUS1), 1);

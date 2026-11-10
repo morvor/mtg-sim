@@ -32,7 +32,10 @@ fn sunbirds_invocation_resolves_before_the_spell_even_if_its_countered() {
     }
     let giant = cast(&mut t, P0, "Hill Giant", "3R", &[]);
     assert_eq!(t.stack_len(), 2);
-    assert!(top_is_trigger_of(&t, t.named_on_battlefield("Sunbird's Invocation")[0]));
+    assert!(top_is_trigger_of(
+        &t,
+        t.named_on_battlefield("Sunbird's Invocation")[0]
+    ));
     t.answer_choose_moved(P0, &[obj(bears)]);
     t.resolve();
     assert_eq!(top_name(&t), "Grizzly Bears", "{}", t.dump_log());
@@ -135,7 +138,9 @@ fn renegade_bulls_copy_is_cast_while_its_ability_resolves_or_never() {
     assert!(t.in_exile("Shock"));
     // The copy is on the stack (with the Bull's trigger on casting it).
     assert!(
-        t.g.stack.iter().any(|id| t.g.obj(*id).kind == mtg_engine::object::ObjKind::CardCopy),
+        t.g.stack
+            .iter()
+            .any(|id| t.g.obj(*id).kind == mtg_engine::object::ObjKind::CardCopy),
         "the copy, cast: {}",
         t.dump_log()
     );
@@ -153,13 +158,17 @@ fn renegade_bulls_copy_is_cast_while_its_ability_resolves_or_never() {
     assert!(t.in_exile("Shock"));
     assert_eq!(t.stack_len(), 0);
     lots(&mut t, P0);
-    assert!(t.g.legal_actions(P0).iter().all(|a| !matches!(a, Action::Cast { .. })));
+    assert!(t
+        .g
+        .legal_actions(P0)
+        .iter()
+        .all(|a| !matches!(a, Action::Cast { .. })));
     assert_eq!(t.life(P1), 20);
 }
 
 #[test]
 fn breeches_copy_isnt_cast() {
-    cr!("707.10", "707.12", "603.2");
+    cr!("707.10", "603.2");
     ruling!(
         "Breeches, the Blastmaker",
         "The copy made by Breeches's delayed triggered ability is created on the stack, so it's not \"cast.\""
@@ -182,7 +191,7 @@ fn breeches_copy_isnt_cast() {
 
 #[test]
 fn tend_the_pests_copies_use_the_power_of_the_creature_sacrificed_for_the_original() {
-    cr!("707.10", "707.12", "601.2b");
+    cr!("707.10", "601.2b");
     ruling!(
         "Tend the Pests",
         "Copies of Tend the Pests will use the power of the creature sacrificed for the original spell to determine the number of Pests each copy creates. Because the copies aren't cast, you won't sacrifice additional creatures for them."
@@ -197,7 +206,12 @@ fn tend_the_pests_copies_use_the_power_of_the_creature_sacrificed_for_the_origin
     assert!(t.in_graveyard(P0, "Hill Giant"));
     cast(&mut t, P0, "Twincast", "UU", &[obj(pests)]);
     t.resolve();
-    assert_eq!(t.stack_len(), 2, "the copy and the original: {}", t.dump_log());
+    assert_eq!(
+        t.stack_len(),
+        2,
+        "the copy and the original: {}",
+        t.dump_log()
+    );
     t.resolve();
     assert_eq!(creature_tokens(&t, P0), 3, "the copy's three Pests");
     assert!(t.on_battlefield(bears), "nothing sacrificed for the copy");
@@ -223,33 +237,43 @@ fn transmute_artifact_sacrifices_on_resolution_one_artifact_and_doesnt_cast_the_
     );
     supported("Transmute Artifact");
     // Resolving: one artifact is sacrificed (the choice offers at most one), the found
-    // Memnite enters without being cast (Manaplasm grew only for Transmute Artifact).
+    // Mind Stone ({2}) enters without being cast (Manaplasm grew for Transmute Artifact
+    // only).
     let mut t = TestGame::new(2);
     let plasm = t.battlefield(P0, "Manaplasm");
-    let m1 = t.battlefield(P0, "Memnite");
-    t.battlefield(P0, "Memnite");
-    let found = t.library_top(P0, "Memnite");
+    let m1 = t.battlefield(P0, "Mind Stone");
+    t.battlefield(P0, "Mind Stone");
+    let found = t.library_top(P0, "Mind Stone");
     let from = t.asked().len();
     t.answer_choose(P0, &[obj(m1)]);
     t.answer_choose(P0, &[obj(found)]);
     cast(&mut t, P0, "Transmute Artifact", "UU", &[]);
     assert!(t.on_battlefield(m1), "nothing sacrificed as a cost");
     assert_eq!(
-        asked_of(&t, P0, from).iter().filter(|d| matches!(d, Decision::ChooseEntities { .. })).count(),
+        asked_of(&t, P0, from)
+            .iter()
+            .filter(|d| matches!(d, Decision::ChooseEntities { .. }))
+            .count(),
         0
     );
     t.resolve_all();
-    assert!(t.in_graveyard(P0, "Memnite"));
-    assert_eq!(count_named(&t, "Memnite"), 2, "{}", t.dump_log());
+    assert!(t.in_graveyard(P0, "Mind Stone"));
+    assert_eq!(count_named(&t, "Mind Stone"), 2, "{}", t.dump_log());
     let sac = asked_of(&t, P0, from)
         .into_iter()
         .find_map(|d| match d {
-            Decision::ChooseEntities { max, prompt, .. } if prompt.contains("acrifice") => Some(max),
+            Decision::ChooseEntities { max, prompt, .. } if prompt.contains("acrifice") => {
+                Some(max)
+            }
             _ => None,
         })
         .expect("the sacrifice choice");
     assert_eq!(sac, 1, "at most one artifact");
-    assert_eq!(t.pt(plasm), (3, 3), "+2/+2 for Transmute Artifact only");
+    assert_eq!(
+        t.pt(plasm),
+        (3, 3),
+        "+2/+2 for Transmute Artifact only, not for the Mind Stone"
+    );
     // Countered: no sacrifice.
     let mut t = TestGame::new(2);
     let m1 = t.battlefield(P0, "Memnite");
@@ -259,12 +283,14 @@ fn transmute_artifact_sacrifices_on_resolution_one_artifact_and_doesnt_cast_the_
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Transmute Artifact"));
     assert!(t.on_battlefield(m1));
-    assert!(asked_of(&t, P0, from).iter().all(|d| !matches!(d, Decision::ChooseEntities { .. })));
+    assert!(asked_of(&t, P0, from)
+        .iter()
+        .all(|d| !matches!(d, Decision::ChooseEntities { .. })));
 }
 
 #[test]
 fn vivien_lets_you_look_at_the_top_card_any_time_without_using_the_stack() {
-    cr!("401.5", "116.1");
+    cr!("401.5");
     ruling!(
         "Vivien, Monsters' Advocate",
         "Vivien lets you look at the top card of your library whenever you want (with one restriction; see below), even if you don't have priority. This action doesn't use the stack. Knowing what that card is becomes part of the information you have access to, just like you can look at the cards in your hand."
@@ -318,13 +344,28 @@ fn vivien_casting_from_the_library_pays_all_costs_including_kicker_and_mutate() 
     let bears = t.battlefield(P0, "Grizzly Bears");
     let shark = t.library_top(P0, "Pouncing Shoreshark");
     mana(&mut t, P0, "3U");
-    assert!(!can_cast(&mut t, P0, shark, CastMethod::Normal), "{{4}}{{U}} can't be paid");
-    assert!(can_cast(&mut t, P0, shark, CastMethod::Keyword(KeywordKind::Mutate)));
+    assert!(
+        !can_cast(&mut t, P0, shark, CastMethod::Normal),
+        "{{4}}{{U}} can't be paid"
+    );
+    assert!(can_cast(
+        &mut t,
+        P0,
+        shark,
+        CastMethod::Keyword(KeywordKind::Mutate)
+    ));
     t.answer_targets(P0, &[obj(bears)]);
-    t.cast(P0, shark).method(CastMethod::Keyword(KeywordKind::Mutate)).go();
+    t.cast(P0, shark)
+        .method(CastMethod::Keyword(KeywordKind::Mutate))
+        .go();
     t.resolve_all();
     assert_eq!(pool(&t, P0), 0);
-    assert_eq!(count_named(&t, "Pouncing Shoreshark"), 1, "{}", t.dump_log());
+    assert_eq!(
+        count_named(&t, "Pouncing Shoreshark"),
+        1,
+        "{}",
+        t.dump_log()
+    );
     assert_eq!(count_named(&t, "Grizzly Bears"), 0, "merged");
 }
 
@@ -413,7 +454,10 @@ fn cards_played_from_exile_follow_the_normal_land_timing_and_land_plays() {
         let mut t = TestGame::new(2);
         let land = setup(&mut t);
         assert_eq!(t.zone(land), Zone::Exile, "{name}: {}", t.dump_log());
-        assert!(can_play_land(&mut t, P0, land), "{name}: main phase, empty stack");
+        assert!(
+            can_play_land(&mut t, P0, land),
+            "{name}: main phase, empty stack"
+        );
         // With a spell on the stack: not playable.
         cast(&mut t, P1, "Shock", "R", &[pl(P0)]);
         assert!(!can_play_land(&mut t, P0, land), "{name}: stack not empty");
@@ -425,7 +469,10 @@ fn cards_played_from_exile_follow_the_normal_land_timing_and_land_plays() {
         assert!(can_play_land(&mut t, P0, land), "{name}: postcombat main");
         let other = t.hand(P0, "Mountain");
         t.play_land(P0, other).unwrap();
-        assert!(!can_play_land(&mut t, P0, land), "{name}: no land play left");
+        assert!(
+            !can_play_land(&mut t, P0, land),
+            "{name}: no land play left"
+        );
         assert_eq!(t.zone(land), Zone::Exile);
     }
 }
@@ -448,7 +495,10 @@ fn spark_of_creativity_pays_all_costs_additional_and_alternative() {
     assert!(t.in_exile("Tormenting Voice"));
     let voice = t.g.current(voice);
     mana(&mut t, P0, "1R");
-    assert!(!can_cast(&mut t, P0, voice, CastMethod::Normal), "nothing to discard");
+    assert!(
+        !can_cast(&mut t, P0, voice, CastMethod::Normal),
+        "nothing to discard"
+    );
     let forest = t.hand(P0, "Forest");
     assert!(can_cast(&mut t, P0, voice, CastMethod::Normal));
     t.answer_choose(P0, &[obj(forest)]);
@@ -499,5 +549,9 @@ fn edgar_casts_artifacts_from_the_graveyard_paying_costs_at_sorcery_timing() {
     t.cast(P0, jugg).go();
     t.resolve_all();
     assert_eq!(pool(&t, P0), 0, "{{4}} paid");
-    assert!(t.on_battlefield(jugg) && t.obj_now(jugg).tapped, "{}", t.dump_log());
+    assert!(
+        t.on_battlefield(jugg) && t.obj_now(jugg).tapped,
+        "{}",
+        t.dump_log()
+    );
 }

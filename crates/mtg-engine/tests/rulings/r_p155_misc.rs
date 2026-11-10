@@ -6,8 +6,8 @@
 //! nothing happening between a spell's actions (CR 608.2).
 
 use crate::r_p155_common::*;
-use mtg_engine::decision::{Answer, Decision};
-use mtg_engine::object::{ObjKind, Zone};
+use mtg_engine::decision::Decision;
+use mtg_engine::object::ObjKind;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -25,7 +25,11 @@ fn dodgy_jalopys_power_is_defined_in_the_graveyard_too() {
     t.battlefield(P0, "Hill Giant");
     let bears = t.battlefield(P0, "Grizzly Bears");
     let jalopy = t.graveyard(P0, "Dodgy Jalopy");
-    assert_eq!(t.pt(jalopy), (4, 5), "Hill Giant's mana value, in the graveyard");
+    assert_eq!(
+        t.pt(jalopy),
+        (4, 5),
+        "Hill Giant's mana value, in the graveyard"
+    );
     mana(&mut t, P0, "2G");
     act(&mut t, P0, jalopy, "Scavenge", &[obj(bears)]).unwrap();
     t.resolve_all();
@@ -43,24 +47,27 @@ fn narsets_emblem_is_colorless_and_deals_damage_from_a_colorless_source() {
     supported("Narset of the Ancient Way");
     let mut t = TestGame::new(2);
     let narset = t.battlefield(P0, "Narset of the Ancient Way");
-    t.g.objects[narset.0 as usize].counters.insert(counters::LOYALTY.into(), 6);
+    t.g.objects[narset.0 as usize]
+        .counters
+        .insert(counters::LOYALTY.into(), 6);
     t.activate(P0, narset, 2, &[]).unwrap();
     t.resolve_all();
-    let emblem = *t
-        .g
-        .command
-        .iter()
-        .find(|id| t.g.obj(**id).kind == ObjKind::Emblem)
-        .expect("the emblem");
+    let emblem =
+        *t.g.command
+            .iter()
+            .find(|id| t.g.obj(**id).kind == ObjKind::Emblem)
+            .expect("the emblem");
     assert!(t.g.obj(emblem).chars.colors.is_colorless());
     let events = t.g.turn_events.len();
     t.answer_targets(P0, &[pl(P1)]);
     cast_resolve(&mut t, P0, "Opt", "U", &[]);
     assert_eq!(t.life(P1), 18, "{}", t.dump_log());
-    let from_emblem = t.g.turn_events[events..].iter().any(|e| matches!(
-        e,
-        mtg_engine::events::Event::Damage { source, .. } if *source == emblem
-    ));
+    let from_emblem = t.g.turn_events[events..].iter().any(|e| {
+        matches!(
+            e,
+            mtg_engine::events::Event::Damage { source, .. } if *source == emblem
+        )
+    });
     assert!(from_emblem, "the emblem is the source");
 }
 
@@ -82,7 +89,11 @@ fn calibrated_blast_puts_the_nonland_card_on_the_bottom_with_the_others() {
     let bottom: Vec<ObjectId> = lib[lib.len() - 3..].to_vec();
     for c in &cards[..3] {
         let now = t.g.current(*c);
-        assert!(bottom.contains(&now) || bottom.contains(c), "{}", t.g.obj(*c).chars.name);
+        assert!(
+            bottom.contains(&now) || bottom.contains(c),
+            "{}",
+            t.g.obj(*c).chars.name
+        );
     }
 }
 
@@ -95,7 +106,13 @@ fn vengeful_rebirth_returning_a_land_deals_no_damage() {
     );
     let mut t = TestGame::new(2);
     let forest = t.graveyard(P0, "Forest");
-    cast_resolve(&mut t, P0, "Vengeful Rebirth", "4RG", &[obj(forest), pl(P1)]);
+    cast_resolve(
+        &mut t,
+        P0,
+        "Vengeful Rebirth",
+        "4RG",
+        &[obj(forest), pl(P1)],
+    );
     assert!(t.in_hand(P0, "Forest"));
     assert_eq!(t.life(P1), 20);
     assert!(t.in_exile("Vengeful Rebirth"));
@@ -172,7 +189,12 @@ fn spellbound_dragon_discards_even_if_the_draw_was_replaced() {
     t.answer_choose(P0, &[obj(giant)]);
     attack_with(&mut t, &[(dragon, pl(P1))]);
     t.resolve_all();
-    assert_eq!(t.life(P1), 18, "Words of War's 2 damage instead of the draw: {}", t.dump_log());
+    assert_eq!(
+        t.life(P1),
+        18,
+        "Words of War's 2 damage instead of the draw: {}",
+        t.dump_log()
+    );
     assert!(t.in_graveyard(P0, "Hill Giant"), "discarded all the same");
     assert_eq!(t.hand_size(P0), 0);
     assert_eq!(t.pt(dragon), (7, 5));
@@ -230,7 +252,9 @@ fn nothing_happens_between_the_actions_of_a_resolving_spell_or_ability() {
     t.resolve();
     assert_eq!(t.library_size(P0), 30);
     assert_eq!(t.life(P1), 13, "{}", t.dump_log());
-    assert!(asked_of(&t, P1, from).iter().all(|d| !matches!(d, Decision::Priority { .. })));
+    assert!(asked_of(&t, P1, from)
+        .iter()
+        .all(|d| !matches!(d, Decision::Priority { .. })));
     // Erratic Mutation: the revealed Hill Giant gives +4/-4 at once: the Bears die.
     let mut t = TestGame::new(2);
     stack_library(&mut t, P0, &["Forest", "Hill Giant", "Island"]);
@@ -239,7 +263,7 @@ fn nothing_happens_between_the_actions_of_a_resolving_spell_or_ability() {
     cast(&mut t, P0, "Erratic Mutation", "2U", &[obj(bears)]);
     t.resolve();
     assert!(t.in_graveyard(P1, "Grizzly Bears"), "{}", t.dump_log());
-    assert!(t.asked()[from..].iter().all(|(_, d)| !matches!(d, Decision::Priority { .. })));
-    let _ = Zone::Exile;
-    let _ = Answer::Default;
+    assert!(t.asked()[from..]
+        .iter()
+        .all(|(_, d)| !matches!(d, Decision::Priority { .. })));
 }

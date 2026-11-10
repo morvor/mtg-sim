@@ -232,7 +232,8 @@ pub const COST_EXILED: Var = vars::USER + 131;
 /// (CR 400.7j) for anything but such a value, an object moved from a hidden zone, and a
 /// card the effect returned from a graveyard to the battlefield (Cleric Class's ruling
 /// reads its toughness there; Sister Hospitaller's ruling reads its mana value in the
-/// graveyard: a conflict left to the current information, see the register entry).
+/// graveyard: a conflict left to the current information, interpretation
+/// `returned-card-values-current-on-the-battlefield`, provisional).
 pub fn moved_object_lki(g: &Game, sel: &Sel, o: ObjectId, ctx: &Ctx) -> ObjectId {
     let names = |v: Var| match sel {
         Sel::Var(x) => *x == v,

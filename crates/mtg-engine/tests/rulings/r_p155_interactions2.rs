@@ -18,7 +18,10 @@ use mtg_engine::*;
 #[test]
 fn imps_mischief_changes_the_target_on_resolution_to_a_legal_one_but_never_to_the_spell_itself() {
     cr!("115.7a", "115.5", "608.2b");
-    ruling!("Imp's Mischief", "You can't make a spell which is on the stack target itself.");
+    ruling!(
+        "Imp's Mischief",
+        "You can't make a spell which is on the stack target itself."
+    );
     ruling!(
         "Imp's Mischief",
         "You don't choose the new target for the spell until Imp's Mischief resolves. You must change the target if possible. However, you can't change the target to an illegal target. If there are no legal targets to choose from, the target isn't changed. It doesn't matter if the original target has somehow become illegal itself."
@@ -53,7 +56,10 @@ fn imps_mischief_changes_the_target_on_resolution_to_a_legal_one_but_never_to_th
     t.answer_targets(P0, &[obj(mischief)]);
     t.resolve();
     let offered = &target_choices(&t, P0, from, "New target")[0];
-    assert!(offered.contains(&obj(mischief)) && !offered.contains(&obj(cancel)), "{offered:?}");
+    assert!(
+        offered.contains(&obj(mischief)) && !offered.contains(&obj(cancel)),
+        "{offered:?}"
+    );
     assert_eq!(stack_targets(&t, cancel), vec![obj(mischief)]);
     t.resolve_all();
     assert_eq!(t.life(P1), 18, "Shock resolved; Cancel had no target left");
@@ -64,7 +70,13 @@ fn imps_mischief_changes_the_target_on_resolution_to_a_legal_one_but_never_to_th
     cast_at(&mut t, P0, "Imp's Mischief", &[obj(nat)]);
     let from = t.asked().len();
     t.resolve();
-    assert!(target_choices(&t, P0, from, "New target").iter().all(|c| c.is_empty()), "{:?}", target_choices(&t, P0, from, "New target"));
+    assert!(
+        target_choices(&t, P0, from, "New target")
+            .iter()
+            .all(|c| c.is_empty()),
+        "{:?}",
+        target_choices(&t, P0, from, "New target")
+    );
     assert_eq!(stack_targets(&t, nat), vec![obj(ring)]);
     assert_eq!(t.life(P0), 18, "Naturalize's mana value");
     t.resolve_all();
@@ -73,7 +85,7 @@ fn imps_mischief_changes_the_target_on_resolution_to_a_legal_one_but_never_to_th
 
 #[test]
 fn zurs_animation_has_no_duration() {
-    cr!("611.2a", "611.2b");
+    cr!("611.2a");
     ruling!(
         "Zur, Eternal Schemer",
         "Zur, Eternal Schemer’s last ability does not have a duration. Once it resolves the target enchantment will be a creature until it leaves the battlefield or another effect causes it to stop being a creature."
@@ -125,7 +137,12 @@ fn riveteers_ascendancy_does_it_once_each_turn_per_ascendancy_but_triggers_each_
     t.answer_yes(P0, true);
     t.resolve_all();
     assert_eq!(count_named(&t, "Centaur Courser"), 1, "{}", t.dump_log());
-    assert_eq!(count_named(&t, "Grizzly Bears"), 0, "only once each turn: {}", t.dump_log());
+    assert_eq!(
+        count_named(&t, "Grizzly Bears"),
+        0,
+        "only once each turn: {}",
+        t.dump_log()
+    );
     assert_eq!(t.zone(bears), Zone::Graveyard(P0));
     // Once a card was returned this turn, a later sacrifice doesn't trigger it again
     // (CR 603.2h).
@@ -157,7 +174,10 @@ fn brothers_yamazaki_two_under_different_players_and_the_legend_rule_with_a_thir
         "Brothers Yamazaki",
         "If a third Brothers Yamazaki enters the battlefield, the legend rule will apply. If one player controls more than one Brothers Yamazaki at that time, that player will have to choose one and put the rest into their graveyard."
     );
-    ruling!("Brothers Yamazaki", "The two Brothers could be controlled by different players.");
+    ruling!(
+        "Brothers Yamazaki",
+        "The two Brothers could be controlled by different players."
+    );
     supported("Brothers Yamazaki");
     let mut t = TestGame::new(2);
     let a = t.battlefield(P0, "Brothers Yamazaki");
@@ -195,10 +215,19 @@ fn myr_servitor_must_still_be_on_the_battlefield_as_its_ability_resolves() {
             kill(&mut t, myr);
         }
         t.resolve_all();
-        assert_eq!(t.on_battlefield(mine), !dies, "dies: {dies}: {}", t.dump_log());
+        assert_eq!(
+            t.on_battlefield(mine),
+            !dies,
+            "dies: {dies}: {}",
+            t.dump_log()
+        );
         assert_eq!(t.on_battlefield(theirs), !dies, "dies: {dies}");
         if !dies {
-            assert_eq!(t.obj_now(theirs).controller, P1, "under its owner's control");
+            assert_eq!(
+                t.obj_now(theirs).controller,
+                P1,
+                "under its owner's control"
+            );
         }
     }
 }
@@ -265,9 +294,18 @@ fn kindle_the_carnage_asks_after_each_discard_and_its_damage() {
     t.answer_yes(P0, true);
     t.answer_yes(P0, false);
     cast_resolve(&mut t, P0, "Kindle the Carnage", "1RR", &[]);
-    assert!(t.in_graveyard(P1, "Craw Wurm") && t.in_graveyard(P1, "Colossal Dreadmaw"), "{}", t.dump_log());
+    assert!(
+        t.in_graveyard(P1, "Craw Wurm") && t.in_graveyard(P1, "Colossal Dreadmaw"),
+        "{}",
+        t.dump_log()
+    );
     assert_eq!(t.hand_size(P0), 0);
-    assert_eq!(yes_nos_asked(&t, P0, from), 2, "{:?}", asked_of(&t, P0, from));
+    assert_eq!(
+        yes_nos_asked(&t, P0, from),
+        2,
+        "{:?}",
+        asked_of(&t, P0, from)
+    );
     // Stopping after the first: the Dreadmaw lives, a Giant stays in hand.
     let mut t = TestGame::new(2);
     t.hand(P0, "Hill Giant");
@@ -320,12 +358,11 @@ fn cost_reductions_are_locked_in_before_mana_abilities_sacrifice_what_they_count
     t.cast(P0, colossus).go();
     assert_eq!(t.zone(colossus), Zone::Stack, "{}", t.dump_log());
     // A counted artifact (a Mind Stone, or the Ironworks itself) was sacrificed to pay.
-    let counted: u32 = t
-        .g
-        .permanents()
-        .filter(|o| o.controller == P0 && o.is(CardType::Artifact) && !o.is(CardType::Creature))
-        .map(|o| t.g.mana_value_of(o.id))
-        .sum();
+    let counted: u32 =
+        t.g.permanents()
+            .filter(|o| o.controller == P0 && o.is(CardType::Artifact) && !o.is(CardType::Creature))
+            .map(|o| t.g.mana_value_of(o.id))
+            .sum();
     assert!(counted < 8, "{counted}: {}", t.dump_log());
     let _ = stones;
     t.resolve_all();
@@ -340,7 +377,11 @@ fn stronghold_arena_is_kicked_once_for_each_of_its_two_kicker_costs() {
         "You may kick Stronghold Arena only once for its {G} cost and only once for its {W} cost. You can kick it twice by paying {G}{W}, but you can't kick it twice by paying {G}{G} or {W}{W}. You can't kick it more than twice."
     );
     supported("Stronghold Arena");
-    for (kicks, life) in [([true, true], 26), ([true, false], 23), ([false, false], 20)] {
+    for (kicks, life) in [
+        ([true, true], 26),
+        ([true, false], 23),
+        ([false, false], 20),
+    ] {
         let mut t = TestGame::new(2);
         let arena = t.hand(P0, "Stronghold Arena");
         mana(&mut t, P0, "1BGW");
@@ -355,8 +396,15 @@ fn stronghold_arena_is_kicked_once_for_each_of_its_two_kicker_costs() {
             .iter()
             .filter(|d| matches!(d, Decision::OptionalCost { .. }))
             .count();
-        assert!(asked <= 2, "{kicks:?}: each kicker once: {:?}", asked_of(&t, P0, from));
-        assert_eq!(t.obj_now(arena).cast.as_ref().map(|c| c.times_kicked), Some(kicks.iter().filter(|k| **k).count() as u32));
+        assert!(
+            asked <= 2,
+            "{kicks:?}: each kicker once: {:?}",
+            asked_of(&t, P0, from)
+        );
+        assert_eq!(
+            t.obj_now(arena).cast.as_ref().map(|c| c.times_kicked),
+            Some(kicks.iter().filter(|k| **k).count() as u32)
+        );
     }
 }
 
@@ -425,7 +473,10 @@ fn karns_mana_stays_through_the_turn_and_pays_for_anything_but_nonartifact_spell
     t.lands(P0, "Forest", 1);
     let jugg = t.hand(P0, "Juggernaut");
     let bears = t.hand(P0, "Grizzly Bears");
-    assert!(t.cast(P0, bears).try_go().is_err(), "{{1}}{{G}} can't use Karn's mana");
+    assert!(
+        t.cast(P0, bears).try_go().is_err(),
+        "{{1}}{{G}} can't use Karn's mana"
+    );
     assert_eq!(pool(&t, P0), 4);
     assert!(can_cast(&mut t, P0, jugg, CastMethod::Normal));
     t.cast(P0, jugg).go();
@@ -457,7 +508,12 @@ fn karns_mana_stays_through_the_turn_and_pays_for_anything_but_nonartifact_spell
     act(&mut t, P0, ballista, "deals 1 damage", &[obj(kappa)]).unwrap();
     t.resolve_all();
     assert_eq!(pool(&t, P0), 0, "{}", t.dump_log());
-    assert_eq!(dmg(&t, kappa), 1, "the ward cost was paid: {}", t.dump_log());
+    assert_eq!(
+        dmg(&t, kappa),
+        1,
+        "the ward cost was paid: {}",
+        t.dump_log()
+    );
 }
 
 #[test]
@@ -498,6 +554,9 @@ fn tormented_thoughts_gives_no_player_a_window_before_the_sacrifice() {
     t.answer_targets(P0, &[pl(P1)]);
     t.cast(P0, tt).go();
     assert!(others_asked_since(&t, from, P0).is_empty());
-    assert!(t.in_graveyard(P0, "Hill Giant"), "sacrificed as the spell was cast");
+    assert!(
+        t.in_graveyard(P0, "Hill Giant"),
+        "sacrificed as the spell was cast"
+    );
     assert_eq!(t.zone(tt), Zone::Stack);
 }

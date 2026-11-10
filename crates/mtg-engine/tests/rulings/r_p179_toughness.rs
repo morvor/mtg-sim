@@ -82,11 +82,7 @@ fn sacrificed_creature_toughness_is_last_known() {
     }
     // Temple of Aclazotz.
     let mut t = TestGame::new(2);
-    let temple = battlefield_back(
-        &mut t,
-        P0,
-        "Arguel's Blood Fast // Temple of Aclazotz",
-    );
+    let temple = battlefield_back(&mut t, P0, "Arguel's Blood Fast // Temple of Aclazotz");
     assert_eq!(t.obj_now(temple).chars.name.as_str(), "Temple of Aclazotz");
     let bears = pumped_bears(&mut t);
     t.answer_choose(P0, &[obj(bears)]);
@@ -126,11 +122,7 @@ fn temple_of_aclazotz_sacrifice_is_a_cost() {
         "Once you've announced the last ability of Temple of Aclazotz, it's too late for anyone to interrupt you by trying to remove the creature you sacrifice."
     );
     let mut t = TestGame::new(2);
-    let temple = battlefield_back(
-        &mut t,
-        P0,
-        "Arguel's Blood Fast // Temple of Aclazotz",
-    );
+    let temple = battlefield_back(&mut t, P0, "Arguel's Blood Fast // Temple of Aclazotz");
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.answer_choose(P0, &[obj(bears)]);
     activate_containing(&mut t, P0, temple, "Sacrifice a creature").unwrap();
@@ -270,7 +262,9 @@ fn bighorner_rancher_mana_ability_adds_greatest_power() {
     let mut t = TestGame::new(2);
     let rancher = t.battlefield(P0, "Bighorner Rancher");
     t.battlefield(P0, "Hill Giant");
-    assert!(crate::r_s20_common::tap_for_mana(&mut t, P0, rancher, "Add"));
+    assert!(crate::r_s20_common::tap_for_mana(
+        &mut t, P0, rancher, "Add"
+    ));
     assert!(t.g.stack.is_empty());
     assert_eq!(crate::r_s24_common::pool(&t, P0, ManaType::G), 3);
     // Greatest power 0: no mana.
@@ -306,10 +300,7 @@ fn bighorner_rancher_life_is_determined_on_resolution() {
 #[test]
 fn purging_scythe_doesnt_target() {
     cr!("115.10", "702.11b");
-    ruling!(
-        "Purging Scythe",
-        "Does not target the creature it damages."
-    );
+    ruling!("Purging Scythe", "Does not target the creature it damages.");
     supported("Purging Scythe");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Purging Scythe");
@@ -318,7 +309,11 @@ fn purging_scythe_doesnt_target() {
     let from = t.asked().len();
     crate::r_s04_common::next_upkeep(&mut t, P0);
     t.resolve_all();
-    assert!(t.in_graveyard(P1, "Gladecover Scout"), "{:?}", t.zone(scout));
+    assert!(
+        t.in_graveyard(P1, "Gladecover Scout"),
+        "{:?}",
+        t.zone(scout)
+    );
     assert!(!t.asked()[from..]
         .iter()
         .any(|(_, d)| matches!(d, mtg_engine::decision::Decision::ChooseTargets { .. })));
@@ -402,6 +397,7 @@ fn cleric_class_creature_dealt_lethal_damage_dies_before_the_counter() {
 #[test]
 fn cleric_class_level_3_uses_toughness_on_the_battlefield() {
     cr!("716.2a", "608.2h");
+    interp!("returned-card-values-current-on-the-battlefield");
     ruling!(
         "Cleric Class",
         "When Cleric Class's level 3 ability resolves, you gain life equal to the creature's toughness as it exists on battlefield, which may be different than its toughness in the graveyard."
@@ -606,9 +602,11 @@ fn arguels_blood_fast_checks_life_at_upkeep_and_on_resolution() {
     );
     supported("Arguel's Blood Fast // Temple of Aclazotz");
     // (life at upkeep, gain in response, triggers, transforms)
-    for (life, gain, triggers, transforms) in
-        [(6, 0, false, false), (5, 0, true, true), (5, 1, true, false)]
-    {
+    for (life, gain, triggers, transforms) in [
+        (6, 0, false, false),
+        (5, 0, true, true),
+        (5, 1, true, false),
+    ] {
         let mut t = TestGame::new(2);
         let fast = t.battlefield(P0, "Arguel's Blood Fast // Temple of Aclazotz");
         t.advance_to(P1, Step::Upkeep);
@@ -696,12 +694,7 @@ fn abzan_beastmaster_checks_toughness_on_resolution() {
     );
     supported("Abzan Beastmaster");
     // (P0's Grizzly Bears pumped in response, P1's Hill Giant pumped in response, draws)
-    for (mine, theirs, draws) in [
-        (0, 0, false),
-        (3, 0, true),
-        (1, 0, true),
-        (2, 3, false),
-    ] {
+    for (mine, theirs, draws) in [(0, 0, false), (3, 0, true), (1, 0, true), (2, 3, false)] {
         let mut t = TestGame::new(2);
         let bm = t.battlefield(P0, "Abzan Beastmaster");
         let bears = t.battlefield(P0, "Grizzly Bears");
@@ -844,7 +837,10 @@ fn arwen_counts_her_toughness_as_the_creature_enters() {
     assert_eq!(t.counters(bears, "+1/+1"), 3);
     // Entering together with Arwen: no counters.
     let mut t = TestGame::new(2);
-    let v = enter_together(&mut t, &[(P0, "Arwen, Weaver of Hope"), (P0, "Grizzly Bears")]);
+    let v = enter_together(
+        &mut t,
+        &[(P0, "Arwen, Weaver of Hope"), (P0, "Grizzly Bears")],
+    );
     assert!(t.on_battlefield(v[0]));
     assert_eq!(t.counters(v[1], "+1/+1"), 0);
 }

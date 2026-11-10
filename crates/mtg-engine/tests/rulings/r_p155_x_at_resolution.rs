@@ -1,7 +1,7 @@
 //! Rulings batch P155 — a value an effect needs from the game is determined as the spell
 //! or ability resolves, only once (CR 608.2h): the greatest mana value or power among
 //! permanents, the number of artifacts, the creatures named so-and-so; an "activate only
-//! if" condition checked only on activation (CR 602.5d); an intervening-if clause
+//! if" condition checked only on activation (CR 602.1b); an intervening-if clause
 //! checked again on resolution (CR 603.4); and a power raised "until end of turn" still
 //! raised during the end step.
 
@@ -68,12 +68,12 @@ fn imskir_calculates_x_once_as_its_triggered_ability_resolves() {
     );
     supported("Imskir Iron-Eater");
     let mut t = TestGame::new(2);
-    let memnites: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Memnite")).collect();
+    let memnites: Vec<ObjectId> = (0..4).map(|_| t.battlefield(P0, "Memnite")).collect();
     t.enter(P0, "Imskir Iron-Eater");
     t.settle();
     assert_eq!(t.stack_len(), 1);
-    // Four artifacts as it triggered (X would be 2); one Memnite leaves in response: X
-    // is 1 as the ability resolves.
+    // Four Memnites as it triggered (Imskir isn't an artifact: X would be 2); one leaves
+    // in response: three, and X is 1 as the ability resolves.
     kill(&mut t, memnites[0]);
     t.resolve_all();
     assert_eq!(t.hand_size(P0), 1, "{}", t.dump_log());
@@ -103,7 +103,12 @@ fn wicks_patrol_calculates_x_as_the_reflexive_ability_resolves() {
         }
         t.resolve_all();
         // X is 6 (Craw Wurm) or 0 (two Forests) as it resolves.
-        assert_eq!(t.on_battlefield(ae), exile_wurm, "exile: {exile_wurm}: {}", t.dump_log());
+        assert_eq!(
+            t.on_battlefield(ae),
+            exile_wurm,
+            "exile: {exile_wurm}: {}",
+            t.dump_log()
+        );
     }
 }
 
@@ -123,7 +128,11 @@ fn muzzio_determines_x_as_the_ability_resolves() {
     activate(&mut t, P0, muzzio, "Look at the top", "3U", &[]);
     kill(&mut t, lotus);
     t.resolve_all();
-    assert!(entity_candidates(&t, P0, from).is_empty(), "looked at nothing: {}", t.dump_log());
+    assert!(
+        entity_candidates(&t, P0, from).is_empty(),
+        "looked at nothing: {}",
+        t.dump_log()
+    );
     assert_eq!(count_named(&t, "Juggernaut"), 0);
     assert_eq!(t.library_size(P0), 31);
 }
@@ -166,7 +175,10 @@ fn fungal_sprouting_counts_the_greatest_power_as_it_resolves() {
     let from = t.asked().len();
     let spell = cast(&mut t, P0, "Fungal Sprouting", "3G", &[]);
     assert!(stack_targets(&t, spell).is_empty());
-    assert!(target_candidates(&t, P0, from).is_empty(), "no targets asked");
+    assert!(
+        target_candidates(&t, P0, from).is_empty(),
+        "no targets asked"
+    );
     // +3/+3 in response: six Saprolings.
     cast_resolve(&mut t, P0, "Giant Growth", "G", &[obj(giant)]);
     t.resolve_all();
@@ -258,7 +270,7 @@ fn tuya_bearclaw_x_is_the_greatest_other_power_as_it_resolves_and_then_fixed() {
 
 #[test]
 fn metallurgic_summonings_checks_its_artifacts_only_on_activation() {
-    cr!("602.2", "602.2b");
+    cr!("602.1b", "602.2");
     ruling!(
         "Metallurgic Summonings",
         "The number of artifacts you control is checked only as you activate Metallurgic Summonings's last ability. It's not checked again as it resolves."
@@ -274,7 +286,11 @@ fn metallurgic_summonings_checks_its_artifacts_only_on_activation() {
     kill(&mut t, memnites[0]);
     assert_eq!(count_named(&t, "Memnite"), 5);
     t.resolve_all();
-    assert!(t.in_hand(P0, "Shock") && t.in_hand(P0, "Divination"), "{}", t.dump_log());
+    assert!(
+        t.in_hand(P0, "Shock") && t.in_hand(P0, "Divination"),
+        "{}",
+        t.dump_log()
+    );
     // With five artifacts, it can't be activated.
     let mut t = TestGame::new(2);
     let ms = t.battlefield(P0, "Metallurgic Summonings");

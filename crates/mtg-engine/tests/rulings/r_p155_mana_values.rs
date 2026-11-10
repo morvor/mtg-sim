@@ -82,8 +82,14 @@ fn a_double_faced_card_in_a_graveyard_has_the_mana_value_of_its_front_face() {
         ],
     );
     activate_resolve(&mut t, P0, hp, "mill three", "3R", &[pl(P1)]);
-    assert_eq!(t.life(P1), 16, "Huntmaster's {{2}}{{R}}{{G}}: {}", t.dump_log());
-    let hm = t.g.find_in_zone(Zone::Graveyard(P0), "Huntmaster of the Fells")[0];
+    assert_eq!(
+        t.life(P1),
+        16,
+        "Huntmaster's {{2}}{{R}}{{G}}: {}",
+        t.dump_log()
+    );
+    let hm =
+        t.g.find_in_zone(Zone::Graveyard(P0), "Huntmaster of the Fells")[0];
     assert_eq!(mana_value(&t, hm), 4);
 }
 
@@ -132,11 +138,19 @@ fn eldritch_evolution_with_a_transformed_a_melded_and_a_copied_creature() {
     let copy = mirror_image_of(&mut t, P0, rav);
     assert_eq!(mana_value(&t, copy), 0);
     let (bears, wurm, crusher) = lib(&mut t);
+    // Hill Giant (4) would be offered if the sacrificed Mirror Image card's own mana
+    // value (3) were used: X 5.
+    let giant = t.library_top(P0, "Hill Giant");
     let from = t.asked().len();
     t.answer_choose(P0, &[obj(copy)]);
     t.answer_choose(P0, &[obj(bears)]);
     cast_resolve(&mut t, P0, "Eldritch Evolution", "1GG", &[]);
     assert!(was_offered(&t, P0, from, bears));
+    assert!(
+        !was_offered(&t, P0, from, giant),
+        "X is 2, not 5: {}",
+        t.dump_log()
+    );
     assert!(!was_offered(&t, P0, from, wurm) && !was_offered(&t, P0, from, crusher));
     assert_eq!(count_named(&t, "Grizzly Bears"), 1);
 }
@@ -152,20 +166,34 @@ fn a_split_card_has_the_combined_mana_value_but_the_spell_only_its_half() {
     supported("Fire // Ice");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Sunbird's Invocation");
+    // Two Forests on top, then two Craw Wurms: the trigger reveals the Forests (X is 2,
+    // Fire's mana value), not the Wurms too (X 4, the card's).
+    let cards = stack_library(&mut t, P0, &["Forest", "Forest", "Craw Wurm", "Craw Wurm"]);
     let fi = t.hand(P0, "Fire // Ice");
     assert_eq!(mana_value(&t, fi), 4, "{{1}}{{R}} and {{1}}{{U}} combined");
     mana(&mut t, P0, "1R");
     // Fire divides 2 damage: all to P1.
     t.answer(P0, DecisionKind::Divide, Answer::Default);
-    let from = t.asked().len();
-    let fire = t.cast(P0, fi).method(CastMethod::Half(0)).targets(&[pl(P1)]).go();
+    let fire = t
+        .cast(P0, fi)
+        .method(CastMethod::Half(0))
+        .targets(&[pl(P1)])
+        .go();
     assert_eq!(mana_value(&t, fire), 2);
     t.settle();
     assert_eq!(t.stack_len(), 2, "{}", t.dump_log());
     t.resolve_all();
-    // The trigger revealed two cards (X is 2), none castable: both on the bottom.
-    assert_eq!(t.library_size(P0), 30);
-    assert!(t.asked()[from..].iter().any(|(p, d)| *p == P0 && matches!(d, Decision::ChooseEntities { .. })) || true);
+    assert_eq!(t.life(P1), 18);
+    // The two Forests (not castable) went to the bottom; the Wurms are still on top.
+    let lib = crate::r_s33_common::library_top_first(&t, P0);
+    assert_eq!(lib.len(), 34);
+    assert_eq!(&lib[..2], &cards[2..], "the Wurms on top: {}", t.dump_log());
+    let bottom = &lib[32..];
+    assert!(
+        bottom.contains(&t.g.current(cards[0])) && bottom.contains(&t.g.current(cards[1])),
+        "{}",
+        t.dump_log()
+    );
 }
 
 #[test]
@@ -180,10 +208,18 @@ fn an_adventure_spell_has_the_mana_value_of_the_adventure() {
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Lozhan, Dragons' Legacy");
     let giant = t.hand(P0, "Bonecrusher Giant // Stomp");
-    assert_eq!(mana_value(&t, giant), 3, "the card's: Bonecrusher Giant's {{2}}{{R}}");
+    assert_eq!(
+        mana_value(&t, giant),
+        3,
+        "the card's: Bonecrusher Giant's {{2}}{{R}}"
+    );
     mana(&mut t, P0, "1R");
     t.answer_targets(P0, &[pl(P1)]);
-    let stomp = t.cast(P0, giant).method(CastMethod::Half(1)).target(pl(P1)).go();
+    let stomp = t
+        .cast(P0, giant)
+        .method(CastMethod::Half(1))
+        .target(pl(P1))
+        .go();
     assert_eq!(mana_value(&t, stomp), 2, "Stomp's {{1}}{{R}}");
     t.settle();
     assert_eq!(t.stack_len(), 2, "Lozhan triggered: {}", t.dump_log());
@@ -204,7 +240,9 @@ fn a_prototyped_permanent_has_the_prototype_mana_value() {
     let fg = t.hand(P0, "Phyrexian Fleshgorger");
     assert_eq!(mana_value(&t, fg), 7);
     mana(&mut t, P0, "1BB");
-    t.cast(P0, fg).method(CastMethod::Keyword(KeywordKind::Prototype)).go();
+    t.cast(P0, fg)
+        .method(CastMethod::Keyword(KeywordKind::Prototype))
+        .go();
     t.resolve_all();
     let perm = t.g.current(fg);
     assert_eq!(t.zone(perm), Zone::Battlefield);
@@ -245,9 +283,19 @@ fn reinterpret_can_cast_either_face_of_a_modal_double_faced_card_with_a_fitting_
     }
     // Hill Giant (4) countered: Birgi (3) may be cast; Harnfel (5) may not.
     let (t, _, _) = counter_with("Hill Giant", "3R", 0);
-    assert_eq!(count_named(&t, "Birgi, God of Storytelling"), 1, "{}", t.dump_log());
+    assert_eq!(
+        count_named(&t, "Birgi, God of Storytelling"),
+        1,
+        "{}",
+        t.dump_log()
+    );
     let (t, from, _) = counter_with("Hill Giant", "3R", 1);
-    assert_eq!(count_named(&t, "Harnfel, Horn of Bounty"), 0, "{}", t.dump_log());
+    assert_eq!(
+        count_named(&t, "Harnfel, Horn of Bounty"),
+        0,
+        "{}",
+        t.dump_log()
+    );
     let offered: Vec<String> = asked_of(&t, P0, from)
         .iter()
         .filter_map(|d| match d {
@@ -261,12 +309,19 @@ fn reinterpret_can_cast_either_face_of_a_modal_double_faced_card_with_a_fitting_
     );
     // Air Elemental (5) countered: Harnfel may be cast.
     let (t, _, _) = counter_with("Air Elemental", "3UU", 1);
-    assert_eq!(count_named(&t, "Harnfel, Horn of Bounty"), 1, "{}", t.dump_log());
+    assert_eq!(
+        count_named(&t, "Harnfel, Horn of Bounty"),
+        1,
+        "{}",
+        t.dump_log()
+    );
     // Grizzly Bears (2) countered: neither face; the card isn't offered.
     let (t, from, mdfc) = counter_with("Grizzly Bears", "1G", 0);
     assert_eq!(count_named(&t, "Birgi, God of Storytelling"), 0);
     assert_eq!(t.zone(mdfc), Zone::Hand(P0), "{}", t.dump_log());
-    assert!(!last_offered_names(&t, P0, from).iter().any(|n| n.contains("Birgi")));
+    assert!(!last_offered_names(&t, P0, from)
+        .iter()
+        .any(|n| n.contains("Birgi")));
 }
 
 #[test]
@@ -313,7 +368,9 @@ fn tokens_have_mana_value_0_unless_they_copy_a_card_with_a_mana_cost() {
     token_copy(&mut t, P0, giant);
     let wb = t.hand(P0, "Willbender");
     mana(&mut t, P0, "3");
-    t.cast(P0, wb).method(CastMethod::FaceDown(KeywordKind::Morph)).go();
+    t.cast(P0, wb)
+        .method(CastMethod::FaceDown(KeywordKind::Morph))
+        .go();
     t.resolve_all();
     assert!(t.obj_now(wb).face_down);
     assert_eq!(t.pt(ooze), (8, 8), "{}", t.dump_log());
@@ -358,5 +415,12 @@ fn cost_reductions_dont_change_a_spells_mana_value() {
     let jedit = cast(&mut t, P0, "Jedit Ojanen", "2WWU", &[]);
     assert_eq!(pool(&t, P0), 0);
     assert_eq!(mana_value(&t, jedit), 7);
-    assert_eq!(t.obj_now(jedit).chars.mana_cost.as_ref().map(|m| m.mana_value()), Some(7));
+    assert_eq!(
+        t.obj_now(jedit)
+            .chars
+            .mana_cost
+            .as_ref()
+            .map(|m| m.mana_value()),
+        Some(7)
+    );
 }

@@ -1,6 +1,6 @@
 //! Rulings batch P155 — interactions: a "blocks or becomes blocked" trigger with several
 //! blockers (CR 509.1h, 603.2c), simultaneous life loss and a drawn game (CR 104.4a,
-//! 704.5a), damage redirection with several objects (CR 615.6, 616.1), a state trigger
+//! 704.5a), damage redirection with several objects (CR 614.1a, 609.7), a state trigger
 //! (CR 603.8), a permanent made a Vehicle (CR 205.1a, 613.1d), tokens copying printed
 //! values (CR 707.2), spells whose only target became illegal (CR 608.2b), a cast trigger
 //! outliving its spell (CR 603.3), an Aura that becomes an Equipment (CR 301.5, 704.5m).
@@ -30,7 +30,10 @@ fn karn_silver_golems_blocked_trigger_triggers_once_for_several_blockers() {
     t.attack(&[(karn, pl(P1))], &[(a, karn), (b, karn)]);
     assert_eq!(t.pt(karn), (0, 8), "{}", t.dump_log());
     assert!(t.on_battlefield(karn));
-    assert!(t.on_battlefield(a) && t.on_battlefield(b), "Karn dealt 0 damage");
+    assert!(
+        t.on_battlefield(a) && t.on_battlefield(b),
+        "Karn dealt 0 damage"
+    );
 }
 
 #[test]
@@ -64,7 +67,11 @@ fn duskmantle_seers_life_loss_is_simultaneous_and_can_draw_the_game() {
     t.set_step(P2, Step::End);
     t.advance_to(P0, Step::Upkeep);
     t.resolve_all();
-    assert!(t.has_lost(P0) && t.has_lost(P1) && !t.has_lost(P2), "{}", t.dump_log());
+    assert!(
+        t.has_lost(P0) && t.has_lost(P1) && !t.has_lost(P2),
+        "{}",
+        t.dump_log()
+    );
     assert_eq!(t.g.result, Some(GameResult::Win(vec![P2])));
 }
 
@@ -108,7 +115,7 @@ fn duskmantle_seer_puts_cards_into_hands_without_drawing_them() {
 
 #[test]
 fn shining_shoal_redirects_damage_to_you_and_your_creatures_as_you_choose_up_to_x() {
-    cr!("615.6", "616.1", "616.1c");
+    cr!("614.1a", "609.7");
     ruling!(
         "Shining Shoal",
         "The redirection protects both you and your creatures from the source. If the source would deal more than X damage to multiple objects, you decide which damage is redirected until X is used up. For example, your opponent casts a spell that deals 1 damage to you and 1 damage to two of your creatures. If you cast Shining Shoal with X = 2, you can have damage to you and one creature redirected to the target, or you could have damage to both creatures redirected."
@@ -135,7 +142,15 @@ fn shining_shoal_redirects_damage_to_you_and_your_creatures_as_you_choose_up_to_
     // Two of the three points were redirected to P1; one was dealt as normal.
     assert_eq!(t.life(P1), 18, "{}", t.dump_log());
     let dealt = (t.life(P0) < 20) as u32 + dmg(&t, a) + dmg(&t, b);
-    assert_eq!(dealt, 1, "life {} damage {} {}: {}", t.life(P0), dmg(&t, a), dmg(&t, b), t.dump_log());
+    assert_eq!(
+        dealt,
+        1,
+        "life {} damage {} {}: {}",
+        t.life(P0),
+        dmg(&t, a),
+        dmg(&t, b),
+        t.dump_log()
+    );
     // P0 chose which damage was redirected.
     assert!(
         t.asked()[from..].iter().any(|(p, _)| *p == P0),
@@ -175,7 +190,11 @@ fn endrek_sahrs_state_trigger_triggers_once_until_it_leaves_the_stack_and_sacrif
     kill(&mut t, thrulls[0]);
     assert_eq!(with_subtype(&t, P0, "Thrull").len(), 6);
     t.resolve_all();
-    assert!(t.in_graveyard(P0, "Endrek Sahr, Master Breeder"), "{}", t.dump_log());
+    assert!(
+        t.in_graveyard(P0, "Endrek Sahr, Master Breeder"),
+        "{}",
+        t.dump_log()
+    );
 }
 
 #[test]
@@ -200,7 +219,11 @@ fn captain_rex_nebula_makes_a_vehicle_keeping_supertypes_and_losing_creature_typ
     assert!(!c.has_subtype("Cat") && !c.has_subtype("Warrior"));
     assert!(c.supertypes.contains(Supertype::Legendary));
     // Crewed: a 7/7 artifact creature, still without its creature types.
-    assert!(crate::r_s04_common::crew(&mut t, P0, jedit, &[bears]), "{}", t.dump_log());
+    assert!(
+        crate::r_s04_common::crew(&mut t, P0, jedit, &[bears]),
+        "{}",
+        t.dump_log()
+    );
     t.resolve_all();
     let c = &t.obj_now(jedit).chars;
     assert!(c.card_types.contains(CardType::Creature));
@@ -234,23 +257,26 @@ fn satyas_token_copies_the_printed_creature_and_chooses_what_it_attacks() {
     t.answer_choose(P0, &[obj(jace)]);
     attack_with(&mut t, &[(satya, pl(P1))]);
     t.resolve_all();
-    let tok = *t
-        .g
-        .battlefield
-        .iter()
-        .find(|o| !before.contains(o) && t.g.obj(**o).is_token())
-        .expect("the token");
+    let tok =
+        *t.g.battlefield
+            .iter()
+            .find(|o| !before.contains(o) && t.g.obj(**o).is_token())
+            .expect("the token");
     assert_eq!(t.obj_now(tok).chars.name, "Grizzly Bears");
     assert_eq!(t.pt(tok), (2, 2), "no counter, no Giant Growth");
     assert_eq!(t.counters(tok, counters::PLUS1), 0);
     assert!(t.obj_now(tok).tapped);
     assert!(crate::r_p195_common::attacking(&t, tok));
-    let attacking = t
-        .g
-        .combat
-        .as_ref()
-        .and_then(|c| c.attackers.iter().find(|a| a.id == tok).map(|a| a.target));
-    assert_eq!(attacking, Some(Some(obj(jace))), "attacks Jace: {}", t.dump_log());
+    let attacking =
+        t.g.combat
+            .as_ref()
+            .and_then(|c| c.attackers.iter().find(|a| a.id == tok).map(|a| a.target));
+    assert_eq!(
+        attacking,
+        Some(Some(obj(jace))),
+        "attacks Jace: {}",
+        t.dump_log()
+    );
     assert_eq!(t.g.player(P0).counter(counters::ENERGY), 2);
 }
 
@@ -274,12 +300,11 @@ fn will_of_the_temurs_token_copies_the_printed_permanent_as_a_4_4_flying_dragon(
     t.answer_targets(P0, &[obj(bears)]);
     t.cast(P0, will).go();
     t.resolve_all();
-    let tok = *t
-        .g
-        .battlefield
-        .iter()
-        .find(|o| !before.contains(o) && t.g.obj(**o).is_token())
-        .expect("the token");
+    let tok =
+        *t.g.battlefield
+            .iter()
+            .find(|o| !before.contains(o) && t.g.obj(**o).is_token())
+            .expect("the token");
     let c = t.obj_now(tok).chars.clone();
     assert_eq!(c.name, "Grizzly Bears");
     assert_eq!(t.pt(tok), (4, 4), "{}", t.dump_log());
@@ -361,7 +386,12 @@ fn ulamogs_cast_trigger_resolves_before_it_and_even_if_its_countered() {
     assert!(t.in_graveyard(P0, "Ulamog, the Defiler"));
     assert_eq!(t.stack_len(), 1);
     t.resolve_all();
-    assert_eq!(t.library_size(P1), 15, "half of 30 exiled: {}", t.dump_log());
+    assert_eq!(
+        t.library_size(P1),
+        15,
+        "half of 30 exiled: {}",
+        t.dump_log()
+    );
 }
 
 #[test]
@@ -381,12 +411,22 @@ fn bludgeon_brawl_makes_an_artifact_aura_an_equipment_too() {
     let hs = crate::r_s06_common::attach_new(&mut t, P0, "Holy Strength", bears);
     t.settle();
     let c = t.obj_now(hs).chars.clone();
-    assert!(c.card_types.contains(CardType::Artifact) && c.has_subtype("Equipment") && c.has_subtype("Aura"), "{c:?}");
+    assert!(
+        c.card_types.contains(CardType::Artifact)
+            && c.has_subtype("Equipment")
+            && c.has_subtype("Aura"),
+        "{c:?}"
+    );
     // "Enchanted creature gets +1/+2" and "equipped creature gets +1/+0" (X = 1).
     assert_eq!(t.pt(bears), (4, 4), "{}", t.dump_log());
     // Equip {1} moves it to the Giant.
     activate_resolve(&mut t, P0, hs, "Equip", "1", &[obj(giant)]);
-    assert_eq!(crate::r_s06_common::attached_to(&t, hs), Some(obj(giant)), "{}", t.dump_log());
+    assert_eq!(
+        crate::r_s06_common::attached_to(&t, hs),
+        Some(obj(giant)),
+        "{}",
+        t.dump_log()
+    );
     assert_eq!(t.pt(giant), (5, 5));
     assert_eq!(t.pt(bears), (2, 2));
     // The creature it enchants leaves: an Aura not attached is put into the graveyard.

@@ -6,7 +6,6 @@
 //! register entry `moved-object-values-as-it-last-existed`.)
 
 use crate::r_p155_common::*;
-use mtg_engine::decision::Answer;
 use mtg_engine::mana::ManaType;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -45,7 +44,11 @@ fn feed_the_swarm_uses_the_mana_value_as_it_last_existed_on_the_battlefield() {
     cast_resolve(&mut t, P0, "Feed the Swarm", "1B", &[obj(copy)]);
     assert!(t.in_graveyard(P1, "Mirror Image"));
     assert_eq!(mana_value(&t, copy), 3, "a Mirror Image in the graveyard");
-    assert_eq!(t.life(P0), 15, "lost 5, the copy's mana value on the battlefield");
+    assert_eq!(
+        t.life(P0),
+        15,
+        "lost 5, the copy's mana value on the battlefield"
+    );
 }
 
 #[test]
@@ -121,7 +124,7 @@ fn jackdaw_savior_compares_with_the_mana_value_as_it_last_existed_on_the_battlef
     t.answer_targets(P0, &[obj(giant)]);
     kill(&mut t, copy);
     assert_eq!(t.stack_len(), 1, "{}", t.dump_log());
-    // Hill Giant (4 < 5) is offered; the Mirror Image card (2) that died isn't "another".
+    // Hill Giant (4 < 5) is offered; the Mirror Image card (3) that died isn't "another".
     let cands = target_candidates(&t, P0, from);
     assert!(cands.iter().flatten().any(|e| *e == obj(giant)));
     t.resolve_all();
@@ -191,7 +194,11 @@ fn expel_the_unworthy_uses_the_mana_value_as_it_last_existed_on_the_battlefield(
     cast_resolve(&mut t, P0, "Expel the Unworthy", "1W", &[obj(copy)]);
     assert!(t.in_exile("Mirror Image"));
     assert_eq!(mana_value(&t, copy), 3, "a Mirror Image in exile");
-    assert_eq!(t.life(P1), 22, "gained 2, the copy's mana value on the battlefield");
+    assert_eq!(
+        t.life(P1),
+        22,
+        "gained 2, the copy's mana value on the battlefield"
+    );
 }
 
 #[test]
@@ -332,6 +339,8 @@ fn terminal_velocity_uses_the_mana_value_as_it_last_existed_on_the_battlefield()
     let mut t = TestGame::new(2);
     let ae = t.battlefield(P1, "Air Elemental");
     let giant = t.battlefield(P1, "Hill Giant");
+    // Siege Mastodon (3/5) dies to 5 damage, not to Clone's own 4.
+    let mastodon = t.battlefield(P1, "Siege Mastodon");
     let clone = t.hand(P0, "Clone");
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[obj(clone)]);
@@ -341,13 +350,18 @@ fn terminal_velocity_uses_the_mana_value_as_it_last_existed_on_the_battlefield()
     let c = t.g.current(clone);
     assert_eq!(t.zone(c), Zone::Battlefield);
     assert_eq!(mana_value(&t, c), 5, "a copy of Air Elemental");
-    // It leaves: 5 damage (not Clone's 4) to each creature: Air Elemental (4/4) dies.
+    // It leaves: 5 damage (not Clone's 4) to each creature: the Mastodon dies too.
     kill(&mut t, c);
     t.resolve_all();
-    assert!(t.in_graveyard(P1, "Air Elemental"), "{}", t.dump_log());
+    assert!(
+        t.in_graveyard(P1, "Siege Mastodon"),
+        "5 damage, not 4: {}",
+        t.dump_log()
+    );
+    assert!(t.in_graveyard(P1, "Air Elemental"));
     assert!(t.in_graveyard(P1, "Hill Giant"));
     assert!(t.in_graveyard(P0, "Clone"));
-    let _ = giant;
+    let _ = (giant, mastodon);
 }
 
 #[test]
@@ -444,5 +458,4 @@ fn the_x_of_a_spell_on_the_stack_counts_in_its_mana_value() {
     t.resolve_all();
     assert_eq!(t.pt(plasm), (7, 7));
     assert_eq!(t.life(P1), 15);
-    let _ = Answer::Default;
 }
