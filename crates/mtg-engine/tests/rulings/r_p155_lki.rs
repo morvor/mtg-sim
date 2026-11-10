@@ -1,7 +1,9 @@
 //! Rulings batch P155 — a mana value or power "as it last existed" (CR 608.2h): a
 //! permanent that left the battlefield (a sacrificed, destroyed or exiled copy whose mana
-//! value on the battlefield was the copied card's), a card that left the graveyard or the
-//! hand, and X in a mana cost off the stack (CR 202.3e).
+//! value on the battlefield was the copied card's), a card that left the hand, and X in
+//! a mana cost off the stack (CR 202.3e). (Sister Hospitaller's "as it last existed in
+//! the graveyard" is left uncited: it conflicts with Cleric Class's ruling, see the
+//! register entry `moved-object-values-as-it-last-existed`.)
 
 use crate::r_p155_common::*;
 use mtg_engine::decision::Answer;
@@ -190,34 +192,6 @@ fn expel_the_unworthy_uses_the_mana_value_as_it_last_existed_on_the_battlefield(
     assert!(t.in_exile("Mirror Image"));
     assert_eq!(mana_value(&t, copy), 3, "a Mirror Image in exile");
     assert_eq!(t.life(P1), 22, "gained 2, the copy's mana value on the battlefield");
-}
-
-#[test]
-fn sister_hospitaller_uses_the_mana_value_as_it_last_existed_in_the_graveyard() {
-    cr!("608.2h", "614.1c", "400.7");
-    interp!("moved-object-values-as-it-last-existed");
-    ruling!(
-        "Sister Hospitaller",
-        "Use the mana value of the card as it last existed in the graveyard to determine the amount of life you gain."
-    );
-    supported("Sister Hospitaller");
-    supported("Clone");
-    let mut t = TestGame::new(2);
-    t.battlefield(P1, "Grizzly Bears");
-    let bears = t.battlefield(P1, "Grizzly Bears");
-    // A Clone ({3}{U}, 4) returned from the graveyard enters as a copy of Grizzly Bears
-    // (2): the life gained is 4, the card's mana value in the graveyard.
-    let clone = t.graveyard(P0, "Clone");
-    t.answer_targets(P0, &[obj(clone)]);
-    t.answer_yes(P0, true);
-    t.answer_choose(P0, &[obj(bears)]);
-    t.enter(P0, "Sister Hospitaller");
-    t.resolve_all();
-    let returned = t.g.current(clone);
-    assert_eq!(t.zone(returned), Zone::Battlefield);
-    assert_eq!(t.obj_now(returned).chars.name, "Grizzly Bears");
-    assert_eq!(mana_value(&t, returned), 2);
-    assert_eq!(t.life(P0), 24, "{}", t.dump_log());
 }
 
 #[test]
