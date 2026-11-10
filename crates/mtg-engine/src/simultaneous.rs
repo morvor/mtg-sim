@@ -221,6 +221,12 @@ fn adds_to_collected(e: &Effect) -> bool {
         // Each player's own piles (`piles.rs`).
         Effect::Piles(a) => a.collects(),
         Effect::Store { var, sel } => mentions(sel, *var),
+        // A store made on a coin flip's result ("flip a coin for each creature. Destroy
+        // each creature whose coin comes up tails": the objects whose coins came up tails,
+        // collected over the flips).
+        Effect::FlipCoins(c) => [&c.on_win, &c.on_lose, &c.on_heads, &c.on_tails]
+            .into_iter()
+            .any(adds_to_collected),
         Effect::May { effect, .. } | Effect::AsPlayer { effect, .. } => adds_to_collected(effect),
         // A choice each of several players makes, added to what was chosen before, in
         // each pass of a loop ("For each fellowship vote, the voter chooses a creature they
@@ -242,6 +248,11 @@ fn updates_number(e: &Effect) -> bool {
     fn stored(e: &Effect, out: &mut Vec<Var>) {
         match e {
             Effect::StoreValue { var, .. } => out.push(*var),
+            Effect::FlipCoins(c) => {
+                for e in [&c.on_win, &c.on_lose, &c.on_heads, &c.on_tails] {
+                    stored(e, out);
+                }
+            }
             Effect::May { effect, .. } | Effect::AsPlayer { effect, .. } => stored(effect, out),
             Effect::If {
                 then, otherwise, ..

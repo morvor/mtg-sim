@@ -2,3 +2,4 @@ Raise Dead	You must show the card you bring out of the graveyard to your opponen
 Surreal Memoir	you must differentiate them so you know which one (if any) is chosen at random	physical procedure for choosing a card at random among identical cards; the engine identifies every object and picks uniformly at random
 Surreal Memoir	you may not reorder your graveyard. In this case, you need to be more careful when selecting an instant card at random	physical procedure and graveyard-order tournament policy for older formats; no engine-testable content
 Surreal Memoir	the easiest way to choose an instant card at random from your graveyard is to take all the instant cards	physical procedure for choosing a card at random; no engine-testable content
+Spellmorph Raise Dead	You must ensure that your face-down spells and permanents can easily be differentiated from each other	Physical presentation: how to keep face-down objects apart on the table; the engine identifies objects by id

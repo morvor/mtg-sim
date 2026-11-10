@@ -1,0 +1,3 @@
+# Ruling texts left OPEN for a named reason (worker.md, rulings brief (c) UNCOVERED): every card they apply to is unsupported, or the engine lacks the behavior and the fix is not small. scripts/rulings_batches.py has no such status, so finish-line-plan criterion C1 reconciles its OPEN count against this list. One line per text: Card<TAB>substring of the ruling<TAB>reason.
+Card	substring	reason
+Tenacious Pup	A one-time boon is a single-use triggered ability with no source	the only card is unsupported: boons are a digital-only mechanic (docs/DEFERRED.md, digital-only cards); the paper printing is legal only in Arena formats

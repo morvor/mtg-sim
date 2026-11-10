@@ -61,6 +61,7 @@ mod once_each_turn;
 mod opt_in;
 mod outcomes;
 mod pairs5_terms;
+mod pairs6_terms;
 mod pairs_terms;
 mod play_terms;
 mod players;
@@ -215,6 +216,7 @@ fn render_abilities_with(abilities: &[Ability], info: &FaceInfo, static_if: bool
             .or_else(|| r.otherwise_group(&abilities[i..]))
             .or_else(|| r.exactly_one_static(&abilities[i..]))
             .or_else(|| r.cast_or_activate_group(&abilities[i..]))
+            .or_else(|| r.once_each_turn_zones_group(&abilities[i..]))
         {
             out.lines.push(line);
             skip = n - 1;
@@ -807,6 +809,12 @@ pub struct Renderer<'a> {
     pub(crate) extra: custom_extra::ExtraState,
     /// Target slots of the body being rendered.
     pub(crate) targets: Vec<TargetSpec>,
+    /// The name of the token whose abilities are being rendered, which they call it by
+    /// ("Jumblebones can't block").
+    pub(crate) token_self: Option<String>,
+    /// An earlier instruction of the sequence looked at the top card of your library, so
+    /// "it" names that card ("you may cast it").
+    pub(crate) top_looked: bool,
     /// Which target slots have been introduced ("target creature") already; later
     /// mentions are anaphoric ("it").
     pub(crate) introduced: Vec<bool>,
@@ -1061,6 +1069,8 @@ impl<'a> Renderer<'a> {
             gaps: Vec::new(),
             extra: Default::default(),
             targets: Vec::new(),
+            token_self: None,
+            top_looked: false,
             introduced: Vec::new(),
             quote_depth: 0,
             grants_to_equipment: false,
@@ -1181,6 +1191,18 @@ impl<'a> Renderer<'a> {
     pub(crate) fn me(&mut self) -> String {
         if self.in_emblem == Some(self.quote_depth) {
             return "{alt:this emblem|~}".into();
+        }
+        // A token's own abilities name it ("Jumblebones can't block") or say "this
+        // creature" (which the comparison reads as the object itself).
+        if let Some(n) = self.token_self.clone() {
+            if self.self_salient && !self.other_salient {
+                return format!("{{alt:~it|{n}}}");
+            }
+            self.self_salient = true;
+            if self.other_salient {
+                self.self_named_in_clause = true;
+            }
+            return format!("{{alt:~|{n}}}");
         }
         if self.self_salient && !self.other_salient {
             "~it".to_string()
@@ -1560,6 +1582,8 @@ impl<'a> Renderer<'a> {
                 // "When you pay this cost one or more times, choose up to that many":
                 // the times it was paid.
                 _ if matches!(m.max, Value::X) && self.extra.x_paid => "up to that many".into(),
+                // "Choose X": exactly that many modes.
+                _ if format!("{:?}", m.min) == format!("{:?}", m.max) => self.value(&m.max),
                 _ => {
                     let v = self.value(&m.max);
                     format!("up to {v}")

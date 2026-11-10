@@ -93,7 +93,7 @@ pub(crate) fn custom_rel(name: &str) -> Option<CustomQuality> {
             rel("{alt:milled this turn|that was milled this turn|that were milled this turn}")
         }
         crate::kw::graveyard_history::PUT_THERE_FROM_LIBRARY => rel(
-            "{alt:that were put there from your library this turn|that were put there from libraries this turn}",
+            "{alt:that were put there from your library this turn|that were put there from libraries this turn|that was put there from a library this turn}",
         ),
         crate::kw::graveyard_history::PUT_THERE_NOT_FROM_BATTLEFIELD => {
             rel("that were put there from anywhere other than the battlefield this turn")

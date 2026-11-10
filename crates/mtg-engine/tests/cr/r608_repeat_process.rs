@@ -2,9 +2,12 @@
 //! with new choices, after each pass that reaches the instruction — decided anew from
 //! each pass's results, all while the spell or ability resolves.
 
+use crate::r703_common::add_scheme_deck;
 use mtg_engine::decision::Decision;
+use mtg_engine::game::GameConfig;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
+use mtg_engine::variants;
 use mtg_engine::*;
 
 fn assert_supported(name: &str) {
@@ -107,4 +110,47 @@ fn hoarders_greed_repeats_after_a_clash_won_by_a_followup_sentence() {
     // Two passes: 4 life lost and 4 cards drawn.
     assert_eq!(t.life(P0), 16);
     assert_eq!(t.library_size(P0), lib - 4);
+}
+
+/// "No Secret Is Hidden from Me" set in motion by P0, who controls `lands` Plains, with
+/// P0's library (top first) Forest, Grizzly Bears, Forest, Hill Giant; P0 casts whatever
+/// it offers; everything resolves. Returns the game and the four cards in that order.
+fn no_secret(lands: usize) -> (TestGame, [ObjectId; 4]) {
+    let mut t = TestGame::with_config(3, GameConfig::archenemy_game(vec![0, 1, 1]));
+    t.lands(P0, "Plains", lands);
+    let giant = t.library_top(P0, "Hill Giant");
+    let forest2 = t.library_top(P0, "Forest");
+    let bears = t.library_top(P0, "Grizzly Bears");
+    let forest1 = t.library_top(P0, "Forest");
+    add_scheme_deck(&mut t, P0, vec![(*card("No Secret Is Hidden from Me")).clone()]);
+    for _ in 0..2 {
+        t.answer_yes(P0, true);
+    }
+    variants::set_in_motion(&mut t.g, P0);
+    t.settle();
+    t.resolve_all();
+    (t, [forest1, bears, forest2, giant])
+}
+
+#[test]
+fn no_secret_is_hidden_from_me_repeats_both_the_exiling_and_the_casting() {
+    cr!("608.2c");
+    assert_supported("No Secret Is Hidden from Me");
+    // "Exile cards from the top of your library until you exile a nonland card. You may
+    // cast that card without paying its mana cost. Then if you control six or more lands,
+    // repeat this process once.": the process is both instructions, so with six lands a
+    // second nonland card is exiled and may be cast too.
+    let (t, [forest1, bears, forest2, giant]) = no_secret(6);
+    assert_eq!(t.zone(forest1), Zone::Exile);
+    assert_eq!(t.zone(forest2), Zone::Exile);
+    assert!(t.on_battlefield(bears), "{}", t.dump_log());
+    assert!(t.on_battlefield(giant), "{}", t.dump_log());
+    assert_eq!(yes_no_asked(&t, P0), 2);
+    // Five lands: once.
+    let (t, [forest1, bears, forest2, giant]) = no_secret(5);
+    assert_eq!(t.zone(forest1), Zone::Exile);
+    assert!(t.on_battlefield(bears));
+    assert_eq!(t.zone(forest2), Zone::Library(P0));
+    assert_eq!(t.zone(giant), Zone::Library(P0));
+    assert_eq!(yes_no_asked(&t, P0), 1);
 }

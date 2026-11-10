@@ -669,7 +669,7 @@ impl Renderer<'_> {
                     Sel::All(f) => self.noun_det(f, Det::A),
                     _ => self.sel(s, Case::Obj),
                 };
-                np.post.push(format!("attached to {w}"));
+                np.post.push(format!("{{alt:attached to|that's attached to}} {w}"));
             }
             // "with toughness greater than its power": a value of the object itself
             // compared with another.
@@ -898,7 +898,12 @@ impl Renderer<'_> {
             Filter::SameNameAs(s) => {
                 let s = self.shared_with(s);
                 let s = s.replace("|each card exiled with ~it}", "|a card exiled with ~it}");
-                np.with.push(format!("the same name as {s}"));
+                // "cards with that name": the name of the card just named.
+                if s == "it" {
+                    np.with.push("{alt:the same name as it|that name}".into());
+                } else {
+                    np.with.push(format!("the same name as {s}"));
+                }
             }
             Filter::DifferentNameFrom(s) => {
                 let s = self.sel(s, Case::Obj);
@@ -1028,7 +1033,7 @@ impl Renderer<'_> {
                     && matches!(s.as_ref(), Sel::Var(v) if *v == crate::ability::vars::IT) =>
             {
                 np.post.push(
-                    "{alt:among them|from among them|from among the milled cards|from among them milled this way}"
+                    "{alt:among them|from among them|from among the milled cards|from among them milled this way|milled this way}"
                         .into(),
                 );
             }
@@ -1247,6 +1252,8 @@ impl Renderer<'_> {
             return;
         }
         match inner {
+            // "a spell that's one or more colors without {X} in its mana cost".
+            Filter::HasX => np.post.push("without {X} in its mana cost".into()),
             Filter::Type(t) => np.nons.push(format!("non{}", t.word())),
             Filter::Subtype(s) => np.nons.push(format!("non-{s}")),
             Filter::Supertype(s) => np.nons.push(format!("non{}", supertype_word(*s))),

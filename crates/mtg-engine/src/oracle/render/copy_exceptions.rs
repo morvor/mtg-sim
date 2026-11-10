@@ -85,7 +85,7 @@ impl Renderer<'_> {
         };
         let typed = !types.is_empty() || !subtypes.is_empty() || !supers.is_empty();
         let tail = if set_types {
-            " and loses all other card types".to_string()
+            " and {opt:it} loses all other card types".to_string()
         } else if added_colors {
             " in addition to its other colors and types".to_string()
         } else if types.is_empty() && supers.is_empty() && !subtypes.is_empty() {

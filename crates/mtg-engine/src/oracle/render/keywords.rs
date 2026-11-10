@@ -24,8 +24,10 @@ impl Renderer<'_> {
     /// nightbound). The engine tells these apart by the keyword's name text.
     fn variant(k: &Keyword) -> Option<&'static str> {
         let t = k.text.as_deref().unwrap_or("").to_lowercase();
-        let pairs: [(&str, &str); 9] = [
+        let pairs: [(&str, &str); 10] = [
             ("megamorph", "megamorph"),
+            // CR 702.43c (`kw/modular.rs`: is_sunburst).
+            ("modular—sunburst", "modular—sunburst"),
             // CR 702.49d (`kw/ninjutsu.rs`: is_commander_ninjutsu).
             ("commander ninjutsu", "commander ninjutsu"),
             ("multikicker", "multikicker"),
@@ -353,6 +355,10 @@ impl Renderer<'_> {
             }
             Filter::Or(v) => {
                 let parts: Vec<String> = v.iter().map(|x| self.quality(x)).collect();
+                // "hexproof from activated and triggered abilities".
+                if parts == ["activated abilities", "triggered abilities"] {
+                    return "{alt:activated abilities and triggered abilities|activated and triggered abilities}".into();
+                }
                 join_list(&parts, "and")
             }
             // "protection from each color among permanents you control": from everything
@@ -362,6 +368,9 @@ impl Renderer<'_> {
                     let n = self.noun(among, Num::Many);
                     format!("each color among {n}")
                 }
+                // "hexproof from each of its colors": from everything that shares a
+                // color with the object itself.
+                Sel::This => "each of its colors".into(),
                 _ => self.noun(f, Num::Many),
             },
             other => self.noun(other, Num::Many),
