@@ -1246,6 +1246,11 @@ impl Game {
                         spell: Some(*spell),
                         player: Some(*player),
                         spell_targets: self.spell_object_targets(*spell),
+                        // The event's amount is the spell's mana value, as the trigger saw
+                        // it ("Whenever you cast a spell with mana value equal to the
+                        // number of doom counters on ~, ~ deals that much damage",
+                        // Imminent Doom: the counters as it triggered, CR 608.2h).
+                        amount: self.mana_value_of(*spell) as i32,
                         ..Default::default()
                     })
                 } else {
