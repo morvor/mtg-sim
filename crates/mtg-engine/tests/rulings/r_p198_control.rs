@@ -163,26 +163,30 @@ fn simic_manipulator_checks_power_again_on_resolution() {
 
 #[test]
 fn daring_thief_relevant_card_types_include_artifact() {
-    cr!("701.12b", "205.2a");
+    cr!("701.12b", "205.2a", "601.2c", "603.3d");
     ruling!(
         "Daring Thief",
         "The relevant card types (that is, the ones a nonland permanent can have) are artifact, battle, creature, enchantment, kindred, and planeswalker."
     );
     supported("Daring Thief");
-    // An artifact and an artifact creature share a card type; an artifact and a
-    // nonartifact creature don't.
-    for (theirs_name, exchanged) in [("Ornithopter", true), ("Grizzly Bears", false)] {
+    // An artifact and an artifact creature share a card type; an artifact and an
+    // enchantment don't (nor do the Thief, a creature, and the enchantment: with no pair
+    // to choose, the trigger has no targets and is removed, CR 601.2c, 603.3d).
+    for (theirs_name, exchanged) in [("Ornithopter", true), ("Glorious Anthem", false)] {
         let mut t = TestGame::new(2);
         let thief = t.battlefield(P0, "Daring Thief");
         let ring = t.battlefield(P0, "Sol Ring");
         let theirs = t.battlefield(P1, theirs_name);
         t.g.tap(thief);
+        let from = t.asked().len();
         t.answer_targets(P0, &[obj(ring)]);
         t.answer_targets(P0, &[obj(theirs)]);
         t.answer_yes(P0, true);
         t.g.untap(thief);
         t.g.flush_events();
         t.resolve_all();
+        let cands = crate::r_s02_common::target_candidates(&t, P0, from);
+        assert_eq!(cands.is_empty(), !exchanged, "{theirs_name}: {cands:?}");
         assert_eq!(ctl(&t, ring) == P1, exchanged, "{theirs_name}");
         assert_eq!(ctl(&t, theirs) == P0, exchanged, "{theirs_name}");
     }

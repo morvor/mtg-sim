@@ -431,8 +431,9 @@ impl Game {
         })
     }
 
-    /// The candidates for slot `i` whose description refers to the player chosen for an
-    /// earlier slot `j` ("target creature that player controls"), with the earlier slot's
+    /// The candidates for slot `i` whose description refers to the target chosen for an
+    /// earlier slot `j` ("target creature that player controls", "target nonland permanent
+    /// an opponent controls with equal or lesser mana value"), with the earlier slot's
     /// legal target that gives the most of them; None if it doesn't refer to one.
     fn candidates_with_earlier_target(
         &self,
@@ -441,13 +442,7 @@ impl Game {
         ctx: &Ctx,
         stack_obj: ObjectId,
     ) -> Option<Vec<Entity>> {
-        let TargetKind::Object(f) = &specs[i].what else {
-            return None;
-        };
-        let j = (0..i).find(|j| {
-            matches!(specs[*j].what, TargetKind::Player(_))
-                && format!("{f:?}").contains(&format!("ControlledByPlayer(Target({j}))"))
-        })?;
+        let j = (0..i).find(|j| mentions_target(&specs[i], *j))?;
         self.legal_target_candidates(&specs[j], ctx, stack_obj)
             .into_iter()
             .map(|p| {
@@ -987,12 +982,20 @@ impl Game {
                     });
                 }
             }
-            // A later slot whose targets must be related to this one's needs one to go
-            // with each target chosen here.
-            let partners: Vec<usize> = (0..specs.len())
+            // A later slot whose targets must be related to this one's ("another target
+            // creature with the same controller"), or whose description refers to this
+            // one's target ("target nonland permanent an opponent controls with equal or
+            // lesser mana value", Puca's Mischief), needs one to go with each target
+            // chosen here: the targets are chosen so that, as a set, they meet every
+            // targeting condition (CR 601.2c), so a target that leaves a required later
+            // instance of "target" nothing legal isn't one to choose.
+            let partners: Vec<usize> = order[pos + 1..]
+                .iter()
+                .copied()
                 .filter(|k| {
                     let s = &specs[*k];
-                    s.related_to.as_ref().is_some_and(|(j, _)| *j as usize == i)
+                    (s.related_to.as_ref().is_some_and(|(j, _)| *j as usize == i)
+                        || mentions_target(s, i))
                         && s.condition.is_none()
                         && s.per_player.is_none()
                         && self.target_min(s, ctx) > 0
@@ -1978,6 +1981,12 @@ fn filter_mentions_attached(f: &Filter) -> bool {
         Filter::And(v) | Filter::Or(v) => v.iter().any(filter_mentions_attached),
         _ => false,
     }
+}
+
+/// Whether the description of target slot `spec` refers to the target chosen for slot
+/// `j` ("that player", "with equal or lesser mana value": `Sel::Target(j)`).
+fn mentions_target(spec: &TargetSpec, j: usize) -> bool {
+    format!("{:?}", spec.what).contains(&format!("Target({j})"))
 }
 
 fn distinct(v: &[Entity]) -> bool {
