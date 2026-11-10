@@ -176,6 +176,7 @@ fn morbid_curiosity_uses_the_mana_value_immediately_before_the_sacrifice() {
 #[test]
 fn expel_the_unworthy_uses_the_mana_value_as_it_last_existed_on_the_battlefield() {
     cr!("608.2h");
+    interp!("moved-object-values-as-it-last-existed");
     ruling!(
         "Expel the Unworthy",
         "Use the creature's mana value as it last existed on the battlefield to determine how much life its controller gains."
@@ -194,6 +195,7 @@ fn expel_the_unworthy_uses_the_mana_value_as_it_last_existed_on_the_battlefield(
 #[test]
 fn sister_hospitaller_uses_the_mana_value_as_it_last_existed_in_the_graveyard() {
     cr!("608.2h", "614.1c", "400.7");
+    interp!("moved-object-values-as-it-last-existed");
     ruling!(
         "Sister Hospitaller",
         "Use the mana value of the card as it last existed in the graveyard to determine the amount of life you gain."
