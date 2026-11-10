@@ -211,6 +211,16 @@ impl Renderer<'_> {
         format!("the {word} {stat} among {s}")
     }
 
+    /// [`Value::OfChosen`]: "the mana value of a commander you own on the battlefield or
+    /// in the command zone", one object the controller picks from several.
+    pub(crate) fn of_chosen_value(&mut self, f: &Filter, of: &Value) -> String {
+        let Some(stat) = tested_stat(of) else {
+            return self.gap("Value::OfChosen");
+        };
+        let n = self.noun(f, Num::One);
+        format!("the {stat} of {n}")
+    }
+
     /// [`Value::OverPlayers`]: each matching player's value, combined.
     pub(crate) fn over_players_value(&mut self, op: AggOp, pf: &PlayerFilter, v: &Value) -> String {
         let iterated = |p: &PlayerRef| matches!(p, PlayerRef::Iterated);

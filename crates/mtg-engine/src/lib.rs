@@ -43,6 +43,7 @@ pub mod cases;
 pub mod casting;
 pub mod casual;
 pub mod choices;
+pub mod chosen_object_value;
 pub mod classes;
 pub mod combat;
 pub mod commander_rules;

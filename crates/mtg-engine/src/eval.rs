@@ -1793,6 +1793,9 @@ impl Game {
             Value::Extreme(of, sel, greatest) => {
                 crate::relational::extreme(self, of, sel, *greatest, ctx)
             }
+            Value::OfChosen { filter, of, store } => {
+                crate::chosen_object_value::eval(self, filter, of, *store, ctx)
+            }
             Value::GreatestPower(f) => self
                 .objects_matching(f, ctx)
                 .iter()

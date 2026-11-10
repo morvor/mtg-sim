@@ -348,6 +348,9 @@ fn atom_ext(s: &str, b: &mut Builder) -> Option<(Value, String)> {
                 if let Some((sel, rest)) = referent(r, b) {
                     return Some((of_referent(stat, sel), rest));
                 }
+                if let Some(v) = one_of_several(stat, r, b) {
+                    return Some(v);
+                }
             }
         }
     }
@@ -400,6 +403,47 @@ pub(crate) fn stat_word(s: &str) -> Option<(Stat, &str)> {
         }
     }
     None
+}
+
+/// "The [characteristic] of a [object]" naming one object of several ("the mana value of
+/// a commander you own on the battlefield or in the command zone", Stinging Study): the
+/// controller picks one of the objects the description matches as the effect resolves (CR
+/// 608.2c; with two commanders, CR 702.124e; interpretation `a-commander-you-own-is-chosen`).
+/// Not "the total ..." or "the greatest ...", which take them all.
+fn one_of_several(stat: Stat, r: &str, b: &mut Builder) -> Option<(Value, String)> {
+    let r = r.strip_prefix("a ").or_else(|| r.strip_prefix("an "))?;
+    // Objects in either of two zones: "on the battlefield or in the command zone".
+    let (filter, rest) = match r.split_once(" on the battlefield or in the command zone") {
+        Some((head, tail)) if word_end(tail) => {
+            let (f, r2) = objects(head, b)?;
+            if !r2.trim().is_empty() {
+                return None;
+            }
+            // The zones say where the objects are: not permanents only.
+            let parts = match f {
+                Filter::And(v) => v,
+                other => vec![other],
+            };
+            let mut parts: Vec<Filter> = parts
+                .into_iter()
+                .filter(|p| !matches!(p, Filter::Permanent))
+                .collect();
+            parts.push(Filter::Or(vec![
+                Filter::InZone(ZoneKind::Battlefield),
+                Filter::InZone(ZoneKind::Command),
+            ]));
+            (Filter::and(parts), tail.to_string())
+        }
+        _ => objects(r, b)?,
+    };
+    Some((
+        Value::OfChosen {
+            filter,
+            of: Box::new(of_referent(stat, Sel::Var(vars::TESTED))),
+            store: vars::CHOSEN_FOR_VALUE,
+        },
+        rest,
+    ))
 }
 
 pub(crate) fn of_referent(stat: Stat, sel: Sel) -> Value {
