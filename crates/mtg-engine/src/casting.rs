@@ -4772,6 +4772,11 @@ fn proposal_may_change_qualities(chars: &Characteristics) -> bool {
 fn filter_mentions_mana_value(f: &Filter) -> bool {
     match f {
         Filter::ManaValue(..) | Filter::SharesManaValue(_) => true,
+        // "with an even mana value" (Void Winnower), "with an odd mana value".
+        Filter::Custom(name) => {
+            name == crate::kw::combat_limits::EVEN_MANA_VALUE
+                || name == crate::kw::combat_limits::ODD_MANA_VALUE
+        }
         Filter::And(fs) | Filter::Or(fs) => fs.iter().any(filter_mentions_mana_value),
         Filter::Not(f) => filter_mentions_mana_value(f),
         _ => false,
@@ -4785,6 +4790,7 @@ fn without_mana_value(f: &Filter) -> Filter {
     let never = || Filter::Not(Box::new(Filter::Any));
     match f {
         Filter::ManaValue(..) | Filter::SharesManaValue(_) => never(),
+        Filter::Custom(_) if filter_mentions_mana_value(f) => never(),
         Filter::Not(x) if filter_mentions_mana_value(x) => never(),
         Filter::And(fs) => Filter::And(fs.iter().map(without_mana_value).collect()),
         Filter::Or(fs) => Filter::Or(fs.iter().map(without_mana_value).collect()),
