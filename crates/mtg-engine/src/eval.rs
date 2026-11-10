@@ -35,6 +35,9 @@ pub struct Ctx {
     /// Current player in a "for each player" loop.
     pub iter_player: Option<PlayerId>,
     pub prev_happened: bool,
+    /// Whether the previous "you may" was taken (`Condition::PrevChosen`).
+    #[serde(default)]
+    pub prev_chosen: bool,
     pub prev_value: i64,
     /// How many times the event of a reflexive triggered ability that follows happened,
     /// set by an instruction that can happen "several times over": putting N counters on
@@ -1981,6 +1984,7 @@ impl Game {
                 .is_some_and(|c| c.paid.iter().any(|p| p == name)),
             Condition::WasCast => self.cast_info(ctx).is_some_and(|c| c.was_cast),
             Condition::PrevHappened => ctx.prev_happened,
+            Condition::PrevChosen => ctx.prev_chosen,
             Condition::PrevAffectedAny => !ctx.prev_affected.is_empty(),
             Condition::CastFrom(z) => self
                 .cast_info(ctx)

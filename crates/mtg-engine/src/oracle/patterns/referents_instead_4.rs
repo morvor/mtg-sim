@@ -812,8 +812,10 @@ fn may_return_to_battlefield_instead(l: &str, prev: &mut Effect, b: &mut Builder
                 to: Destination::battlefield(),
             }),
         },
+        // Declining the "instead" does the original; taking it is final even when the
+        // card then can't enter (an Aura with nothing to enchant stays put, CR 303.4g).
         Effect::If {
-            cond: Condition::Not(Box::new(Condition::PrevHappened)),
+            cond: Condition::Not(Box::new(Condition::PrevChosen)),
             then: Box::new(to_hand.clone()),
             otherwise: Box::new(Effect::Noop),
         },

@@ -276,10 +276,12 @@ fn f_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     }
     let old = std::mem::replace(prev, Effect::Noop);
     let e = match e {
+        // "you may [do this] instead": declining it does the original; taking it is final
+        // whatever then happens (CR 614.1a, 614.15).
         may @ Effect::May { .. } => Effect::seq(vec![
             may,
             Effect::If {
-                cond: Condition::Not(Box::new(Condition::PrevHappened)),
+                cond: Condition::Not(Box::new(Condition::PrevChosen)),
                 then: Box::new(old.clone()),
                 otherwise: Box::new(Effect::Noop),
             },

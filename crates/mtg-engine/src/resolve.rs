@@ -134,6 +134,7 @@ impl Game {
                         true,
                     );
                 ctx.prev_happened = yes;
+                ctx.prev_chosen = yes;
                 if yes {
                     // Effects that can fail to do what they say (sacrificing, paying,
                     // countering) record whether they did it ("if you do", "when you do").

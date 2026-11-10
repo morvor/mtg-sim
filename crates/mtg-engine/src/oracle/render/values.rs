@@ -1227,7 +1227,7 @@ impl Renderer<'_> {
             Condition::NotYourTurn => "it's not your turn".into(),
             Condition::CostPaid(name) => self.cost_paid(name),
             Condition::WasCast => "you cast it".into(),
-            Condition::PrevHappened => "you do".into(),
+            Condition::PrevHappened | Condition::PrevChosen => "you do".into(),
             Condition::PrevAffectedAny => "a card was affected this way".into(),
             // "If this spell was cast from a graveyard" (the zone it was cast from, CR
             // 601.2a); cards casting their own card say "if you cast it from your ...".
@@ -1319,7 +1319,7 @@ impl Renderer<'_> {
             Condition::Exists(f) => self.exists(f, true),
             Condition::YourTurn => "it's not your turn".into(),
             Condition::NotYourTurn => "it's your turn".into(),
-            Condition::PrevHappened => "you don't".into(),
+            Condition::PrevHappened | Condition::PrevChosen => "you don't".into(),
             // "if ~ didn't attack this turn".
             Condition::SelMatches(s, Filter::AttackedThisTurn) => {
                 let subj = self.sel(s, Case::Subj);

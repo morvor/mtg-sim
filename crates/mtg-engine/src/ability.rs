@@ -2190,6 +2190,14 @@ pub enum Condition {
     WasCast,
     /// The previous "you may" / optional cost in this resolution was taken ("if you do").
     PrevHappened,
+    /// The previous "you may" in this resolution was taken, whether or not what it offered
+    /// then happened: the choice to apply a "you may [do this] instead" self-replacement
+    /// (CR 614.1a, 614.15) is final, so the replaced instruction is done only when the
+    /// player declines. (`PrevHappened` records what was done: "you may return it to the
+    /// battlefield instead" with an Aura nothing can be enchanted by leaves it where it
+    /// is, CR 303.4g, Emeria Shepherd's ruling; "you may sacrifice a creature. If you do"
+    /// needs the sacrifice.)
+    PrevChosen,
     /// The previous effect affected at least one object/did something ("if a creature died this way").
     PrevAffectedAny,
     /// The spell/ability was cast from the given zone.
