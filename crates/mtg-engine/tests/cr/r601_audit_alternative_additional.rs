@@ -370,4 +370,16 @@ fn a_repeatable_additional_cost_is_paid_a_whole_number_of_times() {
     let chalice = t.g.current(chalice);
     assert!(t.on_battlefield(chalice));
     assert_eq!(t.counters(chalice, "charge"), 0);
+    // A number of times the player can't pay for makes the casting illegal, and nothing
+    // is paid: three times with four Wastes, and an absurd number (which the engine
+    // doesn't build the cost up from).
+    for times in [3, 1_000_000_000] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, "Wastes", 4);
+        let chalice = t.hand(P0, "Everflowing Chalice");
+        t.answer(P0, DecisionKind::OptionalCost, Answer::Number(times));
+        assert!(t.cast(P0, chalice).try_go().is_err(), "{times} times");
+        assert_eq!(untapped_lands(&t, P0), 4);
+        assert!(t.in_hand(P0, "Everflowing Chalice"));
+    }
 }

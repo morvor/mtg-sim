@@ -1692,6 +1692,13 @@ impl Game {
         let mut extra = Cost::free();
         for (name, cost, repeatable) in crate::keyword_impls::optional_additional_costs(self, id) {
             if repeatable {
+                // More times than the player could possibly pay for (each time costs at
+                // least one mana or one permanent) is unpayable whatever the number, so the
+                // number an agent answers is bounded before the cost is built up from it.
+                let most = self
+                    .max_mana_available(p)
+                    .saturating_add(self.battlefield.len() as u32)
+                    .saturating_add(100);
                 let n = match self.ask(
                     p,
                     Decision::OptionalCost {
@@ -1700,7 +1707,7 @@ impl Game {
                         repeatable: true,
                     },
                 ) {
-                    Answer::Number(n) if n >= 0 => n as u32,
+                    Answer::Number(n) if n >= 0 => (n as u32).min(most),
                     Answer::Bool(true) => 1,
                     _ => 0,
                 };
