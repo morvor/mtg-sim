@@ -24,11 +24,12 @@ fn p1_cancels(t: &mut TestGame, spell: ObjectId) {
 
 #[test]
 fn veiled_sentry_uses_the_mana_value_of_a_spell_that_left_the_stack() {
-    cr!("603.3", "608.2h", "603.4");
+    cr!("603.3", "608.2h", "603.4", "205.1a");
     ruling!(
         "Veiled Sentry",
         "If the spell is no longer on the stack when the triggered ability resolves, the mana value of the spell is still remembered."
     );
+    ruling!("Veiled Sentry", "When it turns into a creature, it is no longer an enchantment.");
     supported("Veiled Sentry");
     // The Giant still on the stack: a 4/4.
     let mut t = TestGame::new(2);
@@ -37,6 +38,14 @@ fn veiled_sentry_uses_the_mana_value_of_a_spell_that_left_the_stack() {
     cast(&mut t, P1, "Hill Giant", "3R", &[]);
     t.resolve();
     assert_eq!(t.pt(sentry), (4, 4), "{}", t.dump_log());
+    // Now a creature and no longer an enchantment (CR 205.1a), so a second spell doesn't
+    // trigger it (the intervening "if", CR 603.4): it stays a 4/4.
+    t.resolve_all();
+    assert!(!t.obj_now(sentry).is(CardType::Enchantment));
+    let bears = cast(&mut t, P1, "Grizzly Bears", "1G", &[]);
+    assert_eq!(t.g.stack.clone(), vec![bears], "no trigger");
+    t.resolve_all();
+    assert_eq!(t.pt(sentry), (4, 4));
     // Countered before the trigger resolves: still a 4/4.
     let mut t = TestGame::new(2);
     let sentry = t.battlefield(P0, "Veiled Sentry");
@@ -140,7 +149,7 @@ fn cast_triggers_resolve_before_the_spell_and_survive_its_countering() {
 
 #[test]
 fn skittering_cicada_gives_flash_to_colorless_spells_not_to_sorcery_speed_abilities() {
-    cr!("702.8a", "602.5a", "117.1a");
+    cr!("702.8a", "602.5d", "702.6a", "117.1a");
     ruling!(
         "Skittering Cicada",
         "Skittering Cicada's second ability applies only to casting spells. It does not, for example, change when you may activate abilities that can be activated \"only as a sorcery.\""
@@ -258,7 +267,7 @@ fn naya_soulbeasts_cast_trigger_resolves_while_it_is_on_the_stack() {
 
 #[test]
 fn dovescape_creates_the_birds_even_if_the_spell_isnt_countered_by_it() {
-    cr!("608.2c", "608.2h", "701.6b");
+    cr!("608.2c", "608.2h", "101.2");
     ruling!(
         "Dovescape",
         "The Bird tokens are created even if the spell isn't countered by Dovescape's ability. This may happen because the spell can't be countered, because it's already been countered, or because it's otherwise been removed from the stack by the time Dovescape's ability resolves."

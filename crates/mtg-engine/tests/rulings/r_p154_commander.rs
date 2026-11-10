@@ -77,7 +77,7 @@ fn stinging_study_with_two_commanders_uses_the_greatest_mana_value() {
 
 #[test]
 fn commander_bonuses_use_the_commanders_current_characteristics_wherever_it_is() {
-    cr!("903.3", "707.2", "613.2");
+    cr!("903.3", "903.3e", "707.2", "613.2");
     ruling!(
         "Tangleweave Armor",
         "It doesn't matter where your commander is (or commanders are, if you have more than one because of the partner ability or similar). The bonus will be calculated using your commander's current characteristics. (Mana value typically doesn't change, but your commander may become a copy of something else.)"

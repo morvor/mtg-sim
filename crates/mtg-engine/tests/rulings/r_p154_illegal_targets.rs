@@ -467,7 +467,7 @@ fn library_revealers_with_an_illegal_target_reveal_nothing() {
 
 #[test]
 fn reinterpret_still_lets_you_cast_when_the_target_cant_be_countered() {
-    cr!("608.2c", "701.6b");
+    cr!("608.2c", "101.2");
     ruling!(
         "Reinterpret",
         "If you target a spell that can’t be countered, like Heated Debate, you won’t counter the spell, but you will get to cast a spell with an equal or lesser mana value."

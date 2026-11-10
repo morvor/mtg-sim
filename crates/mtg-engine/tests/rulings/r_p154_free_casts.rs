@@ -39,11 +39,18 @@ fn rashmis_free_cast_pays_additional_costs_but_no_alternative_cost() {
         "If you cast a card \"without paying its mana cost,\" you can't choose to cast it for any alternative costs, such as emerge costs. You can, however, pay additional costs. If the card has any mandatory additional costs, such as that of Cathartic Reunion, those must be paid to cast the card."
     );
     supported("Rashmi, Eternities Crafter");
-    // Mulldrifter (5) revealed after Craw Wurm (6): cast for free, not evoked, so it stays.
+    // Mulldrifter (5) revealed after Craw Wurm (6): cast for free, not evoked, so it stays;
+    // evoke isn't even offered.
     let mut t = TestGame::new(2);
+    let from = t.asked().len();
     rashmi_reveals(&mut t, "Craw Wurm", "4GG", "Mulldrifter", |_| {});
     assert_eq!(count_named(&t, "Mulldrifter"), 1);
     assert_eq!(t.hand_size(P0), 2, "drew two");
+    assert!(
+        asked_of(&t, P0, from).iter().all(|d| !matches!(d, Decision::ChooseCastingMethod { .. })),
+        "no alternative cost offered: {:?}",
+        asked_of(&t, P0, from)
+    );
     // Tormenting Voice (2) after Hill Giant (4): a card must be discarded.
     let mut t = TestGame::new(2);
     let forest = t.hand(P0, "Forest");
@@ -205,7 +212,7 @@ fn vivien_lets_a_flash_creature_be_cast_from_the_library_at_instant_speed() {
 
 #[test]
 fn spark_of_creativity_keeps_the_exiled_cards_own_timing() {
-    cr!("117.1a", "608.2g");
+    cr!("117.1a");
     ruling!(
         "Spark of Creativity",
         "Spark of Creativity doesn't change when you can play the exiled card. For example, if you exile a creature card without flash, you can cast it only during your main phase when the stack is empty."
@@ -269,7 +276,7 @@ fn kellans_free_permanent_spell_with_x_has_x_0() {
 
 #[test]
 fn kellans_land_isnt_a_land_play() {
-    cr!("305.1", "305.2", "116.2a");
+    cr!("305.1", "305.2", "305.4", "116.2a");
     ruling!(
         "Kellan, the Kid",
         "Putting a land card onto the battlefield with Kellan’s last ability doesn’t count as playing a land. It can put a land card onto the battlefield even if you’ve already played your land for the turn."
@@ -323,4 +330,14 @@ fn kellan_uses_the_mana_value_of_the_split_half_cast() {
     assert!(!was_offered(&t, P0, from, giant));
     assert_eq!(count_named(&t, "Grizzly Bears"), 1);
     assert_eq!(t.life(P0), 16, "Shock and its copy");
+    // Cease itself ({1}{B/G}): mana value 2 on the stack (the ruling's "{1}{B}{G}" is a
+    // typo for the card's cost, see docs/RULING_DISCREPANCIES.md), 8 as a card.
+    let mut t = TestGame::new(2);
+    let cd = t.hand(P0, "Cease // Desist");
+    assert_eq!(mana_value(&t, cd), 8, "both halves off the stack");
+    mana(&mut t, P0, "1B");
+    let cease = t.cast(P0, cd).method(CastMethod::Half(0)).targets(&[]).target(pl(P0)).go();
+    assert_eq!(mana_value(&t, cease), 2);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 22);
 }

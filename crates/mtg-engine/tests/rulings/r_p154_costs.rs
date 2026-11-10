@@ -218,7 +218,7 @@ fn a_cost_reduced_by_mana_values_stays_determined_while_mana_abilities_are_activ
 
 #[test]
 fn eldritch_evolutions_sacrifice_is_a_cost() {
-    cr!("601.2b", "601.2h", "118.3", "601.3");
+    cr!("601.2b", "601.2h", "118.3");
     ruling!(
         "Eldritch Evolution",
         "Sacrificing a creature is part of Eldritch Evolution's cost. You can't sacrifice more creatures to search for more creature cards, and you can't cast Eldritch Evolution at all if you control no creatures."
@@ -250,7 +250,7 @@ fn eldritch_evolutions_sacrifice_is_a_cost() {
 
 #[test]
 fn manaplasm_uses_the_mana_value_not_the_cost_paid() {
-    cr!("202.3", "601.2f", "118.9d");
+    cr!("202.3", "601.2f", "118.8d", "118.9c");
     ruling!(
         "Manaplasm",
         "Mana value takes into account only the mana symbols printed in the upper right corner of the card. Manaplasm doesn't care about additional costs, alternative costs, cost-reduction effects, or what you actually paid to cast the spell."

@@ -280,6 +280,16 @@ fn argentum_masticore_stays_when_the_discard_has_no_legal_target() {
     crate::r_s04_common::next_upkeep(&mut t, P0);
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    // With no card in hand the discard can't be paid: the Masticore is sacrificed (CR
+    // 701.21a) and nothing triggers.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Argentum Masticore");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    assert_eq!(t.hand_size(P0), 0);
+    crate::r_s04_common::next_upkeep(&mut t, P0);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Argentum Masticore"));
+    assert!(t.on_battlefield(bears));
 }
 
 #[test]
@@ -367,7 +377,7 @@ fn nobody_can_respond_once_a_reveal_and_damage_spell_starts_resolving() {
 
 #[test]
 fn riveteers_ascendancy_returns_a_creature_only_once_each_turn() {
-    cr!("603.2", "603.12");
+    cr!("603.2", "603.2h");
     ruling!(
         "Riveteers Ascendancy",
         "Once you have chosen to return a creature to the battlefield, further instances of sacrificing creatures the same turn will not cause the ability to trigger."
@@ -526,7 +536,7 @@ fn rage_extractor_triggers_for_any_phyrexian_mana_symbol_however_paid() {
 
 #[test]
 fn the_lord_of_pain_lets_life_gain_spells_resolve_without_the_life() {
-    cr!("119.8", "608.2c");
+    cr!("119.7", "608.2c");
     ruling!(
         "The Lord of Pain",
         "Spells and abilities that cause opponents to gain life still resolve while The Lord of Pain is on the battlefield. They won't gain life, but any other effects of that spell or ability will still happen."

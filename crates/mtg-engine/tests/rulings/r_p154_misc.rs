@@ -75,7 +75,7 @@ fn sydri_animates_an_artifact_keeping_its_other_types() {
 
 #[test]
 fn spells_on_the_stack_use_the_chosen_x_for_their_mana_value() {
-    cr!("202.3e", "707.10", "702.179a");
+    cr!("202.3e", "707.10", "701.53a");
     ruling!(
         "Chrome Host Seedshark",
         "If the noncreature spell has {X} in its mana cost, use the value chosen for X when calculating that spell's mana value."
@@ -143,7 +143,7 @@ fn spells_on_the_stack_use_the_chosen_x_for_their_mana_value() {
 
 #[test]
 fn planeswalkers_fury_and_mirth_do_nothing_with_an_empty_hand() {
-    cr!("701.17a", "608.2c");
+    cr!("701.20a", "608.2c");
     ruling!(
         "Planeswalker's Fury",
         "If the opponent has no cards in hand, then no damage is dealt."
@@ -174,7 +174,7 @@ fn planeswalkers_fury_and_mirth_do_nothing_with_an_empty_hand() {
 
 #[test]
 fn shining_shoal_doesnt_redirect_damage_to_a_creature_that_left() {
-    cr!("614.1", "614.9", "608.2h");
+    cr!("614.1", "614.9");
     ruling!(
         "Shining Shoal",
         "If the player or creature that was targeted is no longer playing or on the battlefield when the damage would occur, the damage isn’t redirected."
@@ -277,7 +277,7 @@ fn scythe_specter_in_two_headed_giant_drains_the_team_for_each_member() {
 
 #[test]
 fn enchanters_bane_must_target_itself_when_it_is_the_only_enchantment() {
-    cr!("115.3", "603.3d");
+    cr!("601.2c", "603.3d");
     ruling!(
         "Enchanter's Bane",
         "If there are no other enchantments on the battlefield, the triggered ability of Enchanter's Bane must target Enchanter's Bane."
@@ -296,7 +296,7 @@ fn enchanters_bane_must_target_itself_when_it_is_the_only_enchantment() {
 
 #[test]
 fn brimaz_triggers_once_for_a_phyrexian_artifact_creature_spell() {
-    cr!("603.2c", "702.179a");
+    cr!("603.2c", "701.53a");
     ruling!(
         "Brimaz, Blight of Oreskos",
         "If you cast a Phyrexian artifact creature spell, Brimaz's first ability will trigger only once."
@@ -442,7 +442,7 @@ fn bell_borca_notes_the_exiled_cards_mana_value_and_leaves_it_exiled() {
 
 #[test]
 fn the_wedding_of_river_song_gives_suspend_without_counters_to_a_mana_value_0_card() {
-    cr!("702.62a", "702.62b", "702.62c");
+    cr!("702.62a", "702.62b");
     ruling!(
         "The Wedding of River Song",
         "If you exile a card with a mana value of 0, it will gain suspend, but no time counters will be placed on it. It can't be cast unless a time counter is later placed on it (and then, subsequently removed), and it isn't considered to be a \"suspended card.\""
@@ -484,7 +484,7 @@ fn combustible_gearhulks_draw_from_a_small_library_loses_the_game() {
 
 #[test]
 fn undying_flames_does_nothing_with_an_empty_library() {
-    cr!("608.2c", "702.50a");
+    cr!("608.2c");
     ruling!(
         "Undying Flames",
         "If you have no cards in your library, Undying Flames does nothing."
@@ -549,7 +549,7 @@ fn reanimated_permanents_are_exiled_when_their_controller_leaves_the_game() {
 
 #[test]
 fn cait_gets_no_counters_if_she_cant_discard() {
-    cr!("121.4", "701.8a", "608.2c");
+    cr!("121.4", "701.9a", "608.2c");
     ruling!(
         "Cait, Cage Brawler",
         "If you somehow can't discard a card (probably because you had no cards in hand and another effect prevented you from drawing cards), you won't put any counters on Cait no matter whether or not the defending player discarded a card or what that card's mana value is."
@@ -567,6 +567,8 @@ fn cait_gets_no_counters_if_she_cant_discard() {
     assert_eq!(t.counters(cait, counters::PLUS1), 0);
     assert_eq!(t.graveyard_size(P1), 1, "P1 discarded");
     assert_eq!(t.graveyard_size(P0), 0);
+    t.settle();
+    assert!(t.has_lost(P0), "drew from an empty library (CR 121.4)");
 }
 
 #[test]

@@ -608,6 +608,21 @@ decides whether they become a conflict case.
   be told apart (`tests/rulings/r_p061_draw_steps.rs`,
   `additional_draws_happen_after_the_draw_step_draw_when_the_trigger_resolves`). Whether
   either is worth reporting, or Kami's matches an older draw step rule, wasn't checked.
+- **Kellan, the Kid** (rulings-P154 review): "If the spell you cast that caused Kellan, the
+  Kid’s last ability to trigger is represented by a split card, the characteristics of the
+  half you didn’t cast are ignored while that spell is on the stack. For example, if you cast
+  the Cease half of Cease // Desist from the Murders at Karlov Manor release, that spell’s
+  mana value is 2 because Cease’s mana cost is {1}{B}{G}." (2024-04-12) gives Cease's mana
+  cost as {1}{B}{G}, which would have mana value 3; Cease's Oracle mana cost is {1}{B/G}
+  (Cease // Desist, Murders at Karlov Manor), mana value 2, so the ruling's conclusion
+  (mana value 2, CR 202.3d and 709.3a) is right and only the parenthetical cost is a typo
+  (the hybrid symbol written as two symbols). The set's release notes are after the ormos
+  mirror's last capture (2022), so whether Wizards' own text has the same words wasn't
+  checked. No kind fits a wrong cost inside a ruling whose conclusion holds; it stays
+  cited, tested with the mana value of a split half on the stack
+  (`tests/rulings/r_p154_free_casts.rs`, `kellan_uses_the_mana_value_of_the_split_half_cast`:
+  Cooperate cast by aftermath has mana value 3, not the combined 7, and Cease cast from
+  hand has mana value 2, not 3 or the combined 8).
 - Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (copying errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the
