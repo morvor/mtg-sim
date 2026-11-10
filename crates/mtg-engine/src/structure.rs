@@ -713,10 +713,18 @@ pub fn record_cast(g: &crate::game::Game, spell: crate::types::ObjectId) {
         .map(|m| {
             let cost = crate::ability::Cost::mana(m.clone());
             let x = cast.x.unwrap_or(0).max(0) as u32;
-            crate::kw::cost_changing_keywords(g, o.controller, spell, &o.chars, &cost, x)
-                .iter()
-                .map(|k| format!("{k:?}"))
-                .collect()
+            crate::kw::cost_changing_keywords(
+                g,
+                o.controller,
+                spell,
+                &o.chars,
+                &cast.method,
+                &cost,
+                x,
+            )
+            .iter()
+            .map(|k| format!("{k:?}"))
+            .collect()
         })
         .unwrap_or_default();
     // Spree: modes with additional costs were chosen (CR 702.172a).

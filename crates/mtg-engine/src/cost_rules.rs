@@ -49,11 +49,16 @@ pub fn halves(s: ManaSymbol) -> Option<[Half; 2]> {
 /// `c` half counts as mana of that color when the cost has no plain `c` symbol: its
 /// controller announces the nonhybrid equivalent they'll pay before the total cost is
 /// determined (CR 601.2b, 601.2f), and paying it with `c` lets the reduction remove it,
-/// which is never harder to pay than the other half.
+/// which is never harder to pay than the other half. So does a Phyrexian symbol of color
+/// `c`, a colored mana symbol (CR 107.4f) whose controller is taken to have announced
+/// paying it with mana rather than 2 life (interpretation
+/// `phyrexian-symbol-colored-reduction`).
 pub(crate) fn reduce_one_colored(cost: &mut ManaCost, c: Color, colored_only: bool) {
     let hybrid_with_c = |s: &ManaSymbol| match *s {
         ManaSymbol::Hybrid(a, b) | ManaSymbol::PhyrexianHybrid(a, b) => a == c || b == c,
-        ManaSymbol::TwoHybrid(a) | ManaSymbol::ColorlessHybrid(a) => a == c,
+        ManaSymbol::TwoHybrid(a) | ManaSymbol::ColorlessHybrid(a) | ManaSymbol::Phyrexian(a) => {
+            a == c
+        }
         _ => false,
     };
     if let Some(i) = cost

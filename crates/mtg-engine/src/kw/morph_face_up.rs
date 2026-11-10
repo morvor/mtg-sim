@@ -98,9 +98,10 @@ pub(crate) fn face_up_cost_and_way(
         // Its printed abilities.
         face_up_keyword(&card.front().chars.abilities)?
     };
-    // "All morph costs cost {2} more" (a megamorph cost is a morph cost, CR 702.37b).
+    // "All morph costs cost {2} more" (a megamorph cost is a morph cost, CR 702.37b): a
+    // special action's cost, with its increases and reductions applied now.
     let mut cost = if kind == KeywordKind::Morph {
-        super::modified_keyword_cost(g, o.controller, KeywordKind::Morph, &cost)
+        super::modified_keyword_cost_now(g, o.controller, KeywordKind::Morph, &cost)
     } else {
         cost
     };

@@ -193,6 +193,7 @@ pub fn cost_reductions_from_keywords(
     p: PlayerId,
     card: ObjectId,
     chars: &Characteristics,
+    method: &crate::object::CastMethod,
     cost: &mut Cost,
     x: u32,
 ) {
@@ -202,7 +203,7 @@ pub fn cost_reductions_from_keywords(
             m.reduce_generic(n);
         }
     }
-    crate::kw::cost_reductions(g, p, card, chars, cost, x);
+    crate::kw::cost_reductions(g, p, card, chars, method, cost, x);
 }
 
 /// How much less an affinity ability makes `card` cost to cast for `p` (CR 702.41a:

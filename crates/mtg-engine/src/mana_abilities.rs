@@ -323,6 +323,41 @@ fn production_units_raw(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaT
     }
 }
 
+/// Among the options of a "choose one" effect that each add mana ("Add {W}{W}, {W}{U}, or
+/// {U}{U}"), the first whose mana covers every type a pending payment planned for the
+/// ability (`Game::mana_hint`, one type per unit of mana): each hinted type is matched to
+/// a different unit of mana the option could make. `None` if an option doesn't add mana
+/// or none covers the hint (the player chooses then).
+pub(crate) fn option_making(
+    g: &Game,
+    options: &[(String, Effect)],
+    hint: &[ManaType],
+    ctx: &Ctx,
+) -> Option<usize> {
+    let units: Vec<Vec<Vec<ManaType>>> = options
+        .iter()
+        .map(|(_, e)| production_units(g, e, ctx))
+        .collect::<Option<_>>()?;
+    fn covers(units: &[Vec<ManaType>], hint: &[ManaType], used: &mut [bool]) -> bool {
+        let Some((t, rest)) = hint.split_first() else {
+            return true;
+        };
+        for (i, u) in units.iter().enumerate() {
+            if !used[i] && u.contains(t) {
+                used[i] = true;
+                if covers(units, rest, used) {
+                    return true;
+                }
+                used[i] = false;
+            }
+        }
+        false
+    }
+    units
+        .iter()
+        .position(|u| covers(u, hint, &mut vec![false; u.len()]))
+}
+
 /// The colors of mana in `p`'s commanders' combined color identity (CR 903.4, 702.124c),
 /// as established for their cards before the game began (CR 903.4a, 903.4b).
 pub fn commander_identity_types(g: &Game, p: PlayerId) -> Vec<ManaType> {

@@ -552,6 +552,7 @@ impl Game {
         let view = WithChars {
             id: card,
             chars: &chars,
+            face_down: self.obj(card).face_down,
         };
         let check = |r: &Restriction, s: Option<ObjectId>, c: PlayerId| -> bool {
             let Restriction::CantPlayLandCards { who, what } = r else {
@@ -648,7 +649,11 @@ impl Game {
                 continue;
             }
             let ctx = Ctx::new(Some(*src), *ctl);
-            let view = WithChars { id: card, chars };
+            let view = WithChars {
+                id: card,
+                chars,
+                face_down: self.obj(card).face_down,
+            };
             let f = as_spell_filter(&perm.what);
             if !self.player_rel_matches(perm.who, p, &ctx)
                 || !self.matches_view(&view, card, &f, &ctx)
@@ -1114,7 +1119,11 @@ impl Game {
     /// characteristics the spell would have given the choices made in its proposal
     /// (CR 601.3b, 601.3e).
     fn flash_permitted(&self, p: PlayerId, card: ObjectId, chars: &Characteristics) -> bool {
-        let view = WithChars { id: card, chars };
+        let view = WithChars {
+            id: card,
+            chars,
+            face_down: self.obj(card).face_down,
+        };
         self.statics
             .flash_permissions
             .iter()
@@ -1181,7 +1190,11 @@ impl Game {
             .iter()
             .filter(|(q, _)| *q == p)
             .count() as u32;
-        let view = WithChars { id: card, chars };
+        let view = WithChars {
+            id: card,
+            chars,
+            face_down: self.obj(card).face_down,
+        };
         let check = |r: &Restriction, s: Option<ObjectId>, c: PlayerId| -> bool {
             let mut ctx = Ctx::new(s, c);
             // The player the restriction is checked for ("from their graveyards").
@@ -1701,22 +1714,44 @@ impl Game {
                     cast_info.times_kicked += n;
                     cast_info.paid.push("kicker".into());
                 }
-            } else if (self.can_pay_cost_optimistic(p, &cost, Some(id), &chars)
-                || self.total_payable_with(p, id, &chars, opt, &extra, &cost))
-                && matches!(
-                    self.ask(
-                        p,
-                        Decision::OptionalCost {
-                            source: id,
-                            name: name.to_string(),
-                            repeatable: false
-                        }
-                    ),
-                    Answer::Bool(true)
-                )
-            {
+            } else {
+                // Whether it could be paid is judged with the effects that modify that
+                // keyword's costs ("Buyback costs cost {2} less", CR 601.2f), which apply
+                // to the total cost once the cost is announced: it's recorded on the spell
+                // for the check.
+                let affordable = {
+                    if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
+                        si.cast.paid.push(name.clone());
+                    }
+                    let ok = self.can_pay_cost_optimistic(p, &cost, Some(id), &chars)
+                        || self.total_payable_with(p, id, &chars, opt, &extra, &cost);
+                    if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
+                        si.cast.paid.pop();
+                    }
+                    ok
+                };
+                if !affordable
+                    || !matches!(
+                        self.ask(
+                            p,
+                            Decision::OptionalCost {
+                                source: id,
+                                name: name.to_string(),
+                                repeatable: false
+                            }
+                        ),
+                        Answer::Bool(true)
+                    )
+                {
+                    continue;
+                }
                 add_cost(&mut extra, &cost);
                 cast_info.paid.push(name.clone());
+                // Recorded on the spell now: the total cost is determined with the effects
+                // that modify this keyword's costs (CR 601.2f).
+                if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
+                    si.cast.paid.push(name.clone());
+                }
                 if name.as_str() == "kicker" || name.as_str() == "multikicker" {
                     cast_info.times_kicked += 1;
                     // CR 607.2i: abilities linked to a specific kicker cost refer to it.
@@ -1795,7 +1830,43 @@ impl Game {
         let x_ok = |n: i64| x_allowed.as_ref().is_none_or(|v| v.contains(&n));
         let mut x: i64 = 0;
         if base_cost_has_x {
-            let mut max = self.max_mana_available(p) as i64;
+            // Whether mana is paid for X: then the mana available bounds it. Otherwise X is
+            // paid some other way ("pay X life", "discard X cards") and what the player has
+            // of that bounds it (CR 107.3a, 601.2b; the feasibility check below narrows it).
+            let mana_x = match &opt.alt_cost {
+                Some(c) => c.mana.as_ref().is_some_and(|m| m.has_x()),
+                None => chars.mana_cost.as_ref().is_some_and(|m| m.has_x()),
+            } || extra.mana.as_ref().is_some_and(|m| m.has_x())
+                || opt
+                    .extra_cost
+                    .as_ref()
+                    .is_some_and(|c| c.mana.as_ref().is_some_and(|m| m.has_x()));
+            let mut max = if mana_x {
+                self.max_mana_available(p) as i64
+            } else {
+                let mut parts: Vec<&CostPart> = extra.parts.iter().collect();
+                if let Some(c) = &opt.alt_cost {
+                    parts.extend(c.parts.iter());
+                }
+                if let Some(c) = &opt.extra_cost {
+                    parts.extend(c.parts.iter());
+                }
+                for a in &chars.abilities {
+                    if let AbilityKind::Static(StaticAbility {
+                        effect:
+                            StaticEffect::CostModifier(CostModifier {
+                                applies_to: CostTarget::ThisSpell,
+                                change: CostChange::AdditionalCost(c),
+                                ..
+                            }),
+                        ..
+                    }) = &a.kind
+                    {
+                        parts.extend(c.parts.iter());
+                    }
+                }
+                self.x_bound_of_parts(p, &parts)
+            };
             // "Sacrifice a creature with power X or greater" (casualty X): X can be at
             // most the greatest power among the creatures to sacrifice, and if no mana is
             // paid for X, that's the only bound.
@@ -1809,14 +1880,6 @@ impl Game {
                     .map(|o| self.obj(*o).power() as i64)
                     .max()
                     .unwrap_or(0);
-                let mana_x = match &opt.alt_cost {
-                    Some(c) => c.mana.as_ref().is_some_and(|m| m.has_x()),
-                    None => chars.mana_cost.as_ref().is_some_and(|m| m.has_x()),
-                } || extra.mana.as_ref().is_some_and(|m| m.has_x())
-                    || opt
-                        .extra_cost
-                        .as_ref()
-                        .is_some_and(|c| c.mana.as_ref().is_some_and(|m| m.has_x()));
                 max = if mana_x { max.min(power) } else { power };
             }
             // An alternative cost that uses an object described with X ("exile a blue
@@ -2354,7 +2417,13 @@ impl Game {
                             )
                         } else {
                             crate::spell_costs::spells_change_applies_as(
-                                self, card, chars, f, &cm.change, &ctx,
+                                self,
+                                card,
+                                chars,
+                                matches!(opt.method, CastMethod::FaceDown(_)),
+                                f,
+                                &cm.change,
+                                &ctx,
                             )
                         }
                 }
@@ -2362,6 +2431,19 @@ impl Game {
             };
             if applies {
                 changes.add(self, &mut cost, &cm.change, &ctx);
+            }
+        }
+        // Effects that modify the costs of a keyword ("Dash costs you pay cost {2} less",
+        // "Buyback costs cost {2} less"): reductions of the keyword cost the spell is cast
+        // for and of the keyword additional costs announced for it, applied with the other
+        // reductions, after every increase (CR 601.2f, 118.9d). (Their increases are part
+        // of those costs already, see `kw::modified_keyword_cost`.)
+        for k in crate::kw::keyword_costs_being_paid(self, card, &opt.method) {
+            let less = crate::kw::keyword_cost_reductions(self, p, k);
+            if less > 0 {
+                changes
+                    .reductions
+                    .push(crate::activation_costs::Reduction::Generic(less));
             }
         }
         // "Spells you cast this way cost {2} less to cast": a reduction that comes with the
@@ -2390,7 +2472,15 @@ impl Game {
         changes.apply(&mut cost, |i, cur, s| {
             crate::cost_rules::chosen_half(self, card, i, cur, s)
         });
-        crate::keyword_impls::cost_reductions_from_keywords(self, p, card, chars, &mut cost, x);
+        crate::keyword_impls::cost_reductions_from_keywords(
+            self,
+            p,
+            card,
+            chars,
+            &opt.method,
+            &mut cost,
+            x,
+        );
         let x_left = crate::payment_rules::x_left(x_part, before, generic(&cost));
         // Changes applied after all others (e.g. a minimum total cost).
         crate::kw::global_spell_cost(self, p, card, &mut cost);
@@ -4654,6 +4744,56 @@ impl Game {
         self.player(p).mana_pool.total() as u32
             + crate::mana_abilities::potential_mana_count(self, p, None)
     }
+
+    /// The greatest value of X worth considering for the parts of a cost that use X other
+    /// than as mana (CR 107.3a, 601.2b): the life `p` has for "pay X life", their energy
+    /// for "pay X {E}", the cards in their library for "mill X", and how many objects or
+    /// counters there are for the parts that discard, sacrifice, exile, return, tap or
+    /// remove counters from X things. Whether each value can actually be paid is checked
+    /// one by one (`default_x::spell_x_feasible`); parts that describe their objects with X
+    /// ("with power X or greater") are bounded elsewhere.
+    fn x_bound_of_parts(&self, p: PlayerId, parts: &[&CostPart]) -> i64 {
+        let pl = self.player(p);
+        let objects =
+            || (self.permanents_controlled_by(p).len() + pl.graveyard.len() + pl.hand.len()) as i64;
+        let counters = || {
+            self.permanents()
+                .map(|o| o.counters.values().sum::<u32>() as i64)
+                .sum::<i64>()
+        };
+        let is_x = |v: &Value| matches!(v, Value::X);
+        parts
+            .iter()
+            .map(|part| match part {
+                CostPart::PayLife(v) if is_x(v) => pl.life.max(0) as i64,
+                CostPart::PayEnergy(v) if is_x(v) => pl.counter(counters::ENERGY) as i64,
+                CostPart::Mill(v) if is_x(v) => pl.library.len() as i64,
+                CostPart::Discard { count, .. }
+                | CostPart::Exile { count, .. }
+                | CostPart::ReturnToHand { count, .. }
+                | CostPart::TapUntapped { count, .. }
+                | CostPart::UntapTapped { count, .. }
+                | CostPart::Sacrifice { count, .. }
+                | CostPart::RevealFromHand { count, .. }
+                | CostPart::PutFromHandOnLibrary { count, .. }
+                    if is_x(count) =>
+                {
+                    objects()
+                }
+                CostPart::RemoveCounters { count, .. }
+                | CostPart::RemoveCountersFromAmong { count, .. }
+                | CostPart::RemoveCountersFromOne { count, .. }
+                | CostPart::AddCounters { count, .. }
+                | CostPart::PayPlayerCounters { count, .. }
+                    if is_x(count) =>
+                {
+                    counters().max(objects())
+                }
+                _ => 0,
+            })
+            .max()
+            .unwrap_or(0)
+    }
 }
 
 /// Whether `card` matches `f` with the characteristics `chars` it would have as the
@@ -4665,15 +4805,38 @@ pub(crate) fn matches_with_chars(
     f: &Filter,
     ctx: &Ctx,
 ) -> bool {
-    g.matches_view(&WithChars { id: card, chars }, card, f, ctx)
+    matches_with_chars_as(g, card, chars, g.obj(card).face_down, f, ctx)
+}
+
+/// [`matches_with_chars`] for a card that would be cast face down (`face_down`, CR 702.37c,
+/// 708.4: "Face-down creature spells you cast cost {1} less to cast") or face up.
+pub(crate) fn matches_with_chars_as(
+    g: &Game,
+    card: ObjectId,
+    chars: &Characteristics,
+    face_down: bool,
+    f: &Filter,
+    ctx: &Ctx,
+) -> bool {
+    g.matches_view(
+        &WithChars {
+            id: card,
+            chars,
+            face_down,
+        },
+        card,
+        f,
+        ctx,
+    )
 }
 
 /// A view of the game in which one object has substitute characteristics — used to check
 /// rules and effects against the characteristics a card would have as the spell being
-/// proposed (CR 601.3a–e).
+/// proposed (CR 601.3a–e), and whether it would be face down (CR 708.4).
 struct WithChars<'c> {
     id: ObjectId,
     chars: &'c Characteristics,
+    face_down: bool,
 }
 
 impl crate::eval::View for WithChars<'_> {
@@ -4686,6 +4849,13 @@ impl crate::eval::View for WithChars<'_> {
     }
     fn controller(&self, g: &Game, id: ObjectId) -> PlayerId {
         g.obj(id).controller
+    }
+    fn face_down(&self, g: &Game, id: ObjectId) -> bool {
+        if id == self.id {
+            self.face_down
+        } else {
+            g.obj(id).face_down
+        }
     }
 }
 

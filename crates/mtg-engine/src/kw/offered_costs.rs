@@ -207,6 +207,7 @@ pub fn extend_cast_options(g: &Game, p: PlayerId, card: ObjectId, out: &mut Vec<
                 g,
                 card,
                 &chars,
+                matches!(opt.method, CastMethod::FaceDown(_)),
                 &offer.spells,
                 &change,
                 &ctx,

@@ -282,13 +282,17 @@ pub trait KeywordRules: Sync + Send {
         chars: &mut Characteristics,
     ) {
     }
-    /// Reduce/modify the total cost of a spell being cast.
+    /// Reduce/modify the total cost of the spell `card` cast with `method` (CR 601.2f): a
+    /// cost reduction the keyword makes, applied after every increase and before the
+    /// effects that directly affect the total cost (Trinisphere). `card` may still be in
+    /// the zone it would be cast from (while checking whether it could be cast).
     fn cost_reduction(
         &self,
         g: &Game,
         p: PlayerId,
         card: ObjectId,
         kw: &Keyword,
+        method: &CastMethod,
         cost: &mut Cost,
         x: u32,
     ) {
@@ -1102,6 +1106,7 @@ pub fn cost_changing_keywords(
     p: PlayerId,
     card: ObjectId,
     chars: &Characteristics,
+    method: &CastMethod,
     cost: &Cost,
     x: u32,
 ) -> Vec<Keyword> {
@@ -1109,7 +1114,7 @@ pub fn cost_changing_keywords(
     for kw in chars.keywords() {
         for r in impls_for(kw.kind) {
             let mut c = cost.clone();
-            r.cost_reduction(g, p, card, kw, &mut c, x);
+            r.cost_reduction(g, p, card, kw, method, &mut c, x);
             if format!("{c:?}") != format!("{cost:?}")
                 && !out
                     .iter()
@@ -1127,13 +1132,14 @@ pub fn cost_reductions(
     p: PlayerId,
     card: ObjectId,
     chars: &Characteristics,
+    method: &CastMethod,
     cost: &mut Cost,
     x: u32,
 ) {
     let kws: Vec<Keyword> = chars.keywords().cloned().collect();
     for kw in &kws {
         for r in impls_for(kw.kind) {
-            r.cost_reduction(g, p, card, kw, cost, x);
+            r.cost_reduction(g, p, card, kw, method, cost, x);
         }
     }
 }
@@ -1751,11 +1757,48 @@ pub fn custom_trigger_looks_back(name: &str, ev: &Event) -> bool {
         .unwrap_or(false)
 }
 
-/// A keyword ability's cost that `p` pays, after the effects that modify that keyword's
-/// costs ("Buyback costs cost {2} less", "All morph costs cost {2} more", CR 601.2f):
-/// generic mana only, never below zero.
+/// A keyword ability's cost that `p` pays as part of casting a spell, with the cost
+/// increases that modify that keyword's costs ("Flashback costs your opponents pay cost
+/// {2} more", "All morph costs cost {2} more") added. The reductions ("Buyback costs cost
+/// {2} less", "Dash costs you pay cost {2} less") aren't applied here: they're part of the
+/// spell's total cost and apply after every increase, with the other reductions
+/// (CR 601.2f, 118.9d; see [`keyword_cost_reductions`] and `Game::total_cost_and_x`), so
+/// that Warbringer's {2} reduces a {1}{R} dash cost taxed by Sphere of Resistance to {R}
+/// rather than to {1}{R}.
 pub fn modified_keyword_cost(g: &Game, p: PlayerId, kind: KeywordKind, cost: &Cost) -> Cost {
+    let (increase, _) = keyword_cost_changes(g, p, kind);
     let mut cost = cost.clone();
+    if increase > 0 {
+        cost.mana
+            .get_or_insert_with(crate::mana::ManaCost::default)
+            .add(&crate::mana::ManaCost::generic(increase));
+    }
+    cost
+}
+
+/// The generic mana the effects that modify `kind`'s costs ("Dash costs you pay cost {2}
+/// less") take off a cost `p` pays for that keyword (CR 601.2f, 118.7a: generic mana
+/// only, never below zero).
+pub fn keyword_cost_reductions(g: &Game, p: PlayerId, kind: KeywordKind) -> u32 {
+    keyword_cost_changes(g, p, kind).1
+}
+
+/// A keyword ability's cost `p` pays outside casting a spell (the special action of
+/// turning a permanent face up, CR 702.37e): the increases and reductions that modify
+/// that keyword's costs are applied at once, increases first (CR 601.2f).
+pub fn modified_keyword_cost_now(g: &Game, p: PlayerId, kind: KeywordKind, cost: &Cost) -> Cost {
+    let mut cost = modified_keyword_cost(g, p, kind, cost);
+    let less = keyword_cost_reductions(g, p, kind);
+    if let (Some(m), true) = (cost.mana.as_mut(), less > 0) {
+        m.reduce_generic(less);
+    }
+    cost
+}
+
+/// The generic mana the functioning effects that modify `kind`'s costs add to, and take
+/// off, a cost `p` pays for that keyword: (increase, reduction).
+fn keyword_cost_changes(g: &Game, p: PlayerId, kind: KeywordKind) -> (u32, u32) {
+    let (mut more, mut less) = (0u32, 0u32);
     for (s, ctl, cm) in &g.statics.cost_modifiers {
         if !matches!(cm.applies_to, CostTarget::Keyword(k) if k == kind) {
             continue;
@@ -1765,22 +1808,35 @@ pub fn modified_keyword_cost(g: &Game, p: PlayerId, kind: KeywordKind, cost: &Co
             continue;
         }
         match &cm.change {
-            CostChange::ReduceGeneric(v) => {
-                let n = g.eval_value(v, &ctx).max(0) as u32;
-                if let Some(m) = cost.mana.as_mut() {
-                    m.reduce_generic(n);
-                }
-            }
-            CostChange::IncreaseGeneric(v) => {
-                let n = g.eval_value(v, &ctx).max(0) as u32;
-                cost.mana
-                    .get_or_insert_with(crate::mana::ManaCost::default)
-                    .add(&crate::mana::ManaCost::generic(n));
-            }
+            CostChange::ReduceGeneric(v) => less += g.eval_value(v, &ctx).max(0) as u32,
+            CostChange::IncreaseGeneric(v) => more += g.eval_value(v, &ctx).max(0) as u32,
             _ => {}
         }
     }
-    cost
+    (more, less)
+}
+
+/// The keywords whose costs are part of the total cost of the spell `card` cast with
+/// `method`, as far as effects that modify a keyword's costs are concerned (CR 601.2f):
+/// the keyword it's cast for ("Flashback costs you pay cost {2} less" on a spell cast
+/// with flashback), and the keyword additional costs its controller announced they'd pay
+/// ("Buyback costs cost {2} less" on a spell cast with buyback), recorded by their names
+/// in its cast information.
+pub fn keyword_costs_being_paid(g: &Game, card: ObjectId, method: &CastMethod) -> Vec<KeywordKind> {
+    let mut out = Vec::new();
+    if let CastMethod::Keyword(k) = method {
+        out.push(*k);
+    }
+    if let Some(si) = g.obj(card).stack.as_deref() {
+        for name in &si.cast.paid {
+            if let Some(k) = KeywordKind::from_name(name) {
+                if !out.contains(&k) {
+                    out.push(k);
+                }
+            }
+        }
+    }
+    out
 }
 
 pub fn custom_value(g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64> {

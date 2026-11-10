@@ -31,6 +31,7 @@ impl KeywordRules for Undaunted {
         p: PlayerId,
         _card: ObjectId,
         _kw: &Keyword,
+        _method: &crate::object::CastMethod,
         cost: &mut Cost,
         _x: u32,
     ) {

@@ -165,33 +165,13 @@ impl KeywordRules for Emerge {
         Ok(())
     }
 
-    /// CR 702.119a: once the total cost is determined (CR 601.2f), it's reduced by generic
-    /// mana equal to the chosen permanent's mana value. (Generic reductions don't depend
-    /// on the order they're applied in, and every increase is already included.)
-    fn pay_mana_otherwise(
-        &self,
-        g: &mut Game,
-        _p: PlayerId,
-        spell: ObjectId,
-        _kw: &Keyword,
-        cost: &mut Cost,
-    ) -> Result<(), Illegal> {
-        let emerged = g
-            .obj(spell)
-            .stack
-            .as_deref()
-            .is_some_and(|s| is_emerge(&s.cast.method));
-        if !emerged {
-            return Ok(());
-        }
-        if let (Some(c), Some(m)) = (chosen(g, spell), cost.mana.as_mut()) {
-            m.reduce_generic(g.mana_value_of(c));
-        }
-        Ok(())
-    }
-
-    /// For the check whether it could be cast for its emerge cost: the best reduction.
-    fn payable_otherwise(
+    /// CR 702.119a: the total cost is reduced by generic mana equal to the chosen
+    /// permanent's mana value. A cost reduction, applied as the total cost is determined
+    /// (CR 601.2f): after every increase (generic reductions don't depend on the order
+    /// they're applied in) and before the effects that directly affect the total cost,
+    /// such as Trinisphere's floor of three mana. While checking whether the card could be
+    /// cast for its emerge cost (no permanent chosen yet), the best reduction is assumed.
+    fn cost_reduction(
         &self,
         g: &Game,
         p: PlayerId,
@@ -199,17 +179,21 @@ impl KeywordRules for Emerge {
         kw: &Keyword,
         method: &CastMethod,
         cost: &mut Cost,
+        _x: u32,
     ) {
         if !is_emerge(method) {
             return;
         }
-        let best = candidates(g, p, card, kw)
-            .into_iter()
-            .map(|c| g.mana_value_of(c))
-            .max()
-            .unwrap_or(0);
+        let less = match chosen(g, card) {
+            Some(c) => g.mana_value_of(c),
+            None => candidates(g, p, card, kw)
+                .into_iter()
+                .map(|c| g.mana_value_of(c))
+                .max()
+                .unwrap_or(0),
+        };
         if let Some(m) = cost.mana.as_mut() {
-            m.reduce_generic(best);
+            m.reduce_generic(less);
         }
     }
 }

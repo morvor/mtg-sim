@@ -262,8 +262,19 @@ impl Game {
             Effect::RepeatThisProcess => crate::repeat_process::request(ctx),
             Effect::ChooseOne { who, options } => {
                 let p = self.eval_player(who, ctx).unwrap_or(ctx.controller);
-                let labels = options.iter().map(|(l, _)| l.clone()).collect();
-                let i = self.ask_option(p, ctx.source, "Choose one", labels);
+                // A mana ability that chooses what to add ("Add {W}{W}, {W}{U}, or {U}{U}")
+                // activated for a pending payment (CR 601.2g, 605.3a): the option that
+                // makes the mana the payment planned is chosen for the player.
+                let hinted = self.mana_hint.clone().and_then(|hint| {
+                    crate::mana_abilities::option_making(self, options, &hint, ctx)
+                });
+                let i = match hinted {
+                    Some(i) => i,
+                    None => {
+                        let labels = options.iter().map(|(l, _)| l.clone()).collect();
+                        self.ask_option(p, ctx.source, "Choose one", labels)
+                    }
+                };
                 if let Some((_, eff)) = options.get(i) {
                     self.exec(eff, ctx);
                 }

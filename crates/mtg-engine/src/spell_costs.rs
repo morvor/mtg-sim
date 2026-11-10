@@ -140,13 +140,15 @@ pub fn spells_change_applies(
 }
 
 /// [`spells_change_applies`] for `card` cast as a spell with the characteristics `chars`
-/// (one of its faces or halves, or an Adventure): only those characteristics are
-/// considered (CR 601.3e, 715.3a). A Dragon creature card's Adventure isn't a Dragon
-/// spell.
+/// (one of its faces or halves, or an Adventure), face down if `face_down` (CR 702.37c,
+/// 708.4): only those characteristics are considered (CR 601.3e, 715.3a). A Dragon
+/// creature card's Adventure isn't a Dragon spell; a card cast face down is a face-down
+/// creature spell ("Face-down creature spells you cast cost {1} less to cast").
 pub fn spells_change_applies_as(
     g: &Game,
     card: ObjectId,
     chars: &Characteristics,
+    face_down: bool,
     f: &Filter,
     change: &CostChange,
     ctx: &Ctx,
@@ -154,9 +156,16 @@ pub fn spells_change_applies_as(
     let f = crate::casting::as_spell_filter(f);
     if g.obj(card).zone != Zone::Stack && filter_has_targets(&f) {
         return is_reduction(change)
-            && crate::casting::matches_with_chars(g, card, chars, &assume_targets(&f, true), ctx);
+            && crate::casting::matches_with_chars_as(
+                g,
+                card,
+                chars,
+                face_down,
+                &assume_targets(&f, true),
+                ctx,
+            );
     }
-    crate::casting::matches_with_chars(g, card, chars, &f, ctx)
+    crate::casting::matches_with_chars_as(g, card, chars, face_down, &f, ctx)
 }
 
 /// Whether an alternative cost with this condition may be chosen for `card` now
