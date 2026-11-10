@@ -216,66 +216,40 @@ pub const COST_MOVED_SELF: Var = vars::USER + 133;
 /// objects they became in exile ("the exiled card", CR 400.7j). Other objects the cost
 /// moved (sacrificed permanents, discarded cards) aren't among them.
 pub const COST_EXILED: Var = vars::USER + 131;
-/// The object an instruction asks a value of ("its mana value", "the exiled card's
-/// power"), as it last existed in the public zone the resolving effect moved it from
-/// (CR 608.2h: the effect uses an object's current information if it's in the public zone
-/// it was expected to be in, and its last known information once it's no longer there;
-/// CR 113.7a). Applies to "it" (`vars::IT`) for an object the effect itself moved from
-/// the battlefield (its previous object is one the effect referred to, as a target or
-/// through a variable): the permanent as it last existed there, so an exiled copy's mana
-/// value is the copy's (Expel the Unworthy's ruling; interpretation
-/// `moved-object-values-as-it-last-existed`); and to "the exiled card" ([`COST_EXILED`])
-/// a cost exiled from a graveyard: the card as it last existed there (the rulings of
-/// Dread Defiler, Scour the Desert, Young Deathclaws and Ritual of the Returned;
-/// interpretation `exiled-card-power-as-it-last-existed-in-the-graveyard`). Any other
-/// object is itself: an object the effect finds in the public zone it moved it to
-/// (CR 400.7j) for anything but such a value, an object moved from a hidden zone, and a
-/// card the effect returned from a graveyard to the battlefield (Cleric Class's ruling
-/// reads its toughness there; Sister Hospitaller's ruling reads its mana value in the
-/// graveyard: a conflict left to the current information, interpretation
-/// `returned-card-values-current-on-the-battlefield`, provisional).
-pub fn moved_object_lki(g: &Game, sel: &Sel, o: ObjectId, ctx: &Ctx) -> ObjectId {
-    let names = |v: Var| match sel {
-        Sel::Var(x) => *x == v,
-        Sel::Union(u) => u.iter().any(|s| matches!(s, Sel::Var(x) if *x == v)),
+/// "The exiled card" exiled from a graveyard, for its power or toughness: the card as it
+/// last existed in the graveyard (CR 608.2h, 113.7a; the rulings of Dread Defiler, Scour
+/// the Desert, Young Deathclaws and Ritual of the Returned; interpretation
+/// `exiled-card-power-as-it-last-existed-in-the-graveyard`). Applies to a selection that
+/// names the card a cost exiled ([`COST_EXILED`], "the exiled card"), for an object in
+/// exile that the cost or the effect itself exiled (in [`COST_EXILED`] or the effect's
+/// `vars::IT`) from a graveyard. Any other object is itself.
+pub fn exiled_card_lki(g: &Game, sel: &Sel, o: ObjectId, ctx: &Ctx) -> ObjectId {
+    let names_exiled = match sel {
+        Sel::Var(v) => *v == COST_EXILED,
+        Sel::Union(v) => v
+            .iter()
+            .any(|s| matches!(s, Sel::Var(v) if *v == COST_EXILED)),
         _ => false,
     };
-    if !names(COST_EXILED) && !names(vars::IT) {
+    if !names_exiled {
         return o;
     }
     let ob = g.obj(o);
-    let Some(prev) = ob.prev else {
-        return o;
-    };
-    let in_var = |v: Var, id: ObjectId| {
+    let just_exiled = [COST_EXILED, vars::IT].iter().any(|v| {
         ctx.vars
-            .get(&v)
-            .is_some_and(|es| es.contains(&Entity::Object(id)))
-    };
-    let just_moved = in_var(COST_EXILED, o) || in_var(vars::IT, o);
-    if !just_moved {
-        return o;
+            .get(v)
+            .is_some_and(|es| es.contains(&Entity::Object(o)))
+    });
+    match ob.prev {
+        Some(prev)
+            if ob.zone == Zone::Exile
+                && just_exiled
+                && matches!(g.obj(prev).zone, Zone::Graveyard(_)) =>
+        {
+            prev
+        }
+        _ => o,
     }
-    let from = g.obj(prev).zone;
-    if from == ob.zone {
-        return o;
-    }
-    // A card a cost exiled from a graveyard ("the exiled card").
-    if names(COST_EXILED) && ob.zone == Zone::Exile && matches!(from, Zone::Graveyard(_)) {
-        return prev;
-    }
-    // A permanent the effect itself moved off the battlefield: its previous object is one
-    // the effect referred to.
-    let referred = ctx
-        .targets
-        .iter()
-        .flatten()
-        .chain(ctx.vars.values().flatten())
-        .any(|e| *e == Entity::Object(prev));
-    if referred && from == Zone::Battlefield {
-        return prev;
-    }
-    o
 }
 
 /// The cards revealed from a hand to pay the cost of the spell or ability being resolved

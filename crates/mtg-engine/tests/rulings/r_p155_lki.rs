@@ -3,7 +3,7 @@
 //! value on the battlefield was the copied card's), a card that left the hand, and X in
 //! a mana cost off the stack (CR 202.3e). (Sister Hospitaller's "as it last existed in
 //! the graveyard" is left uncited: it conflicts with Cleric Class's ruling, see the
-//! register entry `moved-object-values-as-it-last-existed`.)
+//! provisional register entry `returned-card-values-current-on-the-battlefield`.)
 
 use crate::r_p155_common::*;
 use mtg_engine::mana::ManaType;
@@ -181,7 +181,6 @@ fn morbid_curiosity_uses_the_mana_value_immediately_before_the_sacrifice() {
 #[test]
 fn expel_the_unworthy_uses_the_mana_value_as_it_last_existed_on_the_battlefield() {
     cr!("608.2h");
-    interp!("moved-object-values-as-it-last-existed");
     ruling!(
         "Expel the Unworthy",
         "Use the creature's mana value as it last existed on the battlefield to determine how much life its controller gains."
