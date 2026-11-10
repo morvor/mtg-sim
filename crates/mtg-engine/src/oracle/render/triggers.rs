@@ -1928,7 +1928,7 @@ impl Renderer<'_> {
             TriggerCond::PlayerAction { name, who } => {
                 let w = self.rel_subject(*who);
                 // The player action named "monarch" is becoming the monarch
-                // (`Event::BecameMonarch`, CR 724.2).
+                // (`Event::BecameMonarch`, CR 725.1).
                 let vp = if name == "monarch" {
                     "become the monarch".to_string()
                 } else {

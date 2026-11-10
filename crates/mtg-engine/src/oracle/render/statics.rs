@@ -2809,7 +2809,7 @@ impl Renderer<'_> {
                 };
                 format!("{w} can't activate {s}{m}")
             }
-            // Only spells and abilities are countered (CR 701.5a).
+            // Only spells and abilities are countered (CR 701.6a).
             Restriction::CantBeCountered(Filter::Any) => {
                 "spells and abilities can't be countered".into()
             }

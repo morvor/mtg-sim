@@ -102,7 +102,7 @@ impl Renderer<'_> {
                     if matches!(l.as_ref(), Filter::Type(CardType::Land))) =>
             {
                 let m = self.me();
-                Some(format!("{{alt:{m} isn't a land|{m} is a nonland creature|{m} was a nonland creature}}"))
+                Some(format!("{{alt:{m} is a nonland creature|{m} was a nonland creature}}"))
             }
             // "if it was kicked twice" (Archangel of Wrath): kicked two or more times.
             Condition::Compare(
@@ -211,6 +211,55 @@ pub(crate) fn subject_again(inner: &str, subj: &str) -> String {
         out.push_str(part);
     }
     out
+}
+
+/// Whether a coin flip's one result stores the object the flip was for into `v` (the
+/// objects whose coins came up that way): `Some(true)` for heads, `Some(false)` for tails.
+fn came_up(c: &crate::dice::CoinFlip, v: Var, fv: Var) -> Option<bool> {
+    let collects = |e: &Effect| {
+        matches!(e, Effect::Store { var, sel: Sel::Union(parts) }
+            if *var == v && matches!(parts.as_slice(), [Sel::Var(a), Sel::Var(b)] if *a == v && *b == fv))
+    };
+    if !matches!(c.on_win, Effect::Noop) || !matches!(c.on_lose, Effect::Noop) {
+        return None;
+    }
+    match (collects(&c.on_heads), collects(&c.on_tails)) {
+        (true, false) if matches!(c.on_tails, Effect::Noop) => Some(true),
+        (false, true) if matches!(c.on_heads, Effect::Noop) => Some(false),
+        _ => None,
+    }
+}
+
+/// A filter "[noun] that isn't a [subtype], [subtype], or [subtype]": the rest of the
+/// filter and the subtypes (two or more).
+fn not_subtypes(f: &Filter) -> Option<(Filter, Vec<String>)> {
+    let Filter::And(v) = f else {
+        return None;
+    };
+    let is_subtypes = |o: &Filter| matches!(o, Filter::Or(s) if s.len() >= 2 && s.iter().all(|y| matches!(y, Filter::Subtype(_))));
+    let i = v
+        .iter()
+        .position(|x| matches!(x, Filter::Not(o) if is_subtypes(o)))?;
+    let Filter::Not(o) = &v[i] else {
+        return None;
+    };
+    let Filter::Or(s) = o.as_ref() else {
+        return None;
+    };
+    let subs = s
+        .iter()
+        .filter_map(|y| match y {
+            Filter::Subtype(t) => Some(t.to_string()),
+            _ => None,
+        })
+        .collect();
+    let rest: Vec<Filter> = v
+        .iter()
+        .enumerate()
+        .filter(|(j, _)| *j != i)
+        .map(|(_, x)| x.clone())
+        .collect();
+    Some((Filter::and(rest), subs))
 }
 
 /// Whether an instruction looks at the top card of your library without taking it
@@ -480,6 +529,48 @@ impl Renderer<'_> {
     pub(crate) fn pairs6_seq(&mut self, v: &[Effect]) -> Option<(String, usize)> {
         use crate::kw::choice_grammar as cg;
         match v {
+            // "Flip a coin for each creature that isn't a Demon, Devil, or Imp. Destroy each
+            // creature whose coin comes up tails." (Rakdos, the Showstopper): one flip for
+            // each, the objects whose coins came up tails collected, then one action on all
+            // of them (`dice_coin_ext::f_whose_coin_objects`).
+            [Effect::Store {
+                var: v,
+                sel: Sel::Union(init),
+            }, Effect::ForEach {
+                sel: Sel::All(f),
+                var: fv,
+                effect,
+            }, action, ..]
+                if init.is_empty()
+                    && matches!(effect.as_ref(), Effect::FlipCoins(c) if came_up(c, *v, *fv).is_some()) =>
+            {
+                let Effect::FlipCoins(c) = effect.as_ref() else {
+                    return None;
+                };
+                let side = if came_up(c, *v, *fv)? {
+                    "heads"
+                } else {
+                    "tails"
+                };
+                let n = self.noun(f, Num::One);
+                // "creature that isn't a Demon, Devil, or Imp": the head noun, then the
+                // subtypes it isn't; the action names the head noun only.
+                let (n, head) = match not_subtypes(f) {
+                    Some((rest, subs)) => {
+                        let head = self.noun(&rest, Num::One);
+                        let list = with_article(&join_list(&subs, "or"));
+                        (format!("{{alt:{n}|{head} that isn't {list}}}"), head)
+                    }
+                    None => (n.clone(), n),
+                };
+                self.target_vars.push((
+                    *v,
+                    format!("each {head} whose coin comes up {side}"),
+                    false,
+                ));
+                let a = self.effect(action);
+                Some((format!("flip a coin for each {n}. {a}"), 3))
+            }
             // "~ deals 10 damage to an opponent chosen at random" (Zaffai): the player is
             // chosen as the damage is dealt (CR 608.2d).
             [Effect::Custom(name), Effect::DealDamage {

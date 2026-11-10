@@ -39,7 +39,7 @@ impl Renderer<'_> {
         if let Some(r) = s.strip_prefix("~ was dealt ") {
             return format!("{{opt:that was}} dealt {r}");
         }
-        // "a card ... that was discarded this turn": a player discarded it (CR 701.8a).
+        // "a card ... that was discarded this turn": a player discarded it (CR 701.9a).
         if let Some(r) = s.strip_prefix("a player discarded ~ ") {
             return format!("that was discarded {r}");
         }

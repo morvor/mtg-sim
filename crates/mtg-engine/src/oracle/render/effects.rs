@@ -3321,7 +3321,7 @@ impl Renderer<'_> {
                 let w = self.player(who, Case::Subj);
                 let f = self.noun_det(filter, Det::Each);
                 // A player activates only mana abilities of permanents they control
-                // (CR 605.3a; `mana_abilities::activate_each`).
+                // (CR 602.2; `mana_abilities::activate_each`).
                 let theirs = if format!("{filter:?}").contains("ControlledBy") {
                     ""
                 } else {
