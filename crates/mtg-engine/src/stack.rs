@@ -52,6 +52,7 @@ pub fn create_stack_ability(
         event,
         source_lki: source_lki.or_else(|| Some(Box::new(g.obj(source).chars.clone()))),
         chosen_values: Default::default(),
+        source_attached_to: g.obj(source).attached_to,
     }));
     let _ = ability;
     let id = ObjectId(g.objects.len() as u32);
@@ -734,6 +735,16 @@ impl Game {
         // Static and resolved "can't be the target" restrictions.
         let check = |r: &Restriction, rs: Option<ObjectId>, rc: PlayerId| -> bool {
             if let Restriction::CantBeTargeted { what, by: tr } = r {
+                // CR 109.2: a restriction about "creatures you control" is about permanents;
+                // a creature spell on the stack isn't one of them (Autumn's Veil doesn't
+                // stop Counterspell from targeting your creature spell), while one about
+                // spells is.
+                if ob.zone == Zone::Stack
+                    && !matches!(what, Filter::Source | Filter::Any)
+                    && !target_zones(what).contains(&ZoneKind::Stack)
+                {
+                    return false;
+                }
                 if !self.matches(o, what, &Ctx::new(rs, rc)) {
                     return false;
                 }

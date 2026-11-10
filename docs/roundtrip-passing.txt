@@ -16,7 +16,6 @@ Aang, A Lot to Learn
 Aang, Air Nomad
 Aang, Airbending Master
 Aang, Swift Savior // Aang and La, Ocean's Fury
-Aang, at the Crossroads // Aang, Destined Savior
 Aang, the Last Airbender
 Aarakocra Sneak
 Aardvark Sloth
@@ -1024,7 +1023,6 @@ Archaeomancer
 Archaeomancer's Map
 Archaeomender
 Archangel
-Archangel Avacyn // Avacyn, the Purifier
 Archangel Elspeth
 Archangel of Strife
 Archangel of Thune
@@ -13875,6 +13873,7 @@ Life Chisel
 Life Finds a Way
 Life Goes On
 Life Insurance
+Life Matrix
 Life from the Loam
 Life of Toshiro Umezawa // Memory of Toshiro
 Life of the Party
