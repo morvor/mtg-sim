@@ -325,7 +325,7 @@ fn stella_after_two_spells(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn stella_lee_copies_keep_x_modes_and_targets_and_arent_cast() {
-    cr!("707.10", "707.10c", "707.12", "115.7");
+    cr!("707.10", "707.10c", "115.7");
     supported("Stella Lee, Wild Card");
     ruling!(
         "Stella Lee, Wild Card",

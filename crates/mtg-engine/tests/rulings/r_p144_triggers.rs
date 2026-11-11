@@ -186,7 +186,7 @@ fn prophetic_flamespeaker_triggers_on_each_combat_damage() {
 
 #[test]
 fn syr_carah_triggers_for_each_player_even_as_she_dies() {
-    cr!("603.2c", "603.10a", "120.3");
+    cr!("603.2c", "704.5g", "120.3");
     supported("Syr Carah, the Bold");
     ruling!(
         "Syr Carah, the Bold",
