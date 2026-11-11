@@ -472,3 +472,93 @@ fn a_dies_ability_uses_the_power_the_creature_last_had() {
     t.resolve_all();
     assert_eq!(t.life(P0), 20 + power);
 }
+
+#[test]
+fn an_opponent_gaining_control_triggers_for_the_player_it_was_taken_from() {
+    cr!("603.10d", "603.3a");
+    ruling!(
+        "Zidane, Tantalus Thief",
+        "If an opponent gains control of Zidane from you, Zidane's last ability will trigger and you'll create a Treasure token."
+    );
+    supported("Zidane, Tantalus Thief");
+    let mut t = TestGame::new(2);
+    let zidane = t.battlefield(P1, "Zidane, Tantalus Thief");
+    t.lands(P0, "Mountain", 3);
+    let treason = t.hand(P0, "Act of Treason");
+    t.cast(P0, treason).target(zidane).go();
+    t.resolve();
+    assert_eq!(t.obj_now(zidane).controller, P0);
+    assert_eq!(trigger_controllers(&t, "Zidane, Tantalus Thief"), vec![P1]);
+    t.resolve_all();
+    assert_eq!(tokens_named(&t, P1, "Treasure"), 1);
+    assert_eq!(tokens_named(&t, P0, "Treasure"), 0);
+}
+
+#[test]
+fn several_permanents_taken_at_once_trigger_it_for_each() {
+    cr!("603.10d", "603.2c");
+    ruling!(
+        "Zidane, Tantalus Thief",
+        "If an opponent gains control of Zidane and one or more other permanents from you simultaneously, Zidane's last ability will trigger for each of those permanents, including itself."
+    );
+    supported("Insurrection");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Zidane, Tantalus Thief");
+    t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Mountain", 8);
+    let ins = t.hand(P0, "Insurrection");
+    t.cast(P0, ins).go();
+    t.resolve();
+    assert_eq!(trigger_controllers(&t, "Zidane, Tantalus Thief"), vec![P1, P1]);
+    t.resolve_all();
+    assert_eq!(tokens_named(&t, P1, "Treasure"), 2);
+}
+
+#[test]
+fn a_permanent_phasing_out_sees_itself_phase_out() {
+    cr!("603.10b", "702.26a");
+    supported("Ertai's Familiar");
+    let mut t = TestGame::new(2);
+    let familiar = t.battlefield(P0, "Ertai's Familiar");
+    t.advance_to(P1, Step::PrecombatMain);
+    assert_eq!(t.graveyard_size(P0), 0);
+    t.advance_to(P0, Step::Upkeep);
+    assert!(t.obj_now(familiar).phased_out);
+    t.settle();
+    assert_eq!(triggers_of(&t, "Ertai's Familiar"), 1);
+    t.resolve_all();
+    assert_eq!(t.graveyard_size(P0), 3);
+}
+
+#[test]
+fn creature_cards_leaving_a_graveyard_together_trigger_a_per_card_ability_for_each() {
+    cr!("603.10a", "603.2c");
+    ruling!(
+        "Syr Konrad, the Grim",
+        "If one or more creatures die at the same time as Syr Konrad, its first ability triggers for each of those creatures."
+    );
+    supported("Syr Konrad, the Grim");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Syr Konrad, the Grim");
+    t.graveyard(P0, "Grizzly Bears");
+    t.graveyard(P0, "Hill Giant");
+    t.graveyard(P0, "Lightning Bolt");
+    t.graveyard(P1, "Craw Wurm");
+    let relic = t.battlefield(P0, "Relic of Progenitus");
+    t.lands(P0, "Wastes", 1);
+    t.activate(P0, relic, 1, &[]).expect("activate Relic of Progenitus");
+    t.resolve();
+    // Two creature cards left P0's graveyard (P1's isn't "your graveyard").
+    assert_eq!(triggers_of(&t, "Syr Konrad, the Grim"), 2);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    // Dying with two other creatures: it triggers for each of them.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Syr Konrad, the Grim");
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Grizzly Bears");
+    wrath(&mut t);
+    assert_eq!(triggers_of(&t, "Syr Konrad, the Grim"), 2);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+}

@@ -231,10 +231,14 @@ impl Game {
             }
         }
         let mut batch_start = 0;
+        // CR 603.10d: who controlled each permanent whose control changes in the current
+        // batch immediately before those simultaneous changes.
+        let mut control_before = control_before_fn(&events[batch_start..]);
         for (i, ev) in events.iter().enumerate() {
             if matches!(ev, Event::BatchBoundary) {
                 self.check_batch_triggers(&events[batch_start..i], &born_later);
                 batch_start = i + 1;
+                control_before = control_before_fn(&events[batch_start..]);
                 // The next batch's objects exist from now on.
                 for e in events[batch_start..]
                     .iter()
@@ -267,7 +271,7 @@ impl Game {
             if let Some(f) = self.observer.as_ref().map(|o| o.on_event.clone()) {
                 f(self, ev);
             }
-            once_delayed.extend(self.detect_triggers(ev, &recent, &born_later));
+            once_delayed.extend(self.detect_triggers(ev, &recent, &born_later, &control_before));
         }
         self.excess_ahead.clear();
         self.check_batch_triggers(&events[batch_start..], &born_later);
@@ -434,7 +438,8 @@ impl Game {
                     {
                         continue;
                     }
-                    let matched = self.trigger_matches_ctx(trigger, &base, ev);
+                    let matched =
+                        tag_triggering_event(self.trigger_matches_ctx(trigger, &base, ev), ev);
                     if !matched.is_empty() {
                         let extra = self.additional_triggers(src, &t.trigger, ev, None);
                         extras.extend(std::iter::repeat_n(extra, matched.len()));
@@ -673,7 +678,7 @@ impl Game {
 
     /// Detects triggered abilities for one event (CR 603.2).
     pub fn check_triggers(&mut self, ev: &Event) {
-        let once = self.detect_triggers(ev, &[], &BTreeSet::new());
+        let once = self.detect_triggers(ev, &[], &BTreeSet::new(), &BTreeMap::new());
         self.fire_once_delayed(once);
     }
 
@@ -685,6 +690,7 @@ impl Game {
         ev: &Event,
         recent: &[(ObjectId, Arc<LookbackSnapshot>)],
         born_later: &BTreeSet<ObjectId>,
+        control_before: &BTreeMap<ObjectId, PlayerId>,
     ) -> Vec<(u32, EventInfo)> {
         // "Creatures entering don't cause abilities to trigger" (Torpor Orb).
         if crate::kw::torpor::entering_triggers_nothing(self, ev) {
@@ -766,10 +772,17 @@ impl Game {
             }
         }
         // CR 603.10d: "when you lose control of" abilities look back: they're controlled by
-        // the player who controlled the object before the change.
+        // the player who controlled their source immediately before the change — the
+        // object whose control changed, or one whose control changed at the same time
+        // (Zidane taken with other permanents).
         if let Event::ControlChanged { obj, from, .. } = ev {
             for s in sources.iter_mut() {
-                if s.0 == *obj {
+                let before = if s.0 == *obj {
+                    Some(*from)
+                } else {
+                    control_before.get(&s.0).copied()
+                };
+                if let Some(from) = before {
                     if let AbilityKind::Triggered(t) = &s.2.kind {
                         // (Also qualified: "whenever an opponent gains control of a
                         // permanent from you".)
@@ -778,7 +791,7 @@ impl Game {
                             other => other,
                         };
                         if matches!(lose_control, TriggerCond::LoseControl(_)) {
-                            s.1 = *from;
+                            s.1 = from;
                         }
                     }
                 }
@@ -818,6 +831,7 @@ impl Game {
             infos.extend(crate::teams::more_step_trigger_infos(
                 self, t, &base, ev, &infos,
             ));
+            let infos = tag_triggering_event(infos, ev);
             for info in infos {
                 let mut ctx = Ctx::new(Some(src), ctl);
                 ctx.link = a.link;
@@ -944,7 +958,7 @@ impl Game {
             {
                 continue;
             }
-            let infos = self.trigger_matches_ctx(&d.trigger, &base, ev);
+            let infos = tag_triggering_event(self.trigger_matches_ctx(&d.trigger, &base, ev), ev);
             if let (
                 true,
                 true,
@@ -2231,17 +2245,26 @@ impl Game {
                 };
                 let info = si.event.clone().unwrap_or_default();
                 let about = info.lki.or(info.object);
-                let cause_ok = std::mem::discriminant(&**cause)
-                    == std::mem::discriminant(&t.trigger)
-                    && match &**cause {
-                        TriggerCond::EntersBattlefield(f)
-                        | TriggerCond::LeavesBattlefield(f)
-                        | TriggerCond::Dies(f)
-                        | TriggerCond::Attacks(f) => {
-                            about.is_some_and(|o| self.matches(o, f, &ctx))
-                        }
-                        _ => true,
-                    };
+                // The event that made it trigger, whatever the wording of its trigger
+                // condition ("enters or attacks", "enters, if ...", "enters from a
+                // graveyard").
+                use crate::events::TriggeringEvent as E;
+                let cause_ok = match (&**cause, info.triggered_by) {
+                    (TriggerCond::EntersBattlefield(f), Some(E::Entered))
+                    | (TriggerCond::LeavesBattlefield(f), Some(E::LeftBattlefield { .. }))
+                    | (TriggerCond::Dies(f), Some(E::LeftBattlefield { died: true }))
+                    | (TriggerCond::Attacks(f), Some(E::Attacked)) => {
+                        about.is_some_and(|o| self.matches(o, f, &ctx))
+                    }
+                    (
+                        TriggerCond::EntersBattlefield(_)
+                        | TriggerCond::LeavesBattlefield(_)
+                        | TriggerCond::Dies(_)
+                        | TriggerCond::Attacks(_),
+                        _,
+                    ) => false,
+                    (c, _) => std::mem::discriminant(c) == std::mem::discriminant(&t.trigger),
+                };
                 if cause_ok && self.matches(*s, source, &ctx) {
                     one(EventInfo {
                         object: info.object,
@@ -2661,6 +2684,32 @@ impl Game {
         self.exec(&body.effect, &mut ctx);
         crate::structure::record(&t.ability, &self.obj(t.source).chars.name, "resolved");
     }
+}
+
+/// For the events of one batch (up to the next [`Event::BatchBoundary`]), the controller
+/// each permanent whose control changes in it had before (CR 603.10d).
+fn control_before_fn(events: &[Event]) -> BTreeMap<ObjectId, PlayerId> {
+    let mut out = BTreeMap::new();
+    for e in events
+        .iter()
+        .take_while(|e| !matches!(e, Event::BatchBoundary))
+    {
+        if let Event::ControlChanged { obj, from, .. } = e {
+            out.entry(*obj).or_insert(*from);
+        }
+    }
+    out
+}
+
+/// Records in each of a triggered ability's event infos the kind of event that made it
+/// trigger (`EventInfo::triggered_by`).
+fn tag_triggering_event(mut infos: Vec<EventInfo>, ev: &Event) -> Vec<EventInfo> {
+    if let Some(k) = crate::events::TriggeringEvent::of(ev) {
+        for i in &mut infos {
+            i.triggered_by = Some(k);
+        }
+    }
+    infos
 }
 
 /// Whether a trigger condition is about sacrificing ("whenever you sacrifice a creature"),

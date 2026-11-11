@@ -287,3 +287,44 @@ fn a_lose_control_delayed_trigger_happens_in_the_cleanup_step() {
     t.resolve();
     assert!(t.obj_now(bears).tapped);
 }
+
+#[test]
+fn a_this_turn_delayed_trigger_doesnt_trigger_on_a_later_turn() {
+    cr!("603.7b");
+    ruling!(
+        "Cryptek",
+        "If the target artifact creature isn't put into a graveyard this turn, that ability never triggers."
+    );
+    let mut t = TestGame::new(2);
+    let cryptek = t.battlefield(P0, "Cryptek");
+    let thopter = t.battlefield(P0, "Ornithopter");
+    t.lands(P0, "Swamp", 2);
+    t.activate(P0, cryptek, 0, &[Entity::Object(thopter)])
+        .expect("activate Cryptek");
+    t.resolve_all();
+    t.advance_to(P1, Step::PrecombatMain);
+    t.g.destroy(thopter, None);
+    t.settle();
+    assert_eq!(triggers_of(&t, "Cryptek"), 0);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Ornithopter"));
+}
+
+#[test]
+fn a_delayed_sacrifice_cant_affect_a_phased_out_permanent() {
+    cr!("603.7c", "702.26b");
+    let mut t = TestGame::new(2);
+    let giant = sneak(&mut t, "Hill Giant");
+    t.lands(P0, "Island", 1);
+    let slip = t.hand(P0, "Slip Out the Back");
+    t.cast(P0, slip).target(giant).go();
+    t.resolve_all();
+    assert!(t.obj_now(giant).phased_out);
+    // At the end step the delayed ability resolves and can't find it; it doesn't wait.
+    t.advance_to(P1, Step::Upkeep);
+    assert!(t.on_battlefield(giant));
+    t.advance_to(P0, Step::Upkeep);
+    assert!(!t.obj_now(giant).phased_out);
+    t.advance_to(P1, Step::Upkeep);
+    assert!(t.on_battlefield(giant), "never sacrificed");
+}

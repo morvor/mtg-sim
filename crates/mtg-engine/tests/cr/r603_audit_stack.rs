@@ -237,3 +237,64 @@ fn a_zone_change_trigger_cant_find_a_card_that_left_the_zone_it_went_to() {
     assert!(t.in_graveyard(P0, "Rancor"));
     assert!(!t.in_hand(P0, "Rancor"));
 }
+
+#[test]
+fn an_ability_triggering_on_enters_abilities_sees_every_wording_of_them() {
+    cr!("603.2", "603.6a");
+    ruling!(
+        "Strict Proctor",
+        "Triggered abilities use the word “when,” “whenever,” or “at.” They’re often written as “[Trigger condition], [effect].”"
+    );
+    supported("Strict Proctor");
+    supported("Ichor Wellspring");
+    // "When this artifact enters or is put into a graveyard from the battlefield": its
+    // entering causes it to trigger.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Strict Proctor");
+    let well = t.enter(P0, "Ichor Wellspring");
+    t.settle();
+    assert_eq!(triggers_of(&t, "Ichor Wellspring"), 1);
+    assert_eq!(triggers_of(&t, "Strict Proctor"), 1, "a permanent entering caused it");
+    t.resolve_all();
+    // Its other trigger event isn't a permanent entering.
+    t.g.destroy(well, None);
+    t.settle();
+    assert_eq!(triggers_of(&t, "Ichor Wellspring"), 1);
+    assert_eq!(triggers_of(&t, "Strict Proctor"), 0);
+    t.resolve_all();
+    // "When this enchantment enters, if you control a creature with power 4 or greater"
+    // (an intervening "if").
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Strict Proctor");
+    t.battlefield(P0, "Craw Wurm");
+    t.enter(P0, "Garruk's Uprising");
+    t.settle();
+    assert_eq!(triggers_of(&t, "Garruk's Uprising"), 1);
+    assert_eq!(triggers_of(&t, "Strict Proctor"), 1);
+}
+
+#[test]
+fn an_attack_trigger_of_an_enters_or_attacks_ability_isnt_an_entering_trigger() {
+    cr!("603.2", "603.6a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Strict Proctor");
+    let titan = t.battlefield(P0, "Sun Titan");
+    t.graveyard(P0, "Grizzly Bears");
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(titan, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, Step::DeclareAttackers);
+    t.settle();
+    assert_eq!(triggers_of(&t, "Sun Titan"), 1, "its attack ability");
+    assert_eq!(triggers_of(&t, "Strict Proctor"), 0);
+    // Entering, the same ability is an enters ability.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Strict Proctor");
+    t.graveyard(P0, "Grizzly Bears");
+    t.enter(P0, "Sun Titan");
+    t.settle();
+    assert_eq!(triggers_of(&t, "Sun Titan"), 1);
+    assert_eq!(triggers_of(&t, "Strict Proctor"), 1);
+}
