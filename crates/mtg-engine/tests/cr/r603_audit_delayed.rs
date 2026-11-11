@@ -328,3 +328,35 @@ fn a_delayed_sacrifice_cant_affect_a_phased_out_permanent() {
     t.advance_to(P1, Step::Upkeep);
     assert!(t.on_battlefield(giant), "never sacrificed");
 }
+
+#[test]
+fn a_stolen_spells_delayed_trigger_is_controlled_by_the_player_it_resolved_for() {
+    cr!("603.7d");
+    supported("Commandeer");
+    supported("Through the Breach");
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Mountain", 5);
+    let breach = t.hand(P0, "Through the Breach");
+    let giant = t.hand(P1, "Hill Giant");
+    t.lands(P1, "Island", 7);
+    let commandeer = t.hand(P1, "Commandeer");
+    let spell = t.cast(P0, breach).go();
+    t.cast(P1, commandeer).target(spell).go();
+    t.resolve();
+    assert_eq!(t.obj_now(spell).controller, P1, "P1 took the spell");
+    // It resolves under P1's control: P1 puts a creature from their hand onto the
+    // battlefield, and the delayed sacrifice is P1's.
+    t.answer_yes(P1, true);
+    t.answer_choose(P1, &[Entity::Object(giant)]);
+    t.resolve();
+    let giant = t.g.current(giant);
+    assert!(t.on_battlefield(giant));
+    assert_eq!(t.obj_now(giant).controller, P1);
+    t.advance_to_step(Step::End);
+    t.settle();
+    let d = stack_triggers(&t);
+    assert_eq!(d.len(), 1);
+    assert_eq!((d[0].1, d[0].2.as_str()), (P1, "Through the Breach"));
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+}

@@ -637,3 +637,24 @@ fn an_exchange_of_control_is_looked_back_at_for_both_permanents() {
     assert_eq!(tokens_named(&t, P1, "Treasure"), 1);
     assert_eq!(tokens_named(&t, P0, "Treasure"), 0);
 }
+
+#[test]
+fn a_lose_control_of_itself_ability_ignores_the_permanents_taken_with_it() {
+    cr!("603.10d", "603.2c");
+    supported("Insurrection");
+    supported("Khârn the Betrayer");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Khârn the Betrayer");
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    t.lands(P0, "Mountain", 8);
+    let ins = t.hand(P0, "Insurrection");
+    let h1 = t.hand_size(P1);
+    t.cast(P0, ins).go();
+    t.resolve();
+    // P1 lost control of three permanents at once, and the ability is controlled by P1
+    // for each of those changes; "When you lose control of Khârn" is about Khârn only.
+    assert_eq!(trigger_controllers(&t, "Khârn the Betrayer"), vec![P1]);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P1), h1 + 2);
+}
