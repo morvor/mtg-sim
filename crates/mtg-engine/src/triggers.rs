@@ -320,10 +320,12 @@ impl Game {
         crate::monarch_initiative::detect_batch(self, batch);
         let mut sources = self.current_trigger_sources();
         sources.retain(|(id, _, _)| !born_later.contains(id));
-        // Leaves-the-battlefield look back in time (CR 603.10a): permanents that left in
-        // this batch still see the batch's events that look back. (A permanent that left
-        // keeps its last known information, zone included, under its old id; it's no
-        // longer live.)
+        // Leaves-the-battlefield look back in time (CR 603.10a): the abilities that existed
+        // immediately before the batch's events still see those that look back, whether
+        // their permanent left in this batch (it keeps its last known information, zone
+        // included, under its old id; it's no longer live) or stayed but no longer has the
+        // ability because of the event (one it had only while a Cleric that died was
+        // around).
         let mut seen: BTreeSet<(ObjectId, u64)> =
             sources.iter().map(|(id, _, a)| (*id, a.uid)).collect();
         let mut looking_back: BTreeSet<(ObjectId, u64)> = BTreeSet::new();
@@ -335,8 +337,7 @@ impl Game {
             } = ev
             {
                 for (id, ctl, a) in &lb.sources {
-                    let gone = !self.is_live(*id) || self.obj(*id).zone != Zone::Battlefield;
-                    if gone && seen.insert((*id, a.uid)) {
+                    if seen.insert((*id, a.uid)) {
                         looking_back.insert((*id, a.uid));
                         sources.push((*id, *ctl, a.clone()));
                     }
