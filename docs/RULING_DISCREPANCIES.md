@@ -294,6 +294,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: as the ruling says, for Rowan Kenrith: a creature that's tapped or came under the player's control that turn doesn't attack, and a cost to attack (Ghostly Prison) isn't one the player must pay (CR 508.1d), unless the creature can attack something else for free.
 - Recorded: test `tests/rulings/r_p060_combat.rs` (`rowans_attack_requirement_doesnt_force_creatures_that_cant_attack_or_costs`), citing it under Will Kenrith, which takes part as a planeswalker the creature may attack free of Ghostly Prison's cost.
 
+### Traveling Minister: Undead Butler's ruling about its reflexive trigger
+- Kind: misattached
+- Status: open for review
+- Ruling, Traveling Minister (2021-11-19): "After you exile Undead Butler from your graveyard, a second ability triggers. You choose the target creature card to return at that time."
+- Conflicts with: Traveling Minister has no trigger and exiles nothing: "{T}: Target creature gets +1/+0 until end of turn. You gain 1 life. Activate only as a sorcery." The ruling names and describes Undead Butler: "When this creature dies, you may exile it. When you do, return target creature card from your graveyard to your hand."
+- Evidence: the Innistrad: Crimson Vow Release Notes (2021-11-10; ormos mirror, Wayback capture 2021-11-28) list the ruling under Undead Butler, the card right after Traveling Minister in the notes; the data files Traveling Minister's own note ("If the target of Traveling Minister's activated ability isn't legal as it tries to resolve, you won't gain 1 life.") and this one under Traveling Minister, and none under Undead Butler. Found in work item rulings-P144.
+- Engine: as the ruling says, for Undead Butler: the reflexive trigger's target is chosen once Undead Butler has been exiled (CR 603.12), so a creature card put into the graveyard after the death trigger was put on the stack can be returned.
+- Recorded: test `tests/rulings/r_p144_misc.rs` (`undead_butler_return_trigger_targets_after_the_exile`), citing it under Traveling Minister, which is on the battlefield there (it can't take part).
+
 ## Outdated rulings
 
 ### Souls of the Faultless: "you may choose either member of the attacking team"

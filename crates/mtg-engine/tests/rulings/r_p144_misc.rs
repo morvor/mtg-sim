@@ -417,9 +417,28 @@ fn riku_modes_are_each_chosen_at_most_once() {
         "Riku of Many Paths",
         "You can't choose the same mode of Riku's triggered ability more than once each time it triggers."
     );
-    // Izzet Charm has one mode chosen: X = 1. A modal spell with two modes chosen (an
-    // escalated Collective Defiance is too big; Izzet Charm is cast twice instead): the
-    // trigger offers each of its three modes once, up to X of them.
+    ruling!(
+        "Riku of Many Paths",
+        "Modal spells printed prior to the Khans of Tarkir™ release didn't use bulleted lists for the modes; these cards have received errata in the Oracle card reference."
+    );
+    /// The (min, max, allow_repeat) of the mode choices asked since `from`.
+    fn mode_choices(t: &TestGame, from: usize) -> Vec<(u32, u32, bool)> {
+        t.asked()[from..]
+            .iter()
+            .filter_map(|(_, d)| match d {
+                Decision::ChooseModes {
+                    min,
+                    max,
+                    allow_repeat,
+                    ..
+                } => Some((*min, *max, *allow_repeat)),
+                _ => None,
+            })
+            .collect()
+    }
+    // Izzet Charm (Return to Ravnica, 2012) was printed with its modes in a sentence
+    // ("Choose one — ...; or ...; or ..."): it's a modal spell, and Riku triggers (one
+    // mode chosen: up to one of Riku's).
     let mut t = TestGame::new(2);
     let r = t.battlefield(P0, "Riku of Many Paths");
     let c = t.hand(P0, "Izzet Charm");
@@ -427,23 +446,29 @@ fn riku_modes_are_each_chosen_at_most_once() {
     mana(&mut t, P0, ManaType::R, 1);
     t.cast(P0, c).modes(&[2]).go();
     let from = t.asked().len();
-    // Asking for the counter mode twice isn't allowed: one counter at most.
+    choose_modes(&mut t, P0, &[1]);
+    t.settle();
+    assert_eq!(mode_choices(&t, from), vec![(0, 1, false)]);
+    t.resolve_all();
+    assert_eq!(t.counters(r, counters::PLUS1), 1);
+    // Kolaghan's Command with two modes chosen (P1 discards; 2 damage to P1): up to two
+    // of Riku's modes, no mode twice. Asking for the counter mode twice gets one counter
+    // at most.
+    let mut t = TestGame::new(2);
+    let r = t.battlefield(P0, "Riku of Many Paths");
+    t.hand(P1, "Island");
+    let k = t.hand(P0, "Kolaghan's Command");
+    mana(&mut t, P0, ManaType::B, 1);
+    mana(&mut t, P0, ManaType::R, 2);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.cast(P0, k).modes(&[1, 3]).go();
+    let from = t.asked().len();
     choose_modes(&mut t, P0, &[1, 1]);
     t.settle();
-    let offered: Vec<(u32, u32, bool)> = t.asked()[from..]
-        .iter()
-        .filter_map(|(_, d)| match d {
-            Decision::ChooseModes {
-                min,
-                max,
-                allow_repeat,
-                ..
-            } => Some((*min, *max, *allow_repeat)),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(offered, vec![(0, 1, false)]);
+    assert_eq!(mode_choices(&t, from), vec![(0, 2, false)]);
     t.resolve_all();
+    assert_eq!(t.life(P1), 18);
     assert!(t.counters(r, counters::PLUS1) <= 1);
 }
 
