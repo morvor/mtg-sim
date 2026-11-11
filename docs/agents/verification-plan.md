@@ -265,6 +265,22 @@ The user: "This should be our established pattern going forward - save context w
 - **The coordinator:** hands off to a fresh coordinator session when it can do so without losing anything. RECOVERY.md and this file hold the state; the hourly check-in is re-pointed to the new session.
 - This replaces the "about 300k tokens" threshold below as the default.
 
+### Round 3: off Fable (user, Nov 11)
+
+The user: "Let's start new agents as normal, without fable, since we've used up all our fable usage."
+- Sessions run on the default model.
+- The one-item-per-session rule holds.
+- Starting roster (Nov 11, 22:01 UTC):
+
+| Role | Session | Item |
+|---|---|---|
+| decisions | session_019p6sq15T4fLatJsGyLimVw | user-decisions-nov11 |
+| rulings A | session_019p6spyY9cbQZev5mYNKieP | ruling-conflicts-5, then P101 P157 P090 P197 P139 P181 P114 P115 |
+| rulings B | session_019p6spzzBZ9BLqxMsVQ8xye | P144, then P196 P138 P182 P175 P200 P135 |
+| auditor | session_019p6spxv7g3fVXJLsaQyBqX | engine-audit-1 triggers, then zones-lki, replacement, sba-copy, combat |
+
+Roundtrip-probe-1 and property-tests-3 stay parked.
+
 ### Effort and fresh sessions (user, Nov 4, late evening)
 
 The user decided:
