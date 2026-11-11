@@ -6,6 +6,7 @@
 //! trigger on another ability triggering go on the stack after all the others.
 
 use crate::r603_audit_common::*;
+use mtg_engine::decision::Decision;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -148,7 +149,19 @@ fn abilities_triggering_in_the_untap_step_go_on_the_stack_with_the_upkeep_ones()
     assert!(t.obj_now(guide).tapped);
     t.advance_to(P0, Step::Upkeep);
     assert!(!t.obj_now(guide).tapped);
+    assert_eq!(t.stack_len(), 0, "nothing went on the stack in the untap step");
+    let asked_before = t.asked().len();
     t.settle();
     assert_eq!(triggers_of(&t, "Oreskos Sun Guide"), 1);
     assert_eq!(triggers_of(&t, "Phyrexian Arena"), 1);
+    // They went on the stack together, in the order P0 chose (CR 503.1a: the order in
+    // which they triggered doesn't matter).
+    let orders: Vec<usize> = t.asked()[asked_before..]
+        .iter()
+        .filter_map(|(p, d)| match d {
+            Decision::Order { items, .. } if *p == P0 => Some(items.len()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(orders, vec![2]);
 }

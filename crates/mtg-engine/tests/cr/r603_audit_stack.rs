@@ -298,3 +298,26 @@ fn an_attack_trigger_of_an_enters_or_attacks_ability_isnt_an_entering_trigger() 
     assert_eq!(triggers_of(&t, "Sun Titan"), 1);
     assert_eq!(triggers_of(&t, "Strict Proctor"), 1);
 }
+
+#[test]
+fn an_enters_from_a_graveyard_ability_is_caused_by_the_permanent_entering() {
+    cr!("603.2", "603.6a");
+    supported("Strict Proctor");
+    supported("Triarch Praetorian");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Strict Proctor");
+    let praetorian = t.graveyard(P0, "Triarch Praetorian");
+    t.lands(P0, "Swamp", 4);
+    let zombify = t.hand(P0, "Zombify");
+    let (hand, life) = (t.hand_size(P0) - 1, t.life(P0));
+    t.cast(P0, zombify).target(praetorian).go();
+    t.resolve();
+    // "When this creature enters from a graveyard" is an enters ability: the Proctor
+    // sees the permanent that entered, not the card it was in the graveyard.
+    assert_eq!(triggers_of(&t, "Triarch Praetorian"), 1);
+    assert_eq!(triggers_of(&t, "Strict Proctor"), 1);
+    // P0 has no mana left for {2}: the Praetorian's ability is countered.
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand);
+    assert_eq!(t.life(P0), life);
+}

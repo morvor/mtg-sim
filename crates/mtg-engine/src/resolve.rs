@@ -2310,6 +2310,13 @@ impl Game {
                 if let Some(p) = performer {
                     body = performed_by(body, p);
                 }
+                // It triggers on the action its resolving ability took, not on the event
+                // that made that ability trigger: an enters ability's "When you do" isn't
+                // an ability a permanent entering caused to trigger (Strict Proctor).
+                let event = EventInfo {
+                    triggered_by: None,
+                    ..ctx.event.clone().unwrap_or_default()
+                };
                 for i in 0..times {
                     if i > 0 {
                         self.trigger_order += 1;
@@ -2318,7 +2325,7 @@ impl Game {
                         source: src.unwrap_or(ObjectId(0)),
                         controller,
                         ability: ability.clone(),
-                        event: ctx.event.clone().unwrap_or_default(),
+                        event: event.clone(),
                         source_lki: src.map(|s| Box::new(self.obj(s).chars.clone())),
                         saved: Some(saved.clone()),
                         body: Some(body.clone()),

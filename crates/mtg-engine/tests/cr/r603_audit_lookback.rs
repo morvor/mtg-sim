@@ -219,19 +219,29 @@ fn an_equipment_destroyed_with_the_equipped_creature_sees_it_die() {
     assert_eq!(t.hand_size(P0), hand + 2);
 }
 
-#[test]
-fn an_equipment_leaving_the_battlefield_becomes_unattached_and_looks_back() {
-    cr!("603.10c");
-    ruling!(
-        "Grafted Exoskeleton",
-        "Grafted Exoskeleton becomes unattached from the creature it's equipping if a spell or ability (such as Fulgent Distraction) causes it to become unattached, if Grafted Exoskeleton leaves the battlefield"
-    );
-    let mut t = TestGame::new(2);
+/// P0's Grafted Exoskeleton attached to P0's Grizzly Bears: (Exoskeleton, Bears).
+fn exoskeleton_on_bears(t: &mut TestGame) -> (ObjectId, ObjectId) {
     let exo = t.battlefield(P0, "Grafted Exoskeleton");
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.g.attach(exo, Entity::Object(bears));
     t.g.recompute();
     assert_eq!(t.pt(bears), (4, 4));
+    (exo, bears)
+}
+
+#[test]
+fn an_equipment_leaving_the_battlefield_becomes_unattached_and_looks_back() {
+    cr!("603.10c", "701.3d", "704.5n");
+    ruling!(
+        "Grafted Exoskeleton",
+        "Grafted Exoskeleton becomes unattached from the creature it's equipping if a spell or ability (such as Fulgent Distraction) causes it to become unattached, if Grafted Exoskeleton leaves the battlefield"
+    );
+    supported("Fulgent Distraction");
+    supported("Imprisoned in the Moon");
+    // It leaves the battlefield: it was attached immediately before, and its ability
+    // sacrifices the Bears.
+    let mut t = TestGame::new(2);
+    let (exo, _) = exoskeleton_on_bears(&mut t);
     t.lands(P1, "Mountain", 2);
     let shatter = t.hand(P1, "Shatter");
     t.cast(P1, shatter).target(exo).go();
@@ -242,6 +252,46 @@ fn an_equipment_leaving_the_battlefield_becomes_unattached_and_looks_back() {
         t.in_graveyard(P0, "Grizzly Bears"),
         "the Exoskeleton's ability triggered as it left and sacrificed the Bears"
     );
+    // A spell unattaches it.
+    let mut t = TestGame::new(2);
+    let (exo, bears) = exoskeleton_on_bears(&mut t);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.lands(P1, "Plains", 3);
+    let fulgent = t.hand(P1, "Fulgent Distraction");
+    t.cast(P1, fulgent)
+        .targets(&[Entity::Object(bears), Entity::Object(giant)])
+        .go();
+    t.resolve();
+    assert_eq!(t.obj_now(exo).attached_to, None);
+    assert_eq!(triggers_of(&t, "Grafted Exoskeleton"), 1);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert!(t.on_battlefield(exo));
+    // The equipped creature stops being a creature: the Equipment becomes unattached (a
+    // state-based action) and the land the Bears became is sacrificed.
+    let mut t = TestGame::new(2);
+    let (exo, bears) = exoskeleton_on_bears(&mut t);
+    t.lands(P0, "Island", 3);
+    let moon = t.hand(P0, "Imprisoned in the Moon");
+    t.cast(P0, moon).target(bears).go();
+    t.resolve();
+    assert_eq!(t.obj_now(exo).attached_to, None);
+    assert_eq!(triggers_of(&t, "Grafted Exoskeleton"), 1);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    // The equipped creature leaves the battlefield: the ability triggers and does
+    // nothing (nothing else is sacrificed).
+    let mut t = TestGame::new(2);
+    let (exo, bears) = exoskeleton_on_bears(&mut t);
+    let other = t.battlefield(P0, "Hill Giant");
+    t.g.destroy(bears, None);
+    t.settle();
+    assert_eq!(t.obj_now(exo).attached_to, None);
+    assert_eq!(triggers_of(&t, "Grafted Exoskeleton"), 1);
+    t.resolve_all();
+    assert!(t.on_battlefield(exo) && t.on_battlefield(other));
+    // (The ruling's last case, an Exoskeleton that stops being an Equipment, needs an
+    // effect that removes the subtype but not the ability; no supported card has one.)
 }
 
 #[test]
@@ -561,4 +611,29 @@ fn creature_cards_leaving_a_graveyard_together_trigger_a_per_card_ability_for_ea
     assert_eq!(triggers_of(&t, "Syr Konrad, the Grim"), 2);
     t.resolve_all();
     assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn an_exchange_of_control_is_looked_back_at_for_both_permanents() {
+    cr!("603.10d", "701.12a");
+    supported("Switcheroo");
+    let mut t = TestGame::new(2);
+    let zidane = t.battlefield(P1, "Zidane, Tantalus Thief");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Island", 5);
+    let s = t.hand(P0, "Switcheroo");
+    t.cast(P0, s)
+        .targets(&[Entity::Object(bears), Entity::Object(zidane)])
+        .go();
+    t.resolve();
+    assert_eq!(t.obj_now(zidane).controller, P0);
+    assert_eq!(t.obj_now(bears).controller, P1);
+    // Immediately before the exchange P1 controlled Zidane: P1's opponent gained control
+    // of Zidane from P1 (a trigger for P1); P1 gaining the Bears from P0 isn't an
+    // opponent of Zidane's controller gaining a permanent from them, though P0 controls
+    // Zidane afterwards.
+    assert_eq!(trigger_controllers(&t, "Zidane, Tantalus Thief"), vec![P1]);
+    t.resolve_all();
+    assert_eq!(tokens_named(&t, P1, "Treasure"), 1);
+    assert_eq!(tokens_named(&t, P0, "Treasure"), 0);
 }

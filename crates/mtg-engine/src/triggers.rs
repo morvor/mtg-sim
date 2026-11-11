@@ -441,7 +441,16 @@ impl Game {
                     let matched =
                         tag_triggering_event(self.trigger_matches_ctx(trigger, &base, ev), ev);
                     if !matched.is_empty() {
-                        let extra = self.additional_triggers(src, &t.trigger, ev, None);
+                        // CR 603.2d, 603.10a: as for a single event, the "triggers an
+                        // additional time" effects that applied immediately before a
+                        // permanent left (Teysa Karlov dying with the creatures).
+                        let lb = match ev {
+                            Event::ZoneChange {
+                                lookback: Some(lb), ..
+                            } => Some(&**lb),
+                            _ => None,
+                        };
+                        let extra = self.additional_triggers(src, &t.trigger, ev, lb);
                         extras.extend(std::iter::repeat_n(extra, matched.len()));
                     }
                     infos.extend(matched);
@@ -2244,18 +2253,24 @@ impl Game {
                     return none();
                 };
                 let info = si.event.clone().unwrap_or_default();
-                let about = info.lki.or(info.object);
                 // The event that made it trigger, whatever the wording of its trigger
                 // condition ("enters or attacks", "enters, if ...", "enters from a
                 // graveyard").
                 use crate::events::TriggeringEvent as E;
                 let cause_ok = match (&**cause, info.triggered_by) {
+                    // The permanent that entered (an ability triggering on a zone change
+                    // also records the card it was in the zone it came from) or the
+                    // attacking creature.
                     (TriggerCond::EntersBattlefield(f), Some(E::Entered))
-                    | (TriggerCond::LeavesBattlefield(f), Some(E::LeftBattlefield { .. }))
-                    | (TriggerCond::Dies(f), Some(E::LeftBattlefield { died: true }))
                     | (TriggerCond::Attacks(f), Some(E::Attacked)) => {
-                        about.is_some_and(|o| self.matches(o, f, &ctx))
+                        info.object.is_some_and(|o| self.matches(o, f, &ctx))
                     }
+                    // The permanent as it last existed on the battlefield.
+                    (TriggerCond::LeavesBattlefield(f), Some(E::LeftBattlefield { .. }))
+                    | (TriggerCond::Dies(f), Some(E::LeftBattlefield { died: true })) => info
+                        .lki
+                        .or(info.object)
+                        .is_some_and(|o| self.matches(o, f, &ctx)),
                     (
                         TriggerCond::EntersBattlefield(_)
                         | TriggerCond::LeavesBattlefield(_)

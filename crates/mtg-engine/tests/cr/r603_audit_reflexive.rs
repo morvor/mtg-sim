@@ -206,3 +206,33 @@ fn an_additional_trigger_effect_doesnt_double_delayed_abilities() {
     assert!(t.on_battlefield(back));
     assert!(t.obj_now(back).tapped, "returned tapped");
 }
+
+#[test]
+fn a_reflexive_ability_of_an_enters_ability_isnt_caused_by_the_permanent_entering() {
+    cr!("603.12", "603.2");
+    supported("Strict Proctor");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Strict Proctor");
+    t.lands(P0, "Plains", 6);
+    let adv = t.hand(P0, "Intrepid Adversary");
+    t.cast(P0, adv).go();
+    t.resolve();
+    // The enters ability is caused by the Adversary entering: the Proctor triggers.
+    assert_eq!(triggers_of(&t, "Intrepid Adversary"), 1);
+    assert_eq!(triggers_of(&t, "Strict Proctor"), 1);
+    t.answer_yes(P0, true);
+    t.resolve();
+    assert_eq!(triggers_of(&t, "Strict Proctor"), 0);
+    assert_eq!(triggers_of(&t, "Intrepid Adversary"), 1, "P0 paid {{2}}");
+    // P0 pays {1}{W} once. The "When you pay this cost one or more times" ability
+    // triggers on that payment, not on the Adversary entering.
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, false);
+    t.resolve();
+    assert_eq!(triggers_of(&t, "Intrepid Adversary"), 1, "the reflexive ability");
+    assert_eq!(triggers_of(&t, "Strict Proctor"), 0);
+    t.resolve();
+    assert_eq!(t.counters(t.g.current(adv), "valor"), 1);
+    assert_eq!(t.stack_len(), 0);
+}

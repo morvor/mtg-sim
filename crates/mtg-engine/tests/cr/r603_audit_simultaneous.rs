@@ -276,3 +276,86 @@ fn an_enters_ability_with_an_intervening_if_checks_after_the_event_and_on_resolu
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand);
 }
+
+#[test]
+fn a_one_or_more_ability_triggers_an_additional_time_for_teysa_dying_with_the_creatures() {
+    cr!("603.2d", "603.10a", "603.2c");
+    ruling!(
+        "Teysa Karlov",
+        "If a creature dying at the same time as Teysa (including Teysa itself dying) causes a triggered ability of a permanent you control to trigger, that ability triggers an additional time."
+    );
+    supported("Teysa Karlov");
+    supported("Vengeful Townsfolk");
+    // Teysa dies with the Townsfolk and a Bears: the Townsfolk's "one or more" ability
+    // looks back, and so does Teysa's effect.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Teysa Karlov");
+    t.battlefield(P0, "Vengeful Townsfolk");
+    t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Plains", 4);
+    let wrath = t.hand(P0, "Wrath of God");
+    t.cast(P0, wrath).go();
+    t.resolve();
+    assert_eq!(triggers_of(&t, "Vengeful Townsfolk"), 2);
+    // With Teysa still there, twice; without her, once.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Teysa Karlov");
+    let towns = t.battlefield(P0, "Vengeful Townsfolk");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.destroy(bears, None);
+    t.resolve_all();
+    assert_eq!(t.counters(towns, counters::PLUS1), 2);
+    let mut t = TestGame::new(2);
+    let towns = t.battlefield(P0, "Vengeful Townsfolk");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.destroy(bears, None);
+    t.resolve_all();
+    assert_eq!(t.counters(towns, counters::PLUS1), 1);
+}
+
+#[test]
+fn an_ability_gained_because_of_the_event_doesnt_look_back_at_it() {
+    cr!("603.10", "603.10a", "603.2c");
+    // Threshold versions of Relic Vial: the artifacts have the abilities only once seven
+    // or more cards are in their controller's graveyard.
+    let vial = compile_def(
+        "Threshold Vial",
+        "Artifact",
+        "{1}",
+        "As long as seven or more cards are in your graveyard, this artifact has \"Whenever one or more creatures you control die, you gain 3 life.\"",
+    );
+    let urn = compile_def(
+        "Threshold Urn",
+        "Artifact",
+        "{1}",
+        "As long as seven or more cards are in your graveyard, this artifact has \"Whenever a creature you control dies, you gain 1 life.\"",
+    );
+    for def in [&vial, &urn] {
+        assert!(def.is_fully_supported(), "{:?}", def.unsupported_text());
+    }
+    let mut t = TestGame::new(2);
+    t.custom(P0, vial, Zone::Battlefield);
+    t.custom(P0, urn, Zone::Battlefield);
+    for _ in 0..5 {
+        t.graveyard(P0, "Wastes");
+    }
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Plains", 4);
+    let wrath = t.hand(P0, "Wrath of God");
+    t.cast(P0, wrath).go();
+    t.resolve();
+    // The Bears dying put the seventh card into the graveyard: immediately before the
+    // event the artifacts didn't have the abilities.
+    assert!(t.graveyard_size(P0) >= 7);
+    assert_eq!(triggers_of(&t, "Threshold Vial"), 0);
+    assert_eq!(triggers_of(&t, "Threshold Urn"), 0);
+    // Now they have them.
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.destroy(bears, None);
+    t.settle();
+    assert_eq!(triggers_of(&t, "Threshold Vial"), 1);
+    assert_eq!(triggers_of(&t, "Threshold Urn"), 1);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 24);
+}
