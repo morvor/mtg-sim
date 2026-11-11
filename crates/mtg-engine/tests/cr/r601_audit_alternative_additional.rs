@@ -156,7 +156,7 @@ fn casting_face_down_is_an_alternative_cost_that_cant_be_waived() {
 #[test]
 fn buyback_is_an_additional_cost_paid_with_an_alternative_cost_and_its_reductions_stay_within_it() {
     cr!("118.8", "118.9d", "601.2f", "702.27a");
-    interp!("keyword-cost-reduction-on-an-alternative-cost-after-increases");
+    interp!("keyword-cost-reduction-on-an-additional-cost-within-it");
     ruling!(
         "Memory Crystal",
         "Does not apply to other parts of the cost."

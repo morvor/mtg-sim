@@ -1765,8 +1765,8 @@ pub fn custom_trigger_looks_back(name: &str, ev: &Event) -> bool {
 /// changes that cost, one component of the spell's total cost, and no other part of the
 /// total (Memory Crystal's rulings): a reduction larger than the keyword cost's generic
 /// mana is lost rather than taken off a cost increase (Thalia) or the mana cost the total
-/// also includes. An alternative cost is [`set_alternative_keyword_cost`]'s (interpretation
-/// `keyword-cost-reduction-on-an-alternative-cost-after-increases`).
+/// also includes (interpretation `keyword-cost-reduction-on-an-additional-cost-within-it`).
+/// An alternative cost is [`set_alternative_keyword_cost`]'s.
 pub fn modified_keyword_cost(g: &Game, p: PlayerId, kind: KeywordKind, cost: &Cost) -> Cost {
     let (increase, reduction) = keyword_cost_changes(g, p, kind);
     let mut cost = with_generic_increase(cost, increase);
@@ -1784,9 +1784,10 @@ pub fn modified_keyword_cost(g: &Game, p: PlayerId, kind: KeywordKind, cost: &Co
 /// (CR 118.9d), so a reduction of it comes off the total cost after all of them, with the
 /// other reductions (CR 601.2f), never below zero and only its generic mana (CR 118.7a):
 /// Catalyst Stone with Thalia makes Deep Analysis's flashback {1}{U} + {1} - {2} = {U}
-/// (interpretation `keyword-cost-reduction-on-an-alternative-cost-after-increases`). The
-/// increases are added to the cost here; the reduction is `opt.alt_cost_reduction`, which
-/// the total cost takes off (`Game::total_cost_and_x`).
+/// (interpretations `keyword-cost-reduction-on-an-alternative-cost-after-increases` and,
+/// for the additional costs, `alternative-keyword-cost-reduction-reduces-additional-costs`).
+/// The increases are added to the cost here; the reduction is `opt.alt_cost_reduction`,
+/// which the total cost takes off (`Game::total_cost_and_x`), an X in the cost included.
 pub fn set_alternative_keyword_cost(
     g: &Game,
     p: PlayerId,
