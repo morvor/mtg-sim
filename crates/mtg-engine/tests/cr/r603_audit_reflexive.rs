@@ -210,6 +210,7 @@ fn an_additional_trigger_effect_doesnt_double_delayed_abilities() {
 #[test]
 fn a_reflexive_ability_of_an_enters_ability_isnt_caused_by_the_permanent_entering() {
     cr!("603.12", "603.2");
+    interp!("ability-triggered-cause-is-the-event");
     supported("Strict Proctor");
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Strict Proctor");

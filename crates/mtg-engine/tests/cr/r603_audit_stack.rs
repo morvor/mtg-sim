@@ -241,6 +241,7 @@ fn a_zone_change_trigger_cant_find_a_card_that_left_the_zone_it_went_to() {
 #[test]
 fn an_ability_triggering_on_enters_abilities_sees_every_wording_of_them() {
     cr!("603.2", "603.6a");
+    interp!("ability-triggered-cause-is-the-event");
     ruling!(
         "Strict Proctor",
         "Triggered abilities use the word “when,” “whenever,” or “at.” They’re often written as “[Trigger condition], [effect].”"
@@ -276,6 +277,7 @@ fn an_ability_triggering_on_enters_abilities_sees_every_wording_of_them() {
 #[test]
 fn an_attack_trigger_of_an_enters_or_attacks_ability_isnt_an_entering_trigger() {
     cr!("603.2", "603.6a");
+    interp!("ability-triggered-cause-is-the-event");
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Strict Proctor");
     let titan = t.battlefield(P0, "Sun Titan");
@@ -302,8 +304,10 @@ fn an_attack_trigger_of_an_enters_or_attacks_ability_isnt_an_entering_trigger() 
 #[test]
 fn an_enters_from_a_graveyard_ability_is_caused_by_the_permanent_entering() {
     cr!("603.2", "603.6a");
+    interp!("ability-triggered-cause-is-the-event");
     supported("Strict Proctor");
     supported("Triarch Praetorian");
+    supported("Desecrated Tomb");
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Strict Proctor");
     let praetorian = t.graveyard(P0, "Triarch Praetorian");
@@ -320,4 +324,19 @@ fn an_enters_from_a_graveyard_ability_is_caused_by_the_permanent_entering() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand);
     assert_eq!(t.life(P0), life);
+    // Desecrated Tomb's "Whenever one or more creature cards leave your graveyard" isn't an
+    // enters ability, but the card leaving the graveyard is the permanent entering (one
+    // zone change): that event made it trigger.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Strict Proctor");
+    t.battlefield(P0, "Desecrated Tomb");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.lands(P0, "Swamp", 4);
+    let zombify = t.hand(P0, "Zombify");
+    t.cast(P0, zombify).target(bears).go();
+    t.resolve();
+    assert_eq!(triggers_of(&t, "Desecrated Tomb"), 1);
+    assert_eq!(triggers_of(&t, "Strict Proctor"), 1);
+    t.resolve_all();
+    assert_eq!(tokens_named(&t, P0, "Bat"), 0, "countered: P0 couldn't pay {{2}}");
 }
