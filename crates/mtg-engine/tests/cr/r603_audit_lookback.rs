@@ -615,7 +615,7 @@ fn creature_cards_leaving_a_graveyard_together_trigger_a_per_card_ability_for_ea
 
 #[test]
 fn an_exchange_of_control_is_looked_back_at_for_both_permanents() {
-    cr!("603.10d", "701.12a");
+    cr!("603.10d", "701.12b");
     supported("Switcheroo");
     let mut t = TestGame::new(2);
     let zidane = t.battlefield(P1, "Zidane, Tantalus Thief");

@@ -108,13 +108,26 @@ fn a_one_or_more_ability_lost_because_of_the_event_still_triggers_on_it() {
     assert_eq!(triggers_of(&t, "Batch Vial"), 1);
     // A Wrath kills the Cleric: the artifact had the ability immediately before.
     let mut t = TestGame::new(2);
-    let v = t.custom(P0, vial, Zone::Battlefield);
+    let v = t.custom(P0, vial.clone(), Zone::Battlefield);
     t.battlefield(P0, "Soul Warden");
     t.battlefield(P0, "Grizzly Bears");
     wrath(&mut t);
     assert!(t.on_battlefield(v));
     assert_eq!(triggers_of(&t, "Batch Vial"), 1);
     t.resolve_all();
+    assert_eq!(t.life(P0), 23);
+    // The Cleric died earlier: the artifact lost the ability before the Bears died.
+    let mut t = TestGame::new(2);
+    t.custom(P0, vial, Zone::Battlefield);
+    let warden = t.battlefield(P0, "Soul Warden");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.destroy(warden, None);
+    t.settle();
+    assert_eq!(triggers_of(&t, "Batch Vial"), 1, "the Warden dying");
+    t.resolve_all();
+    t.g.destroy(bears, None);
+    t.settle();
+    assert_eq!(triggers_of(&t, "Batch Vial"), 0);
     assert_eq!(t.life(P0), 23);
 }
 
