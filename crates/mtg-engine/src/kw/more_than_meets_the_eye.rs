@@ -47,12 +47,7 @@ impl KeywordRules for MoreThanMeetsTheEye {
                 return vec![];
             }
         }
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::MoreThanMeetsTheEye,
-            &cost,
-        ));
+        super::set_alternative_keyword_cost(g, p, KeywordKind::MoreThanMeetsTheEye, &cost, &mut opt);
         opt.tag = Some(MORE_THAN_MEETS_THE_EYE);
         vec![opt]
     }

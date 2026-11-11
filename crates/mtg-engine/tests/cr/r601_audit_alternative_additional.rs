@@ -156,7 +156,7 @@ fn casting_face_down_is_an_alternative_cost_that_cant_be_waived() {
 #[test]
 fn buyback_is_an_additional_cost_paid_with_an_alternative_cost_and_its_reductions_stay_within_it() {
     cr!("118.8", "118.9d", "601.2f", "702.27a");
-    interp!("keyword-cost-reduction-bounded-by-the-keyword-cost");
+    interp!("keyword-cost-reduction-on-an-alternative-cost-after-increases");
     ruling!(
         "Memory Crystal",
         "Does not apply to other parts of the cost."
@@ -179,9 +179,10 @@ fn buyback_is_an_additional_cost_paid_with_an_alternative_cost_and_its_reduction
     t.resolve();
     assert!(t.in_hand(P1, "Grizzly Bears"));
     assert!(t.in_hand(P0, "Capsize"));
-    // Two Memory Crystals ({4} less off buyback costs) under Thalia: the buyback cost {3}
-    // becomes {0} and the fourth {1} is lost; Thalia's {1} is added to the total:
-    // {1}{U}{U} + {0} + {1} = {2}{U}{U}.
+    // Two Memory Crystals ({4} less off buyback costs) under Thalia: buyback is an
+    // additional cost, which doesn't take on the cost increases (CR 118.9d puts them on an
+    // alternative cost only), so the buyback cost {3} becomes {0} and the fourth {1} is
+    // lost; Thalia's {1} is added to the total: {1}{U}{U} + {0} + {1} = {2}{U}{U}.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Memory Crystal");
     t.battlefield(P0, "Memory Crystal");

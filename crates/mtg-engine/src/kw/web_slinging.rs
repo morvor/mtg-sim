@@ -46,7 +46,7 @@ impl KeywordRules for WebSlinging {
                 return vec![];
             }
         }
-        let mut cost = super::modified_keyword_cost(g, p, KeywordKind::WebSlinging, &cost);
+        let mut cost = cost;
         cost.parts.push(CostPart::ReturnToHand {
             filter: Filter::and(vec![
                 Filter::Type(CardType::Creature),
@@ -55,7 +55,7 @@ impl KeywordRules for WebSlinging {
             ]),
             count: Value::c(1),
         });
-        opt.alt_cost = Some(cost);
+        super::set_alternative_keyword_cost(g, p, KeywordKind::WebSlinging, &cost, &mut opt);
         opt.tag = Some(WEB_SLINGING);
         vec![opt]
     }

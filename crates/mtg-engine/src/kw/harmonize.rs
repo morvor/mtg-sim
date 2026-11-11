@@ -110,12 +110,7 @@ impl KeywordRules for Harmonize {
                 )
             }
         };
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::Harmonize,
-            &cost,
-        ));
+        super::set_alternative_keyword_cost(g, p, KeywordKind::Harmonize, &cost, &mut opt);
         opt.tag = Some(HARMONIZE);
         vec![opt]
     }

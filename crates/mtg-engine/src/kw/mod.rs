@@ -1757,25 +1757,55 @@ pub fn custom_trigger_looks_back(name: &str, ev: &Event) -> bool {
         .unwrap_or(false)
 }
 
-/// A keyword ability's cost that `p` pays, after the effects that modify that keyword's
-/// costs ("Buyback costs cost {2} less", "Flashback costs your opponents pay cost {2}
-/// more", "All morph costs cost {2} more"): the increases are added to the keyword's cost,
-/// then the reductions are taken off its generic mana, never below zero (CR 118.7a). Such
-/// an effect changes that keyword's cost, one component of the spell's total cost, and
-/// no other part of the total (Memory Crystal's and Inquisitive Glimmer's rulings): a
-/// reduction larger than the keyword cost's generic mana is lost rather than taken off a
-/// cost increase (Thalia) the total cost also includes (interpretation
-/// `keyword-cost-reduction-bounded-by-the-keyword-cost`).
+/// A keyword ability's cost that `p` pays as an additional cost (buyback, CR 702.27a) or
+/// outside casting a spell (a morph cost to turn a permanent face up, CR 702.37e), after
+/// the effects that modify that keyword's costs ("Buyback costs cost {2} less", "All morph
+/// costs cost {2} more"): the increases are added to the keyword's cost, then the
+/// reductions are taken off its generic mana, never below zero (CR 118.7a). Such an effect
+/// changes that cost, one component of the spell's total cost, and no other part of the
+/// total (Memory Crystal's rulings): a reduction larger than the keyword cost's generic
+/// mana is lost rather than taken off a cost increase (Thalia) or the mana cost the total
+/// also includes. An alternative cost is [`set_alternative_keyword_cost`]'s (interpretation
+/// `keyword-cost-reduction-on-an-alternative-cost-after-increases`).
 pub fn modified_keyword_cost(g: &Game, p: PlayerId, kind: KeywordKind, cost: &Cost) -> Cost {
     let (increase, reduction) = keyword_cost_changes(g, p, kind);
-    let mut cost = cost.clone();
-    if increase > 0 {
-        cost.mana
-            .get_or_insert_with(crate::mana::ManaCost::default)
-            .add(&crate::mana::ManaCost::generic(increase));
-    }
+    let mut cost = with_generic_increase(cost, increase);
     if let (Some(m), true) = (cost.mana.as_mut(), reduction > 0) {
         m.reduce_generic(reduction);
+    }
+    cost
+}
+
+/// Makes `cost`, the alternative cost of keyword `kind` (flashback, dash, blitz, ...: "You
+/// may cast this card by paying [cost] rather than its mana cost"), the cost `opt` casts
+/// the spell for, with the effects that modify that keyword's costs ("Flashback costs you
+/// pay cost {2} less", "Flashback costs your opponents pay cost {2} more"). The additional
+/// costs and cost increases that apply to the spell are applied to that alternative cost
+/// (CR 118.9d), so a reduction of it comes off the total cost after all of them, with the
+/// other reductions (CR 601.2f), never below zero and only its generic mana (CR 118.7a):
+/// Catalyst Stone with Thalia makes Deep Analysis's flashback {1}{U} + {1} - {2} = {U}
+/// (interpretation `keyword-cost-reduction-on-an-alternative-cost-after-increases`). The
+/// increases are added to the cost here; the reduction is `opt.alt_cost_reduction`, which
+/// the total cost takes off (`Game::total_cost_and_x`).
+pub fn set_alternative_keyword_cost(
+    g: &Game,
+    p: PlayerId,
+    kind: KeywordKind,
+    cost: &Cost,
+    opt: &mut CastOption,
+) {
+    let (increase, reduction) = keyword_cost_changes(g, p, kind);
+    opt.alt_cost = Some(with_generic_increase(cost, increase));
+    opt.alt_cost_reduction = reduction;
+}
+
+/// `cost` with `n` more generic mana.
+fn with_generic_increase(cost: &Cost, n: u32) -> Cost {
+    let mut cost = cost.clone();
+    if n > 0 {
+        cost.mana
+            .get_or_insert_with(crate::mana::ManaCost::default)
+            .add(&crate::mana::ManaCost::generic(n));
     }
     cost
 }

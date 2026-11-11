@@ -99,7 +99,7 @@ fn prowl_option(g: &Game, p: PlayerId, card: ObjectId, cost: &Cost) -> Option<Ca
     if !prowl_condition(g, p, &chars) {
         return None;
     }
-    opt.alt_cost = Some(super::modified_keyword_cost(g, p, KeywordKind::Prowl, cost));
+    super::set_alternative_keyword_cost(g, p, KeywordKind::Prowl, cost, &mut opt);
     opt.tag = Some(PROWL);
     Some(opt)
 }
