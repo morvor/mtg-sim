@@ -3615,6 +3615,37 @@ pub fn combat_filter(g: &Game, f: &Filter, id: ObjectId) -> bool {
     }
 }
 
+/// Whether a creature is attacking alone, blocking alone, and attacking a player alone
+/// (CR 506.5, 506.6), kept as last known information when it leaves the battlefield.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AloneStatus {
+    pub attacking: bool,
+    pub blocking: bool,
+    pub attacking_player: bool,
+}
+
+impl AloneStatus {
+    /// The value of an "alone" filter (`Filter::AttackingAlone`, `BlockingAlone`,
+    /// `AttackingPlayerAlone`).
+    pub fn matches(&self, f: &Filter) -> bool {
+        match f {
+            Filter::AttackingAlone => self.attacking,
+            Filter::BlockingAlone => self.blocking,
+            Filter::AttackingPlayerAlone => self.attacking_player,
+            _ => false,
+        }
+    }
+}
+
+/// The creature's [`AloneStatus`] now.
+pub fn alone_status(g: &Game, id: ObjectId) -> AloneStatus {
+    AloneStatus {
+        attacking: combat_filter(g, &Filter::AttackingAlone, id),
+        blocking: combat_filter(g, &Filter::BlockingAlone, id),
+        attacking_player: combat_filter(g, &Filter::AttackingPlayerAlone, id),
+    }
+}
+
 fn recipient_matches(g: &Game, r: &DamageRecipient, t: Entity, ctx: &Ctx) -> bool {
     match (r, t) {
         (DamageRecipient::Any, _) => true,

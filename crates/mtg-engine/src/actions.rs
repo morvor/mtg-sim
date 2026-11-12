@@ -215,6 +215,12 @@ impl Game {
                 _ => None,
             })
             .collect();
+        // Whether each creature leaving combat was attacking or blocking alone, before any
+        // of the others leaving at the same time had left (CR 506.5, 608.2h).
+        let alone_before: Vec<(ObjectId, crate::combat::AloneStatus)> = attachments_before
+            .iter()
+            .map(|(o, _)| (*o, crate::combat::alone_status(self, *o)))
+            .collect();
         for (i, e) in finals {
             match e {
                 ReplEvent::Move(m) => {
@@ -235,6 +241,11 @@ impl Game {
         for o in still_attached {
             if let Some(lb) = self.objects[o.0 as usize].left_battlefield.as_mut() {
                 lb.attached = true;
+            }
+        }
+        for (o, alone) in alone_before {
+            if let Some(lb) = self.objects[o.0 as usize].left_battlefield.as_mut() {
+                lb.alone = alone;
             }
         }
         crate::zones::face_down_exiled(
@@ -496,6 +507,7 @@ impl Game {
                 equipped: has(self, "Equipment"),
                 attached: false,
                 attachments: attached.clone(),
+                alone: crate::combat::alone_status(self, old_id),
                 blocks: self
                     .combat
                     .as_ref()

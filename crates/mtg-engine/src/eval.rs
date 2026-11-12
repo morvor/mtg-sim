@@ -797,6 +797,14 @@ impl Game {
             Filter::Blocked => self.combat.as_ref().is_some_and(|cb| cb.is_blocked(id)),
             // CR 509.1h: attackers are neither blocked nor unblocked until blockers are declared.
             Filter::Unblocked => self.combat.as_ref().is_some_and(|cb| cb.is_unblocked(id)),
+            // A creature that left the battlefield: as it last existed there (CR 608.2h).
+            Filter::AttackingAlone | Filter::BlockingAlone | Filter::AttackingPlayerAlone
+                if o.next.is_some() && o.left_battlefield.is_some() =>
+            {
+                o.left_battlefield
+                    .as_deref()
+                    .is_some_and(|l| l.alone.matches(f))
+            }
             Filter::AttackingAlone
             | Filter::BlockingAlone
             | Filter::AttackingPlayerAlone

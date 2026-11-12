@@ -305,3 +305,112 @@ fn mogg_flunkies_attacks_and_blocks_with_a_teammates_creature() {
     assert_eq!(blocking(&t, their_flunkies), vec![flunkies]);
     assert_eq!(blocking(&t, their_mate), vec![mate]);
 }
+
+/// Thijarian Witness (P1): "Whenever another creature dies, if it was attacking or
+/// blocking alone, exile it and investigate."
+fn witness(t: &mut TestGame) {
+    supported("Thijarian Witness");
+    t.battlefield(P1, "Thijarian Witness");
+}
+
+#[test]
+fn a_creature_that_dies_while_attacking_alone_after_the_other_attacker_left_was_attacking_alone() {
+    cr!("506.5", "603.10a");
+    let mut t = TestGame::new(2);
+    witness(&mut t);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let other = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(
+        &mut t,
+        &[(bears, Entity::Player(P1)), (other, Entity::Player(P1))],
+    );
+    block(&mut t, P1, &[(giant, bears)]);
+    go_to(&mut t, Step::DeclareBlockers);
+    // Not declared alone, but attacking alone once the other leaves combat.
+    remove_from_combat(&mut t, other);
+    go_to(&mut t, Step::CombatDamage);
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    assert_eq!(t.named_on_battlefield("Clue Token").len(), 1);
+}
+
+#[test]
+fn a_creature_that_dies_blocking_with_another_wasnt_blocking_alone() {
+    cr!("506.5", "603.10a");
+    supported("Indomitable Ancients");
+    let mut t = TestGame::new(2);
+    witness(&mut t);
+    // Indomitable Ancients: 2/10. It kills one of its two blockers.
+    let ancients = t.battlefield(P0, "Indomitable Ancients");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, &[(ancients, Entity::Player(P1))]);
+    block(&mut t, P1, &[(a, ancients), (b, ancients)]);
+    go_to(&mut t, Step::DeclareBlockers);
+    go_to(&mut t, Step::CombatDamage);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert!(t.named_on_battlefield("Clue Token").is_empty());
+    // With the other blocker gone first, the one left is blocking alone when it dies.
+    let mut t = TestGame::new(2);
+    witness(&mut t);
+    let ancients = t.battlefield(P0, "Indomitable Ancients");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, &[(ancients, Entity::Player(P1))]);
+    block(&mut t, P1, &[(a, ancients), (b, ancients)]);
+    go_to(&mut t, Step::DeclareBlockers);
+    remove_from_combat(&mut t, b);
+    go_to(&mut t, Step::CombatDamage);
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"), "{}", t.dump_log());
+    assert_eq!(t.named_on_battlefield("Clue Token").len(), 1);
+    assert!(t.on_battlefield(b));
+}
+
+#[test]
+fn creatures_that_die_attacking_together_werent_attacking_alone() {
+    cr!("506.5", "603.10a", "608.2h");
+    let mut t = TestGame::new(2);
+    witness(&mut t);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    let x = t.battlefield(P1, "Hill Giant");
+    let y = t.battlefield(P1, "Hill Giant");
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, &[(a, Entity::Player(P1)), (b, Entity::Player(P1))]);
+    block(&mut t, P1, &[(x, a), (y, b)]);
+    go_to(&mut t, Step::DeclareBlockers);
+    go_to(&mut t, Step::CombatDamage);
+    t.resolve_all();
+    // Both died in one event, attacking together: neither was attacking alone, even as
+    // the second of them left after the first.
+    assert_eq!(t.graveyard_size(P0), 2);
+    assert!(!t.in_exile("Grizzly Bears"));
+    assert!(t.named_on_battlefield("Clue Token").is_empty());
+}
+
+#[test]
+fn creatures_that_die_blocking_together_werent_blocking_alone() {
+    cr!("506.5", "603.10a", "608.2h");
+    supported("Colossal Dreadmaw");
+    let mut t = TestGame::new(2);
+    witness(&mut t);
+    let maw = t.battlefield(P0, "Colossal Dreadmaw");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, &[(maw, Entity::Player(P1))]);
+    block(&mut t, P1, &[(a, maw), (b, maw)]);
+    go_to(&mut t, Step::DeclareBlockers);
+    assign(&mut t, P0, &[2, 2, 2]);
+    go_to(&mut t, Step::CombatDamage);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.graveyard_size(P1), 2);
+    assert!(t.named_on_battlefield("Clue Token").is_empty());
+}
