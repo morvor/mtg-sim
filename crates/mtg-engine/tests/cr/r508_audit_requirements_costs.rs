@@ -340,3 +340,115 @@ fn the_total_cost_to_block_is_one_per_blocker_and_must_be_paid_in_full() {
     assert!(blockers_of(&t, angel).is_empty());
     assert!(!t.obj_now(forest).tapped);
 }
+
+#[test]
+fn norns_annex_costs_are_paid_one_way_each_and_two_life_needs_more_than_one_life() {
+    cr!("508.1h", "508.1j", "107.4f");
+    ruling!(
+        "Norn's Annex",
+        "if you attack with two creatures, you may pay {W} for one cost and 2 life for the other"
+    );
+    ruling!("Norn's Annex", "If you're at 1 life or less, you can't pay 2 life.");
+    supported("Norn's Annex");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Norn's Annex");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    let plains = t.lands(P0, "Plains", 1)[0];
+    combat_of_p0(&mut t);
+    declare(&mut t, &[(a, Entity::Player(P1)), (b, Entity::Player(P1))]);
+    go_to(&mut t, Step::DeclareAttackers);
+    assert_eq!(attackers(&t).len(), 2);
+    assert!(t.obj_now(plains).tapped);
+    assert_eq!(t.life(P0), 18);
+    // At 1 life with no white mana, the cost can't be paid: the attack is undone.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Norn's Annex");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    t.g.players[0].life = 1;
+    combat_of_p0(&mut t);
+    declare(&mut t, &[(a, Entity::Player(P1))]);
+    go_to(&mut t, Step::DeclareAttackers);
+    assert!(attackers(&t).is_empty());
+    assert_eq!(t.life(P0), 1);
+}
+
+#[test]
+fn trove_of_temptation_requires_no_attack_its_controller_taxes() {
+    cr!("508.1d");
+    supported("Trove of Temptation");
+    // Trove and Ghostly Prison: attacking P1 needs a cost, and P1 has no planeswalker.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Trove of Temptation");
+    t.battlefield(P1, "Ghostly Prison");
+    t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Plains", 2);
+    combat_of_p0(&mut t);
+    go_to(&mut t, Step::DeclareAttackers);
+    assert!(attackers(&t).is_empty());
+    // With a planeswalker, one creature must attack it (for free).
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Trove of Temptation");
+    t.battlefield(P1, "Ghostly Prison");
+    let jace = t.battlefield(P1, "Jace Beleren");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    combat_of_p0(&mut t);
+    go_to(&mut t, Step::DeclareAttackers);
+    let att = attackers(&t);
+    assert_eq!(att.len(), 1);
+    assert!(att[0] == a || att[0] == b);
+    assert_eq!(attacks(&t, att[0]), Some(Entity::Object(jace)));
+}
+
+#[test]
+fn trove_of_temptation_in_two_headed_giant_needs_an_attack_on_its_controller_by_each_opponent() {
+    cr!("508.1d", "805.10b");
+    ruling!(
+        "Trove of Temptation",
+        "Attacking your teammate or a planeswalker your teammate controls doesn't satisfy Trove of Temptation's requirement."
+    );
+    let mut t = TestGame::with_config(
+        4,
+        GameConfig {
+            variant: mtg_engine::game::Variant::TwoHeadedGiant,
+            teams: Some(vec![0, 0, 1, 1]),
+            ..Default::default()
+        },
+    );
+    t.battlefield(P2, "Trove of Temptation");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let mates = t.battlefield(P1, "Grizzly Bears");
+    combat_of_p0(&mut t);
+    // Both attack P3 (Trove's controller's teammate): illegal.
+    declare(
+        &mut t,
+        &[(mine, Entity::Player(P3)), (mates, Entity::Player(P3))],
+    );
+    go_to(&mut t, Step::DeclareAttackers);
+    assert_eq!(attacks(&t, mine), Some(Entity::Player(P2)));
+    assert_eq!(attacks(&t, mates), Some(Entity::Player(P2)));
+}
+
+#[test]
+fn a_creature_goaded_by_each_opponent_attacks_an_opponent_rather_than_a_planeswalker() {
+    cr!("508.1d", "701.15b", "701.15c");
+    ruling!(
+        "Disrupt Decorum",
+        "If a creature you control has been goaded by each of your opponents, the creature must attack an opponent (rather than a planeswalker"
+    );
+    let mut t = TestGame::with_config(
+        3,
+        GameConfig {
+            attack_multiple_players: true,
+            ..Default::default()
+        },
+    );
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let jace = t.battlefield(P1, "Jace Beleren");
+    t.g.objects[bears.0 as usize].goaded_by = vec![P1, P2];
+    combat_of_p0(&mut t);
+    declare(&mut t, &[(bears, Entity::Object(jace))]);
+    go_to(&mut t, Step::DeclareAttackers);
+    assert!(matches!(attacks(&t, bears), Some(Entity::Player(p)) if p == P1 || p == P2));
+}
