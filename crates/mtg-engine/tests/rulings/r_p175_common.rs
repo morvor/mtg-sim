@@ -12,7 +12,7 @@ pub use crate::r_p195_common::{attacking, on_stack, tap, tapped, top_is_trigger_
 pub use crate::r_p196_common::{ability_resolved_from, give_control_until_eot, pump};
 pub use crate::r_p198_common::{act, act_only, ctl, exile, pass_turn, to_upkeep};
 pub use crate::r_s01_common::{attack_with, creatures, supported, tokens, with_subtype};
-use mtg_engine::ability::{Duration, Effect, PlayerRef, Sel};
+use mtg_engine::ability::{Duration, Effect, PlayerRef, Sel, TokenSpec, Value};
 use mtg_engine::decision::Decision;
 use mtg_engine::events::{Event, MoveCause};
 use mtg_engine::object::Zone;
@@ -80,4 +80,31 @@ pub fn tokens_created(t: &TestGame) -> usize {
         .iter()
         .filter(|e| matches!(e, Event::TokenCreated { .. }))
         .count()
+}
+
+/// `p` creates a token (as a resolving effect would) and settles. Returns the token.
+pub fn make_token(t: &mut TestGame, p: PlayerId, spec: TokenSpec) -> ObjectId {
+    let before = t.g.battlefield.clone();
+    let mut ctx = mtg_engine::eval::Ctx::new(None, p);
+    t.g.exec(
+        &Effect::CreateToken {
+            spec,
+            count: Value::c(1),
+            controller: PlayerRef::You,
+            tapped: false,
+            attacking: false,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+    let tok = t
+        .g
+        .battlefield
+        .iter()
+        .copied()
+        .find(|id| !before.contains(id))
+        .expect("no token");
+    t.g.flush_events();
+    t.settle();
+    tok
 }

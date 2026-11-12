@@ -1172,6 +1172,43 @@ impl Game {
             .collect()
     }
 
+    /// For counting permanents "attached to" an object that has left the battlefield: the
+    /// ones that were attached to it as it last existed there and have left the
+    /// battlefield too (an Aura put into a graveyard as a state-based action), judged as
+    /// they last existed (CR 608.2h, 704.5m). Those still on the battlefield are among
+    /// [`Game::objects_matching`] already (`Filter::AttachedToAnyOf`).
+    fn left_attachments_matching(&self, f: &Filter, ctx: &Ctx) -> usize {
+        let host_sel = match f {
+            Filter::AttachedToAnyOf(s) => Some(s),
+            Filter::And(v) => v.iter().find_map(|x| match x {
+                Filter::AttachedToAnyOf(s) => Some(s),
+                _ => None,
+            }),
+            _ => None,
+        };
+        let Some(sel) = host_sel else {
+            return 0;
+        };
+        if f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+            return 0;
+        }
+        let mut seen: Vec<ObjectId> = Vec::new();
+        for host in self.eval_sel(sel, ctx).iter().filter_map(|e| e.object()) {
+            if self.is_live(host) {
+                continue;
+            }
+            let Some(l) = self.obj(host).left_battlefield.as_deref() else {
+                continue;
+            };
+            for a in &l.attachments {
+                if !self.is_live(*a) && !seen.contains(a) && self.matches(*a, f, ctx) {
+                    seen.push(*a);
+                }
+            }
+        }
+        seen.len()
+    }
+
     /// Enumerates objects matching a filter in the filter's zone (battlefield by default).
     /// Phased-out permanents are excluded (CR 702.26b).
     pub fn objects_matching(&self, f: &Filter, ctx: &Ctx) -> Vec<ObjectId> {
@@ -1591,8 +1628,10 @@ impl Game {
         match v {
             Value::Const(n) => *n as i64,
             Value::X => ctx.x as i64,
-            Value::Count(f) => crate::relational::count(self, f, ctx)
-                .unwrap_or_else(|| self.objects_matching(f, ctx).len() as i64),
+            Value::Count(f) => crate::relational::count(self, f, ctx).unwrap_or_else(|| {
+                (self.objects_matching(f, ctx).len() + self.left_attachments_matching(f, ctx))
+                    as i64
+            }),
             Value::CountSel(s) => self.eval_sel(s, ctx).len() as i64,
             Value::CountPlayers(f) => crate::aggregates::count_players(self, f, ctx),
             Value::PowerOf(s) => self

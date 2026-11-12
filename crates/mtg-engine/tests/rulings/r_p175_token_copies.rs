@@ -6,40 +6,13 @@
 use crate::r_p175_common::*;
 use crate::r_s06_common::attach_new;
 use crate::r_s26_common::{dress_up, fresh, new_tokens};
-use mtg_engine::ability::{Effect, PlayerRef, TokenSpec, Value};
+use mtg_engine::ability::TokenSpec;
 use mtg_engine::decision::Decision;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::{counters, CardType, Color, ColorSet};
 use mtg_engine::*;
-
-/// `p` creates a token (as a resolving effect would) and settles. Returns the token.
-fn make_token(t: &mut TestGame, p: PlayerId, spec: TokenSpec) -> ObjectId {
-    let before = t.g.battlefield.clone();
-    let mut ctx = mtg_engine::eval::Ctx::new(None, p);
-    t.g.exec(
-        &Effect::CreateToken {
-            spec,
-            count: Value::c(1),
-            controller: PlayerRef::You,
-            tapped: false,
-            attacking: false,
-        },
-        &mut ctx,
-    );
-    t.g.recompute();
-    let tok = t
-        .g
-        .battlefield
-        .iter()
-        .copied()
-        .find(|id| !before.contains(id))
-        .expect("no token");
-    t.g.flush_events();
-    t.settle();
-    tok
-}
 
 /// A 1/1 colorless Thopter artifact creature token (enchantment creature: a white
 /// Spirit), as the effect that created it states.
