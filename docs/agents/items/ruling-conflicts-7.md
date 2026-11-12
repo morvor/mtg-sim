@@ -114,3 +114,65 @@ No card in the pool has a required per-player target on an activated ability (th
 - Mysterious Stranger still fails the round-trip check (as before); its new player filter renders through the history-filter renderer.
 
 **For the user.** Accept conclusion A (the provisional entry `per-player-required-targets`): a required target "for each player" needs a legal target for every player the phrase names, or the spell can't be cast and the triggered ability is removed from the stack (Vaevictis's ruling); "up to one" allows none. Recommendation: **yes**. Consequences worth knowing: Sylvan Primordial's ability does nothing if any opponent controls no noncreature permanent it can target; Guff Rewrites History can't be cast unless its caster also controls a nonenchantment, nonland permanent; Turf War's ability needs a land of its controller's.
+
+### Skeptic's review (Nov 12)
+
+A separate adversarial skeptic tried to refute conclusion A independently, then reviewed the code and tests (review commit after a85ea28). **Result: the conclusion survives; A stands, and the register entry stays provisional.**
+
+**Re-checked, verbatim and dated.**
+- CR, against `data/` (effective 2026-09-25): 601.2, 601.2c, 602.2, 602.2b, 603.3d, 115.1, 115.1a, 115.1c, 115.1d, 115.3, 115.6, 608.2f's example and 733.1, as quoted above. Also 609.3, "If an effect attempts to do something impossible, it does only as much as possible.", and 700.2a.
+- Oracle texts and rulings, against `data/` (snapshot 2026-09-24): every one quoted above, with its date. That covers Vaevictis (4), Sylvan Primordial (3), Mass Mutiny (4), the four other Primordials, Blatant Thievery (2), Frenzied Gorespawn (2), Blue Dragon, Goblin Grenadiers, Raven's Run, Hex, Whiplash Trap, The Dead Shall Serve, Decoy Gambit and Nils. Guff Rewrites History, Turf War, Mysterious Stranger (on targets), Chaos Is My Plaything and Windgrace's Judgment have none on this.
+- Archived CRs (pit142857/mtg-cr, all 130 files, decoded per file):
+  - 601.2c's "In some cases, the number of targets will be defined by the spell’s text." is first in the CR effective 2015-09-26 (absent from 2015-07-17).
+  - The removal rule is 410.4 in the file dated 1999-04-23 ("If no legal choice can be made (or if a rule or a continuous effect otherwise makes the ability illegal), the pseudospell is simply removed from the stack."). Today's words are first in the file dated 2009-02-01; the 2008-10-01 file had "If no legal choice can be made (or if a rule or a continuous effect otherwise makes the ability illegal), the ability is simply removed from the stack." The rule is 603.3d from the CR effective 2009-07-11.
+  - 114.6 (zero targets) is first in the CR effective 2019-01-25.
+  - "unable to comply" is in 409.1 of the 1999-04-23 file.
+- ormos (maxmakesmagic/ormos):
+  - The Gatecrash FAQ (2013-01-21) has Sylvan Primordial's three bullets, the first "You can choose a number of targets up to the number of opponents you have, one target per opponent.", and the same bullet under Diluvian, Luminate, Molten and Sepulchral Primordial.
+  - The Planechase 2012 FAQ (2012-05-24) has Mass Mutiny's four bullets, in the order given above.
+  - The Core Set 2019 Release Notes (2018-06-22) have Vaevictis's four bullets.
+  - The Battle for Zendikar bulletin (2015-10-09) has the 601.2c note quoted above. Its example is Quarantine Field, "for each isolation counter on it, exile up to one target nonland permanent".
+  - The Streets of New Capenna (2022-04-20) and Commander 2015 (2015-11-11) release notes have no Turf War or Blatant Thievery entry.
+  - The three Born of the Gods update bulletins (2014-01-27/28) don't mention Sylvan Primordial. No document dates the change of its rulings, so that it replaced the FAQ bullet stays an inference from the dates.
+
+**Contrary evidence searched for; none found.**
+- Rulings (all 78,948 entries) were searched for "won't choose a target", "no target for", "choose no target", "fewer (than N) targets", "enough/sufficient/insufficient legal targets", "doesn't control any", "controls no", "has no (legal) permanent/creature/target", and "for each opponent/player ... target" / "one target per" / "for that player".
+- Every hit falls into one of three groups:
+  - "up to"/"any number" targets: Know Evil, Nissa, Genesis Mage, Deliver Unto Evil, Nyssa of Traken, Jaws of Stone, the Primordial cycle, The Dead Shall Serve, Decoy Gambit, Nils.
+  - Removal or no casting when a required target is missing: Goblin Vandal "the ability doesn’t go on the stack"; the Rooms' "The triggered ability won't go on the stack."; Forebear's Blade; Grave Exchange "You can’t cast it unless there is a legal target to choose for both.".
+  - Unrelated.
+- The survey reproduces exactly: 71 Oracle sentences, 62 "up to one", Windgrace's Judgment, and the 8 required cards.
+- Other templates found no per-player required targets:
+  - "controlled by different players" (Run Away Together, Modify Memory, Kitsune, ...) is one instance of "target" with a cross-target requirement.
+  - "where X is the number of opponents" is "up to X".
+  - "target ... each opponent controls", "each opponent's" and "per opponent" have no matches.
+- Judge forums and community sites are outside this session's allowed hosts (apps.magicjudges.org, tappedout.net). Web searches found no official statement. The only skipping readings found were unsourced search-engine summaries, not rules sources.
+
+**Readings a judge might take, and why A survives.**
+- **Strongest:** Sylvan Primordial's "If an opponent has any legal permanents to target, you must target one of them." implies, by its conditional, that an opponent without one is skipped. Three things answer it.
+  - Wizards uses the same conditional for Blue Dragon's single required target ("If an opponent has at least one creature the ability could target, you must choose a target"). There, skipping the required target and keeping the optional ones isn't possible under 603.3d, so the conditional doesn't imply skipping.
+  - Vaevictis's ruling, the only one that addresses the case, says removal for the identical template ("for each player, choose target permanent that player controls").
+  - Mass Mutiny's errata pairs "up to one" with castability when an opponent has no creature.
+- **"Up to the number of opponents"** (the 2013 FAQ bullet): written for the "up to one" cycle, withdrawn from Sylvan Primordial's rulings, and contradicted by the 2014 ruling's "must".
+- **"For each opponent" counting only opponents with a legal target**, by analogy with 601.2c's variable number of targets: 601.2c lets the player announce a number only when the text makes it variable. Here the text fixes it, and Mysterious Stranger shows how a card limits the players ("for each graveyard with an instant or sorcery card in it").
+- **609.3 ("do as much as possible"):** it governs effects as they're applied, not target choice (601.2c, 603.3d).
+
+Not genuinely D: no ruling or rule states the skipping reading. It remains how a reader may take Sylvan Primordial's conditional, which is why the entry stays provisional. Its Alternatives now list (A) to (C) with these answers.
+
+**Code and tests.**
+- `per_player_targets.rs`: no defect found.
+  - `assign` is a correct bipartite matching (augmenting paths; `seen` reset per seat).
+  - `choose` keeps the requirement feasible at every step (initial check, filtered candidates, answer validation against the later players). Its default (`Answer::Default` or an invalid answer) is the fewest targets, the matching's, so the first candidate, as before. Its `None` branches are unreachable once the initial check passes.
+  - Overlapping candidate sets, where the matching matters, can't come from the parser: `mentions_iterated` requires every target to be controlled or owned by "that player". The unit test covers `assign`.
+- `stack.rs`: per-player slots are checked by `possible` for castability, modes and activation. A `None` from `choose` makes casting and activation `Err(Illegal)` (reversed before costs) and removes a trigger, by the existing paths.
+- The "for each graveyard with X in it" pattern compiles only when the graveyards are described in the target's own words. `PlayerFilter::History(Condition::Exists(f))` evaluates the target's filter with the player as "that player", which is what "graveyard with ... in it" means.
+- Citations (`cr!`, `ruling!`, `interp!`) match what each test asserts. The Guff Rewrites History test is weakened only where the conclusion requires: its three-player case is now uncastable, and the player who controlled none of the permanents is still covered by `guff_rewrites_history_a_player_whose_target_became_illegal_exiles_nothing`. Entry `guff-players-who-controlled` is consistent.
+- `rulings-coverage --check` and `interpretations --check` pass.
+- Break-check (repeated): with the three engine files at 086b682, exactly the six new-behavior tests and the reworked Guff test fail; the four unchanged-behavior tests pass.
+- Simulation (release build), all with no failure:
+  - 30 three-player games of a deck of the per-player cards (`--cards compiled --check 4`, seed 5150);
+  - `--random-decks` 120 two-player games (seed 8128) and 40 four-player games (seed 8129);
+  - the every-card sweep of 10 per-player cards (every card cast and fully exercised).
+- The skeptic's changes: register entry `per-player-required-targets` Alternatives (A) to (C), and this section.
+
+**For the user (skeptic).** Same recommendation: accept conclusion A. If you would rather follow the skipping reading (Alternatives (A) of the entry), the engine change is small: `per_player_targets::requirements` would lower each player's `need` to the number of their legal candidates, and the six new-behavior tests and the reworked Guff Rewrites History test would change with it.
