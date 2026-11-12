@@ -430,7 +430,7 @@ impl Game {
             || !sacrifice.is_empty()
             || !commander_moves.is_empty();
         if !any {
-            return performed;
+            return crate::kw::state_based_actions_after_moves(self) || performed;
         }
 
         for id in cease {
@@ -551,7 +551,9 @@ impl Game {
         // Unattaching and removing counters happen at the same time as the zone changes
         // above. They're done afterward so that the last known information of a
         // permanent that left is from before any of these actions (CR 704.8); a
-        // permanent that left the battlefield needs neither.
+        // permanent that left the battlefield needs neither. So are the keywords' own
+        // state-based actions that change other permanents.
+        crate::kw::state_based_actions_after_moves(self);
         for id in unattach {
             if self.is_live(id) {
                 self.unattach(id);

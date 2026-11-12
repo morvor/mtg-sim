@@ -78,9 +78,9 @@ fn is_bestow_effect(e: &ContinuousEffect) -> bool {
 
 /// Whether the permanent is a bestowed Aura (CR 702.103b).
 pub fn is_bestowed(g: &Game, id: ObjectId) -> bool {
-    g.effects
-        .iter()
-        .any(|e| is_bestow_effect(e) && matches!(&e.affected, Affected::Objects(v) if v.contains(&id)))
+    g.effects.iter().any(|e| {
+        is_bestow_effect(e) && matches!(&e.affected, Affected::Objects(v) if v.contains(&id))
+    })
 }
 
 /// The permanent ceases to be bestowed: the effect making it an Aura ends.
@@ -198,8 +198,9 @@ impl KeywordRules for Bestow {
     }
 
     /// CR 702.103f–g: a bestowed Aura that's unattached, or attached to an illegal object
-    /// or player, becomes unattached and ceases to be bestowed.
-    fn state_based_actions(&self, g: &mut Game) -> bool {
+    /// or player, becomes unattached and ceases to be bestowed (after the check's zone
+    /// changes: a creature dying in the same check dies with the Aura's effects, CR 704.8).
+    fn state_based_actions_after_moves(&self, g: &mut Game) -> bool {
         let bestowed: Vec<ObjectId> = g
             .battlefield
             .iter()

@@ -124,3 +124,56 @@ fn an_aura_or_equipment_that_becomes_a_creature_becomes_unattached() {
     assert!(!t.on_battlefield(land));
     assert_eq!(t.pt(bears), (2, 2));
 }
+
+/// Gives `id` protection from green until end of turn.
+fn protect_from_green(t: &mut TestGame, id: ObjectId) {
+    let mut prot =
+        mtg_engine::keywords::Keyword::new(mtg_engine::keywords::KeywordKind::Protection);
+    prot.filter = Some(Filter::Color(Color::Green));
+    let mut ctx = Ctx::new(None, P0);
+    ctx.targets = vec![vec![Entity::Object(id)]];
+    t.g.exec(
+        &Effect::Modify {
+            what: Sel::Target(0),
+            mods: vec![Modification::AddKeyword(prot)],
+            duration: Duration::EndOfTurn,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+}
+
+#[test]
+fn a_creature_dying_as_its_bestowed_aura_becomes_unattached_dies_with_the_auras_bonus() {
+    cr!("704.3", "704.8", "704.5g", "702.103f");
+    supported("Boon Satyr");
+    supported("Death's Presence");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.battlefield(P0, "Death's Presence");
+    t.lands(P0, "Forest", 5);
+    let satyr = t.hand(P0, "Boon Satyr");
+    t.cast(P0, satyr)
+        .method(CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Bestow,
+        ))
+        .target(bears)
+        .go();
+    t.resolve();
+    assert_eq!(t.pt(bears), (6, 4));
+    // In one check: the Bears have lethal damage, and the Satyr (green) is attached to a
+    // creature with protection from green. Both happen at once; the Bears die as a 6/4.
+    let source = t.battlefield(P1, "Hill Giant");
+    t.g.deal_damage(source, Entity::Object(bears), 4, false);
+    protect_from_green(&mut t, bears);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.settle();
+    assert!(!t.on_battlefield(bears));
+    assert_eq!(t.g.obj(bears).power(), 6, "last known information");
+    t.resolve_all();
+    assert_eq!(t.counters(giant, counters::PLUS1), 6);
+    // The Satyr ceased to be bestowed: it's a creature now.
+    let satyr = t.named_on_battlefield("Boon Satyr")[0];
+    assert!(t.obj_now(satyr).is_creature());
+}

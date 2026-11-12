@@ -556,7 +556,7 @@ pub trait KeywordRules: Sync + Send {
     /// Whether an Aura that's unattached or attached to an illegal object or player stays
     /// on the battlefield instead of being put into its owner's graveyard (an exception to
     /// CR 704.5m, e.g. a bestowed Aura, CR 702.103f): the keyword's own
-    /// [`KeywordRules::state_based_actions`] deal with it.
+    /// [`KeywordRules::state_based_actions_after_moves`] deal with it.
     fn keeps_unattached_aura(&self, g: &Game, aura: ObjectId) -> bool {
         false
     }
@@ -573,6 +573,15 @@ pub trait KeywordRules: Sync + Send {
     /// State-based actions a keyword defines (e.g. space sculptor's sector designations,
     /// CR 704.5u). Returns true if any action was performed.
     fn state_based_actions(&self, g: &mut Game) -> bool {
+        false
+    }
+    /// State-based actions a keyword defines that change permanents other state-based
+    /// actions of the same check may move (a bestowed Aura becoming unattached and ceasing
+    /// to be bestowed, CR 702.103f). They're performed after those zone changes, like the
+    /// check's other unattachments, so a permanent that left keeps its last known
+    /// information from before any of them (CR 704.3, 704.8). Returns true if any action
+    /// was performed.
+    fn state_based_actions_after_moves(&self, g: &mut Game) -> bool {
         false
     }
     /// Whether the resolving ability `stack_obj` (whose body is `body`) resolves even
@@ -804,6 +813,15 @@ pub fn state_based_actions(g: &mut Game) -> bool {
     let mut performed = false;
     for r in registry() {
         performed |= r.state_based_actions(g);
+    }
+    performed
+}
+
+/// See [`KeywordRules::state_based_actions_after_moves`].
+pub fn state_based_actions_after_moves(g: &mut Game) -> bool {
+    let mut performed = false;
+    for r in registry() {
+        performed |= r.state_based_actions_after_moves(g);
     }
     performed
 }
