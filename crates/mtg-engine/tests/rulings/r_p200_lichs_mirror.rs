@@ -151,7 +151,7 @@ fn lichs_mirror_cant_help_twice_when_it_shuffled_itself() {
 
 #[test]
 fn lichs_mirror_gains_or_loses_life_to_reach_20() {
-    cr!("119.5", "614.1a", "614.5");
+    cr!("119.5", "614.1a");
     ruling!(
         "Lich's Mirror",
         "For your life total to become 20, you actually gain or lose the necessary amount of life. Keep in mind that you may have a negative life total when this happens."
@@ -239,6 +239,7 @@ fn lichs_mirror_does_nothing_if_you_cant_lose() {
 #[test]
 fn borrowed_lichs_mirror_loops_into_a_draw() {
     cr!("104.4b", "704.3", "614.1a");
+    interp!("settle-loop-is-a-draw");
     ruling!(
         "Lich's Mirror",
         "If you control *but don't own* Lich's Mirror, Lich's Mirror itself will still be on the battlefield after its effect is finished. If you would lose the game again for any of the reasons above, Lich's Mirror has its effect again . . . and again . . . and again. An involuntary infinite loop will be created, and the game will end in a draw."

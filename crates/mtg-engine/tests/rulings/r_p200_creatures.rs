@@ -1,5 +1,5 @@
 //! Rulings batch P200 — creatures: Death's Shadow's life total (CR 119, 810.9a), Shanna
-//! and Timberpack Wolf's counts (604.3, 704.5g), Faeburrow Elder, Bloom Tender and Glister
+//! and Timberpack Wolf's counts (113.6, 611.3a, 704.5g), Faeburrow Elder, Bloom Tender and Glister
 //! Bairn's colors (105.1), Mightstone, "enters with" counters that ignore creatures
 //! entering at the same time (614.12), Gladewalker Ritualist and Chrome Replicator's
 //! triggers (603.6a, 603.4), Idolized's "attacks alone" (506.5), South Wind Avatar's life
@@ -85,7 +85,9 @@ fn deaths_shadow_uses_the_team_life_total() {
 
 #[test]
 fn shanna_counts_itself_and_is_zero_zero_elsewhere() {
-    cr!("604.3", "611.3a");
+    // "Shanna gets +1/+1 for each creature you control" isn't a characteristic-defining
+    // ability: it works only on the battlefield (CR 113.6).
+    cr!("113.6", "611.3a", "613.4c");
     ruling!(
         "Shanna, Sisay's Legacy",
         "As long as it's on the battlefield, Shanna's last ability will count itself, so it'll be at least 1/1."
@@ -166,16 +168,23 @@ fn shanna_can_be_targeted_by_opponents_spells_but_not_abilities() {
 
 fn pool_of(t: &TestGame, p: PlayerId) -> Vec<(ManaType, u32)> {
     let pool = &t.g.player(p).mana_pool;
-    [ManaType::W, ManaType::U, ManaType::B, ManaType::R, ManaType::G, ManaType::C]
-        .into_iter()
-        .map(|ty| (ty, pool.count(ty) as u32))
-        .filter(|(_, n)| *n > 0)
-        .collect()
+    [
+        ManaType::W,
+        ManaType::U,
+        ManaType::B,
+        ManaType::R,
+        ManaType::G,
+        ManaType::C,
+    ]
+    .into_iter()
+    .map(|ty| (ty, pool.count(ty) as u32))
+    .filter(|(_, n)| *n > 0)
+    .collect()
 }
 
 #[test]
 fn faeburrow_elder_counts_at_most_five_colors_and_at_least_its_own() {
-    cr!("105.1", "105.2c", "604.3");
+    cr!("105.1", "105.2b", "105.2c");
     ruling!(
         "Faeburrow Elder",
         "Faeburrow Elder's middle ability can give it at most +5/+5, that is, +1/+1 each for white, blue, black, red, and green. \"Gold,\" \"multicolor,\" and \"colorless\" aren't colors. Similarly, Faeburrow Elder's last ability can produce at most five mana."
@@ -215,7 +224,7 @@ fn faeburrow_elder_counts_at_most_five_colors_and_at_least_its_own() {
 
 #[test]
 fn bloom_tender_counts_a_permanent_for_each_of_its_colors() {
-    cr!("105.2c", "106.1a");
+    cr!("105.2b", "106.1a");
     ruling!(
         "Bloom Tender",
         "For each color (white, blue, black, red, and green), check to see if you control a permanent of that color. You can count the same permanent for multiple colors."
@@ -256,7 +265,7 @@ fn glister_bairn_x_is_locked_in_on_resolution() {
 
 #[test]
 fn mightstone_pumps_every_players_attackers() {
-    cr!("611.3a", "506.4");
+    cr!("611.3a");
     ruling!(
         "Mightstone",
         "The +1/+0 applies to attacking creatures from all players."
@@ -278,7 +287,7 @@ fn mightstone_pumps_every_players_attackers() {
 
 #[test]
 fn enters_with_counters_ignores_creatures_entering_with_it() {
-    cr!("614.12", "614.1c", "603.6a");
+    cr!("614.12", "614.1c");
     ruling!(
         "Crowd-Control Warden",
         "If Crowd-Control Warden enters the battlefield at the same time as one or more creatures, those creatures won't count for the purposes of Crowd-Control Warden's first ability."
@@ -450,11 +459,7 @@ fn idolized_attacks_alone_counts_every_declared_attacker() {
         &mut t,
         &[(bears, Entity::Player(P2)), (mate, Entity::Player(P2))],
     );
-    assert!(t
-        .g
-        .combat
-        .as_ref()
-        .is_some_and(|c| c.attackers.len() == 2));
+    assert!(t.g.combat.as_ref().is_some_and(|c| c.attackers.len() == 2));
     assert_eq!(t.stack_len(), 0);
 }
 
@@ -479,9 +484,9 @@ fn idolized_ignores_creatures_put_onto_the_battlefield_attacking() {
         .combat
         .as_ref()
         .is_some_and(|c| c.attackers.iter().any(|a| a.id == angel)));
-    // Idolized's ability triggered and resolved: +2/+2 (Geist, Idolized) or +3/+3 (and
-    // the Angel token, if Geist's trigger resolved first).
-    assert!(t.pt(geist).0 >= 4, "{:?}", t.pt(geist));
+    // Idolized's ability triggered and resolved on the 2/2 Geist: +2/+2 (Geist, Idolized)
+    // or +3/+3 (and the Angel token, if Geist's trigger resolved first).
+    assert!(matches!(t.pt(geist), (4, 4) | (5, 5)), "{:?}", t.pt(geist));
 }
 
 // ---------------------------------------------------------------------------------------
@@ -603,20 +608,37 @@ fn mandatory_enters_triggers_target_your_own_permanents() {
     t.enter(P0, "Nekrataal");
     t.resolve_all();
     assert_eq!(t.g.player(P1).graveyard.len(), 0);
+    // A target must be chosen: one is asked for (at least one), and an answer choosing none
+    // isn't taken.
+    let must_target = |t: &TestGame, from: usize| {
+        t.asked()[from..].iter().any(|(p, d)| {
+            *p == P0
+                && matches!(
+                    d,
+                    mtg_engine::decision::Decision::ChooseTargets { min: 1, .. }
+                )
+        })
+    };
     // Only P0's own creature: it's the target.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.battlefield(P1, "Ornithopter");
+    t.answer_targets(P0, &[]);
+    let from = t.asked().len();
     t.enter(P0, "Nekrataal");
     t.resolve_all();
+    assert!(must_target(&t, from));
     assert_eq!(t.zone(bears), Zone::Graveyard(P0));
     // The artifact destroyers with only P0's artifact.
     for name in ["Manic Vandal", "Vithian Renegades", "Oxidda Scrapmelter"] {
         let mut t = TestGame::new(2);
         let stone = t.battlefield(P0, "Mind Stone");
         t.battlefield(P1, "Grizzly Bears");
+        t.answer_targets(P0, &[]);
+        let from = t.asked().len();
         t.enter(P0, name);
         t.resolve_all();
+        assert!(must_target(&t, from), "{name}");
         assert_eq!(t.zone(stone), Zone::Graveyard(P0), "{name}");
     }
     // Yeva's Forcemage alone: it targets itself.
@@ -647,7 +669,7 @@ fn castable(t: &mut TestGame, p: PlayerId, id: ObjectId) -> bool {
 
 #[test]
 fn foretold_soldier_only_its_owner_casts_it() {
-    cr!("702.143a", "108.3");
+    cr!("702.143d", "108.3");
     ruling!(
         "The Foretold Soldier",
         "Regardless of who controlled The Foretold Soldier and exiled it with its triggered ability, only its owner may cast it from exile this way."
@@ -673,7 +695,7 @@ fn foretold_soldier_only_its_owner_casts_it() {
 
 #[test]
 fn aladdin_keeps_control_when_the_permanent_stops_being_an_artifact() {
-    cr!("608.2b", "611.2b");
+    cr!("608.2b", "611.2c");
     ruling!(
         "Aladdin",
         "You do not lose control of the permanent if it stops being an artifact. The validity of the target is checked only on announcement and resolution of the ability."
@@ -798,7 +820,8 @@ fn hinterland_scourge_must_be_blocked_if_able() {
         "If Hinterland Scourge is attacking, the defending player must assign at least one blocker to it during the declare blockers step if that player controls any creatures that could block it."
     );
     let mut t = TestGame::new(2);
-    let scourge = crate::r_p079_common::back_face(&mut t, P0, "Hinterland Hermit // Hinterland Scourge");
+    let scourge =
+        crate::r_p079_common::back_face(&mut t, P0, "Hinterland Hermit // Hinterland Scourge");
     let scourge = t.g.current(scourge);
     t.g.objects[scourge.0 as usize].summoning_sick = false;
     assert_eq!(t.obj_now(scourge).chars.name, "Hinterland Scourge");
@@ -854,7 +877,7 @@ fn oakshade_stalker_flash_for_two_more_even_at_night() {
 
 #[test]
 fn brutal_cathar_exile_lasts_through_transforming_until_it_leaves() {
-    cr!("610.3", "610.3a", "712.18");
+    cr!("610.3", "610.3c", "712.18");
     ruling!(
         "Brutal Cathar // Moonrage Brute",
         "Brutal Cathar's ability creates two one-shot effects: one that exiles the creature when the ability resolves, and another that returns the exiled card to the battlefield immediately after Brutal Cathar (or Moonrage Brute) leaves the battlefield."
@@ -880,7 +903,7 @@ fn brutal_cathar_exile_lasts_through_transforming_until_it_leaves() {
 
 #[test]
 fn brutal_cathar_returns_the_card_with_nothing_in_between() {
-    cr!("610.3", "610.3c", "707.5");
+    cr!("610.3", "707.5");
     ruling!(
         "Brutal Cathar // Moonrage Brute",
         "The exiled card returns to the battlefield immediately after this creature leaves the battlefield. Nothing happens between the two events, including state-based actions. The two creatures aren't on the battlefield at the same time. For example, if the returning creature is a Clone, it can't enter the battlefield as a copy of Brutal Cathar or Moonrage Brute."
@@ -901,7 +924,10 @@ fn brutal_cathar_returns_the_card_with_nothing_in_between() {
     t.answer_choose(P1, &[obj(bears)]);
     move_to(&mut t, cathar, Zone::Graveyard(P0));
     let cands = crate::r_s03_common::choice_candidates(&t, from, "");
-    assert!(cands.iter().all(|c| !c.contains(&obj(cathar_now))), "{cands:?}");
+    assert!(
+        cands.iter().all(|c| !c.contains(&obj(cathar_now))),
+        "{cands:?}"
+    );
     assert!(t.on_battlefield(clone));
     assert_eq!(t.obj_now(clone).chars.name, "Grizzly Bears");
 }

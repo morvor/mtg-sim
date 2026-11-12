@@ -1,7 +1,7 @@
 //! Rulings batch P200 — artifacts and spells: Jandor's Ring's "last card drawn", Peter
 //! Parker's Camera's copies (CR 707.10, 607.2), Urza's Armor's prevention (615), Throne of
 //! Geth and Urza's Chalice, Library of Leng's discards (614, 701.9), Counterbore, Legion's
-//! End, Maelstrom Pulse and Ancient Vendetta's searches by name (701.19, 608.2b),
+//! End, Maelstrom Pulse and Ancient Vendetta's searches by name (701.23, 608.2b),
 //! Scalpelexis's repeated exile.
 
 use crate::r_p194_common::mana;
@@ -109,7 +109,7 @@ fn throne_of_geth_can_sacrifice_itself() {
 
 #[test]
 fn urzas_chalice_doesnt_see_its_own_casting() {
-    cr!("603.2", "603.6a");
+    cr!("603.2", "113.6");
     ruling!(
         "Urza's Chalice",
         "This will not trigger on its own casting. It must be on the battlefield at the time the artifact is cast."
@@ -334,7 +334,10 @@ fn library_of_leng_random_discard_seen_before_deciding() {
         .collect();
     assert_eq!(prompts.len(), 2, "{prompts:?}");
     let first_on_top = prompts[0].contains("Grizzly Bears");
-    assert!(first_on_top || prompts[0].contains("Hill Giant"), "{prompts:?}");
+    assert!(
+        first_on_top || prompts[0].contains("Hill Giant"),
+        "{prompts:?}"
+    );
     let (top, gy) = if first_on_top { (a, b) } else { (b, a) };
     assert!(matches!(t.zone(top), Zone::Library(_)));
     assert_eq!(t.zone(gy), Zone::Graveyard(P0));
@@ -462,8 +465,9 @@ fn counterbore_must_find_graveyard_cards_but_may_leave_hidden_ones() {
     assert_eq!(t.zone(hand), Zone::Hand(P0));
     assert!(matches!(t.zone(lib), Zone::Library(_)));
     // The choice offered was optional.
-    assert!(t.asked()[from..].iter().any(|(p, d)| *p == P1
-        && matches!(d, Decision::ChooseEntities { min: 0, .. })));
+    assert!(t.asked()[from..]
+        .iter()
+        .any(|(p, d)| *p == P1 && matches!(d, Decision::ChooseEntities { min: 0, .. })));
 }
 
 // ---------------------------------------------------------------------------------------
@@ -664,7 +668,9 @@ fn ancient_vendetta_names_on_resolution_any_name_up_to_four() {
 
 #[test]
 fn ancient_vendetta_may_leave_found_cards() {
-    cr!("701.23b");
+    // "Up to four": which of the cards found are exiled is chosen as the spell resolves,
+    // even among those in the (public) graveyard.
+    cr!("608.2d");
     ruling!(
         "Ancient Vendetta",
         "You don’t have to exile each card you find with that name. If you want to leave one in their graveyard, for example, you may."
@@ -691,16 +697,13 @@ fn scalpelexis_repeats_until_no_pair() {
     );
     let mut t = TestGame::new(2);
     let s = t.battlefield(P0, "Scalpelexis");
-    stack_library(
-        &mut t,
-        P1,
-        &[
-            "Island", "Island", "Forest", "Swamp", // pair
-            "Mountain", "Plains", "Mountain", "Swamp", // pair
-            "Grizzly Bears", "Hill Giant", "Craw Wurm", "Shock", // none
-            "Forest", "Forest",
-        ],
-    );
+    // P1's library from the top: four cards with a pair, four with a pair, four with no
+    // pair, then two Forests that are never reached.
+    let mut top_first = vec!["Island", "Island", "Forest", "Swamp"];
+    top_first.extend(["Mountain", "Plains", "Mountain", "Swamp"]);
+    top_first.extend(["Grizzly Bears", "Hill Giant", "Craw Wurm", "Shock"]);
+    top_first.extend(["Forest", "Forest"]);
+    stack_library(&mut t, P1, &top_first);
     let lib = t.library_size(P1);
     t.attack(&[(s, Entity::Player(P1))], &[]);
     t.resolve_all();

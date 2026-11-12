@@ -1,5 +1,5 @@
 //! Rulings batch P200 — legendary-ish lands: City of Brass's tap trigger (CR 603.3,
-//! 605.3), Command Tower (903.4f), Reflecting Pool (106.7), Cabal Coffers, Homeward Path's
+//! 605.3), Command Tower (903.4, 106.5), Reflecting Pool (106.7), Cabal Coffers, Homeward Path's
 //! owners (108.3, 111.2), Valakut's intervening "if" (603.4), Vesuva, The Mycosynth
 //! Gardens and Adagia's copies (707.2), the enters-tapped-unless villages (614.12),
 //! Magosi's extra and skipped turns (500.7, 614.10, 805.8), Sunhome's double strike
@@ -133,18 +133,27 @@ fn city_of_brass_triggers_however_it_becomes_tapped() {
 
 #[test]
 fn command_tower_with_a_colorless_commander_makes_no_mana() {
-    cr!("903.4f", "903.4");
+    cr!("903.4", "106.5");
     ruling!(
         "Command Tower",
         "If your commander is a card that has no colors in its color identity, Command Tower's ability produces no mana. It doesn't produce {C}."
     );
+    // P0's commander is colorless (Karn), P1's is green (Llanowar Elves): the same Tower
+    // makes {G} for P1 (so the commander is found) and nothing at all for P0.
     let mut t = TestGame::new(2);
     let karn = t.command(P0, "Karn, Legacy Reforged");
     t.g.objects[karn.0 as usize].is_commander = true;
+    let elves = t.command(P1, "Llanowar Elves");
+    t.g.objects[elves.0 as usize].is_commander = true;
+    let theirs = t.battlefield(P1, "Command Tower");
+    assert!(tap_for_mana(&mut t, P1, theirs, "Add"));
+    assert_eq!(t.g.player(P1).mana_pool.count(ManaType::G), 1);
     let tower = t.battlefield(P0, "Command Tower");
-    let _ = t.activate(P0, tower, 0, &[]);
+    let (opts, ok) = mana_options(&mut t, P0, tower);
+    assert!(ok, "the ability can still be activated");
+    assert!(t.obj_now(tower).tapped);
+    assert!(opts.is_empty(), "{opts:?}");
     assert_eq!(pool_total(&t, P0), 0);
-    assert_eq!(t.g.player(P0).mana_pool.count(ManaType::C), 0);
 }
 
 #[test]
@@ -212,9 +221,9 @@ fn reflecting_pool_ignores_restrictions_on_other_lands_mana() {
     let from = t.asked().len();
     t.answer(P0, DecisionKind::Option, Answer::Index(3));
     assert!(tap_for_mana(&mut t, P0, pool, "Add"));
-    assert!(t.asked()[from..].iter().any(
-        |(_, d)| matches!(d, Decision::ChooseOption { options, .. } if options.len() == 5)
-    ));
+    assert!(t.asked()[from..]
+        .iter()
+        .any(|(_, d)| matches!(d, Decision::ChooseOption { options, .. } if options.len() == 5)));
     assert_eq!(t.g.player(P0).mana_pool.count(ManaType::R), 1);
     let bolt = t.hand(P0, "Lightning Bolt");
     t.cast(P0, bolt).target(Entity::Player(P1)).go();
@@ -309,7 +318,8 @@ fn valakut_intervening_if_checked_on_trigger_and_resolution() {
     t.enter(P0, "Mountain");
     t.settle();
     assert_eq!(t.stack_len(), 0);
-    // (2) Five others, two gone by resolution: nothing.
+    // (2) Five others, one of them gone by resolution (four left): nothing, though P0
+    // would say yes.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Valakut, the Molten Pinnacle");
     let old = t.lands(P0, "Mountain", 5);
@@ -381,10 +391,7 @@ fn vesuva_copies_only_the_printed_land() {
     assert_eq!(o.chars.name, "Forest");
     assert!(o.chars.has_subtype("Forest") && !o.chars.has_subtype("Island"));
     assert_eq!(t.counters(v, "charge"), 0);
-    assert!(t
-        .g
-        .permanents()
-        .all(|p| p.attached_to != Some(obj(v))));
+    assert!(t.g.permanents().all(|p| p.attached_to != Some(obj(v))));
     // Untapped original, tapped Vesuva (its own "enter tapped").
     assert!(!t.obj_now(forest).tapped);
     assert!(t.obj_now(v).tapped);
@@ -505,7 +512,7 @@ fn planet_is_a_land_type_with_no_intrinsic_ability() {
 
 #[test]
 fn villages_check_lands_already_on_the_battlefield() {
-    cr!("614.12", "614.1c", "603.6a");
+    cr!("614.12", "614.1d");
     ruling!(
         "Great Arashin City",
         "You must already control a Forest or Plains as Great Arashin City enters for it to enter untapped. If it enters at the same time as a Forest or Plains when you control no other Forests or Plains, it will enter tapped."
@@ -676,7 +683,9 @@ fn sunhome_damage(name: &str, step: Step) -> i32 {
     mana(&mut t, P0, ManaType::C, 2);
     t.activate(P0, sunhome, 1, &[obj(c)]).unwrap();
     t.resolve_all();
-    assert!(t.obj_now(c).has_keyword(mtg_engine::keywords::KeywordKind::DoubleStrike));
+    assert!(t
+        .obj_now(c)
+        .has_keyword(mtg_engine::keywords::KeywordKind::DoubleStrike));
     t.advance_to(P0, Step::PostcombatMain);
     // The Knight dealt 2 in the first-strike step.
     20 - 2 - t.life(P1)
@@ -684,7 +693,7 @@ fn sunhome_damage(name: &str, step: Step) -> i32 {
 
 #[test]
 fn sunhome_double_strike_too_late_adds_nothing() {
-    cr!("510.4", "702.4c", "702.4d");
+    cr!("510.4", "702.4b");
     ruling!(
         "Sunhome, Fortress of the Legion",
         "If you give double strike to a creature after either first-strike or normal combat damage has been dealt, it won't help that creature deal any additional combat damage."
@@ -750,9 +759,9 @@ fn castable(t: &mut TestGame, p: PlayerId, id: ObjectId) -> bool {
     t.g.turn.priority = Some(p);
     t.g.recompute();
     let c = t.g.current(id);
-    t.g.legal_actions(p).iter().any(|a| {
-        matches!(a, mtg_engine::decision::Action::Cast { card, .. } if *card == c)
-    })
+    t.g.legal_actions(p)
+        .iter()
+        .any(|a| matches!(a, mtg_engine::decision::Action::Cast { card, .. } if *card == c))
 }
 
 #[test]
@@ -937,7 +946,7 @@ fn diamond_shield(t: &mut TestGame, target: ObjectId) -> ObjectId {
 
 #[test]
 fn diamond_city_shield_counter_isnt_regeneration() {
-    cr!("122.1c", "701.19c");
+    cr!("122.1c", "701.19a");
     ruling!(
         "Diamond City",
         "Removing a shield counter when a permanent would be dealt damage or destroyed isn’t the same as regenerating a permanent."

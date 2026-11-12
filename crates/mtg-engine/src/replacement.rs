@@ -518,7 +518,11 @@ impl Game {
             // choice can depend on it (Library of Leng: "You can look at a randomly
             // discarded card before deciding where it goes.").
             let about = match &ev {
-                ReplEvent::Move(m) if crate::player_control::can_see(self, who, m.obj) => {
+                // (A face-down permanent has no name to show.)
+                ReplEvent::Move(m)
+                    if crate::player_control::can_see(self, who, m.obj)
+                        && !self.obj(m.obj).chars.name.is_empty() =>
+                {
                     format!(" ({})", self.obj(m.obj).chars.name)
                 }
                 _ => String::new(),
