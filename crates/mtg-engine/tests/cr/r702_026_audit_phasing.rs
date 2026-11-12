@@ -320,8 +320,9 @@ fn a_phase_in_trigger_sees_the_permanents_phasing_in_with_it() {
     supported("King of the Oathbreakers");
     supported("Clever Concealment");
     let mut t = TestGame::new(2);
-    let king = t.battlefield(P0, "King of the Oathbreakers");
+    // (The Kami comes first in the battlefield's order: it phases in before the King.)
     let kami = t.battlefield(P0, "Kami of Ancient Law");
+    let king = t.battlefield(P0, "King of the Oathbreakers");
     // Both phase out ("Any number of target nonland permanents you control phase out";
     // the King also phases each of them out as it becomes the target of a spell).
     t.lands(P0, "Plains", 4);
