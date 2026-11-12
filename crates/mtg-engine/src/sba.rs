@@ -327,7 +327,9 @@ impl Game {
             let o = self.obj(id);
             if o.chars.has_subtype("Saga") {
                 if let Some(final_ch) = crate::saga::final_chapter(o) {
-                    if o.counter(counters::LORE) >= final_ch && !self.is_source_of_stack_trigger(id)
+                    // Only its chapter abilities keep it (not other triggered abilities).
+                    if o.counter(counters::LORE) >= final_ch
+                        && !self.is_source_of_stack_trigger_where(id, crate::saga::is_chapter)
                     {
                         sacrifice.push(id);
                     }
@@ -589,12 +591,23 @@ impl Game {
     /// Whether the object is the source of a triggered ability that has triggered but not
     /// yet left the stack (CR 704.5s, 704.5v).
     pub fn is_source_of_stack_trigger(&self, id: ObjectId) -> bool {
-        self.pending_triggers.iter().any(|t| t.source == id)
-            || self.stack.iter().any(|s| {
-                matches!(
-                    self.obj(*s).stack.as_deref().map(|x| &x.kind),
-                    Some(StackKind::Triggered { source, .. }) if *source == id
-                )
-            })
+        self.is_source_of_stack_trigger_where(id, |_| true)
+    }
+
+    /// Whether the object is the source of a triggered ability matching `which` that has
+    /// triggered but not yet left the stack (a Saga's chapter abilities, CR 704.5s).
+    pub fn is_source_of_stack_trigger_where(
+        &self,
+        id: ObjectId,
+        which: impl Fn(&Ability) -> bool,
+    ) -> bool {
+        self.pending_triggers
+            .iter()
+            .any(|t| t.source == id && which(&t.ability)) || self.stack.iter().any(|s| {
+            matches!(
+                self.obj(*s).stack.as_deref().map(|x| &x.kind),
+                Some(StackKind::Triggered { source, ability }) if *source == id && which(ability)
+            )
+        })
     }
 }
