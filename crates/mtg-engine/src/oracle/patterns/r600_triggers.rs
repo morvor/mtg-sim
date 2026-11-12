@@ -70,22 +70,6 @@ fn when_you_do_about(l: &str, b: &mut Builder, it: Sel) -> Option<Effect> {
         return None;
     };
     let body = reflexive_body_about(r, b, it)?;
-    // "When you do, if you control a red permanent other than Ajani, he deals ..." (Ajani,
-    // Nacatl Avenger): an intervening "if" (CR 603.4) — the reflexive ability triggers
-    // only if the condition holds, and checks it again as it resolves (its body's own
-    // condition). A condition about the reflexive ability's own targets can't be checked
-    // before they're chosen.
-    let intervening = match &body.effect {
-        Effect::If {
-            cond, otherwise, ..
-        } if r.starts_with("if ")
-            && matches!(**otherwise, Effect::Noop)
-            && !format!("{cond:?}").contains("Target(") =>
-        {
-            Some(cond.clone())
-        }
-        _ => None,
-    };
     let reflexive = Effect::Reflexive {
         body: Box::new(body),
     };
@@ -93,10 +77,6 @@ fn when_you_do_about(l: &str, b: &mut Builder, it: Sel) -> Option<Effect> {
         Condition::PrevHappened
     } else {
         Condition::Not(Box::new(Condition::PrevHappened))
-    };
-    let cond = match intervening {
-        Some(c) => Condition::And(vec![cond, c]),
-        None => cond,
     };
     Some(Effect::If {
         cond,

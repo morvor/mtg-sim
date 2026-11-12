@@ -2303,6 +2303,15 @@ impl Game {
             Effect::NoteLinked { what, replace } => {
                 crate::linked_notes::exec(self, what, *replace, ctx);
             }
+            // "When you do, if you control a red permanent other than Ajani, ..." (Ajani,
+            // Nacatl Avenger's ruling): an intervening "if" (CR 603.4) — the reflexive
+            // ability triggers only if the condition holds, and its body checks it again
+            // as it resolves. (A condition about its own targets can't be checked yet.)
+            Effect::Reflexive { body }
+                if matches!(&body.effect, Effect::If { cond, otherwise, .. }
+                    if matches!(**otherwise, Effect::Noop)
+                        && !format!("{cond:?}").contains("Target(")
+                        && !self.eval_cond(cond, ctx)) => {}
             Effect::Reflexive { body } => {
                 // CR 603.12: a reflexive triggered ability is checked immediately after it's
                 // created; it triggers now and waits to be put on the stack (with its own
