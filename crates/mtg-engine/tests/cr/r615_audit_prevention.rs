@@ -189,3 +189,59 @@ fn questing_beast_makes_only_combat_damage_unpreventable() {
     cast_resolve(&mut t, P0, "Shock", &[Entity::Player(P1)]);
     assert_eq!(t.life(P1), 18, "2 of the shield's 2 remaining prevent the Shock");
 }
+
+#[test]
+fn a_cop_shield_on_a_sacrificed_mogg_fanatic_prevents_its_damage() {
+    cr!("609.7a", "615.8");
+    supported("Mogg Fanatic");
+    let mut t = TestGame::new(2);
+    let fanatic = t.battlefield(P0, "Mogg Fanatic");
+    let cop = t.battlefield(P1, "Circle of Protection: Red");
+    t.lands(P1, "Plains", 1);
+    t.answer_choose(P1, &[obj(fanatic)]);
+    t.activate(P1, cop, 0, &[]).expect("activate the Circle");
+    t.resolve_all();
+    // The Fanatic is sacrificed to pay for its ability; it deals the damage as it last
+    // existed, and it's still the source the shield was created for.
+    t.activate(P0, fanatic, 0, &[Entity::Player(P1)])
+        .expect("sacrifice the Fanatic");
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Mogg Fanatic"));
+    assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn a_shield_on_a_creature_doesnt_protect_it_after_it_returns_as_a_new_object() {
+    cr!("615.7", "400.7");
+    supported("Cloudshift");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.lands(P0, "Plains", 1);
+    let salve = t.hand(P0, "Healing Salve");
+    t.answer_targets(P0, &[obj(bears)]);
+    t.cast(P0, salve).modes(&[1]).go();
+    t.resolve_all();
+    cast_resolve(&mut t, P0, "Cloudshift", &[obj(bears)]);
+    let bears = t.g.current(bears);
+    assert!(t.on_battlefield(bears));
+    cast_resolve(&mut t, P1, "Shock", &[obj(bears)]);
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+}
+
+#[test]
+fn damage_pariah_redirects_to_a_protected_creature_is_then_prevented() {
+    cr!("616.2", "614.9", "702.16e");
+    supported("Pariah");
+    let mut t = TestGame::new(2);
+    let walker = t.battlefield(P0, "Kor Firewalker");
+    let pariah = t.battlefield(P0, "Pariah");
+    t.g.attach(pariah, obj(walker));
+    // (P0 declines the Firewalker's "you may gain 1 life" for the red spell.)
+    t.answer_yes(P0, false);
+    cast_resolve(&mut t, P1, "Lightning Bolt", &[Entity::Player(P0)]);
+    // Redirected to the Firewalker, the damage is from a red source: protection from red
+    // now applies to it.
+    assert_eq!(t.life(P0), 20);
+    assert_eq!(damage_on(&t, walker), 0);
+    assert!(t.on_battlefield(walker));
+}
