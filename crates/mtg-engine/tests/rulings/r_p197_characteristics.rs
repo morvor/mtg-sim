@@ -96,7 +96,11 @@ fn an_added_creature_subtype_disappears_while_the_permanent_isnt_a_creature() {
     supported("Smuggler's Copter");
     for card in ["Archangel Elspeth", "Breach the Multiverse"] {
         supported(card);
-        let sub = if card == "Breach the Multiverse" { "Phyrexian" } else { "Angel" };
+        let sub = if card == "Breach the Multiverse" {
+            "Phyrexian"
+        } else {
+            "Angel"
+        };
         let mut t = TestGame::new(2);
         t.set_step(P0, Step::PrecombatMain);
         let copter = crewed_copter(&mut t);
@@ -234,7 +238,12 @@ fn ashiok_puts_a_bestow_card_in_as_a_creature_and_x_is_zero() {
     assert_eq!(t.pt(satyr), (4, 2));
     // Endless One (mana value 0 in exile): enters with no counters and dies as a 0/0.
     let mut t = TestGame::new(2);
-    let one = ashiok_puts(&mut t, &["Endless One", "Island", "Island"], "Endless One", 0);
+    let one = ashiok_puts(
+        &mut t,
+        &["Endless One", "Island", "Island"],
+        "Endless One",
+        0,
+    );
     let entered = t.g.turn_events.iter().any(|e| {
         matches!(e, Event::ZoneChange { to: Zone::Battlefield, new, .. } if t.g.current(*new) == one)
     });
@@ -318,10 +327,21 @@ fn reanimated_zombies_keep_their_colors_and_types() {
         assert!(t.on_battlefield(e), "{card}");
         assert_eq!(ctl(&t, e), P0);
         let c = &t.obj_now(e).chars;
-        assert!(c.colors.contains(Color::Black) && c.colors.contains(Color::Green), "{card}");
-        assert_eq!(creature_types(&t, e), vec!["Druid", "Elf", "Zombie"], "{card}");
+        assert!(
+            c.colors.contains(Color::Black) && c.colors.contains(Color::Green),
+            "{card}"
+        );
+        assert_eq!(
+            creature_types(&t, e),
+            vec!["Druid", "Elf", "Zombie"],
+            "{card}"
+        );
         two_turns(&mut t);
-        assert_eq!(creature_types(&t, e), vec!["Druid", "Elf", "Zombie"], "{card}");
+        assert_eq!(
+            creature_types(&t, e),
+            vec!["Druid", "Elf", "Zombie"],
+            "{card}"
+        );
     }
 }
 
@@ -574,10 +594,7 @@ fn effects_that_animate_or_change_a_permanent_last_indefinitely() {
         "Soulstone Sanctuary",
         "Soulstone Sanctuary's last ability doesn't have a duration. Once it resolves, it will remain in effect until the game ends, Soulstone Sanctuary leaves the battlefield, or some subsequent effect changes its characteristics, whichever comes first."
     );
-    ruling!(
-        "Moonlace",
-        "Moonlace's effect doesn't wear off."
-    );
+    ruling!("Moonlace", "Moonlace's effect doesn't wear off.");
     ruling!(
         "Lizard, Connors's Curse",
         "The effect from Lizard's triggered ability doesn't end at the end of the turn."
@@ -620,7 +637,11 @@ fn effects_that_animate_or_change_a_permanent_last_indefinitely() {
                 let s = t.battlefield(P0, card);
                 let i = if card == "Ride the Shoopuf" { 0 } else { 1 };
                 act(&mut t, P0, s, i, &[]);
-                let pt = if card == "Ride the Shoopuf" { (7, 7) } else { (3, 3) };
+                let pt = if card == "Ride the Shoopuf" {
+                    (7, 7)
+                } else {
+                    (3, 3)
+                };
                 (
                     s,
                     Box::new(move |t, s| {
@@ -649,7 +670,10 @@ fn effects_that_animate_or_change_a_permanent_last_indefinitely() {
                         assert_eq!(t.pt(a), (4, 4));
                         assert!(!has_kw(t, a, KeywordKind::Flying));
                         assert!(t.obj_now(a).chars.has_subtype("Lizard"));
-                        assert_eq!(t.obj_now(a).chars.colors, mtg_engine::types::ColorSet::single(Color::Green));
+                        assert_eq!(
+                            t.obj_now(a).chars.colors,
+                            mtg_engine::types::ColorSet::single(Color::Green)
+                        );
                     }),
                 )
             }
@@ -708,7 +732,11 @@ fn losing_all_abilities_lasts_indefinitely() {
     kill(&mut t, ab);
     two_turns(&mut t);
     assert!(!has_kw(&t, angel, KeywordKind::Vigilance));
-    for k in [KeywordKind::Flying, KeywordKind::FirstStrike, KeywordKind::Lifelink] {
+    for k in [
+        KeywordKind::Flying,
+        KeywordKind::FirstStrike,
+        KeywordKind::Lifelink,
+    ] {
         assert!(has_kw(&t, angel, k));
     }
     // Retched Wretch dies with a -1/-1 counter, returns without abilities; turns later it
@@ -892,20 +920,19 @@ fn ascent_of_the_worthy_redirected_combat_damage_is_still_combat_damage() {
     t.resolve_all();
     t.advance_to(P1, Step::BeginningOfCombat);
     t.attack(&[(attacker, pl(P0))], &[(blocker, attacker)]);
-    let hits: Vec<(Entity, bool)> = t
-        .g
-        .turn_events
-        .iter()
-        .filter_map(|e| match e {
-            Event::Damage {
-                source,
-                target,
-                combat,
-                ..
-            } if *source == attacker => Some((*target, *combat)),
-            _ => None,
-        })
-        .collect();
+    let hits: Vec<(Entity, bool)> =
+        t.g.turn_events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Damage {
+                    source,
+                    target,
+                    combat,
+                    ..
+                } if *source == attacker => Some((*target, *combat)),
+                _ => None,
+            })
+            .collect();
     assert_eq!(hits, vec![(obj(chosen), true)]);
     assert_eq!(crate::r_p009_common::dmg(&t, chosen), 2);
     assert_eq!(crate::r_p009_common::dmg(&t, blocker), 0);
@@ -984,10 +1011,19 @@ fn kheru_lich_lord_exile_abilities_belong_to_the_ability_not_the_creature() {
     };
     let mut t = TestGame::new(2);
     let b = setup(&mut t);
-    for k in [KeywordKind::Flying, KeywordKind::Trample, KeywordKind::Haste] {
+    for k in [
+        KeywordKind::Flying,
+        KeywordKind::Trample,
+        KeywordKind::Haste,
+    ] {
         assert!(has_kw(&t, b, k));
     }
-    assert!(t.obj_now(b).chars.abilities.iter().all(|a| !a.text.contains("xile")));
+    assert!(t
+        .obj_now(b)
+        .chars
+        .abilities
+        .iter()
+        .all(|a| !a.text.contains("xile")));
     // It loses all its abilities (Turn to Frog): still exiled at the end step.
     cast_at(&mut t, P1, "Turn to Frog", &[obj(b)]);
     t.resolve_all();
@@ -1123,4 +1159,3 @@ fn the_tarrasque_has_haste_and_ward_when_cast_from_another_zone() {
     assert!(!has_kw(&t, tq, KeywordKind::Haste));
     assert!(!has_kw(&t, tq, KeywordKind::Ward));
 }
-

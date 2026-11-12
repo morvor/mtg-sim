@@ -89,7 +89,11 @@ fn cyclopean_giant_stays_in_the_graveyard_if_its_trigger_doesnt_resolve() {
             bounce(&mut t, land);
         }
         t.resolve_all();
-        assert_eq!(t.in_graveyard(P0, "Cyclopean Giant"), !legal, "legal {legal}");
+        assert_eq!(
+            t.in_graveyard(P0, "Cyclopean Giant"),
+            !legal,
+            "legal {legal}"
+        );
         if legal {
             assert!(t.in_exile("Cyclopean Giant"));
             assert!(t.obj_now(land).chars.has_subtype("Swamp"));
@@ -145,7 +149,8 @@ fn tezzerets_discount_goes_to_the_ability_begun_before_its_mana_abilities() {
     // The Rod's {3} becomes {1}, paid by tapping Sol Ring during the activation.
     let mut t = TestGame::new(2);
     let (rod, ring) = tezzeret_setup(&mut t);
-    t.activate(P0, rod, 0, &[pl(P1)]).expect("{1} payable with Sol Ring");
+    t.activate(P0, rod, 0, &[pl(P1)])
+        .expect("{1} payable with Sol Ring");
     assert!(t.obj_now(ring).tapped);
     t.resolve_all();
     assert_eq!(t.life(P1), 19);
@@ -165,7 +170,10 @@ fn tezzerets_discount_applies_only_to_the_first_artifact_ability_even_a_mana_abi
     let (rod, ring) = tezzeret_setup(&mut t);
     t.activate(P0, ring, 0, &[]).expect("Sol Ring");
     assert_eq!(t.g.player(P0).mana_pool.count(ManaType::C), 2);
-    assert!(t.activate(P0, rod, 0, &[pl(P1)]).is_err(), "{{3}} with {{C}}{{C}}");
+    assert!(
+        t.activate(P0, rod, 0, &[pl(P1)]).is_err(),
+        "{{3}} with {{C}}{{C}}"
+    );
     mana(&mut t, P0, ManaType::C, 1);
     t.activate(P0, rod, 0, &[pl(P1)]).expect("{3} payable now");
     t.resolve_all();
@@ -461,7 +469,9 @@ fn hidden_spider_checks_the_spell_for_flying() {
         t.settle();
         t.resolve_all();
         let c = t.named_on_battlefield(spell)[0];
-        assert!(t.obj_now(c).has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+        assert!(t
+            .obj_now(c)
+            .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
         assert_eq!(
             t.obj_now(spider).is(mtg_engine::types::CardType::Creature),
             triggers,
@@ -529,7 +539,9 @@ fn hall_of_the_bandit_lord_mana_on_an_additional_cost_gives_haste() {
     t.resolve_all();
     let kavu = t.named_on_battlefield("Kavu Titan")[0];
     assert_eq!(t.counters(kavu, "+1/+1"), 3);
-    assert!(t.obj_now(kavu).has_keyword(mtg_engine::keywords::KeywordKind::Haste));
+    assert!(t
+        .obj_now(kavu)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Haste));
 }
 
 #[test]

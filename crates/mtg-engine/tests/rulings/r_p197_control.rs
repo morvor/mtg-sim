@@ -179,7 +179,12 @@ fn control_changes_with_no_duration_outlast_the_turn() {
     steal(&mut t, "Lullmage's Domination", bears);
     bounce(&mut t, bears);
     let card = t.g.find_in_zone(Zone::Hand(P1), "Grizzly Bears")[0];
-    t.g.move_object(card, Zone::Battlefield, mtg_engine::events::MoveCause::Effect, None);
+    t.g.move_object(
+        card,
+        Zone::Battlefield,
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
     t.g.recompute();
     let again = t.named_on_battlefield("Grizzly Bears")[0];
     assert_eq!(ctl(&t, again), P1);
@@ -297,7 +302,10 @@ fn control_outlasts_the_source_leaving_or_changing_hands() {
                 assert_eq!(t.stack_len(), 1);
                 assert_eq!(ctl(&t, v), P0, "{card}: Emrakul left");
                 t.resolve_all();
-                assert!(t.in_graveyard(P1, victim), "sacrificed, to its owner's graveyard");
+                assert!(
+                    t.in_graveyard(P1, victim),
+                    "sacrificed, to its owner's graveyard"
+                );
                 continue;
             }
             // The Saga is gone already (sacrificed after chapter III).
@@ -616,7 +624,14 @@ fn rags_riches_each_opponent_chooses_then_you_take_them_all_untargeted() {
     let mut t = TestGame::new(4);
     t.set_step(P0, Step::PrecombatMain);
     // P1's creature has hexproof; P2 controls none; P3 has a Bears.
-    let hex = creature_with(&mut t, P1, "Test Hexproof", "Creature — Elf", (1, 1), "Hexproof");
+    let hex = creature_with(
+        &mut t,
+        P1,
+        "Test Hexproof",
+        "Creature — Elf",
+        (1, 1),
+        "Hexproof",
+    );
     assert!(t.obj_now(hex).has_keyword(KeywordKind::Hexproof));
     let bears = t.battlefield(P3, "Grizzly Bears");
     lots(&mut t, P0);
@@ -744,6 +759,10 @@ fn avarice_totem_activated_twice_swaps_any_permanent() {
     // The second resolves first: the Totem for the Bears.
     t.resolve();
     assert_eq!((ctl(&t, totem), ctl(&t, theirs)), (P1, P0));
+    // In between, the opponent controls the Totem and could activate it.
+    lots(&mut t, P1);
+    assert!(crate::r_s02_common::can_activate(&mut t, P1, totem));
+    t.g.players[1].mana_pool.mana.clear();
     // Then the first: the Totem (now P1's) for the Giant.
     t.resolve();
     assert_eq!(ctl(&t, totem), P0);
