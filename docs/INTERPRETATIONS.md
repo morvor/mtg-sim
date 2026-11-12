@@ -10,13 +10,11 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 |---|---:|---:|
 | interpretation | 101 | 0 |
 | deviation | 10 | 0 |
-| policy | 34 | 1 |
+| policy | 35 | 0 |
 
 ## Provisional entries
 
-- **settle-loop-is-a-draw** (policy, [game-end](interpretations/game-end.md)): State-based actions still happening after 1,000 rounds are a loop of mandatory actions, and the game is a draw
-  - Question: When state-based actions are performed check after check without end (a Lich's Mirror its controller doesn't own, with ten poison counters), no player ever receives priority, so nothing can stop them, but the engine can't see that the checks will never end. When is that a loop of mandatory actions, and for whom is the game a draw?
-  - Decision: `Game::settle` performs at most 1,000 rounds of state-based action checks and of putting triggered abilities on the stack (CR 704.3, 117.5); if the game still hasn't settled, it has entered a loop of mandatory actions and the whole game is a draw (`endless_settle_loop`), also in a multiplayer game using the limited range of influence option, where 104.4f makes it a draw only for the players controlling objects involved in the loop and those within their ranges of influence.
+None.
 
 ## All entries
 
@@ -76,7 +74,7 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | `concede-with-priority` | A player concedes only as a priority action | deviation | decided | [game-end](interpretations/game-end.md) |
 | `growing-loops-run-to-the-limit` | A loop that grows the game state isn't recognized and ends only at the action limit | deviation | decided | [game-end](interpretations/game-end.md) |
 | `mandatory-loop-detection` | A loop of mandatory actions is recognized when the game state repeats | interpretation | decided | [game-end](interpretations/game-end.md) |
-| `settle-loop-is-a-draw` | State-based actions still happening after 1,000 rounds are a loop of mandatory actions, and the game is a draw | policy | provisional | [game-end](interpretations/game-end.md) |
+| `settle-loop-is-a-draw` | State-based actions still happening after 1,000 rounds are a loop of mandatory actions, and the game is a draw | policy | decided | [game-end](interpretations/game-end.md) |
 | `simulation-limits` | A game past the turn or decision limit is a draw | policy | decided | [game-end](interpretations/game-end.md) |
 | `a-commander-you-own-is-chosen` | "The mana value of a commander you own" with several commanders is that of the one you choose as the spell resolves | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
 | `arbiter-of-knollridge-uses-controllers-range` | Arbiter of Knollridge's ability uses its controller's range of influence, not each player's own | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
