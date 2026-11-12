@@ -28,21 +28,15 @@ fn a_second_kaervek_kills_creatures_at_the_same_time_as_the_legend_rule() {
     // -1/-1 counter (the counters are removed in the same check), so persist doesn't
     // return it (CR 704.8).
     let finks = t.battlefield(P1, "Kitchen Finks");
-    t.g.add_counters(Entity::Object(finks), counters::MINUS1, 1, None);
-    t.g.add_counters(Entity::Object(finks), counters::PLUS1, 1, None);
     // A 3/3 with a +1/+1 and a -1/-1 counter: 1/1 under two Kaerveks, it survives and its
     // counters annihilate.
     let giant = t.battlefield(P1, "Hill Giant");
-    t.g.add_counters(Entity::Object(giant), counters::MINUS1, 1, None);
-    t.g.add_counters(Entity::Object(giant), counters::PLUS1, 1, None);
     t.settle();
-    assert_eq!(
-        t.counters(giant, counters::PLUS1),
-        0,
-        "annihilated alone first"
-    );
-    t.g.add_counters(Entity::Object(giant), counters::MINUS1, 1, None);
-    t.g.add_counters(Entity::Object(giant), counters::PLUS1, 1, None);
+    for id in [finks, giant] {
+        t.g.add_counters(Entity::Object(id), counters::MINUS1, 1, None);
+        t.g.add_counters(Entity::Object(id), counters::PLUS1, 1, None);
+    }
+    assert_eq!(t.counters(finks, counters::MINUS1), 1);
     assert_eq!(t.pt(bears), (1, 1));
     // The second Kaervek: the player keeps the first one.
     t.answer_choose(P0, &[Entity::Object(first)]);
@@ -55,11 +49,17 @@ fn a_second_kaervek_kills_creatures_at_the_same_time_as_the_legend_rule() {
     // Had the legend rule been performed first, the Bears would be a 1/1 again.
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
     assert!(t.in_graveyard(P1, "Kitchen Finks"));
-    t.resolve_all();
-    assert!(
-        t.named_on_battlefield("Kitchen Finks").is_empty(),
-        "it died with a -1/-1 counter: no persist"
+    // It died with a -1/-1 counter: persist doesn't trigger (a returned Finks would be a
+    // 1/0 under the remaining Kaervek and die again, so look at the stack).
+    assert_eq!(
+        t.g.obj(finks).counters.get(counters::MINUS1).copied(),
+        Some(1)
     );
+    assert_eq!(triggers_of(&t, "Kitchen Finks"), 0, "no persist");
+    let life = t.life(P1);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Kitchen Finks").is_empty());
+    assert_eq!(t.life(P1), life, "Kitchen Finks never returned");
     assert!(t.on_battlefield(giant));
     assert_eq!(t.counters(giant, counters::PLUS1), 0);
     assert_eq!(t.counters(giant, counters::MINUS1), 0);
