@@ -216,3 +216,44 @@ fn a_land_put_onto_the_battlefield_tapped_under_spelunking_enters_untapped_witho
     assert!(!is_tapped(&t, forest));
     assert!(replacement_choices(&t).is_empty());
 }
+
+#[test]
+fn whiptongue_hydra_counts_only_the_fliers_actually_destroyed() {
+    cr!("614.8", "701.19a", "702.89a", "614.6");
+    ruling!(
+        "Whiptongue Hydra",
+        "A creature with indestructible or a creature that regenerates won't count as having been \"destroyed this way.\""
+    );
+    ruling!(
+        "Whiptongue Hydra",
+        "If a creature with flying would be destroyed, but an Aura with the umbra armor ability is destroyed instead, Whiptongue Hydra won't count that creature or that Aura as a \"creature destroyed this way.\""
+    );
+    supported("Whiptongue Hydra");
+    supported("Ghost Ship");
+    supported("Hyena Umbra");
+    supported("Darksteel Gargoyle");
+    let mut t = TestGame::new(2);
+    // P0's fliers: Ghost Ship with a regeneration shield, Serra Angel enchanted with
+    // Hyena Umbra, Darksteel Gargoyle (indestructible) and another Serra Angel.
+    let ship = t.battlefield(P0, "Ghost Ship");
+    t.lands(P0, "Island", 3);
+    t.activate(P0, ship, 0, &[]).expect("regenerate");
+    t.resolve_all();
+    let angel = t.battlefield(P0, "Serra Angel");
+    let umbra = t.battlefield(P0, "Hyena Umbra");
+    t.g.attach(umbra, obj(angel));
+    let gargoyle = t.battlefield(P0, "Darksteel Gargoyle");
+    let plain = t.battlefield(P0, "Serra Angel");
+    t.set_step(P1, Step::PrecombatMain);
+    // "When this creature enters, destroy all creatures with flying. Put a +1/+1 counter
+    // on this creature for each creature destroyed this way."
+    let hydra = cast_resolve(&mut t, P1, "Whiptongue Hydra", &[]);
+    let hydra = t.g.current(hydra);
+    for (id, stays) in [(ship, true), (angel, true), (gargoyle, true), (plain, false)] {
+        assert_eq!(t.on_battlefield(id), stays);
+    }
+    assert!(t.obj_now(ship).tapped, "regenerated");
+    assert!(t.in_graveyard(P0, "Hyena Umbra"));
+    // Only the unprotected Angel was destroyed this way.
+    assert_eq!(plus_counters(&t, hydra), 1);
+}

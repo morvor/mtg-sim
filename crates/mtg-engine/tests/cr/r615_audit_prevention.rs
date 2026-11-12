@@ -6,6 +6,7 @@
 use crate::r614_audit_common::*;
 use mtg_engine::decision::Answer;
 use mtg_engine::testing::*;
+use mtg_engine::types::Color;
 use mtg_engine::*;
 
 #[test]
@@ -284,4 +285,36 @@ fn vigor_puts_the_counters_for_two_blockers_damage_as_one_event() {
     assert!(t.on_battlefield(giant));
     assert_eq!(damage_on(&t, giant), 0);
     assert_eq!(plus_counters(&t, giant), 5);
+}
+
+#[test]
+fn a_cop_shield_rechecks_its_source_is_red_and_isnt_used_up_when_it_isnt() {
+    cr!("615.9", "609.7b", "615.8");
+    supported("Cerulean Wisps");
+    supported("Crimson Wisps");
+    let mut t = TestGame::new(2);
+    let pyro = t.battlefield(P0, "Prodigal Pyromancer");
+    let cop = t.battlefield(P1, "Circle of Protection: Red");
+    t.lands(P1, "Plains", 1);
+    t.answer_choose(P1, &[obj(pyro)]);
+    t.activate(P1, cop, 0, &[]).expect("activate the Circle");
+    t.resolve_all();
+    // The chosen source turns blue ("becomes blue until end of turn. Untap that
+    // creature."): its damage isn't a red source's, so it's dealt and the shield waits.
+    cast_resolve(&mut t, P0, "Cerulean Wisps", &[obj(pyro)]);
+    assert!(has_color(&t, pyro, Color::Blue) && !has_color(&t, pyro, Color::Red));
+    t.activate(P0, pyro, 0, &[Entity::Player(P1)]).expect("ping");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+    // Red again (Crimson Wisps, a later timestamp): the shield prevents its next damage.
+    cast_resolve(&mut t, P0, "Crimson Wisps", &[obj(pyro)]);
+    t.g.untap(pyro);
+    t.activate(P0, pyro, 0, &[Entity::Player(P1)]).expect("ping");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+    // Then it's used up.
+    t.g.untap(pyro);
+    t.activate(P0, pyro, 0, &[Entity::Player(P1)]).expect("ping");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
 }
