@@ -514,7 +514,17 @@ impl Game {
         // Optional ("you may") replacements.
         if cand.def.optional {
             let who = cand.controller;
-            if !self.ask_yes_no(who, cand.source, &format!("Apply: {}?", cand.text), true) {
+            // The card an event moves is named when the deciding player may see it: the
+            // choice can depend on it (Library of Leng: "You can look at a randomly
+            // discarded card before deciding where it goes.").
+            let about = match &ev {
+                ReplEvent::Move(m) if crate::player_control::can_see(self, who, m.obj) => {
+                    format!(" ({})", self.obj(m.obj).chars.name)
+                }
+                _ => String::new(),
+            };
+            let prompt = format!("Apply: {}?{about}", cand.text);
+            if !self.ask_yes_no(who, cand.source, &prompt, true) {
                 return self.replace_rec(ev, applied, depth + 1, self_only, snap, None);
             }
         }
