@@ -107,23 +107,35 @@ pub fn offer_splices(
             amount: spell.0 as i32,
         });
     }
-    // CR 702.47c: the spell gains the rules text of each spliced card, after its own;
-    // the main spell's effects happen first (CR 702.47b). The effect ends when the spell
-    // leaves the stack (CR 702.47e), as it then becomes a new object.
+    for (card, _) in &chosen {
+        g.log(|g| format!("{} splices {}", p, g.describe(*card)));
+    }
+    let cards: Vec<ObjectId> = chosen.iter().map(|(c, _)| *c).collect();
+    add_spliced_text(g, spell, p, &cards);
+    g.recompute();
+    chosen.into_iter().map(|(_, c)| c).collect()
+}
+
+/// CR 702.47c: `spell` gains the rules text of each of `cards` (spliced onto it), after
+/// its own; the main spell's effects happen first (CR 702.47b). The effect ends when the
+/// spell leaves the stack (CR 702.47e), as it then becomes a new object.
+pub fn add_spliced_text(g: &mut Game, spell: ObjectId, controller: PlayerId, cards: &[ObjectId]) {
+    if cards.is_empty() {
+        return;
+    }
     let mut abilities = Vec::new();
     let mut text: Vec<String> = Vec::new();
-    for (card, _) in &chosen {
+    for card in cards {
         let c = &g.obj(*card).chars;
         abilities.extend(c.abilities.iter().cloned());
         text.push(c.rules_text.to_string());
-        g.log(|g| format!("{} splices {}", p, g.describe(*card)));
     }
     let id = g.new_effect_id();
     let ts = g.new_timestamp();
     g.effects.push(ContinuousEffect {
         id,
         source: Some(spell),
-        controller: p,
+        controller,
         timestamp: ts,
         duration: Duration::Permanent,
         affected: Affected::Objects(vec![spell]),
@@ -134,8 +146,7 @@ pub fn offer_splices(
         layer1: None,
         created_turn: g.turn.number,
     });
-    g.recompute();
-    chosen.into_iter().map(|(_, c)| c).collect()
+    g.dirty = true;
 }
 
 /// Whether a continuous effect is the text a spell gained from cards spliced onto it.

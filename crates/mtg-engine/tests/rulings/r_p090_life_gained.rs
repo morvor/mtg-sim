@@ -282,7 +282,8 @@ fn tenured_concocter_triggers_once_per_spell_and_resolves_first() {
     give_mana_for(&mut t, P1, "Seeds of Strength");
     let seeds = t.hand(P1, "Seeds of Strength");
     let o = Entity::Object(tc);
-    t.cast(P1, seeds).targets(&[o, o, o]).go();
+    let s = t.cast(P1, seeds).target(tc).target(tc).target(tc).go();
+    assert_eq!(mtg_engine::copy::chosen_targets(&t.g, s), vec![o, o, o]);
     t.settle();
     assert_eq!(t.stack_len(), 2, "{}", t.dump_log());
     let hand = t.hand_size(P0);
