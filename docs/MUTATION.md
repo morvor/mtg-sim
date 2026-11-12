@@ -87,6 +87,7 @@ Each surviving mutant is classified as
 | casting.rs | 841 | 85 (1/10) | 74 | 9 | 0 | 2 | 89.2% | 96.4% (80/83) |
 | casting.rs (2026-11-10, after the casting-costs audit; all 105 tested, see below) | 1049 | 105 (1/10) | 87 | 16 | 1 | 1 | 84.6% | 89.4% (93/104): the 5 killable survivors and the timed-out mutant caught in the re-run, 11 equivalent |
 | combat.rs | 876 | 88 (1/10) | 68 | 13 | 0 | 7 | 84.0% | 93.8% (76/81) |
+| zones.rs (2026-11-12, during the zones-lki audit; all 29 sampled tested, see below) | 288 | 29 (1/10) | 19 | 6 | 1 | 3 | 76.9% | 84.6% (22/26): the 2 killable survivors killed by review tests, each checked with the mutant applied by hand (no `RERUN` yet); 4 equivalent |
 | **all 15** | 5,281 | 551 | 423 | 93 | 4 | 31 | **82.1%** | **88.3%** (459/520) |
 
 "After new tests" re-tests the first run's survivors (`RERUN=1`, 2026-10-21, on the tree
@@ -856,6 +857,71 @@ to the worktree and to pass without it.
   only an attack on one of its controller's opponents makes a Treasure; the file also
   covers Emberwilde Captain, which compiles to a different trigger).
 
+### zones.rs (2026-11-12)
+
+First run, during the `engine-audit-1/zones-lki` audit, against the implementer's first
+commit `d5a6c7b` (its tests then: the six phasing fixes' tests; `zones.rs` itself hasn't
+changed since, so the line numbers are today's): 29 of 288 mutants (round-robin 0/10), 2
+hours. 19 caught, 6 missed, 1 timeout, 3 unviable, kill rate **76.9%** (20/26). Every
+sampled mutant was reached. Two survivors are killable and were killed by tests written in
+the review, each checked by applying the mutant to the worktree by hand (the `cr` binary
+then fails in that test alone; no `RERUN` yet): **84.6%** (22/26) with them. The other four
+are equivalent.
+
+- `zones.rs:164:26: replace || with && in own_move_replacements` (a moving object's own
+  zone-change replacement abilities aren't looked at for a move to a hidden zone, nor for a
+  face-down move): **(a) equivalent with today's cards**. The mutant also collects them for
+  a face-up move into a library or hand, and for a face-down move of an object that isn't
+  face down yet (a card manifested from a library). The function only returns
+  `ZoneChange` replacements about the object itself: "If ~ would be put into a graveyard
+  from anywhere", "If ~ would die" and a granted "If this permanent would leave the
+  battlefield, exile it instead". None matches a move into a hand or library from a hidden
+  zone, a permanent's are already collected with the battlefield's static abilities (and
+  deduplicated), and no face-down move goes to a graveyard. The "If ~ would enter, ...
+  instead" ones (Mox Diamond, Lotus Vale) are `EntersBattlefield` replacements, which the
+  hypothetical entry hides for a face-down permanent. The review's
+  `a_manifested_card_enters_without_its_own_enters_replacement`
+  (`tests/cr/r708_003_audit_face_down_entry.rs`: Soul Summons manifests Mox Diamond, which
+  doesn't ask for a land or go to the graveyard; cast face up, it goes to the graveyard)
+  passes with the mutant; it pins that hiding instead (it fails, with
+  `r708_face_down::permanents_put_onto_the_battlefield_face_down_have_no_enters_abilities`,
+  when `with_hypothetical_entry` doesn't turn the card face down).
+- `zones.rs:335:36: replace && with || in record_cost_moved` (the cards an action in the
+  cost exiled, `COST_EXILED`): **(a) equivalent with today's cards**. The mutant adds every
+  other live object the cost used (a creature it tapped, a card it revealed) and dead
+  objects last seen in exile. Only an ability whose cost has an exile part reads
+  `COST_EXILED` ("the exiled card"), and no such cost in the pool also taps, reveals or
+  uses a permanent or card that stays where it is, or moves a card out of exile.
+- `zones.rs:922:76: replace == with != in update_revealed_tops` (a top card revealed again
+  became a new object, CR 401.6: the entries of players who may look at that library's top
+  card follow it): **(a) equivalent in practice**. `looked_top_by` is rebuilt from the
+  effects at the start of every call, and the function runs on every recompute; the card
+  that became a new object is revealed, so everyone sees it anyway. Until the next
+  recompute the mutant leaves a stale entry for the old object (dead, so never visible) and
+  points a viewer's entries for other players' top cards at the revealed one.
+- `zones.rs:1073:10: replace < with > in order_simultaneous_stack_objects` and
+  `zones.rs:1092:28: replace - with / in order_simultaneous_stack_objects` (CR 405.3, the
+  copies of "each other player copies that spell"): **(b) missing test**. The first returns
+  early whenever anything is below the new objects (always: the copied spell is), so a player
+  with more than one copy doesn't order them; the second truncates the stack to `n / k`
+  objects before putting the copies back, which loses objects below once there are enough of
+  them (here, with the resolving trigger still on the stack, five below two copies).
+  Killed by `a_player_orders_their_simultaneous_copies_above_the_rest_of_the_stack`
+  (`tests/cr/r405_003_audit_simultaneous_copies.rs`: three Prodigal Pyromancer pings below
+  Lightning Bolt; Hive Mind and Twinning Staff give P0 two copies, which P0 orders second
+  copy lowest): with the first the copies keep their creation order, with the second the
+  stack has 5 objects instead of 6 (the Bolt is gone).
+- `zones.rs:1169:40: replace && with || in face_down_exiled` (pruning the piles of
+  face-down exiled cards, CR 406.4): **(a) equivalent**. The mutant keeps the entries of
+  objects that are no longer face down in exile. Pile numbers come from a counter, and a
+  pile is looked up only for a face-down exiled card that can't be looked at, whose own
+  entry both versions keep; the extra entries (dead objects, a card turned face up in exile)
+  are never looked up.
+- The timeout, `zones.rs:99:5: replace contradictory_moves -> Vec<MoveEv> with vec![]`,
+  drops every batch of zone moves (the function filters all of them, not only those a
+  state-based action contradicts), so a state-based action that should move an object
+  repeats forever: a detection.
+
 ## Status (2026-10-21)
 
 Done. All 15 core files are sampled (551 of 5,281 mutants, 520 viable): 427 killed
@@ -874,3 +940,7 @@ timeouts (**88.7%**), 6 equivalent survivors.
 2026-11-11: `triggers.rs` was re-sampled after the `engine-audit-1/triggers` tests (see
 "triggers.rs, second run" above): 17 of 55 sampled mutants reached when the audit landed, 14
 killed (**82.4%**), 3 equivalent survivors; the other 38 remain to be tested.
+
+2026-11-12: `zones.rs` was sampled for the first time, during the `engine-audit-1/zones-lki`
+audit (see "zones.rs" above): 29 of 29 sampled mutants tested, 19 killed and 1 timeout
+(**76.9%**), 6 survivors: 2 killed by review tests (**84.6%**), 4 equivalent.

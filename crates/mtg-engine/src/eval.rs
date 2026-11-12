@@ -1160,12 +1160,15 @@ impl Game {
         crate::mana_value::mana_value_with(self, id, &self.obj(id).chars)
     }
 
-    /// Objects that are attached to the given entity.
+    /// Objects that are attached to the given entity. An Aura, Equipment or Fortification
+    /// that phased out by itself stays attached (it phases in attached, CR 702.26i) but is
+    /// treated as though it doesn't exist (CR 702.26b): it isn't among them, so the object
+    /// isn't enchanted or equipped by it meanwhile.
     pub fn attachments_of(&self, e: Entity) -> Vec<ObjectId> {
         self.battlefield
             .iter()
             .copied()
-            .filter(|a| self.obj(*a).attached_to == Some(e))
+            .filter(|a| self.obj(*a).attached_to == Some(e) && !self.obj(*a).phased_out)
             .collect()
     }
 

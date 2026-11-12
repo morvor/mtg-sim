@@ -2385,8 +2385,10 @@ impl Game {
             Entity::Player(p) => self.player(p).in_game(),
             Entity::Object(o) => {
                 let ob = self.obj(o);
+                // A phased-out permanent can't be dealt damage (CR 702.26b).
                 self.is_live(o)
                     && ob.zone == Zone::Battlefield
+                    && !ob.phased_out
                     && (ob.is_creature()
                         || ob.is(CardType::Planeswalker)
                         || ob.is(CardType::Battle))

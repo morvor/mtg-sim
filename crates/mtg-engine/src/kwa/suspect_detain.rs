@@ -39,7 +39,11 @@ fn suspected_mods() -> Vec<Modification> {
 
 /// Suspects `obj` (CR 701.60a, 701.60d). Returns true if it became suspected.
 pub fn suspect(g: &mut Game, obj: ObjectId) -> bool {
-    if !on_battlefield(g, obj) || g.obj(obj).suspected {
+    // A phased-out creature can't be affected (CR 702.26b).
+    if !on_battlefield(g, obj)
+        || g.obj(obj).suspected
+        || crate::kw::phasing::is_phased_out(g, obj)
+    {
         return false;
     }
     // "can't become suspected".

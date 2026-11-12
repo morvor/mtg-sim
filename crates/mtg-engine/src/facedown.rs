@@ -70,7 +70,8 @@ const FACE_DOWN_KINDS: [&str; 5] = ["Morph", "Megamorph", "Disguise", "Cloak", "
 /// turned face down: nothing happens (CR 708.2b). Returns true if it did.
 pub fn turn_face_down(g: &mut Game, id: ObjectId) -> bool {
     let o = g.obj(id);
-    if o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) {
+    // A phased-out permanent can't be affected (CR 702.26b).
+    if o.face_down || o.zone != Zone::Battlefield || !g.is_live(id) || o.phased_out {
         return false;
     }
     // CR 712.16: melded permanents and other double-faced permanents can't be turned face

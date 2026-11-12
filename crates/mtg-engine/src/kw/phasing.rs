@@ -66,6 +66,17 @@ fn attached_closure(g: &Game, objs: &[ObjectId]) -> Vec<ObjectId> {
     out
 }
 
+/// Whether `id` is a phased-out permanent: treated as though it doesn't exist, it can't be
+/// affected by anything (CR 702.26b) — an instruction naming it without targeting it ("it
+/// fights", "exchange control of ~", "deals 3 damage to that creature") does nothing to it,
+/// and a continuous effect of a resolving spell or ability that changes characteristics or
+/// control doesn't include it in the set of objects it affects, even when it names it
+/// specifically (CR 702.26e).
+pub fn is_phased_out(g: &Game, id: ObjectId) -> bool {
+    let o = g.obj(id);
+    o.zone == crate::object::Zone::Battlefield && o.phased_out
+}
+
 /// CR 702.26b: a phased-out permanent is treated as though it doesn't exist, so no effect
 /// moves it off the battlefield (an effect that remembers it — "exile it at the beginning
 /// of the next end step" — finds nothing while it's phased out). The rules still exile it

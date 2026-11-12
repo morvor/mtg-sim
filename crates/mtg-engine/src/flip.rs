@@ -36,11 +36,12 @@ fn flip_card_of(g: &Game, id: ObjectId) -> Option<std::sync::Arc<crate::card::Ca
 }
 
 /// Whether `id` is a permanent with a flip card's characteristics (its own, or copied)
-/// that hasn't flipped yet.
+/// that hasn't flipped yet, and isn't phased out (it can't be affected, CR 702.26b).
 pub fn can_flip(g: &Game, id: ObjectId) -> bool {
     let o = g.obj(id);
     g.is_live(id)
         && o.zone == Zone::Battlefield
+        && !o.phased_out
         && !o.face_down
         && !o.flipped
         && o.face == FaceState::Front
