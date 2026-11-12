@@ -964,9 +964,13 @@ fn plan(
         Effect::SacrificeObjects { what } if plannable(g, e, ctx, p) => {
             let own_source = matches!(what, Sel::This);
             let objs = g.resolve_objects(what, ctx);
+            // A sacrifice this spell or ability can't cause (Sigarda, Host of Herons) doesn't
+            // happen, as `Game::exec` performs it (CR 701.21).
+            let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
             let what = objs
                 .into_iter()
                 .filter(|o| g.is_live(*o))
+                .filter(|o| !g.sacrifice_forbidden(*o, cause.as_ref()))
                 .filter(|o| !own_source || g.obj(*o).controller == ctx.controller)
                 .map(|o| (o, g.obj(o).controller))
                 .collect();
@@ -980,10 +984,11 @@ fn plan(
                 return Plan::Nothing;
             };
             let n = g.eval_value(count, ctx).max(0) as u32;
+            let cause = crate::rule_statics::sacrifice_causes::cause_of(ctx);
             let cands: Vec<ObjectId> = g
                 .objects_matching(filter, ctx)
                 .into_iter()
-                .filter(|o| g.obj(*o).controller == q && !g.cant_be_sacrificed(*o))
+                .filter(|o| g.obj(*o).controller == q && !g.sacrifice_forbidden(*o, cause.as_ref()))
                 .collect();
             let k = n.min(cands.len() as u32);
             let pick = g.ask_objects(q, ctx.source, "Choose permanents to sacrifice", cands, k, k);
