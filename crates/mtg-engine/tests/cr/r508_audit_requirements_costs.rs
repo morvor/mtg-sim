@@ -452,3 +452,67 @@ fn a_creature_goaded_by_each_opponent_attacks_an_opponent_rather_than_a_planeswa
     go_to(&mut t, Step::DeclareAttackers);
     assert!(matches!(attacks(&t, bears), Some(Entity::Player(p)) if p == P1 || p == P2));
 }
+
+#[test]
+fn menace_and_a_one_blocker_limit_together_make_a_creature_unblockable_even_with_lure() {
+    cr!("509.1b", "509.1c", "702.111b");
+    supported("Tahngarth, First Mate");
+    // Tahngarth: "can't be blocked by more than one creature"; with menace, no block of
+    // it is legal, and Lure's requirement can't be obeyed.
+    for blocks in [1usize, 2] {
+        let mut t = TestGame::new(2);
+        let x = t.battlefield(P1, "Grizzly Bears");
+        let y = t.battlefield(P1, "Hill Giant");
+        let tahngarth = t.battlefield(P0, "Tahngarth, First Mate");
+        give(&mut t, tahngarth, mtg_engine::keywords::KeywordKind::Menace);
+        let tahn = lured_attack_existing(&mut t, tahngarth);
+        let decl: Vec<(ObjectId, ObjectId)> = [(x, tahn), (y, tahn)][..blocks].to_vec();
+        block(&mut t, P1, &decl);
+        go_to(&mut t, Step::DeclareBlockers);
+        assert!(blockers_of(&t, tahn).is_empty(), "{blocks} blockers");
+    }
+}
+
+#[test]
+fn two_attackers_with_menace_can_each_be_blocked_by_the_same_two_creatures() {
+    cr!("509.1b", "702.111b");
+    supported("Two-Headed Giant of Foriys");
+    let mut t = TestGame::new(2);
+    // Two-Headed Giant of Foriys and Night Market Guard can each block an additional
+    // creature: both block both menace attackers.
+    let giant = t.battlefield(P1, "Two-Headed Giant of Foriys");
+    let guard = t.battlefield(P1, "Night Market Guard");
+    let a = t.battlefield(P0, "Wayward Giant");
+    let b = t.battlefield(P0, "Wayward Giant");
+    combat_of_p0(&mut t);
+    declare(&mut t, &[(a, Entity::Player(P1)), (b, Entity::Player(P1))]);
+    block(
+        &mut t,
+        P1,
+        &[(giant, a), (guard, a), (giant, b), (guard, b)],
+    );
+    go_to(&mut t, Step::DeclareBlockers);
+    assert_eq!(blockers_of(&t, a).len(), 2);
+    assert_eq!(blockers_of(&t, b).len(), 2);
+    // One blocker on each: illegal (menace), undone.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Two-Headed Giant of Foriys");
+    let guard = t.battlefield(P1, "Night Market Guard");
+    let a = t.battlefield(P0, "Wayward Giant");
+    let b = t.battlefield(P0, "Wayward Giant");
+    combat_of_p0(&mut t);
+    declare(&mut t, &[(a, Entity::Player(P1)), (b, Entity::Player(P1))]);
+    block(&mut t, P1, &[(giant, a), (guard, a), (giant, b)]);
+    go_to(&mut t, Step::DeclareBlockers);
+    assert!(blockers_of(&t, a).is_empty() && blockers_of(&t, b).is_empty());
+}
+
+/// P0 attacks with an existing creature after enchanting it with Lure.
+fn lured_attack_existing(t: &mut TestGame, a: ObjectId) -> ObjectId {
+    let lure = t.battlefield(P0, "Lure");
+    assert!(t.g.attach(lure, Entity::Object(a)));
+    combat_of_p0(t);
+    declare(t, &[(a, Entity::Player(P1))]);
+    go_to(t, Step::DeclareAttackers);
+    a
+}
