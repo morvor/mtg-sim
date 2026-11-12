@@ -344,3 +344,51 @@ fn removing_the_only_first_striker_before_damage_means_one_damage_step() {
     assert!(!t.g.turn.step_log.contains(&Step::FirstStrikeDamage));
     assert_eq!(t.life(P1), 18);
 }
+
+/// P0's Invasion of Segovia (defense 4), protected by P1.
+fn segovia(t: &mut TestGame) -> ObjectId {
+    supported("Invasion of Segovia");
+    t.answer_choose(P0, &[Entity::Player(P1)]);
+    let b = t.enter(P0, "Invasion of Segovia");
+    t.resolve_all();
+    assert_eq!(mtg_engine::battle::protector(&t.g, b), Some(P1));
+    b
+}
+
+#[test]
+fn a_trampler_attacking_a_battle_assigns_its_excess_to_the_battle_not_its_protector() {
+    cr!("702.19b", "310.6", "510.1c");
+    let mut t = TestGame::new(2);
+    let b = segovia(&mut t);
+    let maw = t.battlefield(P0, "Colossal Dreadmaw");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.script.lock().unwrap().asked.clear();
+    attack(&mut t, &[(maw, Entity::Object(b))], &[(bears, maw)]);
+    assign(&mut t, P0, &[2, 4]);
+    go_to(&mut t, Step::CombatDamage);
+    let d = damage_decisions(&t);
+    assert_eq!(
+        d[0].2,
+        vec![Entity::Object(bears), Entity::Object(b)],
+        "the protector isn't a recipient"
+    );
+    assert_eq!(t.life(P1), 20);
+    assert_eq!(t.obj_now(b).defense(), 0);
+}
+
+#[test]
+fn double_strike_and_trample_attacking_a_battle_it_defeated_deals_nothing_more() {
+    cr!("510.1b", "506.4", "702.19f", "510.4");
+    let mut t = TestGame::new(2);
+    let b = segovia(&mut t);
+    let cc = t.battlefield(P0, "Crimson Caravaneer");
+    pump(&mut t, cc, 4);
+    attack(&mut t, &[(cc, Entity::Object(b))], &[]);
+    go_to(&mut t, Step::FirstStrikeDamage);
+    t.resolve_all();
+    // Defeated: exiled (and cast transformed, a new object).
+    assert_eq!(t.named_on_battlefield("Caetus, Sea Tyrant of Segovia").len(), 1);
+    go_to(&mut t, Step::CombatDamage);
+    assert_eq!(attacks(&t, cc), None);
+    assert_eq!(t.life(P1), 20);
+}
