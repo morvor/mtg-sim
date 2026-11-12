@@ -687,9 +687,13 @@ impl Game {
                                     .iter()
                                     .any(|(src, _, ab, _)| *src == m.obj && ab.uid == a.uid)
                             {
+                                // Its own abilities are controlled by the player it
+                                // enters under ("your graveyard", CR 109.5), not the
+                                // player whose effect puts it there (an opponent's
+                                // Oblivion Ring returning it under its owner's control).
                                 sources.push((
                                     m.obj,
-                                    m.by.unwrap_or(o.controller),
+                                    self.entering_controller(m),
                                     a.clone(),
                                     d.clone(),
                                 ));
