@@ -518,6 +518,7 @@ Readings the user accepted for now, but wants to look at again before calling th
   - "its power/toughness" after a graveyard return;
   - a card that never arrives (Containment Priest with Reanimate);
   - Deicide's searched name for a copied God.
+- **A phased-out source's characteristics.** Entry `phased-out-source-still-acts` (decided Nov 12) uses the source's characteristics while it is phased out, not its last known information. Example: Spikeshot Elder under Glorious Anthem deals 1, not 2.
 - **Loops:** a robust system later (D4, Nov 10).
 
 ### Already decided, not re-asked
