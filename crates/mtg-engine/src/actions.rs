@@ -1364,7 +1364,10 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
-        if !self.is_live(obj) || self.obj(obj).zone != Zone::Battlefield {
+        // A phased-out permanent can't be destroyed (CR 702.26b): no destruction event, so
+        // no replacement of one either (its regeneration shield isn't used).
+        if !self.is_live(obj) || self.obj(obj).zone != Zone::Battlefield || self.obj(obj).phased_out
+        {
             return false;
         }
         // CR 702.12b: indestructible permanents can't be destroyed.
@@ -1411,7 +1414,11 @@ impl Game {
         let mut moves = Vec::new();
         let mut causes: Vec<(Option<ObjectId>, Option<PlayerId>)> = Vec::new();
         for obj in objs {
-            if !self.is_live(obj) || self.obj(obj).zone != Zone::Battlefield {
+            // Not a phased-out permanent (CR 702.26b; see `destroy_by`).
+            if !self.is_live(obj)
+                || self.obj(obj).zone != Zone::Battlefield
+                || self.obj(obj).phased_out
+            {
                 continue;
             }
             if self.obj(obj).has_keyword(KeywordKind::Indestructible) {

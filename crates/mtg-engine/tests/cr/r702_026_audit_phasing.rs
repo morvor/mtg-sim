@@ -79,7 +79,7 @@ fn a_creature_that_phased_out_doesnt_fight() {
 
 #[test]
 fn a_phased_out_creature_cant_be_exchanged() {
-    cr!("701.12a", "702.26b", "702.26d");
+    cr!("701.12a", "702.26b", "702.26d", "702.26e");
     supported("Phyrexian Infiltrator");
     let mut t = TestGame::new(2);
     let infiltrator = t.battlefield(P0, "Phyrexian Infiltrator");
@@ -142,6 +142,20 @@ fn an_effect_naming_a_phased_out_permanent_doesnt_affect_it_once_it_phases_in() 
     assert!(!t.on_battlefield(moment));
     assert!(!phased_out(&t, shade));
     assert_eq!(pt(&mut t, shade), (3, 2));
+    // A creature The Moment phased out doesn't phase in during its controller's untap
+    // step: it's still phased out in P0's next upkeep.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let moment = t.battlefield(P0, "The Moment");
+    t.lands(P0, "Plains", 2);
+    t.activate(P0, moment, 0, &[Entity::Object(bears)])
+        .expect("The Moment");
+    t.resolve();
+    assert!(phased_out(&t, bears));
+    to_upkeep(&mut t, P0);
+    t.settle();
+    assert!(phased_out(&t, bears), "not phased in by P0's untap step");
+    assert!(t.on_battlefield(moment));
 }
 
 #[test]
@@ -179,7 +193,7 @@ fn counters_stay_on_a_permanent_that_phased_out_in_response_to_removing_one() {
 
 #[test]
 fn no_counter_moves_onto_a_creature_that_phased_out() {
-    cr!("122.5", "702.26b", "702.95a");
+    cr!("122.5", "702.26b", "702.58a");
     supported("Simic Initiate");
     let mut t = TestGame::new(2);
     // Graft 1: a 0/0 that enters with a +1/+1 counter.

@@ -132,12 +132,15 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        // A phased-out permanent can't be sacrificed (CR 702.26b): "sacrifice it" names it
+        // in vain, and nothing records a sacrifice.
         let ok: Vec<(ObjectId, PlayerId)> = what
             .iter()
             .copied()
             .filter(|(o, by)| {
                 self.is_live(*o)
                     && self.obj(*o).zone == Zone::Battlefield
+                    && !crate::kw::phasing::is_phased_out(self, *o)
                     && self.obj(*o).controller == *by
                     && !self.cant_be_sacrificed(*o)
             })

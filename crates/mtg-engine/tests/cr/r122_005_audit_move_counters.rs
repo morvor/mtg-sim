@@ -9,7 +9,7 @@ use mtg_engine::*;
 
 #[test]
 fn no_counter_moves_onto_a_creature_that_cant_have_counters_put_on_it() {
-    cr!("122.5", "702.95a");
+    cr!("122.5", "702.58a");
     ruling!(
         "Melira's Keepers",
         "Melira's Keepers can't have any kind of counters placed on it, not just -1/-1 counters."

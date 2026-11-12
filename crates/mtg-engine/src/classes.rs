@@ -30,9 +30,10 @@ pub fn level(g: &Game, id: ObjectId) -> u32 {
     g.obj(id).class_level.max(1)
 }
 
-/// Sets the level of the permanent `id` (CR 716.2a).
+/// Sets the level of the permanent `id` (CR 716.2a). A phased-out Class can't be affected
+/// (CR 702.26b): it doesn't gain the level.
 pub fn set_level(g: &mut Game, id: ObjectId, level: u32) {
-    if !g.is_live(id) {
+    if !g.is_live(id) || crate::kw::phasing::is_phased_out(g, id) {
         return;
     }
     let o = g.obj_mut(id);
