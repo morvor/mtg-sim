@@ -1967,8 +1967,9 @@ fn referent_effect(
             };
             if p.look {
                 // "You may look at and play that card ...": only the player who gets the
-                // permission looks, and only while it's exiled (CR 406.3b). ("... this
-                // turn": having looked at it, they know what it is.)
+                // permission looks, and only while it's exiled (CR 406.3). ("... this
+                // turn": having been allowed to look at it, they may go on looking at it
+                // after the turn, CR 406.3.)
                 if p.who != Who::You
                     || !matches!(d, Duration::Permanent | Duration::EndOfTurn)
                 {

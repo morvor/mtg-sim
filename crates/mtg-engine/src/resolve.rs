@@ -1144,7 +1144,9 @@ impl Game {
             } => {
                 let n = self.eval_value(count, ctx).max(0) as u32;
                 let players = self.eval_players(controller, ctx);
+                let one_controller = players.len() == 1;
                 let mut created = Vec::new();
+                let mut specified: Option<Characteristics> = None;
                 for p in players {
                     let tc = TokenCreate {
                         chars: crate::tokens::token_characteristics_in(self, spec, ctx),
@@ -1154,12 +1156,29 @@ impl Game {
                         copy_of: None,
                         copy_exceptions: vec![],
                     };
+                    specified.get_or_insert_with(|| tc.chars.clone());
                     created.extend(self.create_tokens_maybe_attacking(p, tc, n, *attacking, ctx));
                 }
                 self.link_to_creator(ctx, &created);
                 ctx.prev_value = created.len() as i64;
-                // "Create a ... token. When you do, ...": whether one was created.
-                ctx.prev_happened = !created.is_empty();
+                // "Create a ... token. When you do, ...": whether one was created — one of
+                // the tokens the instruction specifies: tokens a replacement effect creates
+                // instead (Divine Visitation's Angels) aren't (Ajani, Nacatl Avenger
+                // ruling). Twice as many (Doubling Season) is creating them twice, so the
+                // reflexive ability triggers twice (CR 603.12a, the same ruling).
+                let as_specified = created
+                    .iter()
+                    .filter(|t| {
+                        specified.as_ref().is_some_and(|c| {
+                            let o = &self.obj(**t).copiable;
+                            o.name == c.name
+                                && o.card_types == c.card_types
+                                && o.subtypes == c.subtypes
+                        })
+                    })
+                    .count() as u32;
+                ctx.prev_happened = as_specified > 0;
+                ctx.reflexive_times = (one_controller && n > 0).then(|| as_specified / n);
                 ctx.set_var(
                     vars::CREATED,
                     created.into_iter().map(Entity::Object).collect(),

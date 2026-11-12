@@ -26,7 +26,7 @@
 //! | dies / leaves | last known information; actions find the card (CR 400.7e) | its controller |
 //! | attacks | the attacker | the attacked player |
 //! | blocks a creature / becomes blocked by a creature | the other creature (CR 509.3b/d) | its controller |
-//! | deals damage to a player | the source (`~` for self triggers) | the damaged player |
+//! | deals damage to a player | the source (`~` for self triggers) | the damaged player (to you by a source an opponent controls: its controller) |
 //! | deals damage to a creature (self) | the damaged creature | its controller |
 //! | casts a spell | the spell | the caster |
 //! | player events (gain life, draw, …) | — | the player |
@@ -2175,6 +2175,15 @@ fn parse_damage_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)
             PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
         ),
         (DamageRecipient::Object(_), false) => (cond, Sel::None, PlayerRef::Iterated),
+        // "Whenever a source an opponent controls deals damage to you, that player
+        // sacrifices a permanent" (Michiko Konda, Truth Seeker): "that player" is the
+        // opponent, the source's controller, not you (as for "one or more creatures an
+        // opponent controls" above).
+        (DamageRecipient::Player(PlayerRel::You), false) if controlled_by_opponent(&subj.filter) => (
+            cond,
+            Sel::TriggerOtherObject,
+            PlayerRef::ControllerOf(Box::new(Sel::TriggerOtherObject)),
+        ),
         (_, true) => (cond, Sel::This, PlayerRef::TriggerPlayer),
         (_, false) => (cond, Sel::TriggerOtherObject, PlayerRef::TriggerPlayer),
     };

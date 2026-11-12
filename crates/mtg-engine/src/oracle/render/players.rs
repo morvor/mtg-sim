@@ -1258,10 +1258,14 @@ impl Renderer<'_> {
                 };
             }
             // "Whenever a land enters under an opponent's control, that player loses 2
-            // life": the opponent the trigger named.
+            // life": the opponent the trigger named ("Whenever a source an opponent
+            // controls deals damage to you, that player ...": the source's controller).
             PlayerRef::ControllerOf(sel)
                 if self.trigger_names_opponent
-                    && matches!(sel.as_ref(), Sel::TriggerObject | Sel::TriggerLki) =>
+                    && matches!(
+                        sel.as_ref(),
+                        Sel::TriggerObject | Sel::TriggerLki | Sel::TriggerOtherObject
+                    ) =>
             {
                 "{alt:that player|its controller}".into()
             }
