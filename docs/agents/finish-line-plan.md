@@ -520,6 +520,9 @@ Readings the user accepted for now, but wants to look at again before calling th
   - Deicide's searched name for a copied God.
 - **Loops:** a robust system later (D4, Nov 10).
 
+A question raised by a decision, not yet asked:
+- **Torpor Orb and Panharmonicon on a reanimation** (entry `ability-triggered-cause-is-the-event`). The Nov 12 answer ("those are two separate things, and desecrated tomb should still trigger") was given for Strict Proctor. The statics of the same template still treat the zone change as one event. So Torpor Orb ("Creatures entering don't cause abilities to trigger.") stops Desecrated Tomb's ability when a creature card is put onto the battlefield from your graveyard, and Panharmonicon makes it trigger twice. Should they follow the same reading? Hushbringer's ruling on "from anywhere" abilities reads its "dying" the current way.
+
 ### Already decided, not re-asked
 
 All 128 register entries (Oct 21, Nov 4, 5, 7 and 9); the Nov 5 conflict cases (template and

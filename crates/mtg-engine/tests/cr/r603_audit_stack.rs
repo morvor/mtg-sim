@@ -365,3 +365,197 @@ fn strict_proctor_doesnt_tax_a_leaves_your_graveyard_ability_on_a_reanimation() 
     });
     assert!(!asked_to_pay, "no {{2}} is asked");
 }
+
+#[test]
+fn strict_proctor_judges_which_of_several_trigger_events_matched_a_reanimation() {
+    cr!("603.2", "603.2c");
+    interp!("ability-triggered-cause-is-the-event");
+    use crate::r600_common::{gain, trig, CB};
+    use mtg_engine::ability::{Body, Filter, PlayerRel, TriggerCond, ZoneKind};
+    supported("Strict Proctor");
+    supported("Syr Konrad, the Grim");
+    // Syr Konrad, the Grim: "Whenever another creature dies, or a creature card is put into
+    // a graveyard from anywhere other than the battlefield, or a creature card leaves your
+    // graveyard, Syr Konrad deals 1 damage to each opponent." A reanimation matches only
+    // its last trigger event, the card leaving the graveyard.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Strict Proctor");
+    t.battlefield(P0, "Syr Konrad, the Grim");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.lands(P0, "Swamp", 4);
+    let zombify = t.hand(P0, "Zombify");
+    t.cast(P0, zombify).target(bears).go();
+    t.resolve();
+    assert_eq!(triggers_of(&t, "Syr Konrad, the Grim"), 1);
+    assert_eq!(triggers_of(&t, "Strict Proctor"), 0);
+    t.resolve_all();
+    assert_eq!(
+        t.life(P1),
+        19,
+        "not countered (P0 had no mana left for {{2}})"
+    );
+    // "Whenever a creature card leaves your graveyard or a creature enters": a reanimation
+    // matches both trigger events and triggers it once (603.2c). The entering is one of
+    // them, so a permanent entering caused it to trigger, whichever the text names first.
+    let leaves = TriggerCond::ZoneChange {
+        filter: Filter::and(vec![Filter::creature(), Filter::OwnedBy(PlayerRel::You)]),
+        from: Some(ZoneKind::Graveyard),
+        to: None,
+    };
+    let enters = TriggerCond::EntersBattlefield(Filter::creature());
+    for conds in [
+        vec![leaves.clone(), enters.clone()],
+        vec![enters.clone(), leaves.clone()],
+    ] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P1, "Strict Proctor");
+        let watcher = CB::new("Two-Way Watcher")
+            .enchantment()
+            .ability(trig(TriggerCond::AnyOf(conds), Body::effect(gain(1))))
+            .build();
+        t.custom(P0, watcher, Zone::Battlefield);
+        let bears = t.graveyard(P0, "Grizzly Bears");
+        t.lands(P0, "Swamp", 4);
+        let zombify = t.hand(P0, "Zombify");
+        t.cast(P0, zombify).target(bears).go();
+        t.resolve();
+        assert_eq!(triggers_of(&t, "Two-Way Watcher"), 1);
+        assert_eq!(triggers_of(&t, "Strict Proctor"), 1);
+    }
+}
+
+#[test]
+fn strict_proctor_doesnt_count_an_ability_that_matched_a_card_leaving_any_zone() {
+    cr!("603.2");
+    interp!("ability-triggered-cause-is-the-event");
+    use crate::r600_common::{gain, trig, CB};
+    use mtg_engine::ability::{Body, Filter, PlayerRel, TriggerCond, ZoneKind};
+    supported("Strict Proctor");
+    // "Whenever a card leaves your hand" (library, exile), and Grizzly Bears put onto the
+    // battlefield from that zone by an effect: the ability's trigger event is the card
+    // leaving the zone it came from, not the permanent entering, whatever the zone.
+    for from in [ZoneKind::Hand, ZoneKind::Library, ZoneKind::Exile] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P1, "Strict Proctor");
+        let leaves = TriggerCond::ZoneChange {
+            filter: Filter::OwnedBy(PlayerRel::You),
+            from: Some(from),
+            to: None,
+        };
+        let watcher = CB::new("Departure Watcher")
+            .enchantment()
+            .ability(trig(leaves, Body::effect(gain(1))))
+            .build();
+        t.custom(P0, watcher, Zone::Battlefield);
+        let bears = match from {
+            ZoneKind::Hand => t.hand(P0, "Grizzly Bears"),
+            ZoneKind::Library => t.library_top(P0, "Grizzly Bears"),
+            _ => t.exile(P0, "Grizzly Bears"),
+        };
+        let now =
+            t.g.move_object(bears, Zone::Battlefield, MoveCause::Effect, Some(P0))
+                .expect("moved");
+        t.settle();
+        assert!(t.on_battlefield(now), "{from:?}");
+        assert_eq!(triggers_of(&t, "Departure Watcher"), 1, "{from:?}");
+        assert_eq!(triggers_of(&t, "Strict Proctor"), 0, "{from:?}");
+        t.resolve_all();
+        assert_eq!(t.life(P0), 21, "{from:?}");
+    }
+}
+
+#[test]
+fn torpor_orb_and_panharmonicon_still_judge_a_reanimation_as_one_zone_change() {
+    cr!("603.2d");
+    interp!("ability-triggered-cause-is-the-event");
+    supported("Torpor Orb");
+    supported("Panharmonicon");
+    supported("Desecrated Tomb");
+    // The user's decision of Nov 12 is about the abilities that trigger on another ability
+    // triggering. The static abilities of the same template still judge the zone change as
+    // a whole, a question not yet asked (docs/agents/finish-line-plan.md §5, "Revisit
+    // later"): Torpor Orb ("Creatures entering don't cause abilities to trigger.") stops
+    // Desecrated Tomb's ability on a reanimation, and Panharmonicon ("If an artifact or
+    // creature entering causes a triggered ability of a permanent you control to trigger,
+    // that ability triggers an additional time.") makes it trigger twice.
+    for (statik, bats) in [("Torpor Orb", 0), ("Panharmonicon", 2)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, statik);
+        t.battlefield(P0, "Desecrated Tomb");
+        let bears = t.graveyard(P0, "Grizzly Bears");
+        t.lands(P0, "Swamp", 4);
+        let zombify = t.hand(P0, "Zombify");
+        t.cast(P0, zombify).target(bears).go();
+        t.resolve_all();
+        assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "{statik}");
+        assert_eq!(tokens_named(&t, P0, "Bat"), bats, "{statik}");
+    }
+}
+
+#[test]
+fn aboleth_spawn_and_firebender_ascension_judge_the_trigger_event_that_matched() {
+    cr!("603.2", "603.6a");
+    interp!("ability-triggered-cause-is-the-event");
+    use crate::r600_common::{gain, trig, CB};
+    use mtg_engine::ability::{Body, Filter, PlayerRel, TriggerCond, ZoneKind};
+    supported("Aboleth Spawn");
+    supported("Firebender Ascension");
+    supported("Sun Titan");
+    // Aboleth Spawn copies an ability of a creature entering under an opponent's control
+    // only if the entering made it trigger: an enters ability, but not the creature's
+    // "Whenever a card leaves your hand", which the permanent sees itself match (it doesn't
+    // look back) by the card leaving the zone it came from.
+    for (leaving, copies) in [(true, 0), (false, 1)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Aboleth Spawn");
+        let cond = if leaving {
+            TriggerCond::ZoneChange {
+                filter: Filter::OwnedBy(PlayerRel::You),
+                from: Some(ZoneKind::Hand),
+                to: None,
+            }
+        } else {
+            TriggerCond::EntersBattlefield(Filter::Source)
+        };
+        let hatchling = CB::new("Test Hatchling")
+            .creature(1, 1)
+            .cost("{1}")
+            .ability(trig(cond, Body::effect(gain(1))))
+            .build();
+        let card = t.custom(P1, hatchling, Zone::Hand(P1));
+        t.g.move_object(card, Zone::Battlefield, MoveCause::Effect, Some(P1))
+            .expect("moved");
+        t.settle();
+        assert_eq!(triggers_of(&t, "Test Hatchling"), 1, "leaving: {leaving}");
+        assert_eq!(
+            triggers_of(&t, "Aboleth Spawn"),
+            copies,
+            "leaving: {leaving}"
+        );
+    }
+    // Firebender Ascension ("a creature you control attacking causes a triggered ability of
+    // that creature to trigger") counts Sun Titan's "enters or attacks" ability when its
+    // attack made it trigger, not when its entering did.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Firebender Ascension");
+    t.graveyard(P0, "Grizzly Bears");
+    t.enter(P0, "Sun Titan");
+    t.settle();
+    assert_eq!(triggers_of(&t, "Sun Titan"), 1);
+    assert_eq!(triggers_of(&t, "Firebender Ascension"), 0);
+    let mut t = TestGame::new(2);
+    let asc = t.battlefield(P0, "Firebender Ascension");
+    let titan = t.battlefield(P0, "Sun Titan");
+    t.graveyard(P0, "Grizzly Bears");
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(titan, Entity::Player(P1))]),
+    );
+    t.advance_to(P0, Step::DeclareAttackers);
+    t.settle();
+    assert_eq!(triggers_of(&t, "Sun Titan"), 1);
+    assert_eq!(triggers_of(&t, "Firebender Ascension"), 1);
+    t.resolve();
+    assert_eq!(t.counters(asc, "quest"), 1);
+}

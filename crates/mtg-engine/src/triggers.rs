@@ -2760,15 +2760,19 @@ impl Game {
 
     /// Whether the trigger event of `t` that matched zone change `ev` is the object leaving
     /// the zone it came from ("leaves your graveyard", "leaves your hand": an origin and no
-    /// destination) rather than its arrival in the new zone. For several trigger
-    /// conditions, the first one that matches is the one used, as when it triggers
-    /// (`TriggerCond::AnyOf`).
+    /// destination) rather than its arrival in the new zone. With several trigger
+    /// conditions (`TriggerCond::AnyOf`), only if every one that matched it is about the
+    /// leaving: one that matched the entering makes the permanent entering a cause of the
+    /// ability triggering, whichever comes first in its text.
     fn matched_zone_left(&self, t: &TriggerCond, base: &Ctx, ev: &Event) -> bool {
         match t {
-            TriggerCond::AnyOf(v) => v
-                .iter()
-                .find(|c| !self.trigger_matches_ctx(c, base, ev).is_empty())
-                .is_some_and(|c| self.matched_zone_left(c, base, ev)),
+            TriggerCond::AnyOf(v) => {
+                let mut matched = v
+                    .iter()
+                    .filter(|c| !self.trigger_matches_ctx(c, base, ev).is_empty())
+                    .peekable();
+                matched.peek().is_some() && matched.all(|c| self.matched_zone_left(c, base, ev))
+            }
             TriggerCond::Where { trigger: c, .. }
             | TriggerCond::Batched { trigger: c, .. }
             | TriggerCond::FirstTimeEachTurn(c)
