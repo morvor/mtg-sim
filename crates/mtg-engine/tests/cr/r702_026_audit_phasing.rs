@@ -238,6 +238,70 @@ fn a_phased_out_permanent_isnt_untapped() {
     assert!(!t.obj_now(shooter).tapped);
 }
 
+#[test]
+fn a_phased_out_permanent_doesnt_become_a_copy() {
+    cr!("702.26e", "707.2");
+    supported("Dimir Doppelganger");
+    let mut t = TestGame::new(2);
+    let doppelganger = t.battlefield(P0, "Dimir Doppelganger");
+    let bears = t.graveyard(P1, "Grizzly Bears");
+    // "{1}{U}{B}: Exile target creature card from a graveyard. This creature becomes a copy
+    // of that card, except it has this ability." It phases out in response: the card is
+    // exiled, but the copy effect doesn't include the phased-out Doppelganger.
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Swamp", 2);
+    t.activate(P0, doppelganger, 0, &[Entity::Object(bears)])
+        .expect("ability");
+    ripple(&mut t, P0, doppelganger);
+    t.resolve_all();
+    assert!(t.in_exile("Grizzly Bears"));
+    to_upkeep(&mut t, P0);
+    t.settle();
+    assert!(!phased_out(&t, doppelganger));
+    assert_eq!(
+        t.obj_now(doppelganger).chars.name.as_str(),
+        "Dimir Doppelganger"
+    );
+    assert_eq!(pt(&mut t, doppelganger), (0, 2));
+    // Phased in, the same ability makes it a copy.
+    let giant = t.graveyard(P1, "Hill Giant");
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Swamp", 2);
+    t.activate(P0, doppelganger, 0, &[Entity::Object(giant)])
+        .expect("ability");
+    t.resolve_all();
+    assert_eq!(t.obj_now(doppelganger).chars.name.as_str(), "Hill Giant");
+}
+
+#[test]
+fn a_phased_out_permanent_doesnt_transform() {
+    cr!("702.26b", "701.27a");
+    supported("Gatstaf Shepherd // Gatstaf Howler");
+    let mut t = TestGame::new(2);
+    // "At the beginning of each upkeep, if no spells were cast last turn, transform this
+    // creature." No spell was cast on turn 1: it triggers in P1's upkeep, and P0 phases
+    // it out in response.
+    let shepherd = t.battlefield(P0, "Gatstaf Shepherd // Gatstaf Howler");
+    to_upkeep(&mut t, P1);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    ripple(&mut t, P0, shepherd);
+    t.resolve_all();
+    assert_eq!(t.obj_now(shepherd).chars.name.as_str(), "Gatstaf Shepherd");
+    // It phases in front face up in P0's untap step (a spell was cast last turn, so it
+    // doesn't transform in this upkeep either).
+    to_upkeep(&mut t, P0);
+    t.resolve_all();
+    assert!(!phased_out(&t, shepherd));
+    assert_eq!(t.obj_now(shepherd).chars.name.as_str(), "Gatstaf Shepherd");
+    assert_eq!(pt(&mut t, shepherd), (2, 2));
+    // Phased in, the trigger of a turn after a turn without spells transforms it.
+    to_upkeep(&mut t, P1);
+    t.resolve_all();
+    assert_eq!(t.obj_now(shepherd).chars.name.as_str(), "Gatstaf Howler");
+}
+
 /// Advances to `p`'s next upkeep (its untap step's phasing done), triggered abilities not
 /// yet put on the stack.
 fn to_upkeep(t: &mut TestGame, p: PlayerId) {

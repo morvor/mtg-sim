@@ -54,7 +54,8 @@ pub fn can_transform(g: &Game, id: ObjectId) -> bool {
 /// can't transform any other way (CR 702.145b, 702.145e).
 pub fn can_transform_by(g: &Game, id: ObjectId, day_night: bool) -> bool {
     let o = g.obj(id);
-    if o.zone != Zone::Battlefield || !g.is_live(id) || o.face_down {
+    // A phased-out permanent can't be affected (CR 702.26b).
+    if o.zone != Zone::Battlefield || !g.is_live(id) || o.face_down || o.phased_out {
         return false;
     }
     if !day_night && crate::kw::daybound::transforms_only_by_day_night(g, id) {
