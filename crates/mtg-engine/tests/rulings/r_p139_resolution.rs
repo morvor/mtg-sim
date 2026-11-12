@@ -946,14 +946,15 @@ fn global_ruin_sacrifices_lands_without_basic_land_types() {
     let mut t = TestGame::new(2);
     let post = t.battlefield(P1, "Cloudpost");
     let island = t.battlefield(P1, "Island");
-    let island2 = t.battlefield(P1, "Island");
-    let sea = t.battlefield(P1, "Tropical Island");
-    t.answer_choose(P1, &[obj(island), obj(post)]);
+    let from = t.asked().len();
     cast_new(&mut t, P0, "Global Ruin", &[]);
     t.resolve_all();
     assert!(!t.on_battlefield(post));
-    assert!(t.on_battlefield(island) || t.on_battlefield(sea));
-    assert!(!t.on_battlefield(island2) || !t.on_battlefield(island));
+    assert!(t.on_battlefield(island));
+    assert!(t.asked()[from..].iter().all(|(_, d)| match d {
+        Decision::ChooseEntities { candidates, .. } => !candidates.contains(&obj(post)),
+        _ => true,
+    }));
 }
 
 #[test]
