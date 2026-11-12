@@ -8,15 +8,13 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 
 | Kind | Decided | Provisional |
 |---|---:|---:|
-| interpretation | 95 | 1 |
+| interpretation | 96 | 0 |
 | deviation | 9 | 0 |
 | policy | 34 | 0 |
 
 ## Provisional entries
 
-- **phased-out-source-still-acts** (interpretation, [zones-objects](interpretations/zones-objects.md)): An ability whose source phased out still has its source perform the action, as a source that left the battlefield would
-  - Question: Prodigal Pyromancer's "{T}: This creature deals 1 damage to any target." is on the stack when the Pyromancer phases out. Does the phased-out Pyromancer deal the damage? 702.26b says it "can’t affect ... anything else in the game"; 113.7a says a source that no longer exists still performs the action, with its last known information. No ruling addresses a source that phased out.
-  - Decision: It deals the damage. A phased-out permanent is treated as though it doesn't exist, which for the ability's source is the case 113.7a describes: the source is no longer where it's expected to be, and it still performs the action. Only an instruction that requires it to be on the battlefield fails: it doesn't fight (701.14b, with 702.26d's "treated as though it’s not on the battlefield"). Instructions that would affect the phased-out permanent itself do nothing (702.26b, 702.26e: no damage, counters, control change or continuous effect for it). Known limitation: the source's characteristics are those it has while phased out, which other objects' static abilities don't affect (`layers.rs`), not exactly those it had immediately before phasing out: Spikeshot Elder made 2/2 by Glorious Anthem and phased out in response to "This creature deals damage equal to its power to any target" deals 1, where its last known information would give 2.
+None.
 
 ## All entries
 
@@ -156,7 +154,7 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | `looked-at-hand-card-stays-seen` | A card looked at in another player's hand stays visible to the looker while it remains there | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |
 | `mdfc-back-face-up-enters-transformed` | A modal double-faced card cast or played with its back face up "enters transformed" | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |
 | `outside-the-game-is-the-sideboard` | Cards a player brings in "from outside the game" come from their sideboard | policy | decided | [zones-objects](interpretations/zones-objects.md) |
-| `phased-out-source-still-acts` | An ability whose source phased out still has its source perform the action, as a source that left the battlefield would | interpretation | provisional | [zones-objects](interpretations/zones-objects.md) |
+| `phased-out-source-still-acts` | An ability whose source phased out still has its source perform the action, as a source that left the battlefield would | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |
 | `returned-card-values-by-wording` | A value of a card an effect returned from a graveyard to the battlefield follows the wording: "its" mana value and "that card's" values are the card's as it last existed in the graveyard, "that creature's" values are the permanent's | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |
 | `rimescale-dragon-creatures-only` | Rimescale Dragon's "Creatures with ice counters on them don't untap" affects only creatures, whatever put the ice counters on them | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |
 | `self-shuffle-gone-library-still-shuffled` | "Its owner shuffles it into their library" shuffles that library even when it has left | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |
