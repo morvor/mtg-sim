@@ -41,7 +41,9 @@ fn giant_blocked_by_bears_under_vigor(extra: &str) -> (TestGame, ObjectId) {
 
 #[test]
 fn hardened_scales_adds_to_the_counters_vigor_puts_for_prevented_combat_damage() {
-    cr!("614.16", "615.5");
+    // (Hardened Scales applies to any counters put on a creature, CR 122.6; Doubling
+    // Season's "if an effect would put" is the wording CR 614.16 is about.)
+    cr!("615.5", "122.6");
     let (t, bears) = giant_blocked_by_bears_under_vigor("Hardened Scales");
     assert!(t.on_battlefield(bears));
     assert_eq!(damage_on(&t, bears), 0);

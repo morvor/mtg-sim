@@ -245,3 +245,43 @@ fn damage_pariah_redirects_to_a_protected_creature_is_then_prevented() {
     assert_eq!(damage_on(&t, walker), 0);
     assert!(t.on_battlefield(walker));
 }
+
+#[test]
+fn two_urzas_armors_preventing_one_bolt_are_two_prevention_events_for_selfless_squire() {
+    cr!("615.13", "615.10");
+    supported("Selfless Squire");
+    supported("Urza's Armor");
+    let mut t = TestGame::new(2);
+    let squire = t.battlefield(P0, "Selfless Squire");
+    t.battlefield(P0, "Urza's Armor");
+    t.battlefield(P0, "Urza's Armor");
+    // "Whenever damage that would be dealt to you is prevented, put that many +1/+1
+    // counters on Selfless Squire." Each Armor's effect is applied once to the Bolt and
+    // prevents 1 of it: two prevention effects, so the ability triggers twice.
+    cast(&mut t, P1, "Lightning Bolt", &[Entity::Player(P0)]);
+    t.resolve();
+    assert_eq!(t.life(P0), 19);
+    assert_eq!(t.stack_len(), 2, "one trigger for each prevention effect");
+    t.resolve_all();
+    assert_eq!(plus_counters(&t, squire), 2);
+}
+
+#[test]
+fn vigor_puts_the_counters_for_two_blockers_damage_as_one_event() {
+    cr!("615.5", "122.6");
+    supported("Vigor");
+    supported("Hardened Scales");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Vigor");
+    t.battlefield(P0, "Hardened Scales");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let b = t.battlefield(P1, "Grizzly Bears");
+    // The two blockers' 4 damage to the Giant is prevented by one application of Vigor's
+    // effect (as Undergrowth Champion's ruling has its effect "apply once to all that
+    // damage"): its 4 counters are put on the Giant at once, and Hardened Scales adds one.
+    t.attack(&[(giant, Entity::Player(P1))], &[(a, giant), (b, giant)]);
+    assert!(t.on_battlefield(giant));
+    assert_eq!(damage_on(&t, giant), 0);
+    assert_eq!(plus_counters(&t, giant), 5);
+}

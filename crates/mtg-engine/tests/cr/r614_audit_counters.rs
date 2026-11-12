@@ -21,7 +21,7 @@ fn spark_double_copying_feeder(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn spark_double_copying_spike_feeder_enters_with_its_counters_and_one_more() {
-    cr!("614.1c", "614.12", "707.9b");
+    cr!("614.1c", "614.12", "707.9f");
     ruling!(
         "Spark Double",
         "“[this permanent] enters the battlefield with” abilities of the chosen permanent will also work."
@@ -39,7 +39,7 @@ fn spark_double_copying_spike_feeder_enters_with_its_counters_and_one_more() {
 
 #[test]
 fn hardened_scales_adds_one_counter_to_spark_doubles_whole_entry() {
-    cr!("614.1c", "614.5", "122.6", "614.16");
+    cr!("614.1c", "614.5", "122.6");
     ruling!(
         "Hardened Scales",
         "If a creature you control would enter the battlefield with a number of +1/+1 counters on it, it enters with that many plus one instead."
@@ -159,4 +159,28 @@ fn vorinclex_halves_the_counters_an_opponents_creature_enters_with_and_doubles_i
     t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
     let theirs = cast_resolve(&mut t, P1, "Spike Feeder", &[]);
     assert_eq!(plus_counters(&t, theirs), 1);
+}
+
+#[test]
+fn an_opponents_vorinclex_halves_all_the_counters_a_feeder_enters_with_under_master_biomancer() {
+    cr!("614.1c", "122.6a", "616.2");
+    interp!("entering-counter-modifiers-after-enters-with");
+    supported("Vorinclex, Monstrous Raider");
+    supported("Master Biomancer");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Vorinclex, Monstrous Raider");
+    t.battlefield(P1, "Master Biomancer");
+    t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
+    // Spike Feeder's two and Master Biomancer's two, put by P1 (its controller), halved
+    // by P0's Vorinclex: 2. (The CR would let P1 halve Spike Feeder's two before adding
+    // Master Biomancer's, for 3.)
+    let feeder = cast_resolve(&mut t, P1, "Spike Feeder", &[]);
+    let feeder = t.g.current(feeder);
+    assert_eq!(plus_counters(&t, feeder), 2);
+    // Without Master Biomancer's, Spike Feeder's two are halved to one.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Vorinclex, Monstrous Raider");
+    t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
+    let feeder = cast_resolve(&mut t, P1, "Spike Feeder", &[]);
+    assert_eq!(plus_counters(&t, t.g.current(feeder)), 1);
 }

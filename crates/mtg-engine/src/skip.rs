@@ -6,33 +6,35 @@ use crate::eval::Ctx;
 use crate::game::Game;
 use crate::types::*;
 
-/// Applies static "skip" replacement effects ("Skip your draw step", "Players skip their
-/// upkeep steps", "If you would begin your draw step, you may skip that step instead")
-/// to a step that is about to begin. Returns true if the step is skipped. An effect that
-/// also has the player take another action queues it as the first thing that happens in
-/// the next step that actually occurs (CR 614.10b).
-pub fn static_skip(g: &mut Game, kind: StepKind, active: PlayerId) -> bool {
+/// A "skip" effect that applies to a step about to begin: (source, controller, effect,
+/// uid of the static ability it comes from, id of the one-shot effect, description).
+type SkipCand = (
+    Option<ObjectId>,
+    PlayerId,
+    ReplacementDef,
+    Option<u64>,
+    Option<u32>,
+    String,
+);
+
+/// The static and one-shot "skip" effects that apply to `active`'s step of this kind.
+fn skip_candidates(g: &Game, kind: StepKind, active: PlayerId) -> Vec<SkipCand> {
     let applies = |d: &ReplacementDef, s: Option<ObjectId>, c: PlayerId| match &d.event {
         ReplacementEvent::SkipStep { step, whose } => {
             *step == kind && g.player_rel_matches(*whose, active, &Ctx::new(s, c))
         }
         _ => false,
     };
-    // (source, controller, effect, uid of the static ability it comes from, id of the
-    // one-shot effect)
-    type Cand = (
-        Option<ObjectId>,
-        PlayerId,
-        ReplacementDef,
-        Option<u64>,
-        Option<u32>,
-    );
-    let mut cands: Vec<Cand> = g
+    let name = |s: Option<ObjectId>| s.map_or(String::new(), |s| g.obj(s).chars.name.to_string());
+    let mut cands: Vec<SkipCand> = g
         .statics
         .replacements
         .iter()
         .filter(|(s, c, _, _, d)| applies(d, Some(*s), *c))
-        .map(|(s, c, _, a, d)| (Some(*s), *c, d.clone(), Some(a.uid), None))
+        .map(|(s, c, _, a, d)| {
+            let text = format!("{}: {}", name(Some(*s)), a.text);
+            (Some(*s), *c, d.clone(), Some(a.uid), None, text)
+        })
         .collect();
     // One-shot effects ("you skip your draw step this turn"): several of them still skip
     // the step only once.
@@ -40,9 +42,38 @@ pub fn static_skip(g: &mut Game, kind: StepKind, active: PlayerId) -> bool {
         g.replacements
             .iter()
             .filter(|r| r.uses != Some(0) && applies(&r.def, r.source, r.controller))
-            .map(|r| (r.source, r.controller, r.def.clone(), None, Some(r.id))),
+            .map(|r| {
+                let text = format!("{} (effect #{})", name(r.source), r.id);
+                (
+                    r.source,
+                    r.controller,
+                    r.def.clone(),
+                    None,
+                    Some(r.id),
+                    text,
+                )
+            }),
     );
-    for (src, ctl, d, uid, one_shot) in cands {
+    cands
+}
+
+/// Descriptions of the "skip" effects [`static_skip`] would apply, for a choice among
+/// them and other effects that would skip the same step (CR 616.1).
+pub fn static_skip_options(g: &Game, kind: StepKind, active: PlayerId) -> Vec<String> {
+    skip_candidates(g, kind, active)
+        .into_iter()
+        .map(|c| c.5)
+        .collect()
+}
+
+/// Applies static "skip" replacement effects ("Skip your draw step", "Players skip their
+/// upkeep steps", "If you would begin your draw step, you may skip that step instead")
+/// to a step that is about to begin. Returns true if the step is skipped. An effect that
+/// also has the player take another action queues it as the first thing that happens in
+/// the next step that actually occurs (CR 614.10b).
+pub fn static_skip(g: &mut Game, kind: StepKind, active: PlayerId) -> bool {
+    let cands = skip_candidates(g, kind, active);
+    for (src, ctl, d, uid, one_shot, _) in cands {
         if d.optional && !g.ask_yes_no(active, src, &format!("Skip your {kind:?} step?"), false) {
             continue;
         }
@@ -83,18 +114,30 @@ pub fn consume_turn_skip(g: &mut Game, p: PlayerId) -> bool {
     consume_skip(g, p, StepKind::Turn)
 }
 
-/// Uses up one "skip your next [step/turn]" of `p` — with shared team turns, of any player
-/// on `p`'s team: if an effect causes a player to skip a step, phase or turn, that
-/// player's team does so (CR 805.8). Returns true if one was used up.
-pub fn consume_skip(g: &mut Game, p: PlayerId, kind: StepKind) -> bool {
-    let holders = if g.uses_shared_team_turns() {
+/// The players whose "skip your next [step/turn]" effects skip `p`'s: `p`, and with shared
+/// team turns, the players on `p`'s team (CR 805.8).
+fn skip_holders(g: &Game, p: PlayerId) -> Vec<PlayerId> {
+    if g.uses_shared_team_turns() {
         let mut v = vec![p];
         v.extend(g.team_members(p).into_iter().filter(|q| *q != p));
         v
     } else {
         vec![p]
-    };
-    for q in holders {
+    }
+}
+
+/// Whether a "skip your next [step]" effect of this kind is waiting to skip `p`'s next one.
+pub fn has_pending_skip(g: &Game, p: PlayerId, kind: StepKind) -> bool {
+    skip_holders(g, p)
+        .into_iter()
+        .any(|q| g.player(q).skips.contains(&kind))
+}
+
+/// Uses up one "skip your next [step/turn]" of `p` — with shared team turns, of any player
+/// on `p`'s team: if an effect causes a player to skip a step, phase or turn, that
+/// player's team does so (CR 805.8). Returns true if one was used up.
+pub fn consume_skip(g: &mut Game, p: PlayerId, kind: StepKind) -> bool {
+    for q in skip_holders(g, p) {
         if let Some(i) = g.player(q).skips.iter().position(|k| *k == kind) {
             g.players[q.idx()].skips.remove(i);
             return true;

@@ -34,7 +34,7 @@ fn damage_bounced_between_two_palisade_giants_stops_on_the_second() {
 
 #[test]
 fn two_thought_reflections_make_one_draw_four() {
-    cr!("614.5", "614.11", "616.2");
+    cr!("614.5", "616.2");
     supported("Thought Reflection");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Thought Reflection");
@@ -63,7 +63,7 @@ fn opt_under_notion_thief_and_reflection(picks: &[usize]) -> TestGame {
 
 #[test]
 fn reflection_then_notion_thief_gives_the_thief_two_cards_thief_first_gives_one() {
-    cr!("616.1", "616.1e", "616.1f", "614.5", "614.11");
+    cr!("616.1", "616.1e", "616.1f", "614.5");
     let base = TestGame::new(2).hand_size(P0);
     // Reflection first: two draws instead, and the Thief applies to each of them.
     let t = opt_under_notion_thief_and_reflection(&[]);
@@ -197,7 +197,11 @@ fn rest_in_peace_destroyed_with_the_creatures_still_exiles_them_all() {
 
 #[test]
 fn a_land_put_onto_the_battlefield_tapped_under_spelunking_enters_untapped_without_a_choice() {
-    cr!("614.15", "616.1a", "614.1d");
+    cr!("614.1d");
+    ruling!(
+        "Spelunking",
+        "If a land you control is simply put onto the battlefield tapped without a replacement effect being applied, it always enters untapped if you control Spelunking."
+    );
     supported("Spelunking");
     supported("Rampant Growth");
     let mut t = TestGame::new(2);
@@ -207,8 +211,8 @@ fn a_land_put_onto_the_battlefield_tapped_under_spelunking_enters_untapped_witho
     cast_resolve(&mut t, P0, "Rampant Growth", &[]);
     let forest = t.g.current(forest);
     assert!(t.on_battlefield(forest));
-    // "Tapped" is part of the spell's own instruction, applied first; then Spelunking's
-    // effect has it enter untapped.
+    // "Tapped" is part of the spell's instruction, not a replacement effect Spelunking's
+    // could be ordered with: Spelunking's effect has it enter untapped.
     assert!(!is_tapped(&t, forest));
     assert!(replacement_choices(&t).is_empty());
 }

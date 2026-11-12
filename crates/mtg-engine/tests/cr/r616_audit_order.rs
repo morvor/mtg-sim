@@ -367,7 +367,7 @@ fn mind_rot_liege_under_leyline(picks: &[usize]) -> TestGame {
 
 #[test]
 fn a_discarded_wilt_leaf_liege_goes_where_its_owner_chooses_and_was_still_discarded() {
-    cr!("616.1", "616.1e", "616.1f", "701.9a");
+    cr!("616.1", "616.1e", "616.1f", "614.6");
     ruling!(
         "Wilt-Leaf Liege",
         "and both Wilt-Leaf Liege's ability and another ability (such as that of an opponent's Leyline of the Void) instruct you to put Wilt-Leaf Liege somewhere else instead of putting it into your graveyard, you choose which one to apply."
@@ -392,4 +392,33 @@ fn a_discarded_wilt_leaf_liege_goes_where_its_owner_chooses_and_was_still_discar
     assert!(t.named_on_battlefield("Wilt-Leaf Liege").is_empty());
     assert!(t.in_exile("Wilt-Leaf Liege"));
     assert_eq!(t.life(P1), 16);
+}
+
+#[test]
+fn master_biomancers_ability_is_one_option_however_many_parts_it_has() {
+    cr!("616.1", "616.1e", "616.1f");
+    supported("Master Biomancer");
+    supported("Spike Feeder");
+    // Master Biomancer's "enters with ... counters ... and as a Mutant" is one replacement
+    // effect (compiled in two parts); with Spike Feeder's own it's a choice between two
+    // effects, made once, whichever P0 applies first.
+    for first in ["Master Biomancer", "Spike Feeder"] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Master Biomancer");
+        let probe_options = {
+            let mut p = TestGame::new(2);
+            p.battlefield(P0, "Master Biomancer");
+            cast_resolve(&mut p, P0, "Spike Feeder", &[]);
+            replacement_choices(&p)
+        };
+        assert_eq!(probe_options.len(), 1, "{probe_options:?}");
+        let options = &probe_options[0].1;
+        assert_eq!(options.len(), 2, "{options:?}");
+        pick_replacements(&mut t, P0, &[option_index(options, first)]);
+        let feeder = cast_resolve(&mut t, P0, "Spike Feeder", &[]);
+        let feeder = t.g.current(feeder);
+        assert_eq!(replacement_choices(&t).len(), 1, "first {first}");
+        assert_eq!(plus_counters(&t, feeder), 4, "first {first}");
+        assert!(t.obj_now(feeder).chars.has_subtype("Mutant"));
+    }
 }

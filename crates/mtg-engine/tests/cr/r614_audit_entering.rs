@@ -111,7 +111,7 @@ fn thalia_returning_with_an_opponents_creatures_doesnt_tap_them() {
 
 #[test]
 fn corpsejack_returning_with_spike_feeder_doesnt_double_its_counters() {
-    cr!("614.12", "614.1c", "614.16");
+    cr!("614.12", "614.1c");
     supported("Living Death");
     supported("Corpsejack Menace");
     let mut t = TestGame::new(2);

@@ -789,6 +789,11 @@ pub struct Game {
     /// Objects entering the battlefield simultaneously right now: effects modifying how
     /// they enter can't choose them to change zones (CR 614.13a, 614.13c).
     pub entering: Vec<ObjectId>,
+    /// While the replacement effects that would apply to a permanent entering the
+    /// battlefield are looked for from where it is: its characteristics as it would exist
+    /// on the battlefield, which "if [a permanent] would enter" effects check (CR 614.12;
+    /// `Game::replace_rec`).
+    pub(crate) entering_chars: Option<(ObjectId, Box<Characteristics>)>,
     /// While tokens are being created "attached to" an object or player: what they enter
     /// attached to (`Some(None)`: an undefined object or player), CR 303.4f–i, 301.5e.
     pub token_attach: Option<Option<Entity>>,
@@ -974,6 +979,7 @@ impl Game {
             next_spell_effects: vec![],
             step_start_actions: vec![],
             entering: vec![],
+            entering_chars: None,
             token_attach: None,
             token_counters: vec![],
             token_attack_options: vec![],

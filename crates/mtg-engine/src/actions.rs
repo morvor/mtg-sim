@@ -78,12 +78,10 @@ impl Game {
         // simultaneous events, they do so in APNAP order.
         let apnap = self.apnap();
         let mut order: Vec<usize> = (0..moves.len()).collect();
-        order.sort_by_key(|i| {
-            let o = self.obj(moves[*i].obj);
-            let p = match o.zone {
-                Zone::Battlefield | Zone::Stack => o.controller,
-                _ => o.owner,
-            };
+        order.sort_by_cached_key(|i| {
+            // The player who chooses for that move (an entering permanent's would-be
+            // controller, `entering-would-be-controller-chooses`).
+            let p = self.affected_player(&ReplEvent::Move(moves[*i].clone()));
             apnap.iter().position(|x| *x == p).unwrap_or(usize::MAX)
         });
         for (i, m) in order.into_iter().map(|i| (i, &moves[i])) {

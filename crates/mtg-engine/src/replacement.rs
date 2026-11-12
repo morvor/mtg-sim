@@ -326,15 +326,17 @@ impl Game {
         let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
         // What replacement effects do is part of the event they modify: no trigger check
         // happens in the middle (see `trigger_timing`).
-        self.atomically(|g| g.replace_rec(ev, applied, 0, false, None))
+        self.atomically(|g| g.replace_rec(ev, applied, 0, false, None, None))
     }
 
     /// Runs only self-replacement effects on an event that can't happen (CR 614.17c).
     pub fn replace_self_only(&mut self, ev: ReplEvent) -> Vec<ReplEvent> {
         let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
-        self.replace_rec(ev, applied, 0, true, None)
+        self.replace_rec(ev, applied, 0, true, None, None)
     }
 
+    /// `parts_of`: an ability (its source and text) one part of which was applied to the
+    /// event this one modified, whose other parts apply next (see below).
     fn replace_rec(
         &mut self,
         ev: ReplEvent,
@@ -342,6 +344,7 @@ impl Game {
         depth: u32,
         self_only: bool,
         snap: Option<Rc<EntrySnapshot>>,
+        parts_of: Option<(ObjectId, String)>,
     ) -> Vec<ReplEvent> {
         if depth > 32 {
             return vec![ev];
@@ -354,8 +357,22 @@ impl Game {
             // CR 614.12: which effects modify how a permanent enters, and how, is
             // determined from the permanent as it would exist on the battlefield.
             ReplEvent::Move(m) if m.to == Zone::Battlefield => {
-                let mut v = self.replacement_candidates(&ev, &applied, CandScope::NotEntry);
                 let m = m.clone();
+                let ev2 = ev.clone();
+                let (mut entry, as_it_would_exist) = self.with_hypothetical_entry(&m, |g| {
+                    (
+                        g.replacement_candidates(&ev2, &applied, CandScope::EntryOnly),
+                        Box::new(g.obj(m.obj).chars.clone()),
+                    )
+                });
+                // The others are checked where the object is ("and it wasn't cast": it's on
+                // the stack), but what they say of the permanent ("if a nontoken creature
+                // would enter", Containment Priest) is checked against the permanent as it
+                // would exist on the battlefield (CR 614.12; Containment Priest's ruling:
+                // a noncreature card entering as a creature is exiled).
+                let outer = self.entering_chars.replace((m.obj, as_it_would_exist));
+                let mut v = self.replacement_candidates(&ev, &applied, CandScope::NotEntry);
+                self.entering_chars = outer;
                 // The entering object's own conditional entry replacements ("If ~ would
                 // enter and it wasn't cast, exile it instead") apply only if it would have
                 // that ability on the battlefield (CR 614.12: not under Humility, Primeval
@@ -382,10 +399,6 @@ impl Game {
                     });
                     v.retain(|c| !own_where(c) || kept.contains(&key(&c.def)));
                 }
-                let ev2 = ev.clone();
-                let mut entry = self.with_hypothetical_entry(&m, |g| {
-                    g.replacement_candidates(&ev2, &applied, CandScope::EntryOnly)
-                });
                 match &snap {
                     // Effects that applied to the permanent as the event was proposed
                     // still apply, even if applying another one (an "as this enters,
@@ -459,31 +472,50 @@ impl Game {
         cands.retain(|c| c.class == min_class);
         let chooser = self.affected_player(&ev);
         // The parts one printed ability of one object was compiled into ("enters with
-        // ... counters and as a Mutant", Master Biomancer) are one replacement effect: no
-        // order to choose among them (CR 616.1 chooses among effects).
-        let one_ability = cands.iter().all(|c| {
-            matches!(c.key, ReplKey::Static(..))
-                && c.source.is_some()
-                && c.source == cands[0].source
-                && c.text == cands[0].text
-        });
-        let pick = if cands.len() == 1 || one_ability {
+        // ... counters and as a Mutant", Master Biomancer) are one replacement effect (CR
+        // 616.1 chooses among effects): they're one option, and once a part is applied
+        // the others follow before any other effect is chosen.
+        let ability_of = |c: &Candidate| match (c.key, c.source) {
+            (ReplKey::Static(..), Some(s)) => Some((s, c.text.clone())),
+            _ => None,
+        };
+        let mut options_of: Vec<usize> = Vec::new();
+        for (i, c) in cands.iter().enumerate() {
+            let a = ability_of(c);
+            if a.is_none() || !options_of.iter().any(|j| ability_of(&cands[*j]) == a) {
+                options_of.push(i);
+            }
+        }
+        let next_part = parts_of
+            .as_ref()
+            .and_then(|p| cands.iter().position(|c| ability_of(c).as_ref() == Some(p)));
+        let pick = if let Some(i) = next_part {
+            i
+        } else if options_of.len() == 1 {
             0
         } else {
-            let options = self.replacement_options(&cands);
+            let shown: Vec<Candidate> = options_of.iter().map(|i| cands[*i].clone()).collect();
+            let options = self.replacement_options(&shown);
             match self.ask(chooser, Decision::ChooseReplacement { options }) {
-                Answer::Index(i) if i < cands.len() => i,
+                Answer::Index(i) if i < options_of.len() => options_of[i],
                 _ => 0,
             }
         };
         let cand = cands.swap_remove(pick);
+        // The ability whose other parts are applied next: this one's, or the one whose
+        // parts were waiting for a choice of an earlier class (CR 616.1a–d).
+        let parts_of = match ability_of(&cand) {
+            a @ Some(_) if cands.iter().any(|c| ability_of(c) == a) => a,
+            _ if next_part.is_none() => parts_of,
+            _ => None,
+        };
         let mut applied = applied;
         applied.push(cand.key);
         // Optional ("you may") replacements.
         if cand.def.optional {
             let who = cand.controller;
             if !self.ask_yes_no(who, cand.source, &format!("Apply: {}?", cand.text), true) {
-                return self.replace_rec(ev, applied, depth + 1, self_only, snap);
+                return self.replace_rec(ev, applied, depth + 1, self_only, snap, None);
             }
         }
         let mut results = self.apply_replacement(&cand, ev, &applied);
@@ -495,7 +527,14 @@ impl Game {
         results.retain(|r| crate::multiplayer::range::replaced_event_in_range(self, r));
         let mut out = Vec::new();
         for r in results {
-            out.extend(self.replace_rec(r, applied.clone(), depth + 1, self_only, snap.clone()));
+            out.extend(self.replace_rec(
+                r,
+                applied.clone(),
+                depth + 1,
+                self_only,
+                snap.clone(),
+                parts_of.clone(),
+            ));
         }
         out
     }
@@ -557,8 +596,14 @@ impl Game {
     }
 
     /// The player who chooses among replacement effects for an event (CR 616.1).
-    fn affected_player(&self, ev: &ReplEvent) -> PlayerId {
+    pub(crate) fn affected_player(&self, ev: &ReplEvent) -> PlayerId {
         match ev {
+            // A permanent entering the battlefield: the player it would enter under the
+            // control of, as the effects applied so far have it (CR 614.12). After a
+            // control-changing effect (CR 616.1b), the new would-be controller makes the
+            // next choice (Gather Specimens' ruling), not the controller of the spell
+            // (`entering-would-be-controller-chooses`).
+            ReplEvent::Move(m) if m.to == Zone::Battlefield => self.entering_controller(m),
             ReplEvent::Move(m) => {
                 let o = self.obj(m.obj);
                 match o.zone {
@@ -1040,6 +1085,12 @@ impl Game {
             }
         }
         self.battlefield.push(id);
+        // Its copiable values as "as this enters" abilities that set them have them (CR
+        // 707.2, as `perform_move` applies them: exceptions of the copy effect it enters
+        // with, or its own copiable values).
+        let as_entered = |e: &[Modification]| -> Vec<Modification> {
+            e.iter().chain(&m.etb.copiable_mods).cloned().collect()
+        };
         if let Some(src) = m.etb.copy_of {
             let values = Box::new(m.etb.copied_values(self, src).clone());
             self.effects.push(ContinuousEffect {
@@ -1052,8 +1103,20 @@ impl Game {
                 mods: vec![],
                 layer1: Some(Layer1::Copy {
                     values,
-                    exceptions: m.etb.copy_exceptions.clone(),
+                    exceptions: as_entered(&m.etb.copy_exceptions),
                 }),
+                created_turn: self.turn.number,
+            });
+        } else if !m.etb.copiable_mods.is_empty() {
+            self.effects.push(ContinuousEffect {
+                id: 0,
+                source: Some(id),
+                controller,
+                timestamp: saved_next_ts,
+                duration: Duration::Permanent,
+                affected: Affected::Objects(vec![id]),
+                mods: vec![],
+                layer1: Some(Layer1::Copiable(as_entered(&[]))),
                 created_turn: self.turn.number,
             });
         }
@@ -1070,6 +1133,32 @@ impl Game {
                 layer1: None,
                 created_turn: self.turn.number,
             });
+        }
+        // What replacement effects already applied have it enter as ("enters ... as a
+        // Mutant in addition to its other types", Master Biomancer; "enters with haste"):
+        // performed as it's put onto the battlefield (`EtbInfo::as_enters`), they're part
+        // of the permanent as it would exist there, which later effects check (CR 614.12,
+        // 616.2: a Mutant entering under Metallic Mimic naming Mutant gets its counter).
+        for (k, (_, e)) in m.etb.as_enters.iter().enumerate() {
+            if let Effect::Modify {
+                what: Sel::This,
+                mods,
+                ..
+            } = e
+            {
+                let sets_pt = mods.iter().any(|x| matches!(x, Modification::SetPT(..)));
+                self.effects.push(ContinuousEffect {
+                    id: 0,
+                    source: Some(id),
+                    controller,
+                    timestamp: saved_next_ts + 2 + k as Timestamp,
+                    duration: Duration::Permanent,
+                    affected: Affected::Objects(vec![id]),
+                    mods: if sets_pt { vec![] } else { mods.clone() },
+                    layer1: sets_pt.then(|| Layer1::Copiable(mods.clone())),
+                    created_turn: self.turn.number,
+                });
+            }
         }
         self.compute_characteristics(false);
         self.statics.replacements = saved_statics.replacements.clone();
@@ -1411,29 +1500,27 @@ impl Game {
     /// (CR 614.12), with the player who will control it. When `replace` gathers the
     /// effects that modify how a permanent enters, this runs inside
     /// `with_hypothetical_entry`, so the object's characteristics are those it would have
-    /// on the battlefield; the queries over all effects (`applicable_replacements` and the
-    /// like) see its current characteristics.
+    /// on the battlefield; when it gathers the others ("if a nontoken creature would enter
+    /// and it wasn't cast", whose condition is checked where the object is), they're
+    /// `Game::entering_chars`; the queries over all effects (`applicable_replacements`
+    /// and the like) see its current characteristics.
     fn matches_entering(&self, m: &MoveEv, f: &Filter, ctx: &Ctx) -> bool {
         let view = EnteringView {
             obj: m.obj,
             controller: self.entering_controller(m),
+            chars: self
+                .entering_chars
+                .as_ref()
+                .filter(|(o, _)| *o == m.obj)
+                .map(|(_, c)| &**c),
         };
         self.matches_view(&view, m.obj, f, ctx)
     }
 
-    /// The player who will control a permanent entering the battlefield (as in
-    /// `perform_move`).
+    /// The player who will control a permanent entering the battlefield (the one
+    /// `perform_move` puts it under the control of).
     pub fn entering_controller(&self, m: &MoveEv) -> PlayerId {
-        let o = self.obj(m.obj);
-        m.etb
-            .controller
-            .or(if o.zone == Zone::Stack {
-                Some(o.controller)
-            } else {
-                None
-            })
-            .or(m.by)
-            .unwrap_or(o.owner)
+        self.entry_controller(m)
     }
 
     /// Whether the limited-use replacement effect `id` was used up by another object
@@ -2425,14 +2512,20 @@ impl Game {
 
 /// Characteristics of an object about to enter the battlefield, with the controller it
 /// will have there (CR 614.12).
-struct EnteringView {
+struct EnteringView<'c> {
     obj: ObjectId,
     controller: PlayerId,
+    /// Its characteristics as it would exist on the battlefield, if they differ from its
+    /// current ones (see [`Game::matches_entering`]).
+    chars: Option<&'c Characteristics>,
 }
 
-impl crate::eval::View for EnteringView {
+impl crate::eval::View for EnteringView<'_> {
     fn chars<'a>(&'a self, g: &'a Game, id: ObjectId) -> &'a Characteristics {
-        &g.obj(id).chars
+        match self.chars {
+            Some(c) if id == self.obj => c,
+            _ => &g.obj(id).chars,
+        }
     }
     fn controller(&self, g: &Game, id: ObjectId) -> PlayerId {
         if id == self.obj {
