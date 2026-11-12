@@ -520,9 +520,7 @@ Readings the user accepted for now, but wants to look at again before calling th
   - Deicide's searched name for a copied God.
 - **A phased-out source's characteristics.** Entry `phased-out-source-still-acts` (decided Nov 12) uses the source's characteristics while it is phased out, not its last known information. Example: Spikeshot Elder under Glorious Anthem deals 1, not 2.
 - **Loops:** a robust system later (D4, Nov 10).
-
-A question raised by a decision, not yet asked:
-- **Torpor Orb and Panharmonicon on a reanimation** (entry `ability-triggered-cause-is-the-event`). The Nov 12 answer ("those are two separate things, and desecrated tomb should still trigger") was given for Strict Proctor. The statics of the same template still treat the zone change as one event. So Torpor Orb ("Creatures entering don't cause abilities to trigger.") stops Desecrated Tomb's ability when a creature card is put onto the battlefield from your graveyard, and Panharmonicon makes it trigger twice. Should they follow the same reading? Hushbringer's ruling on "from anywhere" abilities reads its "dying" the current way.
+- **Counter modifiers on an entering permanent.** Entry `entering-counter-modifiers-after-enters-with` (a deviation, to be fixed later; the user, Nov 12): the effects that modify how many counters are put apply after all of a permanent's "enters with" effects, so an opponent's Vorinclex, Monstrous Raider can't be interleaved with Master Biomancer (Spike Feeder enters with 2 counters, not the 3 the controller could choose).
 
 ### Already decided, not re-asked
 

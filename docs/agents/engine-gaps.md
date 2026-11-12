@@ -824,8 +824,8 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   (CR 605.1a, revision effective 2026-08-07), MDFC "can't transform" rulings (CR 701.27g, 712.3; the Marvel's
   Spider-Man CR update effective 2025-09-19).
 - Ambiguous/unsettled readings: ward on a copy that keeps its targets, granted changeling vs layer 4,
-  Panharmonicon on non-ETB triggers, Torpor Orb on leave-graveyard triggers, Grand Melee
-  planeswalking readings of 701.31a/b.
+  Grand Melee planeswalking readings of 701.31a/b. (Panharmonicon and Torpor Orb on a card leaving a
+  graveyard as it enters: decided by the user, Nov 12, register `ability-triggered-cause-is-the-event`.)
 - No current card affected: keyword-derived activated/triggered abilities added after layer 6, "can't have
   [keyword]" at the end of layer 6, `Filter::zone()` returning None for `Or`, `Value::DistinctNames` greed,
   legend rule with chained interchangeable names, copies made from LKI losing saved context/splices
