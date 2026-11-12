@@ -99,17 +99,18 @@ fn opening_hand_actions_come_after_mulligans_starting_player_first_for_each_word
         assert_eq!(t.g.turn.number, 0, "{name}");
     }
     // Then the first turn begins: Chancellor of the Spires' reveals mill each opponent
-    // seven cards apiece at the first upkeep (P1's): seven reveals mill all 33 cards of
-    // P0's library.
+    // seven cards apiece at the first upkeep (P1's): each player's seven reveals mill all
+    // 33 cards of the other's library.
     let (mut t, _) = opening_hands(2, "Chancellor of the Spires", P1, &[]);
     let start = t.g.turn.starting_player;
     assert_eq!(start, P1);
     t.g.begin_turn(start, false);
     t.advance_to(P1, Step::Upkeep);
     t.resolve_all();
-    assert_eq!(t.graveyard_size(P0), 33);
-    assert_eq!(t.library_size(P0), 0);
-    assert_eq!(t.graveyard_size(P1), 0);
+    for p in [P0, P1] {
+        assert_eq!(t.graveyard_size(p), 33);
+        assert_eq!(t.library_size(p), 0);
+    }
 }
 
 #[test]
