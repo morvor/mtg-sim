@@ -163,6 +163,52 @@ fn a_kicked_permanent_flickered_returns_unkicked() {
 }
 
 #[test]
+fn a_card_cast_from_exile_and_exiled_again_is_no_longer_exiled_with_its_source() {
+    cr!("400.7", "607.2a");
+    ruling!(
+        "King Narfi's Betrayal",
+        "If you cast a spell with the chapter II/III ability, it becomes a new object. If it returns to exile, it's no longer exiled with King Narfi's Betrayal, and you won't be able to cast it again this way."
+    );
+    supported("King Narfi's Betrayal");
+    supported("Dissipate");
+    let mut t = TestGame::new(2);
+    for p in [P0, P1] {
+        for _ in 0..4 {
+            t.library_top(p, "Forest");
+        }
+    }
+    // I — "Each player mills four cards. Then you may exile a creature or planeswalker card
+    // from each graveyard.": P1's Hill Giant.
+    let giant = t.graveyard(P1, "Hill Giant");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(giant)]);
+    t.enter(P0, "King Narfi's Betrayal");
+    t.resolve_all();
+    let exiled = t.g.current(giant);
+    assert_eq!(t.zone(exiled), Zone::Exile);
+    // II — "Until end of turn, you may cast spells from among cards exiled with this Saga".
+    let saga = t.named_on_battlefield("King Narfi's Betrayal")[0];
+    t.g.add_counters(Entity::Object(saga), "lore", 1, None);
+    t.g.flush_events();
+    t.resolve_all();
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Mountain", 4);
+    let spell = t.cast(P0, exiled).go();
+    // P1's Dissipate counters it and exiles it: a new object in exile.
+    t.lands(P1, "Island", 3);
+    let dissipate = t.hand(P1, "Dissipate");
+    t.cast(P1, dissipate).target(spell).go();
+    t.resolve_all();
+    let again = t.g.current(giant);
+    assert_eq!(t.zone(again), Zone::Exile);
+    assert_ne!(again, exiled);
+    // It isn't a card exiled with the Saga any more: it can't be cast this way.
+    t.lands(P0, "Mountain", 4);
+    assert!(t.cast(P0, again).try_go().is_err());
+    assert_eq!(t.zone(again), Zone::Exile);
+}
+
+#[test]
 fn counters_that_remain_on_a_moving_object_dont_bring_effects_along() {
     cr!("400.7", "122.2", "611.2b");
     ruling!(

@@ -390,6 +390,56 @@ fn phasing_out_isnt_dying_for_morbid() {
     assert!(t.in_graveyard(P1, "Hill Giant"));
 }
 
+/// P1 casts Lightning Bolt at P0's Grizzly Bears in P1's main phase, and P0 delays it
+/// with Ertai's Meddling (X = 1): the Bolt is exiled with a delay counter, to be put back
+/// onto the stack with its target at P1's next upkeep. Returns the Bears.
+fn delayed_bolt_at_bears(t: &mut TestGame) -> ObjectId {
+    supported("Ertai's Meddling");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P1, Step::PrecombatMain);
+    t.lands(P1, "Mountain", 1);
+    let bolt = t.hand(P1, "Lightning Bolt");
+    let spell = t.cast(P1, bolt).target(bears).go();
+    t.lands(P0, "Island", 2);
+    let em = t.hand(P0, "Ertai's Meddling");
+    t.cast(P0, em).x(1).target(spell).go();
+    t.resolve();
+    assert!(t.in_exile("Lightning Bolt"));
+    bears
+}
+
+#[test]
+fn a_permanent_that_phased_out_and_in_is_still_the_object_a_spell_targets() {
+    cr!("702.26d", "400.7", "608.2b");
+    ruling!(
+        "Ertai's Meddling",
+        "A targeted spell which is delayed will still succeed even if its target has phased out and back in again."
+    );
+    // The Bears phase out (and back in during P0's untap step) before the Bolt returns:
+    // phasing isn't a zone change, so they're still its target.
+    let mut t = TestGame::new(2);
+    let bears = delayed_bolt_at_bears(&mut t);
+    ripple(&mut t, P0, bears);
+    to_upkeep(&mut t, P0);
+    t.settle();
+    assert!(!phased_out(&t, bears));
+    to_upkeep(&mut t, P1);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    // Exiled and returned instead (Cloudshift), they're a new object: the Bolt has no
+    // legal target.
+    let mut t = TestGame::new(2);
+    let bears = delayed_bolt_at_bears(&mut t);
+    t.lands(P0, "Plains", 1);
+    let cs = t.hand(P0, "Cloudshift");
+    t.cast(P0, cs).target(bears).go();
+    t.resolve();
+    to_upkeep(&mut t, P1);
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(bears)));
+    assert!(t.in_graveyard(P1, "Lightning Bolt"));
+}
+
 #[test]
 fn a_phased_out_source_still_deals_its_abilitys_damage() {
     cr!("113.7a", "702.26b");
