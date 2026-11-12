@@ -351,6 +351,7 @@ fn ajani_reflexive_trigger_once_per_cat_warrior_created() {
         "Ajani, Nacatl Pariah // Ajani, Nacatl Avenger",
         "In a case where you create more than one Cat Warrior creature token with Ajani, Nacatl Avenger's second ability (for example, because of the effect of Doubling Season), the reflexive ability will trigger once for each Cat Warrior you made this way. If a replacement effect causes you to create different tokens instead (for example, the effect of Divine Visitation), the creation of those tokens won't cause the reflexive ability to trigger."
     );
+    interp!("reflexive-trigger-per-specified-token");
     const AJANI: &str = "Ajani, Nacatl Pariah // Ajani, Nacatl Avenger";
     for (with, triggers) in [("Doubling Season", 2usize), ("Divine Visitation", 0)] {
         let mut t = TestGame::new(2);

@@ -84,6 +84,8 @@ fn call_to_the_grave_checks_for_creatures_on_trigger_and_resolution() {
     t.battlefield(P1, "Grizzly Bears");
     to_end_step(&mut t);
     assert_eq!(t.stack_len(), 0);
+    t.resolve_all();
+    assert!(t.on_battlefield(call));
     // None: it triggers; a creature enters in response: nothing happens.
     let mut t = TestGame::new(2);
     let call2 = t.battlefield(P0, "Call to the Grave");
@@ -98,7 +100,6 @@ fn call_to_the_grave_checks_for_creatures_on_trigger_and_resolution() {
     to_end_step(&mut t);
     t.resolve_all();
     assert!(!t.on_battlefield(call3));
-    assert!(t.on_battlefield(call) || !t.g.is_live(call));
 }
 
 #[test]

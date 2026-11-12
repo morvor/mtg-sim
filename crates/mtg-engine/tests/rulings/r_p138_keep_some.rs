@@ -145,7 +145,7 @@ fn slaughter_the_strong_checks_the_total_power_of_the_creatures_chosen() {
 
 #[test]
 fn abolisher_opponent_with_fewer_than_three_sacrifices_all() {
-    cr!("701.21a", "701.28a");
+    cr!("701.21a", "701.27a");
     ruling!(
         "Voldaren Pariah // Abolisher of Bloodlines",
         "If the targeted opponent doesn't control three creatures as the triggered ability of Abolisher of Bloodlines resolves, that player sacrifices as many creatures as able."

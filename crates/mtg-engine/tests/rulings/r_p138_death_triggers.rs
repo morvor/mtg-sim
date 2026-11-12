@@ -114,7 +114,7 @@ fn two_players_copies_chain_until_creatures_run_out() {
 
 #[test]
 fn players_with_hexproof_still_sacrifice() {
-    cr!("115.1", "702.11d");
+    cr!("115.1", "702.11c");
     ruling!(
         "Grave Pact",
         "None of the players are targeted. A player with hexproof would still sacrifice a creature."
