@@ -324,9 +324,10 @@ fn an_enters_from_a_graveyard_ability_is_caused_by_the_permanent_entering() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand);
     assert_eq!(t.life(P0), life);
-    // Desecrated Tomb's "Whenever one or more creature cards leave your graveyard" isn't an
-    // enters ability, but the card leaving the graveyard is the permanent entering (one
-    // zone change): that event made it trigger.
+    // Desecrated Tomb's "Whenever one or more creature cards leave your graveyard" isn't
+    // caused by the permanent entering: the card leaving the graveyard and the permanent
+    // entering are two separate things, and the Tomb's trigger event is the leaving (the
+    // user's decision of Nov 12).
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Strict Proctor");
     t.battlefield(P0, "Desecrated Tomb");
@@ -336,7 +337,31 @@ fn an_enters_from_a_graveyard_ability_is_caused_by_the_permanent_entering() {
     t.cast(P0, zombify).target(bears).go();
     t.resolve();
     assert_eq!(triggers_of(&t, "Desecrated Tomb"), 1);
-    assert_eq!(triggers_of(&t, "Strict Proctor"), 1);
+    assert_eq!(triggers_of(&t, "Strict Proctor"), 0);
     t.resolve_all();
-    assert_eq!(tokens_named(&t, P0, "Bat"), 0, "countered: P0 couldn't pay {{2}}");
+    assert_eq!(tokens_named(&t, P0, "Bat"), 1);
+}
+
+#[test]
+fn strict_proctor_doesnt_tax_a_leaves_your_graveyard_ability_on_a_reanimation() {
+    cr!("603.2");
+    interp!("ability-triggered-cause-is-the-event");
+    supported("Strict Proctor");
+    supported("Desecrated Tomb");
+    // P0 could pay {2} (six Swamps for Zombify's {3}{B}), but isn't asked to: the Tomb's
+    // ability matched the Bears leaving the graveyard, not a permanent entering.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Strict Proctor");
+    t.battlefield(P0, "Desecrated Tomb");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.lands(P0, "Swamp", 6);
+    let zombify = t.hand(P0, "Zombify");
+    t.cast(P0, zombify).target(bears).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    assert_eq!(tokens_named(&t, P0, "Bat"), 1, "the Bat is made");
+    let asked_to_pay = t.asked().into_iter().any(|(p, d)| {
+        p == P0 && matches!(d, Decision::YesNo { prompt, .. } if prompt.starts_with("Pay"))
+    });
+    assert!(!asked_to_pay, "no {{2}} is asked");
 }

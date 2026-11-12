@@ -438,8 +438,12 @@ impl Game {
                     {
                         continue;
                     }
-                    let matched =
-                        tag_triggering_event(self.trigger_matches_ctx(trigger, &base, ev), ev);
+                    let matched = self.tag_triggering_event(
+                        trigger,
+                        &base,
+                        self.trigger_matches_ctx(trigger, &base, ev),
+                        ev,
+                    );
                     if !matched.is_empty() {
                         // CR 603.2d, 603.10a: as for a single event, the "triggers an
                         // additional time" effects that applied immediately before a
@@ -840,7 +844,7 @@ impl Game {
             infos.extend(crate::teams::more_step_trigger_infos(
                 self, t, &base, ev, &infos,
             ));
-            let infos = tag_triggering_event(infos, ev);
+            let infos = self.tag_triggering_event(&t.trigger, &base, infos, ev);
             for info in infos {
                 let mut ctx = Ctx::new(Some(src), ctl);
                 ctx.link = a.link;
@@ -967,7 +971,12 @@ impl Game {
             {
                 continue;
             }
-            let infos = tag_triggering_event(self.trigger_matches_ctx(&d.trigger, &base, ev), ev);
+            let infos = self.tag_triggering_event(
+                &d.trigger,
+                &base,
+                self.trigger_matches_ctx(&d.trigger, &base, ev),
+                ev,
+            );
             if let (
                 true,
                 true,
@@ -2716,15 +2725,66 @@ fn control_before_fn(events: &[Event]) -> BTreeMap<ObjectId, PlayerId> {
     out
 }
 
-/// Records in each of a triggered ability's event infos the kind of event that made it
-/// trigger (`EventInfo::triggered_by`).
-fn tag_triggering_event(mut infos: Vec<EventInfo>, ev: &Event) -> Vec<EventInfo> {
-    if let Some(k) = crate::events::TriggeringEvent::of(ev) {
+impl Game {
+    /// Records in each of the event infos of a triggered ability with trigger condition
+    /// `trigger` the kind of event that made it trigger (`EventInfo::triggered_by`, what
+    /// "[a permanent entering] causes a triggered ability to trigger" looks at, CR 603.2).
+    /// A card put onto the battlefield from another zone both leaves that zone and enters
+    /// the battlefield, two separate things: the ability was triggered by a permanent
+    /// entering only if the trigger event that matched is the entering (the zone change's
+    /// destination side, whatever the wording: "enters or attacks", "enters, if ...",
+    /// "enters from a graveyard"), not the card leaving the zone it came from ("Whenever one
+    /// or more creature cards leave your graveyard", the origin side). Interpretation
+    /// `ability-triggered-cause-is-the-event`.
+    fn tag_triggering_event(
+        &self,
+        trigger: &TriggerCond,
+        base: &Ctx,
+        mut infos: Vec<EventInfo>,
+        ev: &Event,
+    ) -> Vec<EventInfo> {
+        use crate::events::TriggeringEvent;
+        let Some(k) = TriggeringEvent::of(ev) else {
+            return infos;
+        };
+        if infos.is_empty()
+            || (k == TriggeringEvent::Entered && self.matched_zone_left(trigger, base, ev))
+        {
+            return infos;
+        }
         for i in &mut infos {
             i.triggered_by = Some(k);
         }
+        infos
     }
-    infos
+
+    /// Whether the trigger event of `t` that matched zone change `ev` is the object leaving
+    /// the zone it came from ("leaves your graveyard", "leaves your hand": an origin and no
+    /// destination) rather than its arrival in the new zone. For several trigger
+    /// conditions, the first one that matches is the one used, as when it triggers
+    /// (`TriggerCond::AnyOf`).
+    fn matched_zone_left(&self, t: &TriggerCond, base: &Ctx, ev: &Event) -> bool {
+        match t {
+            TriggerCond::AnyOf(v) => v
+                .iter()
+                .find(|c| !self.trigger_matches_ctx(c, base, ev).is_empty())
+                .is_some_and(|c| self.matched_zone_left(c, base, ev)),
+            TriggerCond::Where { trigger: c, .. }
+            | TriggerCond::Batched { trigger: c, .. }
+            | TriggerCond::FirstTimeEachTurn(c)
+            | TriggerCond::ThisTurn(c)
+            | TriggerCond::UntilYourNextTurn(c)
+            | TriggerCond::ThisCombat(c)
+            | TriggerCond::ForAsLongAs(c, _)
+            | TriggerCond::Noncombat(c) => self.matched_zone_left(c, base, ev),
+            TriggerCond::ZoneChange {
+                from: Some(_),
+                to: None,
+                ..
+            } => true,
+            _ => false,
+        }
+    }
 }
 
 /// Whether a trigger condition is about sacrificing ("whenever you sacrifice a creature"),
