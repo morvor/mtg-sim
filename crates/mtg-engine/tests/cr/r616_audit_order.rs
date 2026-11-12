@@ -257,6 +257,7 @@ fn gather_specimens_applies_before_its_casters_essence_of_the_wild_which_then_ap
     let bears = t.g.current(bears);
     assert_eq!(controller(&mut t, bears), P0);
     assert_eq!(t.obj_now(bears).chars.name.as_str(), "Essence of the Wild");
+    assert!(replacement_choices(&t).is_empty());
 }
 
 #[test]
@@ -271,6 +272,7 @@ fn gather_specimens_applies_before_the_casters_opponents_essence_which_then_does
     let bears = t.g.current(bears);
     assert_eq!(controller(&mut t, bears), P0);
     assert_eq!(t.obj_now(bears).chars.name.as_str(), "Grizzly Bears");
+    assert!(replacement_choices(&t).is_empty());
 }
 
 #[test]
@@ -300,6 +302,8 @@ fn voice_of_all_entering_under_essence_of_the_wild_never_chooses_a_color() {
         &t.asked()[before..]
     );
     assert_eq!(t.obj_now(voice).choices.color, None);
+    // The copy effect must be applied first: there's no choice of order to make.
+    assert!(replacement_choices(&t).is_empty());
 }
 
 #[test]
@@ -341,6 +345,8 @@ fn master_biomancer_still_gives_counters_to_a_creature_entering_as_essence_of_th
     assert_eq!(t.obj_now(bears).chars.name.as_str(), "Essence of the Wild");
     assert_eq!(plus_counters(&t, bears), 2);
     assert!(t.obj_now(bears).chars.has_subtype("Mutant"));
+    // The copy effect comes first (CR 616.1c); then only Master Biomancer's is left.
+    assert!(replacement_choices(&t).is_empty());
 }
 
 /// P0 controls Leyline of the Void and Megrim and casts Mind Rot on P1, whose hand is

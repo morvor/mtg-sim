@@ -143,4 +143,6 @@ fn evil_reawakened_applies_before_essence_of_the_wild_and_its_counters_stay() {
     // The spell's two additional counters, but not Spike Feeder's own two (it's already
     // a copy of Essence of the Wild when its own ability would apply).
     assert_eq!(plus_counters(&t, feeder), 2);
+    // Self-replacement, then copy: no order is left to choose (CR 616.1a, 616.1c).
+    assert!(replacement_choices(&t).is_empty());
 }

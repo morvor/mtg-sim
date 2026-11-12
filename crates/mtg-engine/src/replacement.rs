@@ -458,7 +458,16 @@ impl Game {
         let min_class = cands.iter().map(|c| c.class).min().unwrap();
         cands.retain(|c| c.class == min_class);
         let chooser = self.affected_player(&ev);
-        let pick = if cands.len() == 1 {
+        // The parts one printed ability of one object was compiled into ("enters with
+        // ... counters and as a Mutant", Master Biomancer) are one replacement effect: no
+        // order to choose among them (CR 616.1 chooses among effects).
+        let one_ability = cands.iter().all(|c| {
+            matches!(c.key, ReplKey::Static(..))
+                && c.source.is_some()
+                && c.source == cands[0].source
+                && c.text == cands[0].text
+        });
+        let pick = if cands.len() == 1 || one_ability {
             0
         } else {
             let options = self.replacement_options(&cands);
