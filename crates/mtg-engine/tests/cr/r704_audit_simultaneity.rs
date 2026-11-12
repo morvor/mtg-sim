@@ -289,7 +289,7 @@ fn counters_annihilating_are_removed_counters_for_protean_hydra() {
 
 #[test]
 fn persist_returns_a_creature_again_after_its_minus_one_counter_annihilated() {
-    cr!("704.5q", "702.79a", "704.8");
+    cr!("704.5q", "702.79a");
     ruling!(
         "Putrid Goblin",
         "Putrid Goblin’s persist ability can bring it back again if its -1/-1 counters are removed this way."

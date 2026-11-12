@@ -10,13 +10,14 @@ use mtg_engine::testing::*;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
-/// A two-chapter Saga that also has a triggered ability that isn't a chapter ability.
+/// A two-chapter Saga creature that also has a triggered ability that isn't a chapter
+/// ability (in the text box below its type line, CR 714.1a).
 fn saga_with_another_trigger() -> mtg_engine::card::CardDef {
     oracle_card(
         "Lifewatch Saga",
-        "Enchantment — Saga",
+        "Enchantment Creature — Saga Spirit",
         "{0}",
-        None,
+        Some((2, 2)),
         "I — You gain 1 life.\nII — You gain 2 life.\nWhenever you gain life, put a +1/+1 counter on target creature.",
     )
 }
@@ -51,7 +52,7 @@ fn a_saga_waits_only_for_its_chapter_abilities() {
 
 #[test]
 fn a_saga_creature_that_lost_its_chapter_abilities_isnt_sacrificed() {
-    cr!("704.5s", "714.2d", "714.3c");
+    cr!("704.5s", "714.2d");
     supported("Humility");
     let mut t = TestGame::new(2);
     let saga = t.custom(

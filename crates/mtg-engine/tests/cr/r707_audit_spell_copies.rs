@@ -270,7 +270,20 @@ fn a_copy_of_a_commander_spell_isnt_a_commander() {
     t.resolve();
     let token = t.named_on_battlefield("Isamaru, Hound of Konda")[0];
     assert!(!t.obj_now(token).is_commander);
-    // Its combat damage isn't commander damage.
-    t.g.deal_damage(token, Entity::Player(P1), 2, true);
+    // Its combat damage isn't commander damage: 21 of it doesn't make P1 lose (704.6c).
+    t.g.players[1].life = 100;
+    t.g.deal_damage(token, Entity::Player(P1), 21, true);
+    t.settle();
     assert!(t.player(P1).commander_damage.is_empty());
+    assert!(!t.has_lost(P1));
+    // The commander itself resolves (the player keeps it under the legend rule); 21 combat
+    // damage from it does.
+    t.answer_choose_moved(P0, &[Entity::Object(spell)]);
+    t.resolve();
+    let commander = t.g.current(spell);
+    assert!(t.on_battlefield(commander) && t.obj_now(commander).is_commander);
+    assert!(!t.on_battlefield(token));
+    t.g.deal_damage(commander, Entity::Player(P1), 21, true);
+    t.settle();
+    assert!(t.has_lost(P1));
 }

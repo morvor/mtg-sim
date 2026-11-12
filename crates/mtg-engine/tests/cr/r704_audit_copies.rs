@@ -243,7 +243,7 @@ fn a_permanent_that_becomes_a_copy_of_a_world_enchantment_is_the_newest_one() {
 
 #[test]
 fn a_creature_that_becomes_a_copy_of_a_noncreature_loses_its_aura_and_equipment() {
-    cr!("704.5m", "704.5n", "707.4", "301.5a", "303.4c");
+    cr!("704.5m", "704.5n", "707.4", "301.5c", "303.4c");
     supported("Holy Strength");
     supported("Bonesplitter");
     let mut t = TestGame::new(2);
@@ -305,6 +305,16 @@ fn a_copy_of_a_saga_is_a_saga_with_its_own_lore_counters() {
     assert_eq!(triggers_of(&t, "The Eldest Reborn"), 1);
     t.resolve_all();
     assert!(t.on_battlefield(copy) && t.on_battlefield(saga));
+    // Each is sacrificed at its own final chapter: the copy with three lore counters goes,
+    // the original with two stays.
+    t.g.objects[copy.0 as usize]
+        .counters
+        .insert(counters::LORE.into(), 3);
+    t.g.dirty = true;
+    t.settle();
+    assert!(!t.on_battlefield(copy));
+    assert!(t.on_battlefield(saga));
+    assert!(t.in_graveyard(P0, "Copy Enchantment"));
 }
 
 #[test]
