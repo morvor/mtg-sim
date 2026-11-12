@@ -55,12 +55,7 @@ impl KeywordRules for Overload {
                 return vec![];
             }
         }
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::Overload,
-            &cost,
-        ));
+        super::set_alternative_keyword_cost(g, p, KeywordKind::Overload, &cost, &mut opt);
         opt.tag = Some(OVERLOAD);
         vec![opt]
     }

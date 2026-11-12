@@ -38,12 +38,7 @@ impl KeywordRules for Disturb {
         };
         let mut opt = CastOption::normal(FaceState::Back);
         opt.method = CastMethod::Keyword(KeywordKind::Disturb);
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::Disturb,
-            &cost,
-        ));
+        super::set_alternative_keyword_cost(g, p, KeywordKind::Disturb, &cost, &mut opt);
         opt.tag = Some(DISTURB);
         vec![opt]
     }

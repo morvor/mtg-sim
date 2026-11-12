@@ -58,12 +58,7 @@ impl KeywordRules for Mayhem {
         let mut opt = CastOption::normal(FaceState::Front);
         opt.method = CastMethod::Keyword(KeywordKind::Mayhem);
         if let Some(cost) = &kw.cost {
-            opt.alt_cost = Some(super::modified_keyword_cost(
-                g,
-                p,
-                KeywordKind::Mayhem,
-                cost,
-            ));
+            super::set_alternative_keyword_cost(g, p, KeywordKind::Mayhem, cost, &mut opt);
             opt.tag = Some(MAYHEM);
         }
         vec![opt]

@@ -83,12 +83,7 @@ impl KeywordRules for Flashback {
                 ),
             };
             // "Flashback costs you pay cost {2} less."
-            opt.alt_cost = Some(super::modified_keyword_cost(
-                g,
-                p,
-                KeywordKind::Flashback,
-                &cost,
-            ));
+            super::set_alternative_keyword_cost(g, p, KeywordKind::Flashback, &cost, &mut opt);
             opt.tag = Some(FLASHBACK);
             out.push(opt);
         }

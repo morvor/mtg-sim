@@ -51,12 +51,7 @@ impl KeywordRules for Surge {
                 return vec![];
             }
         }
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::Surge,
-            &cost,
-        ));
+        super::set_alternative_keyword_cost(g, p, KeywordKind::Surge, &cost, &mut opt);
         opt.tag = Some(SURGE);
         vec![opt]
     }
