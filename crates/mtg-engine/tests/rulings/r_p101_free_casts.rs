@@ -147,7 +147,10 @@ fn oskars_cast_happens_as_the_trigger_resolves_and_is_paid_for() {
         if !paid {
             let bolt = t.g.find_in_zone(Zone::Graveyard(P0), "Lightning Bolt")[0];
             mana(&mut t, P0, "R");
-            assert!(!crate::r_s21_common::castable(&mut t, P0, bolt), "not later");
+            assert!(
+                !crate::r_s21_common::castable(&mut t, P0, bolt),
+                "not later"
+            );
         }
     }
 }
@@ -168,7 +171,12 @@ fn lukkas_exiled_creature_cards_may_be_cast_as_adventures_or_for_alternative_cos
     let lib = set_library(
         &mut t,
         P0,
-        &["Bonecrusher Giant // Stomp", "Demon of Death's Gate", "Island", "Forest"],
+        &[
+            "Bonecrusher Giant // Stomp",
+            "Demon of Death's Gate",
+            "Island",
+            "Forest",
+        ],
     );
     t.activate(P0, lukka, 0, &[]).expect("Lukka +1");
     t.resolve_all();
@@ -180,13 +188,19 @@ fn lukkas_exiled_creature_cards_may_be_cast_as_adventures_or_for_alternative_cos
     assert!(!can_cast(&mut t, P0, giant, CastMethod::Half(1)));
     t.lands(P0, "Mountain", 2);
     assert!(can_cast(&mut t, P0, giant, CastMethod::Half(1)));
-    let stomp = t.cast(P0, giant).method(CastMethod::Half(1)).target(pl(P1)).go();
+    let stomp = t
+        .cast(P0, giant)
+        .method(CastMethod::Half(1))
+        .target(pl(P1))
+        .go();
     assert!(!t.obj_now(stomp).is(CardType::Creature));
     t.resolve_all();
     assert_eq!(t.life(P1), 18);
     assert_eq!(t.zone(giant), Zone::Exile, "on an adventure");
     // Demon of Death's Gate for its alternative cost (6 life, three black creatures).
-    let hawks: Vec<_> = (0..3).map(|_| t.battlefield(P0, "Vampire Nighthawk")).collect();
+    let hawks: Vec<_> = (0..3)
+        .map(|_| t.battlefield(P0, "Vampire Nighthawk"))
+        .collect();
     let alts = crate::r_p102_common::alternatives(&mut t, P0, demon);
     assert_eq!(alts.len(), 1, "{alts:?}");
     t.answer_choose(P0, &hawks.iter().map(|h| obj(*h)).collect::<Vec<_>>());

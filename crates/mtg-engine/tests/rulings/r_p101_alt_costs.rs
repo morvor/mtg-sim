@@ -25,7 +25,9 @@ fn alt(t: &mut TestGame, p: PlayerId, card: ObjectId) -> CastMethod {
 /// P0's Demon of Death's Gate in hand with three Vampire Nighthawks (black) to sacrifice.
 fn demon(t: &mut TestGame) -> (ObjectId, Vec<ObjectId>) {
     let d = t.hand(P0, "Demon of Death's Gate");
-    let hawks = (0..3).map(|_| t.battlefield(P0, "Vampire Nighthawk")).collect();
+    let hawks = (0..3)
+        .map(|_| t.battlefield(P0, "Vampire Nighthawk"))
+        .collect();
     (d, hawks)
 }
 
@@ -76,12 +78,18 @@ fn demon_of_deaths_gates_alternative_cost_keeps_its_mana_value_and_timing() {
         let c = setup(&mut t);
         assert_eq!(alternatives(&mut t, P0, c).len(), 1, "{name}: main phase");
         t.set_step(P1, Step::PrecombatMain);
-        assert!(alternatives(&mut t, P0, c).is_empty(), "{name}: opponent's turn");
+        assert!(
+            alternatives(&mut t, P0, c).is_empty(),
+            "{name}: opponent's turn"
+        );
         t.set_step(P0, Step::BeginningOfCombat);
         assert!(alternatives(&mut t, P0, c).is_empty(), "{name}: combat");
         t.set_step(P0, Step::PostcombatMain);
         cast_new(&mut t, P1, "Shock", &[pl(P1)]);
-        assert!(alternatives(&mut t, P0, c).is_empty(), "{name}: stack not empty");
+        assert!(
+            alternatives(&mut t, P0, c).is_empty(),
+            "{name}: stack not empty"
+        );
     }
 }
 
@@ -107,7 +115,10 @@ fn cost_increases_apply_to_alternative_costs() {
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Sphere of Resistance");
     let (d, hawks) = demon(&mut t);
-    assert!(alternatives(&mut t, P0, d).is_empty(), "no mana for the {{1}}");
+    assert!(
+        alternatives(&mut t, P0, d).is_empty(),
+        "no mana for the {{1}}"
+    );
     mana(&mut t, P0, "1");
     let m = alt(&mut t, P0, d);
     t.answer_choose(P0, &hawks.iter().map(|h| obj(*h)).collect::<Vec<_>>());
@@ -121,7 +132,10 @@ fn cost_increases_apply_to_alternative_costs() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     let pyro = t.hand(P0, "Pyrokinesis");
     let shock = t.hand(P0, "Shock");
-    assert!(alternatives(&mut t, P0, pyro).is_empty(), "no mana for the {{1}}");
+    assert!(
+        alternatives(&mut t, P0, pyro).is_empty(),
+        "no mana for the {{1}}"
+    );
     mana(&mut t, P0, "1");
     let m = alt(&mut t, P0, pyro);
     t.answer_choose(P0, &[obj(shock)]);
@@ -137,7 +151,10 @@ fn cost_increases_apply_to_alternative_costs() {
     t.g.mill(P1, 3);
     t.settle();
     let trap = t.hand(P0, "Ravenous Trap");
-    assert!(alternatives(&mut t, P0, trap).is_empty(), "no mana for the {{1}}");
+    assert!(
+        alternatives(&mut t, P0, trap).is_empty(),
+        "no mana for the {{1}}"
+    );
     mana(&mut t, P0, "1");
     let m = alt(&mut t, P0, trap);
     let spell = t.cast(P0, trap).method(m).target(pl(P1)).go();
@@ -211,7 +228,11 @@ fn mental_misstep_counts_phyrexian_mana_as_1_and_x_as_chosen() {
         assert_eq!(mv(&t, blaze) as i64, x + 1);
         let m = t.hand(P0, "Mental Misstep");
         t.g.turn.priority = Some(P0);
-        assert_eq!(t.cast(P0, m).target(obj(blaze)).try_go().is_ok(), legal, "X = {x}");
+        assert_eq!(
+            t.cast(P0, m).target(obj(blaze)).try_go().is_ok(),
+            legal,
+            "X = {x}"
+        );
     }
 }
 
@@ -256,7 +277,10 @@ fn mindbreak_traps_condition_needs_one_opponent_casting_three_spells_resolved_or
     let decay = cast_new(&mut t, P1, "Abrupt Decay", &[obj(bears)]);
     let trap = t.hand(P0, "Mindbreak Trap");
     let m = alt(&mut t, P0, trap);
-    t.cast(P0, trap).method(m).targets(&[obj(a), obj(b), obj(decay)]).go();
+    t.cast(P0, trap)
+        .method(m)
+        .targets(&[obj(a), obj(b), obj(decay)])
+        .go();
     t.resolve_all();
     for s in [a, b, decay] {
         assert_eq!(t.zone(s), Zone::Exile);
@@ -300,7 +324,10 @@ fn archive_traps_condition_is_any_search_of_any_opponent() {
     cast_new(&mut t, P1, "Impulse", &[]);
     t.resolve_all();
     let trap = t.hand(P0, "Archive Trap");
-    assert!(alternatives(&mut t, P0, trap).is_empty(), "looking isn't searching");
+    assert!(
+        alternatives(&mut t, P0, trap).is_empty(),
+        "looking isn't searching"
+    );
     // Rampant Growth finding nothing (no basic land in a library of fillers) is a search;
     // so is one with Aven Mindcensor (the top four only).
     for mindcensor in [false, true] {
@@ -346,7 +373,11 @@ fn commandeers_alternative_cost_needs_two_blue_cards_in_hand() {
         for _ in 0..blue {
             t.hand(P0, "Opt");
         }
-        assert_eq!(alternatives(&mut t, P0, c).len(), ok as usize, "{blue} blue cards");
+        assert_eq!(
+            alternatives(&mut t, P0, c).len(),
+            ok as usize,
+            "{blue} blue cards"
+        );
     }
 }
 
@@ -365,10 +396,19 @@ fn fires_of_invention_lets_you_pay_the_mana_cost_or_another_alternative_cost() {
     let m = t.hand(P0, "Mulldrifter");
     let methods = crate::r_s07_common::cast_methods(&mut t, P0, m);
     assert!(methods.contains(&CastMethod::Normal), "{methods:?}");
-    assert!(methods.contains(&CastMethod::Keyword(KeywordKind::Evoke)), "{methods:?}");
+    assert!(
+        methods.contains(&CastMethod::Keyword(KeywordKind::Evoke)),
+        "{methods:?}"
+    );
     assert!(methods.len() >= 3, "and the free cast: {methods:?}");
-    t.cast(P0, m).method(CastMethod::Keyword(KeywordKind::Evoke)).go();
-    assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 3, "paid {{2}}{{U}}");
+    t.cast(P0, m)
+        .method(CastMethod::Keyword(KeywordKind::Evoke))
+        .go();
+    assert_eq!(
+        crate::r_s01_common::tapped_lands(&t, P0),
+        3,
+        "paid {{2}}{{U}}"
+    );
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Mulldrifter"), "evoked");
 }
@@ -394,7 +434,10 @@ fn a_commander_free_spell_is_cast_with_no_one_acting_in_between() {
         t.set_step(P1, Step::PrecombatMain);
         let shock = cast_new(&mut t, P1, "Shock", &[pl(P0)]);
         let c = t.hand(P0, name);
-        assert!(alternatives(&mut t, P0, c).is_empty(), "{name}: no commander");
+        assert!(
+            alternatives(&mut t, P0, c).is_empty(),
+            "{name}: no commander"
+        );
         commander_on_battlefield(&mut t, "Grizzly Bears");
         let m = alt(&mut t, P0, c);
         let targets: Vec<Entity> = match name {
@@ -422,7 +465,11 @@ fn summoning_trap_looks_at_all_of_a_short_library() {
     );
     supported("Summoning Trap");
     let mut t = TestGame::new(2);
-    let lib = set_library(&mut t, P0, &["Island", "Island", "Island", "Island", "Hill Giant"]);
+    let lib = set_library(
+        &mut t,
+        P0,
+        &["Island", "Island", "Island", "Island", "Hill Giant"],
+    );
     t.answer_choose(P0, &[obj(lib[4])]);
     cast_resolve(&mut t, P0, "Summoning Trap", "4GG", &[]);
     assert_eq!(count_named(&t, "Hill Giant"), 1);

@@ -1,0 +1,1 @@
+Clown Car	In an Un- game, if X is actually infinite	No in-scope game state: an infinite X needs infinite mana, which only Urza's Fun House ({T}: Add {∞}) makes — an acorn card not legal in any format (docs/DEFERRED.md, cards not legal in any format); the engine has no infinite numbers, and the ruling's rolls "infinite times" are an Un-game assumption, not a rule

@@ -201,7 +201,9 @@ fn subtlety_puts_a_creature_spell_into_its_library_by_its_owners_choice() {
         t.resolve();
         assert!(t.on_battlefield(s));
         let cands = target_candidates(&t, P0, from);
-        assert!(cands.iter().all(|c| !c.contains(&obj(bears)) && !c.contains(&obj(s))));
+        assert!(cands
+            .iter()
+            .all(|c| !c.contains(&obj(bears)) && !c.contains(&obj(s))));
         assert!(cands.iter().any(|c| c.contains(&obj(tyrant))));
         t.resolve_all();
         let lib = &t.g.player(P1).library;
@@ -252,19 +254,18 @@ fn deflecting_swat_keeps_the_division_of_damage_and_counters() {
     let goblin = t.battlefield(P1, "Raging Goblin");
     t.set_step(P1, Step::PrecombatMain);
     divide(&mut t, P1, &[1, 1]);
-    t.answer(P1, DecisionKind::Targets, Answer::Entities(vec![pl(P0), obj(bears)]));
+    t.answer(
+        P1,
+        DecisionKind::Targets,
+        Answer::Entities(vec![pl(P0), obj(bears)]),
+    );
     let bolt = cast_new(&mut t, P1, "Forked Bolt", &[]);
     cast(&mut t, P0, "Deflecting Swat", "2R", &[obj(bolt)]);
     t.answer_yes(P0, true);
     t.answer_targets(P0, &[pl(P1)]);
     t.answer_targets(P0, &[obj(goblin)]);
     t.resolve_all();
-    assert_eq!(
-        (t.life(P0), t.life(P1)),
-        (20, 19),
-        "{}",
-        t.dump_log()
-    );
+    assert_eq!((t.life(P0), t.life(P1)), (20, 19), "{}", t.dump_log());
     assert!(!t.on_battlefield(goblin));
     assert_eq!(dmg(&t, bears), 0);
     // Blessings of Nature (distribute four +1/+1 counters): 3 on Grizzly Bears, 1 on
@@ -275,7 +276,11 @@ fn deflecting_swat_keeps_the_division_of_damage_and_counters() {
     let giant = t.battlefield(P0, "Hill Giant");
     t.set_step(P1, Step::PrecombatMain);
     divide(&mut t, P1, &[3, 1]);
-    t.answer(P1, DecisionKind::Targets, Answer::Entities(vec![obj(bears), obj(goblin)]));
+    t.answer(
+        P1,
+        DecisionKind::Targets,
+        Answer::Entities(vec![obj(bears), obj(goblin)]),
+    );
     let bless = cast_new(&mut t, P1, "Blessings of Nature", &[]);
     cast(&mut t, P0, "Deflecting Swat", "2R", &[obj(bless)]);
     t.answer_yes(P0, true);
@@ -304,7 +309,14 @@ fn mizzixs_trigger_comes_after_the_spell_is_cast_and_resolves_before_it() {
     let spell = t.cast(P0, div).go();
     assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 3);
     t.resolve();
-    assert_eq!(t.g.player(P0).counters.get("experience").copied().unwrap_or(0), 1);
+    assert_eq!(
+        t.g.player(P0)
+            .counters
+            .get("experience")
+            .copied()
+            .unwrap_or(0),
+        1
+    );
     assert_eq!(t.zone(spell), Zone::Stack);
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Divination"));

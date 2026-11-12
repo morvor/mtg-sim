@@ -32,14 +32,22 @@ fn pyre_of_heroes_uses_the_sacrificed_back_faces_types_and_its_mana_value() {
     assert!(mtg_engine::dfc::transform(&mut t.g, delver));
     t.g.recompute();
     assert_eq!(mv(&t, delver), 1);
-    let lib = set_library(&mut t, P0, &["Spellstutter Sprite", "Kraul Harpooner", "Hill Giant"]);
+    let lib = set_library(
+        &mut t,
+        P0,
+        &["Spellstutter Sprite", "Kraul Harpooner", "Hill Giant"],
+    );
     t.answer_choose(P0, &[obj(delver)]);
     t.answer_choose(P0, &[obj(lib[1])]);
     let from = t.asked().len();
     mana(&mut t, P0, "2");
     act(&mut t, P0, pyre, "Search your library", &[]).expect("Pyre");
     t.resolve_all();
-    assert!(was_offered(&t, P0, from, lib[1]), "{:?}", asked_of(&t, P0, from));
+    assert!(
+        was_offered(&t, P0, from, lib[1]),
+        "{:?}",
+        asked_of(&t, P0, from)
+    );
     assert!(!was_offered(&t, P0, from, lib[0]));
     assert_eq!(count_named(&t, "Kraul Harpooner"), 1);
 }
@@ -91,13 +99,16 @@ fn enigmatic_incarnation_sacrifices_just_one_enchantment() {
     end_step(&mut t, P0);
     t.resolve_all();
     let max = asked_of(&t, P0, from).iter().find_map(|d| match d {
-        Decision::ChooseEntities { candidates, max, .. } if candidates.contains(&obj(a)) => {
-            Some(*max)
-        }
+        Decision::ChooseEntities {
+            candidates, max, ..
+        } if candidates.contains(&obj(a)) => Some(*max),
         _ => None,
     });
     assert_eq!(max, Some(1));
-    assert_eq!(t.on_battlefield(a) as usize + t.on_battlefield(b) as usize, 1);
+    assert_eq!(
+        t.on_battlefield(a) as usize + t.on_battlefield(b) as usize,
+        1
+    );
     assert_eq!(count_named(&t, "Gray Ogre"), 1);
 }
 
@@ -113,15 +124,16 @@ fn abilities_that_may_be_activated_and_do_nothing() {
         "You may activate the last ability even if Steel Hellkite hasn't dealt combat damage to any players that turn. If you do, the ability won't do anything."
     );
     supported("Vivien on the Hunt");
-    // Vivien +2, declining to sacrifice: loyalty 8, no search, the Bears stays.
+    // Vivien +2, declining to sacrifice: no search, the Bears stays.
     let mut t = TestGame::new(2);
     let vivien = t.battlefield(P0, "Vivien on the Hunt");
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.library_top(P0, "Hill Giant");
     t.answer_yes(P0, false);
+    let loyalty = t.counters(vivien, "loyalty");
     t.activate(P0, vivien, 0, &[]).expect("Vivien +2");
     t.resolve_all();
-    assert_eq!(t.counters(vivien, "loyalty"), 8);
+    assert_eq!(t.counters(vivien, "loyalty"), loyalty + 2);
     assert!(t.on_battlefield(bears));
     assert_eq!(count_named(&t, "Hill Giant"), 0);
     // Steel Hellkite with X = 0, no combat damage dealt: nothing is destroyed.
@@ -161,11 +173,12 @@ fn anchor_to_reality_and_neoform_sacrifice_exactly_one() {
         t.g.turn.priority = Some(P0);
         t.cast(P0, c).go();
         let sac = asked_of(&t, P0, from).iter().find_map(|d| match d {
-            Decision::ChooseEntities { min, max, candidates, .. }
-                if candidates.contains(&obj(a)) =>
-            {
-                Some((*min, *max))
-            }
+            Decision::ChooseEntities {
+                min,
+                max,
+                candidates,
+                ..
+            } if candidates.contains(&obj(a)) => Some((*min, *max)),
             _ => None,
         });
         assert_eq!(sac, Some((1, 1)), "{name}");
@@ -245,21 +258,36 @@ fn a_split_card_has_one_combined_mana_value_for_atemsis_and_azors_gateway() {
     // (3), Fire // Ice (4) and Air Elemental (5): six different mana values; P1 loses.
     let mut t = TestGame::new(2);
     let atemsis = t.battlefield(P0, "Atemsis, All-Seeing");
-    for c in ["Forest", "Opt", "Grizzly Bears", "Divination", "Fire // Ice", "Air Elemental"] {
+    for c in [
+        "Forest",
+        "Opt",
+        "Grizzly Bears",
+        "Divination",
+        "Fire // Ice",
+        "Air Elemental",
+    ] {
         t.hand(P0, c);
     }
     t.answer_yes(P0, true);
-    t.set_step(P0, Step::BeginningOfCombat);
-    t.attack(&[(atemsis, pl(P1))], &[]);
-    t.resolve_all();
+    attack_with(&mut t, &[(atemsis, pl(P1))]);
+    // The game ends as the trigger resolves (in the combat damage step).
+    t.g.run_until(10_000, |g| {
+        g.player(P1).has_lost || g.turn.step == Step::EndOfCombat
+    });
     assert!(t.has_lost(P1), "{}", t.dump_log());
     // Azor's Gateway: Forest, Opt, Bears, Divination and Fire // Ice — five values.
     let mut t = TestGame::new(2);
     let gate = t.battlefield(P0, "Azor's Gateway // Sanctum of the Sun");
-    let cards: Vec<ObjectId> = ["Forest", "Opt", "Grizzly Bears", "Divination", "Fire // Ice"]
-        .iter()
-        .map(|c| t.hand(P0, c))
-        .collect();
+    let cards: Vec<ObjectId> = [
+        "Forest",
+        "Opt",
+        "Grizzly Bears",
+        "Divination",
+        "Fire // Ice",
+    ]
+    .iter()
+    .map(|c| t.hand(P0, c))
+    .collect();
     for c in &cards {
         t.g.objects[gate.0 as usize].tapped = false;
         mana(&mut t, P0, "1");
@@ -381,7 +409,9 @@ fn tenth_district_heros_second_ability_checks_for_a_detective_on_resolution() {
         "You can activate Tenth District Hero's second ability regardless of what creature types it is. The ability checks Tenth District Hero's creature types when it resolves. If Tenth District Hero isn't a Detective at that time, the ability does nothing."
     );
     let evidence = |t: &mut TestGame| -> Vec<Entity> {
-        (0..2).map(|_| obj(t.graveyard(P0, "Grizzly Bears"))).collect()
+        (0..2)
+            .map(|_| obj(t.graveyard(P0, "Grizzly Bears")))
+            .collect()
     };
     // A Human, not a Detective: the ability resolves and does nothing.
     let mut t = TestGame::new(2);
@@ -389,7 +419,7 @@ fn tenth_district_heros_second_ability_checks_for_a_detective_on_resolution() {
     let ev = evidence(&mut t);
     t.answer_choose(P0, &ev);
     mana(&mut t, P0, "2W");
-    act(&mut t, P0, hero, "If this creature is a Detective", &[]).expect("Hero");
+    act(&mut t, P0, hero, "Collect evidence 4", &[]).expect("Hero");
     t.resolve_all();
     assert_eq!(t.obj_now(hero).chars.name, "Tenth District Hero");
     assert_eq!(t.pt(hero), (2, 3));
@@ -402,7 +432,7 @@ fn tenth_district_heros_second_ability_checks_for_a_detective_on_resolution() {
     let ev = evidence(&mut t);
     t.answer_choose(P0, &ev);
     mana(&mut t, P0, "2W");
-    act(&mut t, P0, hero, "If this creature is a Detective", &[]).expect("Hero");
+    act(&mut t, P0, hero, "Collect evidence 4", &[]).expect("Hero");
     t.resolve_all();
     assert_eq!(t.obj_now(hero).chars.name, "Mileva, the Stalwart");
     assert_eq!(t.pt(hero), (5, 5));
@@ -483,7 +513,8 @@ fn arenas_fight_with_tapped_creatures_illegal_targets_and_current_power() {
     arena(&mut t, bears, wurm);
     crate::r_p003_common::giant_growth(&mut t, bears);
     t.resolve_all();
-    assert_eq!(dmg(&t, wurm), 5);
+    // Craw Wurm (6/4) is dealt 5: destroyed (the Bears' 2 wouldn't have been lethal).
+    assert!(!t.on_battlefield(wurm), "{}", t.dump_log());
 }
 
 #[test]
@@ -552,6 +583,10 @@ fn gusthas_scepter_triggers_on_losing_control_or_leaving() {
             give_control(&mut t, scepter, P1);
         }
         t.resolve_all();
-        assert!(t.in_graveyard(P0, "Hill Giant"), "leaves = {leaves}: {}", t.dump_log());
+        assert!(
+            t.in_graveyard(P0, "Hill Giant"),
+            "leaves = {leaves}: {}",
+            t.dump_log()
+        );
     }
 }

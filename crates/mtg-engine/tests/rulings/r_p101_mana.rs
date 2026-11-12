@@ -4,8 +4,8 @@
 //! (605.1b), Culling Ritual's colors, Mana Crypt's flip, and paying mana during Tariff's
 //! resolution (608.2d, 605.3a).
 
-use crate::r_p101_common::*;
 use crate::r_p017_common::load_coins;
+use crate::r_p101_common::*;
 use mtg_engine::ability::AbilityKind;
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::mana::ManaType;
@@ -41,7 +41,12 @@ fn a_countered_or_fizzled_pact_makes_no_delayed_trigger() {
         "Summoner's Pact",
         "If Summoner's Pact is countered, the delayed triggered ability that threatens you with a game loss won't trigger at the beginning of your next upkeep."
     );
-    for name in ["Pact of Negation", "Pact of the Titan", "Slaughter Pact", "Summoner's Pact"] {
+    for name in [
+        "Pact of Negation",
+        "Pact of the Titan",
+        "Slaughter Pact",
+        "Summoner's Pact",
+    ] {
         supported(name);
         for fizzle in [false, true] {
             if fizzle && matches!(name, "Pact of the Titan" | "Summoner's Pact") {
@@ -122,15 +127,14 @@ fn a_pact_that_resolves_but_does_nothing_still_makes_you_pay() {
 fn activate_mana(t: &mut TestGame, src: ObjectId) -> (bool, usize) {
     t.g.turn.priority = Some(P0);
     t.g.recompute();
-    let uid = t
-        .g
-        .obj(src)
-        .chars
-        .abilities
-        .iter()
-        .find(|a| matches!(&a.kind, AbilityKind::Activated(x) if x.is_mana_ability))
-        .map(|a| a.uid)
-        .expect("a mana ability");
+    let uid =
+        t.g.obj(src)
+            .chars
+            .abilities
+            .iter()
+            .find(|a| matches!(&a.kind, AbilityKind::Activated(x) if x.is_mana_ability))
+            .map(|a| a.uid)
+            .expect("a mana ability");
     let before = t.g.player(P0).mana_pool.total();
     let ok = t.g.activate_ability(P0, src, uid).is_ok();
     t.g.flush_events();
@@ -231,8 +235,16 @@ fn a_second_mox_opal_meets_the_legend_rule_before_either_can_tap() {
     t.resolve_all();
     assert_eq!(controls_named(&t, P0, "Mox Opal"), 1);
     assert_eq!(t.graveyard_size(P0), 1);
-    let left = if t.on_battlefield(first) { first } else { t.g.current(second) };
-    assert_eq!(activate_mana(&mut t, left), (false, 0), "only two artifacts now");
+    let left = if t.on_battlefield(first) {
+        first
+    } else {
+        t.g.current(second)
+    };
+    assert_eq!(
+        activate_mana(&mut t, left),
+        (false, 0),
+        "only two artifacts now"
+    );
 }
 
 #[test]
@@ -248,7 +260,10 @@ fn a_spirit_guide_returned_to_hand_as_a_cost_cant_pay_for_that_cost() {
     );
     // The spirit guide attacks unblocked; ninjutsu of Ninja of the Deep Hours ({1}{U},
     // return an unblocked attacker you control to hand) with only an Island.
-    for (guide, land) in [("Elvish Spirit Guide", "Forest"), ("Simian Spirit Guide", "Mountain")] {
+    for (guide, land) in [
+        ("Elvish Spirit Guide", "Forest"),
+        ("Simian Spirit Guide", "Mountain"),
+    ] {
         for with_land in [false, true] {
             let mut t = TestGame::new(2);
             let g = t.battlefield(P0, guide);
@@ -280,7 +295,10 @@ fn a_spirit_guide_returned_to_hand_as_a_cost_cant_pay_for_that_cost() {
 #[test]
 fn elemental_resonances_mana_comes_from_a_triggered_ability_on_the_stack() {
     cr!("605.1b", "603.3");
-    ruling!("Elemental Resonance", "This ability isn't a mana ability. It uses the stack.");
+    ruling!(
+        "Elemental Resonance",
+        "This ability isn't a mana ability. It uses the stack."
+    );
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     crate::r_s06_common::attach_new(&mut t, P0, "Elemental Resonance", obj(bears));
@@ -334,8 +352,7 @@ fn mana_crypts_damage_follows_the_lost_flip_at_once() {
     let from = t.asked().len();
     t.g.resolve_top();
     let lost_first = t.life(P0) == 17;
-    assert!(t
-        .asked()[from..]
+    assert!(t.asked()[from..]
         .iter()
         .all(|(_, d)| !matches!(d, Decision::Priority { .. })));
     if !lost_first {

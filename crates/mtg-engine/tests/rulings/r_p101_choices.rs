@@ -215,7 +215,10 @@ fn culling_scales_lets_you_choose_among_tied_lowest() {
 #[test]
 fn talion_may_choose_1_or_10() {
     cr!("607.2a", "614.12b", "601.2");
-    ruling!("Talion, the Kindly Lord", "The numbers you may choose include 1 and 10.");
+    ruling!(
+        "Talion, the Kindly Lord",
+        "The numbers you may choose include 1 and 10."
+    );
     supported("Talion, the Kindly Lord");
     for n in [1, 10] {
         let mut t = TestGame::new(2);
@@ -265,7 +268,11 @@ fn nahiris_sacrifice_chooses_x_targets_and_division_as_it_is_cast() {
     let from = t.asked().len();
     answer_x(&mut t, P0, 2);
     t.answer_choose(P0, &[obj(bears)]);
-    t.answer(P0, DecisionKind::Targets, Answer::Entities(vec![obj(a), obj(b)]));
+    t.answer(
+        P0,
+        DecisionKind::Targets,
+        Answer::Entities(vec![obj(a), obj(b)]),
+    );
     divide(&mut t, P0, &[1, 1]);
     let spell = cast(&mut t, P0, "Nahiri's Sacrifice", "1R", &[]);
     assert_eq!(t.zone(spell), Zone::Stack);
@@ -370,7 +377,11 @@ fn hollow_marauders_opponents_choose_in_turn_order_from_the_active_one() {
             .map(|(p, _)| *p)
             .collect();
         order.dedup();
-        let want = if active == P0 { vec![P1, P2, P3] } else { vec![P2, P3, P1] };
+        let want = if active == P0 {
+            vec![P1, P2, P3]
+        } else {
+            vec![P2, P3, P1]
+        };
         assert_eq!(order, want, "{}", t.dump_log());
         for p in [P1, P2, P3] {
             assert!(t.in_graveyard(p, "Hill Giant"));

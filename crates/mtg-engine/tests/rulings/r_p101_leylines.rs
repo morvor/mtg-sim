@@ -79,6 +79,21 @@ fn leyline_of_hope_applies_once_per_life_gain_event() {
     t.attack(&[(a, pl(P1))], &[(x, a), (y, a)]);
     assert_eq!((dmg(&t, x), dmg(&t, y)), (1, 1), "{}", t.dump_log());
     assert_eq!(t.life(P0), 23);
+    // Child of Night with Leyline Axe (3/2 double strike, trample) blocked by Grizzly
+    // Bears: in the first-strike step 2 to the Bears and 1 to P1 (one event: 3 + 1), then
+    // 3 to P1 (3 + 1).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Leyline of Hope");
+    let a = t.battlefield(P0, "Child of Night");
+    crate::r_s06_common::attach_new(&mut t, P0, "Leyline Axe", obj(a));
+    assert_eq!(t.pt(a), (3, 2));
+    let x = t.battlefield(P1, "Grizzly Bears");
+    t.answer(P0, DecisionKind::Damage, Answer::Numbers(vec![2, 1]));
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(a, pl(P1))], &[(x, a)]);
+    assert!(!t.on_battlefield(x));
+    assert_eq!(t.life(P1), 16);
+    assert_eq!(t.life(P0), 28, "{}", t.dump_log());
     // Peach Garden Oath ("You gain 2 life for each creature you control.") with three
     // creatures: one event of 6, plus 1.
     let mut t = TestGame::new(2);
@@ -110,7 +125,11 @@ fn leyline_of_hope_ignores_a_teammates_life_gain_in_two_headed_giant() {
     t.battlefield(P0, "Leyline of Hope");
     let before = t.life(P0);
     gain(&mut t, P1, 3);
-    assert_eq!(t.life(P0), before + 3, "the teammate gained 3; the team's total rose by 3");
+    assert_eq!(
+        t.life(P0),
+        before + 3,
+        "the teammate gained 3; the team's total rose by 3"
+    );
     gain(&mut t, P0, 3);
     assert_eq!(t.life(P0), before + 3 + 4);
 }
@@ -264,7 +283,11 @@ fn leyline_of_the_meek_pumps_tokens_but_not_a_clone_copying_a_token() {
 
 /// `p` answers every "Choose a creature type" choice with `ty`, recording the options.
 fn choose_type(t: &mut TestGame, p: PlayerId, ty: &str) {
-    let i = subtype_lists().creature.iter().position(|t| t == ty).unwrap();
+    let i = subtype_lists()
+        .creature
+        .iter()
+        .position(|t| t == ty)
+        .unwrap();
     t.answer(p, DecisionKind::Option, Answer::Index(i));
 }
 
@@ -287,16 +310,23 @@ fn leyline_of_transformations_type_applies_before_enters_replacements_for_that_t
     let options: Vec<String> = t.asked()[from..]
         .iter()
         .find_map(|(_, d)| match d {
-            Decision::ChooseOption { prompt, options, .. } if prompt == "Choose a creature type" => {
-                Some(options.clone())
-            }
+            Decision::ChooseOption {
+                prompt, options, ..
+            } if prompt == "Choose a creature type" => Some(options.clone()),
             _ => None,
         })
         .expect("asked for a creature type");
     for ok in ["Human", "Survivor", "Warrior"] {
         assert!(options.iter().any(|o| o == ok), "{ok}");
     }
-    for no in ["Human Survivor", "Artifact", "artifact", "Kaito", "Vehicle", "Treasure"] {
+    for no in [
+        "Human Survivor",
+        "Artifact",
+        "artifact",
+        "Kaito",
+        "Vehicle",
+        "Treasure",
+    ] {
         assert!(!options.iter().any(|o| o == no), "{no}");
     }
     assert_eq!(
@@ -336,7 +366,11 @@ fn leyline_of_resonances_copy_isnt_cast_and_may_keep_or_change_its_target() {
         t.resolve_all();
         if change {
             assert_eq!(t.pt(bears), (5, 5));
-            assert_eq!(t.pt(goblin), (4, 4), "an opponent's creature is a legal new target");
+            assert_eq!(
+                t.pt(goblin),
+                (4, 4),
+                "an opponent's creature is a legal new target"
+            );
         } else {
             assert_eq!(t.pt(bears), (8, 8));
         }
@@ -382,10 +416,15 @@ fn leyline_of_the_void_still_lets_discard_abilities_see_the_card_in_exile() {
     t.hand(P1, "Fiery Temper");
     t.hand(P1, "Hill Giant");
     let bears = t.battlefield(P0, "Grizzly Bears");
-    t.g.players[P1.idx()].mana_pool.add_type(mtg_engine::mana::ManaType::R, 1);
+    t.g.players[P1.idx()]
+        .mana_pool
+        .add_type(mtg_engine::mana::ManaType::R, 1);
     t.answer_yes(P1, true);
     t.answer_targets(P1, &[obj(bears)]);
     cast_resolve(&mut t, P0, "Mind Rot", "2B", &[pl(P1)]);
     assert!(!t.on_battlefield(bears), "{}", t.dump_log());
-    assert!(t.in_exile("Fiery Temper"), "a resolved spell goes to the graveyard, so is exiled");
+    assert!(
+        t.in_exile("Fiery Temper"),
+        "a resolved spell goes to the graveyard, so is exiled"
+    );
 }

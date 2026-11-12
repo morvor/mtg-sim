@@ -32,7 +32,11 @@ pub fn opening_hands(
         decks,
     );
     for p in mulligans {
-        t.answer(*p, DecisionKind::Mulligan, mtg_engine::decision::Answer::Bool(true));
+        t.answer(
+            *p,
+            DecisionKind::Mulligan,
+            mtg_engine::decision::Answer::Bool(true),
+        );
     }
     for i in 0..n {
         for _ in 0..8 {

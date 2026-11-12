@@ -79,7 +79,11 @@ fn opening_hand_actions_come_after_mulligans_starting_player_first_for_each_word
     }
     supported("Gemstone Caverns");
     let (t, order) = opening_hands(3, "Gemstone Caverns", P1, &[P0, P0]);
-    assert_eq!(player_runs(&order), [P2, P0], "not offered to the starting player");
+    assert_eq!(
+        player_runs(&order),
+        [P2, P0],
+        "not offered to the starting player"
+    );
     assert_eq!(
         [P1, P2, P0].map(|p| controls_named(&t, p, "Gemstone Caverns")),
         [0, 4, 3],
@@ -94,7 +98,11 @@ fn opening_hand_actions_come_after_mulligans_starting_player_first_for_each_word
         supported(name);
         let (t, order) = opening_hands(3, name, P1, &[P0, P0]);
         assert_eq!(player_runs(&order), [P1, P2, P0], "{name}");
-        assert_eq!(order.len(), 7 + 7 + 6, "{name}: each card in each opening hand");
+        assert_eq!(
+            order.len(),
+            7 + 7 + 6,
+            "{name}: each card in each opening hand"
+        );
         assert_eq!(t.g.delayed_triggers.len(), 20, "{name}");
         assert_eq!(t.g.turn.number, 0, "{name}");
     }
@@ -209,7 +217,10 @@ fn providence_sets_life_to_26_by_gaining_or_losing_once_however_many_are_reveale
         set_life(&mut t, P0, from);
         cast_resolve(&mut t, P0, "Providence", "5WW", &[]);
         assert_eq!(t.life(P0), 26);
-        assert_eq!(t.g.history.life_gained.get(&P0).copied().unwrap_or(0), gained);
+        assert_eq!(
+            t.g.history.life_gained.get(&P0).copied().unwrap_or(0),
+            gained
+        );
         assert_eq!(t.g.history.life_lost.get(&P0).copied().unwrap_or(0), lost);
     }
     // Leyline of Hope ("If you would gain life, you gain that much life plus 1 instead.")
