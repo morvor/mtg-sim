@@ -30,6 +30,7 @@ fn turtle_and_arbiter(n: usize) -> (TestGame, Vec<ObjectId>) {
 #[test]
 fn with_a_maximum_of_one_attacker_exactly_one_of_many_creatures_that_must_attack_attacks() {
     cr!("508.1c", "508.1d");
+    interp!("requirement-search-budget");
     for n in [3usize, 11, 14] {
         let (mut t, _) = turtle_and_arbiter(n);
         // Not attacking obeys none of the n requirements; one Bear attacking obeys one.
@@ -74,6 +75,7 @@ fn many_creatures_that_must_attack_and_one_that_cant_attack_alone_all_attack() {
 #[test]
 fn many_blockers_that_must_block_and_a_maximum_of_one_blocker() {
     cr!("509.1b", "509.1c");
+    interp!("requirement-search-budget");
     // Grand Melee: all creatures block each combat if able (and attack: the attacker
     // attacks anyway). Silent Arbiter: no more than one creature can block each combat.
     supported("Grand Melee");
