@@ -17,7 +17,7 @@ const EXTUS: &str = "Extus, Oriq Overlord // Awaken the Blood Avatar";
 
 #[test]
 fn cataclysm_a_permanent_with_two_types_represents_either() {
-    cr!("101.4", "205.2a");
+    cr!("608.2d", "205.2a");
     ruling!(
         "Cataclysm",
         "If you control a permanent with more than one type, you can choose that permanent to be the representative of either type. This makes it possible to have more than one creature (or other permanent type) on the battlefield."
@@ -45,7 +45,7 @@ fn cataclysm_a_permanent_with_two_types_represents_either() {
 
 #[test]
 fn gearhulk_and_ajani_lands_arent_chosen_or_sacrificed_and_missing_types_are_skipped() {
-    cr!("101.4", "205.2a");
+    cr!("608.2d", "205.2a");
     ruling!(
         "Cataclysmic Gearhulk",
         "Lands can't be chosen and won't be sacrificed, even if they have other types (such as an artifact land)."
@@ -110,7 +110,7 @@ fn gearhulk_and_ajani_lands_arent_chosen_or_sacrificed_and_missing_types_are_ski
 
 #[test]
 fn slaughter_the_strong_checks_the_total_power_of_the_creatures_chosen() {
-    cr!("101.4", "608.2d");
+    cr!("608.2d");
     ruling!(
         "Slaughter the Strong",
         "Slaughter the Strong has each player choose any number of creatures and then checks that the total power of creatures each player chose this way is 4 or less. For example, you could save two 2/2 creatures, or a 1/1 and a 3/3 creature, but not all four of those creatures."
@@ -145,7 +145,7 @@ fn slaughter_the_strong_checks_the_total_power_of_the_creatures_chosen() {
 
 #[test]
 fn abolisher_opponent_with_fewer_than_three_sacrifices_all() {
-    cr!("701.21a", "701.27a");
+    cr!("701.21a", "701.27a", "609.3");
     ruling!(
         "Voldaren Pariah // Abolisher of Bloodlines",
         "If the targeted opponent doesn't control three creatures as the triggered ability of Abolisher of Bloodlines resolves, that player sacrifices as many creatures as able."
@@ -204,7 +204,7 @@ fn tyrant_of_discord_repeats_for_the_same_opponent_and_holds_triggers() {
 
 #[test]
 fn tyrant_of_discord_with_sigarda_chooses_but_doesnt_sacrifice() {
-    cr!("701.21a", "608.2b");
+    cr!("701.21a", "609.3");
     ruling!(
         "Tyrant of Discord",
         "If the target opponent can't sacrifice permanents (perhaps because of Sigarda, Host of Herons), the opponent will choose a permanent at random but not sacrifice it. The ability will then finish resolving."

@@ -46,7 +46,7 @@ fn simultaneous_deaths_trigger_once_each() {
 
 #[test]
 fn each_copy_triggers_for_one_death() {
-    cr!("603.2", "603.3b");
+    cr!("603.2", "603.3");
     ruling!(
         "Grave Pact",
         "If you control more than one Grave Pact and a creature you control dies, each of the triggered abilities will trigger. Each other player will sacrifice a creature each time one of those abilities resolves."

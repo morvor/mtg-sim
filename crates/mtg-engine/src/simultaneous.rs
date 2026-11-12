@@ -1113,12 +1113,10 @@ fn plan(
         } if plannable(g, e, ctx, p) => {
             if let (Some(q), Some(part)) = (g.eval_player(who, ctx), choice_cost(cost)) {
                 // "You" in the cost is the player who pays it ("for each opponent, you
-                // create ... unless that player sacrifices a creature"), as paying it
-                // would see it (`Game::pay_cost`).
-                let payer = Ctx {
-                    controller: q,
-                    ..ctx.clone()
-                };
+                // create ... unless that player sacrifices a creature"), and paying it is
+                // still caused by the resolving spell or ability, as paying it would see it
+                // (`Game::pay_cost`).
+                let payer = crate::event_causes::payer_ctx(ctx, q);
                 let cands = (!crate::multiplayer::cant_pay(g, q)
                     && crate::entry_costs::can_pay(g, q, cost, ctx))
                 .then(|| choice_cost_candidates(g, q, part, &payer))

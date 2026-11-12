@@ -198,7 +198,7 @@ fn the_eternal_wanderer_has_no_planeswalker_type() {
 
 #[test]
 fn barrensteppe_siege_without_a_choice_has_neither_ability() {
-    cr!("614.12", "607.5a");
+    cr!("614.12c");
     ruling!(
         "Barrensteppe Siege",
         "If you somehow control Barrensteppe Siege and no choice was made for it (perhaps because another permanent on the battlefield became a copy of it), it has neither of the two abilities."
@@ -220,7 +220,7 @@ fn barrensteppe_siege_without_a_choice_has_neither_ability() {
 
 #[test]
 fn slave_of_bolas_doesnt_sacrifice_a_creature_you_no_longer_control() {
-    cr!("603.7c", "611.2c", "613.1b");
+    cr!("701.21a", "603.7b", "613.1b");
     ruling!(
         "Slave of Bolas",
         "If you don’t control the targeted creature when the “at end of turn” ability resolves, it won’t be sacrificed. If it’s still on the battlefield but under another player’s control, the ability won’t try to have you sacrifice it again at the end of the turn after that."
@@ -273,7 +273,7 @@ fn disruption_aura_mana_cost_includes_colored_mana() {
 
 #[test]
 fn sheoldred_transforms_even_if_the_graveyards_shrink() {
-    cr!("602.5b", "113.7a");
+    cr!("602.5", "602.2");
     ruling!(
         "Sheoldred // The True Scriptures",
         "Once you’ve activated Sheoldred’s last ability, it doesn’t matter what happens to the number of cards in opponents’ graveyards. The ability will resolve even if no opponent has eight or more cards in their graveyard by that time."
@@ -374,6 +374,49 @@ fn ajani_reflexive_trigger_once_per_cat_warrior_created() {
     }
 }
 
+/// The rest of the register entry: "Create two ... tokens. When you do" with Doubling
+/// Season (four created: it triggers twice, the provisional part), and "If you do" after a
+/// creation Divine Visitation replaced (no Wolf was created: no counter).
+#[test]
+fn token_creation_counts_the_specified_tokens_for_when_and_if_you_do() {
+    cr!("603.12", "603.12a", "614.1a");
+    interp!("reflexive-trigger-per-specified-token");
+    supported("Faebloom Trick");
+    for doubling in [false, true] {
+        let mut t = TestGame::new(2);
+        if doubling {
+            t.battlefield(P0, "Doubling Season");
+        }
+        let a = t.battlefield(P1, "Grizzly Bears");
+        let b = t.battlefield(P1, "Hill Giant");
+        t.answer_targets(P0, &[obj(a)]);
+        t.answer_targets(P0, &[obj(b)]);
+        cast(&mut t, P0, "Faebloom Trick", &[]);
+        t.resolve();
+        let what = format!("Doubling Season {doubling}");
+        assert_eq!(tokens(&t, P0).len(), if doubling { 4 } else { 2 }, "{what}");
+        assert_eq!(t.stack_len(), if doubling { 2 } else { 1 }, "{what}");
+        t.resolve_all();
+        assert!(t.obj_now(a).tapped, "{what}");
+        assert_eq!(t.obj_now(b).tapped, doubling, "{what}");
+    }
+    supported("Turntimber Ranger");
+    for visitation in [false, true] {
+        let mut t = TestGame::new(2);
+        if visitation {
+            t.battlefield(P0, "Divine Visitation");
+        }
+        t.answer_yes(P0, true);
+        let ranger = t.enter(P0, "Turntimber Ranger");
+        t.resolve_all();
+        let what = format!("Divine Visitation {visitation}");
+        assert_eq!(tokens(&t, P0).len(), 1, "{what}");
+        let angels = t.named_on_battlefield("Angel").len() + t.named_on_battlefield("Angel Token").len();
+        assert_eq!(angels, usize::from(visitation), "{what}");
+        assert_eq!(t.counters(ranger, counters::PLUS1), u32::from(!visitation), "{what}");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Friend or foe; modes in order
 // ---------------------------------------------------------------------------
@@ -403,6 +446,86 @@ fn friend_or_foe_triggers_wait_until_the_foes_have_acted() {
     assert_eq!(triggers_on_stack(&t, "damage"), 1);
     t.resolve_all();
     assert_eq!(t.life(P0), 18);
+}
+
+/// The same for the other wordings of the friend-or-foe actions (P0 a friend, P1 a foe):
+/// what the friends' draws, +1/+1 counters and cards returned from a graveyard trigger goes
+/// on the stack only once the foes have acted and the spell has finished resolving.
+#[test]
+fn friend_or_foe_other_wordings_hold_the_friends_triggers_until_the_foes_have_acted() {
+    cr!("603.3", "608.2");
+    ruling!(
+        "Khorvath's Fury",
+        "Players can’t take actions in between the time that friends perform their actions and the time that foes perform theirs."
+    );
+    ruling!(
+        "Regna's Sanction",
+        "Players can’t take actions in between the time that friends perform their actions and the time that foes perform theirs."
+    );
+    ruling!(
+        "Virtus's Maneuver",
+        "Players can’t take actions in between the time that friends perform their actions and the time that foes perform theirs."
+    );
+    let friend_and_foe = |t: &mut TestGame| {
+        t.answer(P0, DecisionKind::Option, Answer::Index(0));
+        t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    };
+    // Khorvath's Fury: the friend discards one card and draws two, each draw triggering
+    // Jace's Erasure (its target chosen as it's put on the stack); the foe is dealt damage
+    // equal to the three cards in their hand before that.
+    supported("Khorvath's Fury");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Jace's Erasure");
+    t.hand(P0, "Forest");
+    for _ in 0..3 {
+        t.hand(P1, "Forest");
+    }
+    friend_and_foe(&mut t);
+    let life_at_target = watch(
+        &mut t,
+        P0,
+        |d| matches!(d, Decision::ChooseTargets { .. }),
+        |g| g.players[1].life,
+    );
+    cast(&mut t, P0, "Khorvath's Fury", &[]);
+    t.resolve();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(triggers_on_stack(&t, "mill"), 2, "Khorvath's Fury");
+    assert_eq!(life_at_target.lock().unwrap().first().copied(), Some(17));
+    // Regna's Sanction: the friend's +1/+1 counter triggers Simic Ascendancy; the foe
+    // chooses the creature it keeps untapped with only the spell on the stack.
+    supported("Regna's Sanction");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Simic Ascendancy");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let lions = t.battlefield(P1, "Savannah Lions");
+    let giant = t.battlefield(P1, "Hill Giant");
+    friend_and_foe(&mut t);
+    t.answer_choose(P1, &[obj(lions)]);
+    let stack_at_foe = watch(&mut t, P1, is_choose, |g| g.stack.len());
+    cast(&mut t, P0, "Regna's Sanction", &[]);
+    t.resolve();
+    assert_eq!(stack_at_foe.lock().unwrap().first().copied(), Some(1));
+    assert_eq!(triggers_on_stack(&t, "growth"), 1, "Regna's Sanction");
+    assert!(t.obj_now(giant).tapped && !t.obj_now(lions).tapped);
+    t.resolve_all();
+    assert_eq!(t.counters(bears, counters::PLUS1), 1);
+    // Virtus's Maneuver: the friend's creature card leaving the graveyard triggers
+    // Desecrated Tomb; the foe chooses what to sacrifice with only the spell on the stack.
+    supported("Virtus's Maneuver");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Desecrated Tomb");
+    t.graveyard(P0, "Grizzly Bears");
+    let lions = t.battlefield(P1, "Savannah Lions");
+    t.battlefield(P1, "Hill Giant");
+    friend_and_foe(&mut t);
+    t.answer_choose(P1, &[obj(lions)]);
+    let stack_at_foe = watch(&mut t, P1, is_choose, |g| g.stack.len());
+    cast(&mut t, P0, "Virtus's Maneuver", &[]);
+    t.resolve();
+    assert_eq!(stack_at_foe.lock().unwrap().first().copied(), Some(1));
+    assert!(!t.on_battlefield(lions) && t.in_hand(P0, "Grizzly Bears"));
+    assert_eq!(triggers_on_stack(&t, "Bat"), 1, "Virtus's Maneuver");
 }
 
 #[test]
@@ -578,4 +701,123 @@ fn single_combat_lasts_until_the_left_players_turn_would_have_begun() {
     assert!(try_cast(&mut t, P2, "Grizzly Bears", &[]).is_err());
     t.advance_to(P1, Step::PrecombatMain);
     assert!(try_cast(&mut t, P1, "Grizzly Bears", &[]).is_ok());
+}
+
+// ---------------------------------------------------------------------------
+// "Can't cause you to sacrifice" against an opponent's "unless [a player] sacrifices"
+// ---------------------------------------------------------------------------
+
+/// An opponent's spell or ability that has something happen unless a player sacrifices a
+/// permanent (or discards a card) can't have a player under Sigarda, Host of Herons, Tajuru
+/// Preserver or Tamiyo, Collector of Tales do so, also when that player isn't the one the
+/// rest of it is about: Mogis deals the damage, Ogre Marauder gains the evasion, Acererak's
+/// controller creates the token (planned with the other opponents' choices) and Torment of
+/// Hailfire's opponent loses the life. (Regression: the cost was attributed to the player
+/// paying it, not to the resolving ability's controller.)
+#[test]
+fn an_opponents_unless_sacrifice_cost_cant_be_paid_under_sigarda() {
+    cr!("118.12", "701.21a", "701.9a");
+    ruling!("Sigarda, Host of Herons", "you can't choose to sacrifice a permanent");
+    ruling!(
+        "Tajuru Preserver",
+        "you can’t choose to sacrifice a permanent. You must perform the action"
+    );
+    ruling!(
+        "Tamiyo, Collector of Tales",
+        "you can’t choose to sacrifice or discard"
+    );
+    for name in [
+        "Mogis, God of Slaughter",
+        "Ogre Marauder",
+        "Acererak the Archlich",
+        "Torment of Hailfire",
+    ] {
+        supported(name);
+    }
+    for protected in [false, true] {
+        let what = |card: &str| format!("{card}, protected {protected}");
+        // "At the beginning of each opponent's upkeep, Mogis deals 2 damage to that player
+        // unless they sacrifice a creature of their choice."
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Mogis, God of Slaughter");
+        if protected {
+            t.battlefield(P1, "Sigarda, Host of Herons");
+        }
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.answer_yes(P1, true);
+        t.answer_choose(P1, &[obj(bears)]);
+        to_upkeep(&mut t, P1);
+        t.resolve_all();
+        let expected = if protected { (true, 18) } else { (false, 20) };
+        assert_eq!((t.on_battlefield(bears), t.life(P1)), expected, "{}", what("Mogis"));
+
+        // "Whenever Ogre Marauder attacks, it gains 'can't be blocked' until end of turn
+        // unless defending player sacrifices a creature of their choice."
+        let mut t = TestGame::new(2);
+        let ogre = t.battlefield(P0, "Ogre Marauder");
+        if protected {
+            t.battlefield(P1, "Tajuru Preserver");
+        }
+        let b1 = t.battlefield(P1, "Grizzly Bears");
+        let b2 = t.battlefield(P1, "Grizzly Bears");
+        t.answer_yes(P1, true);
+        t.answer_choose(P1, &[obj(b1)]);
+        attack_with(&mut t, &[(ogre, pl(P1))]);
+        t.resolve_all();
+        assert_eq!(t.on_battlefield(b1), protected, "{}", what("Ogre Marauder"));
+        assert_eq!(t.g.can_block(b2, ogre), !protected, "{}", what("Ogre Marauder"));
+
+        // "For each opponent, you create a 2/2 black Zombie creature token unless that
+        // player sacrifices a creature of their choice": P1 (protected) and P2 both try.
+        let mut t = TestGame::new(3);
+        let acererak = t.battlefield(P0, "Acererak the Archlich");
+        if protected {
+            t.battlefield(P1, "Sigarda, Host of Herons");
+        }
+        let mine = t.battlefield(P1, "Grizzly Bears");
+        let theirs = t.battlefield(P2, "Grizzly Bears");
+        for (p, b) in [(P1, mine), (P2, theirs)] {
+            t.answer_yes(p, true);
+            t.answer_choose(p, &[obj(b)]);
+        }
+        attack_with(&mut t, &[(acererak, pl(P1))]);
+        t.resolve_all();
+        let zombies = tokens(&t, P0).len();
+        assert_eq!(t.on_battlefield(mine), protected, "{}", what("Acererak"));
+        assert!(!t.on_battlefield(theirs), "{}", what("Acererak"));
+        assert_eq!(zombies, usize::from(protected), "{}", what("Acererak"));
+
+        // "Each opponent loses 3 life unless that player sacrifices a nonland permanent of
+        // their choice or discards a card", once (X = 1): under Tamiyo P1 can do neither.
+        let mut t = TestGame::new(2);
+        if protected {
+            t.battlefield(P1, "Tamiyo, Collector of Tales");
+        }
+        let ring = t.battlefield(P1, "Sol Ring");
+        t.hand(P1, "Forest");
+        t.answer_yes(P1, true);
+        t.answer_choose(P1, &[obj(ring)]);
+        lots(&mut t, P0);
+        let c = t.hand(P0, "Torment of Hailfire");
+        t.cast(P0, c).x(1).go();
+        t.resolve_all();
+        let expected = if protected { (true, 1, 17) } else { (false, 1, 20) };
+        assert_eq!(
+            (t.on_battlefield(ring), t.hand_size(P1), t.life(P1)),
+            expected,
+            "{}",
+            what("Torment of Hailfire")
+        );
+    }
+    // Sigarda doesn't stop discarding: P1 discards the Forest instead.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Sigarda, Host of Herons");
+    let ring = t.battlefield(P1, "Sol Ring");
+    t.hand(P1, "Forest");
+    t.answer_yes(P1, true);
+    lots(&mut t, P0);
+    let c = t.hand(P0, "Torment of Hailfire");
+    t.cast(P0, c).x(1).go();
+    t.resolve_all();
+    assert_eq!((t.on_battlefield(ring), t.hand_size(P1), t.life(P1)), (true, 0, 20));
 }

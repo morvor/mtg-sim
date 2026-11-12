@@ -158,7 +158,7 @@ fn mace_aura_may_go_on_hexproof_but_not_protection_and_otherwise_stays() {
 
 #[test]
 fn mace_card_that_left_the_graveyard_isnt_returned_but_life_may_still_be_paid() {
-    cr!("400.7", "603.10a", "608.2b");
+    cr!("400.7", "603.10a");
     ruling!(
         "Nazgûl Battle-Mace",
         "If the card leaves the graveyard before the last ability granted by Nazgûl Battle-Mace resolves, the opponent will still have the option to pay 3 life. Regardless of their choice, you can't put the card onto the battlefield, even if it returns to the graveyard before the ability resolves."
@@ -183,7 +183,7 @@ fn mace_card_that_left_the_graveyard_isnt_returned_but_life_may_still_be_paid() 
 
 #[test]
 fn it_that_betrays_does_nothing_once_another_returned_the_card() {
-    cr!("400.7", "603.10a", "101.4");
+    cr!("400.7", "603.10a", "603.3b");
     ruling!(
         "It That Betrays",
         "If the sacrificed permanent that caused the second ability to trigger somehow leaves the graveyard before the ability resolves (possibly because it was returned to the battlefield by the ability of another It That Betrays), the ability simply won’t do anything when it resolves."

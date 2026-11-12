@@ -26,20 +26,25 @@ fn sheoldred_cant_target_a_creature_another_upkeep_trigger_will_sacrifice() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     let giant = t.graveyard(P0, "Hill Giant");
     t.answer_choose(P0, &[obj(bears)]);
-    let from = t.asked().len();
     to_upkeep(&mut t, P0);
-    t.resolve_all();
-    // The only target was the Hill Giant; the Bears were sacrificed afterwards.
-    let offered: Vec<Vec<Entity>> = asked_since(&t, from)
-        .into_iter()
-        .filter_map(|(p, d)| match d {
-            Decision::ChooseTargets { candidates, .. } if p == P0 => Some(candidates),
-            _ => None,
-        })
+    // Both upkeep triggers went on the stack before either resolved: Sheoldred's target
+    // was chosen while the Bears were still on the battlefield, so it's the Hill Giant,
+    // the only creature card in the graveyard then.
+    assert_eq!(t.stack_len(), 2);
+    assert!(t.on_battlefield(bears));
+    let targeted: Vec<Vec<Entity>> = t
+        .g
+        .stack
+        .iter()
+        .map(|id| crate::r_p016_common::stack_targets(&t, *id))
+        .filter(|v| !v.is_empty())
         .collect();
-    assert!(offered.iter().all(|c| !c.contains(&obj(bears))));
+    assert_eq!(targeted, vec![vec![obj(giant)]]);
+    t.resolve_all();
+    // The Bears' card stays in the graveyard.
     assert!(t.on_battlefield(giant));
     assert_eq!(t.zone(bears), Zone::Graveyard(P0));
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 0);
 }
 
 #[test]
@@ -73,7 +78,7 @@ fn upkeep_edicts_trigger_for_each_player_of_a_two_headed_giant_team() {
 
 #[test]
 fn call_to_the_grave_checks_for_creatures_on_trigger_and_resolution() {
-    cr!("603.4", "603.8");
+    cr!("603.4");
     ruling!(
         "Call to the Grave",
         "If there is at least one creature on the battlefield at the beginning of the end step, the last ability won't trigger. If it does trigger, but a creature enters before it resolves, the ability won't do anything when it resolves. Call to the Grave's controller won't sacrifice it."
@@ -104,7 +109,7 @@ fn call_to_the_grave_checks_for_creatures_on_trigger_and_resolution() {
 
 #[test]
 fn angrath_in_two_headed_giant() {
-    cr!("810.9", "810.2", "606.3");
+    cr!("810.9", "810.2");
     ruling!(
         "Angrath, the Flame-Chained",
         "In a Two-Headed Giant game, Angrath’s first ability causes the opposing team to lose 4 life, and each player on that team discards a card. His last ability causes the opposing team to lose life equal to the number of cards in both graveyards."
@@ -400,7 +405,7 @@ fn savra_triggers_on_sacrifices_other_effects_cause() {
 
 #[test]
 fn bearer_of_silence_payment_is_decided_on_resolution() {
-    cr!("603.2", "608.2d", "117.3c");
+    cr!("603.2", "608.2d");
     ruling!(
         "Bearer of Silence",
         "Players can respond to the triggered ability, but once it starts resolving and you decide whether to pay {1}{C}, it's too late for anyone to respond."

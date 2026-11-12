@@ -1,5 +1,5 @@
 //! Rulings batch P138 — what edicts and sweepers count and when: last known information
-//! of the sacrificed creature (CR 608.2h, 113.7a), amounts determined on resolution
+//! of the sacrificed creature (CR 608.2h), amounts determined on resolution
 //! (CR 608.2h), choices made on resolution (CR 608.2d), copies (CR 707.10), and what the
 //! sacrificed cards are afterwards (CR 400.7, 614.1).
 
@@ -23,7 +23,7 @@ fn consume(t: &mut TestGame) {
 
 #[test]
 fn life_gained_uses_the_sacrificed_creatures_last_known_power_and_toughness() {
-    cr!("608.2h", "113.7a");
+    cr!("608.2h");
     ruling!(
         "Devour Flesh",
         "The amount of life gained is equal to the creature’s toughness as it last existed on the battlefield."
@@ -72,7 +72,7 @@ fn consume_with_negative_power_changes_no_life() {
 
 #[test]
 fn skull_storm_copies_each_determine_the_life_loss_on_resolution() {
-    cr!("608.2h", "707.10", "903.8");
+    cr!("608.2h", "707.10");
     ruling!(
         "Skull Storm",
         "The amount of life to lose is determined only as Skull Storm resolves. For example, if an opponent controls no creatures and has 30 life when you cast Skull Storm and make two copies, the first to resolve causes that opponent to lose 15 life (so they have 15 life left), the second causes that opponent to lose 8 life (7 life left), and the original spell causes that player to lose 4 life, leaving the player at 3 life."

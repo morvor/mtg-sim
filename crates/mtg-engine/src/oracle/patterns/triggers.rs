@@ -26,7 +26,7 @@
 //! | dies / leaves | last known information; actions find the card (CR 400.7e) | its controller |
 //! | attacks | the attacker | the attacked player |
 //! | blocks a creature / becomes blocked by a creature | the other creature (CR 509.3b/d) | its controller |
-//! | deals damage to a player | the source (`~` for self triggers) | the damaged player |
+//! | deals damage to a player | the source (`~` for self triggers) | the damaged player (to you by a source an opponent controls: its controller) |
 //! | deals damage to a creature (self) | the damaged creature | its controller |
 //! | casts a spell | the spell | the caster |
 //! | player events (gain life, draw, …) | — | the player |

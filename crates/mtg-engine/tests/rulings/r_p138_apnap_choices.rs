@@ -100,7 +100,7 @@ fn acererak_opponents_decide_in_turn_order_then_all_happens_at_once() {
     t.answer_choose(P1, &[obj(b1)]);
     t.answer_yes(P2, false);
     let seen = watch(&mut t, P2, |d| matches!(d, decision::Decision::YesNo { .. }), |g| {
-        g.permanents().count()
+        known(g, PlayerId(2))
     });
     let n = t.g.permanents().count();
     let from = t.asked().len();
@@ -113,14 +113,33 @@ fn acererak_opponents_decide_in_turn_order_then_all_happens_at_once() {
         .collect();
     assert_eq!(askers.first(), Some(&P1));
     assert_eq!(askers.last(), Some(&P2));
-    // P2 decided while P1's Bears were still there.
-    assert_eq!(seen.lock().unwrap().first().copied(), Some(n));
+    // P2 decided while P1's Bears were still there, knowing P1's choice.
+    assert_eq!(seen.lock().unwrap().first().copied(), Some((n, 1)));
     assert!(!t.on_battlefield(b1) && t.on_battlefield(g1) && t.on_battlefield(b2));
-    let zombies = permanents_of(&t, P0)
-        .into_iter()
-        .filter(|id| t.obj(*id).chars.has_subtype("Zombie") && t.obj(*id).is_token())
-        .count();
-    assert_eq!(zombies, 1);
+    let zombies = |t: &TestGame| {
+        permanents_of(t, P0)
+            .into_iter()
+            .filter(|id| t.obj(*id).chars.has_subtype("Zombie") && t.obj(*id).is_token())
+            .count()
+    };
+    assert_eq!(zombies(&t), 1);
+
+    // P1 declines and P2 sacrifices: P1's Zombie isn't created before P2 decides.
+    let mut t = TestGame::new(3);
+    let acererak = t.battlefield(P0, "Acererak the Archlich");
+    let b1 = t.battlefield(P1, "Grizzly Bears");
+    let b2 = t.battlefield(P2, "Grizzly Bears");
+    t.answer_yes(P1, false);
+    t.answer_yes(P2, true);
+    t.answer_choose(P2, &[obj(b2)]);
+    let tokens_seen = watch(&mut t, P2, |d| matches!(d, decision::Decision::YesNo { .. }), |g| {
+        g.permanents().filter(|o| o.is_token()).count()
+    });
+    attack_with(&mut t, &[(acererak, pl(P1))]);
+    t.resolve_all();
+    assert_eq!(tokens_seen.lock().unwrap().first().copied(), Some(0));
+    assert!(t.on_battlefield(b1) && !t.on_battlefield(b2));
+    assert_eq!(zombies(&t), 1);
 }
 
 #[test]

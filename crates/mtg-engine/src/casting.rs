@@ -3665,6 +3665,11 @@ impl Game {
         // An X chosen for the payment ("sacrifice any number of creatures ...").
         c.x = ctx.x;
         c.x_defined = ctx.x_defined;
+        // What paying it does is caused by the resolving spell or ability and its
+        // controller, also when another player pays (`event_causes::payer_ctx`).
+        c.resolving_controller = ctx
+            .resolving_controller
+            .or((ctx.controller != p).then_some(ctx.controller));
         self.can_pay_cost_optimistic_in(p, cost, src, &chars, &c)
     }
 
@@ -3673,15 +3678,13 @@ impl Game {
         // A cost is written from the paying player's point of view: when another player
         // pays it ("counter it unless that player pays [cost]", CR 702.21a), "you" in it
         // ("sacrifice a permanent" — one you control) is that player, as when checking
-        // whether it can be paid.
+        // whether it can be paid; what paying it does is still caused by the resolving
+        // spell or ability (Sigarda, Host of Herons).
         let payer_ctx;
         let ctx = if ctx.controller == p {
             ctx
         } else {
-            payer_ctx = Ctx {
-                controller: p,
-                ..ctx.clone()
-            };
+            payer_ctx = crate::event_causes::payer_ctx(ctx, p);
             &payer_ctx
         };
         let snapshot = self.clone();
