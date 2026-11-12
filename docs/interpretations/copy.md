@@ -41,10 +41,10 @@ Judgment calls about copiable values and copy effects (CR 707). Format and kinds
 
 ## copied-chapter-ability-keeps-saga: A copy of a Saga's chapter ability keeps the Saga on the battlefield until the copy leaves the stack
 - Kind: interpretation
-- Status: provisional
+- Status: decided
 - Rules: 704.5s "If the number of lore counters on a Saga permanent with one or more chapter abilities is greater than or equal to its final chapter number and it isn’t the source of a chapter ability that has triggered but not yet left the stack, that Saga’s controller sacrifices it." / 707.10 "A copy of a spell or ability copies both the characteristics of the spell or ability and all decisions made for it ... A copy of an ability is itself an ability." / 707.10b "A copy of an ability has the same source as the original ability."
 - Question: A Saga's final chapter ability triggers; Strionic Resonator copies it; the chapter ability that triggered is then countered (Stifle), leaving only the copy on the stack. Is the Saga "the source of a chapter ability that has triggered but not yet left the stack"? The copy is a chapter ability whose source is the Saga, but the copy itself never triggered.
-- Decision: Yes: a copy of a chapter ability counts as a chapter ability waiting on the stack, so the Saga isn't sacrificed until the copy has left the stack too. The same holds for a Siege (704.5v, any ability it's the source of) and a dungeon's room abilities (704.5t).
+- Decision: Decided by the user, Nov 12 (as recommended). Yes: a copy of a chapter ability counts as a chapter ability waiting on the stack, so the Saga isn't sacrificed until the copy has left the stack too. The same holds for a Siege (704.5v, any ability it's the source of) and a dungeon's room abilities (704.5t).
 - Alternatives: Count only the chapter ability that actually triggered: the Saga would be sacrificed while the copy is still on the stack (it would still resolve, its source as it last existed).
 - Why: The clause exists so the Saga's last chapter can do its work before the Saga goes; a copy of that ability has the Saga as its source (707.10b) and is the same ability in every other respect (707.10), and the rule's "that has triggered but not yet left the stack" reads naturally as "waiting to resolve". No ruling covers a copy. Provisional because the words "has triggered" can be read as excluding a copy.
 - Affects: copies of chapter, Siege and room abilities (Strionic Resonator, Lithoform Engine) whose original leaves the stack first (rare: the copy is put above the original).

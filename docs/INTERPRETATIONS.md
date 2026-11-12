@@ -8,15 +8,13 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 
 | Kind | Decided | Provisional |
 |---|---:|---:|
-| interpretation | 100 | 1 |
+| interpretation | 101 | 0 |
 | deviation | 10 | 0 |
 | policy | 34 | 0 |
 
 ## Provisional entries
 
-- **copied-chapter-ability-keeps-saga** (interpretation, [copy](interpretations/copy.md)): A copy of a Saga's chapter ability keeps the Saga on the battlefield until the copy leaves the stack
-  - Question: A Saga's final chapter ability triggers; Strionic Resonator copies it; the chapter ability that triggered is then countered (Stifle), leaving only the copy on the stack. Is the Saga "the source of a chapter ability that has triggered but not yet left the stack"? The copy is a chapter ability whose source is the Saga, but the copy itself never triggered.
-  - Decision: Yes: a copy of a chapter ability counts as a chapter ability waiting on the stack, so the Saga isn't sacrificed until the copy has left the stack too. The same holds for a Siege (704.5v, any ability it's the source of) and a dungeon's room abilities (704.5t).
+None.
 
 ## All entries
 
@@ -37,7 +35,7 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | `qualified-landwalk-is-that-landwalk` | "snow islandwalk" is an islandwalk ability | interpretation | decided | [combat](interpretations/combat.md) |
 | `that-excess-damage-this-turn` | "that excess damage" after "was dealt excess damage this turn" is the turn's total | interpretation | decided | [combat](interpretations/combat.md) |
 | `trample-reassignment-counts-only-assigned-damage` | After an illegal total assignment, damage is assigned again counting only damage already assigned | deviation | decided | [combat](interpretations/combat.md) |
-| `copied-chapter-ability-keeps-saga` | A copy of a Saga's chapter ability keeps the Saga on the battlefield until the copy leaves the stack | interpretation | provisional | [copy](interpretations/copy.md) |
+| `copied-chapter-ability-keeps-saga` | A copy of a Saga's chapter ability keeps the Saga on the battlefield until the copy leaves the stack | interpretation | decided | [copy](interpretations/copy.md) |
 | `copy-exception-ability-stacks` | An ability a copy exception grants is added again even when the copied values already have it | interpretation | decided | [copy](interpretations/copy.md) |
 | `copy-target-legality-original-or-copy` | Copies made for each object a spell "could target" are decided from the original spell's point of view; a copy given a specified target is created only if the copy itself can target it | interpretation | decided | [copy](interpretations/copy.md) |
 | `copy-values-fixed-when-determined` | A copy takes the copiable values the original has when the copy is determined | interpretation | decided | [copy](interpretations/copy.md) |
