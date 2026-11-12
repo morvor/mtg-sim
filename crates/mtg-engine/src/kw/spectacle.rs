@@ -50,12 +50,7 @@ impl KeywordRules for Spectacle {
                 return vec![];
             }
         }
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::Spectacle,
-            &cost,
-        ));
+        super::set_alternative_keyword_cost(g, p, KeywordKind::Spectacle, &cost, &mut opt);
         opt.tag = Some(SPECTACLE);
         vec![opt]
     }

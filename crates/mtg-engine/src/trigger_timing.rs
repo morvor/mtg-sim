@@ -186,6 +186,17 @@ impl Game {
         }
     }
 
+    /// Between the cards of a process that moves cards one at a time ("exile cards from
+    /// the top of your library until ...", cascade, discover): each card's move is an
+    /// event of its own, so "whenever one or more cards are put into exile" triggers once
+    /// per card (Laelia, the Blade Reforged's rulings, CR 603.2c), even though the whole
+    /// process is one instruction (whose events otherwise form one batch).
+    pub fn one_at_a_time_step(&mut self) {
+        let hold = std::mem::replace(&mut self.batch_hold, 0);
+        self.sequential_step();
+        self.batch_hold = hold;
+    }
+
     /// Runs `f` as one atomic action: no trigger check happens inside it (see the module
     /// documentation).
     pub fn atomically<R>(&mut self, f: impl FnOnce(&mut Game) -> R) -> R {

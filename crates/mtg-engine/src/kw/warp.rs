@@ -104,12 +104,7 @@ impl KeywordRules for Warp {
         }
         let mut opt = CastOption::normal(FaceState::Front);
         opt.method = CastMethod::Keyword(KeywordKind::Warp);
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::Warp,
-            &cost,
-        ));
+        super::set_alternative_keyword_cost(g, p, KeywordKind::Warp, &cost, &mut opt);
         opt.tag = Some(WARP);
         vec![opt]
     }

@@ -58,12 +58,7 @@ impl KeywordRules for Evoke {
                 return vec![];
             }
         }
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::Evoke,
-            &cost,
-        ));
+        super::set_alternative_keyword_cost(g, p, KeywordKind::Evoke, &cost, &mut opt);
         opt.tag = Some(EVOKE);
         vec![opt]
     }

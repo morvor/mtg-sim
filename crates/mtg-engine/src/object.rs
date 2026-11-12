@@ -378,6 +378,12 @@ pub struct EventInfo {
     /// as it last existed, CR 608.2h).
     #[serde(default)]
     pub spell_targets: Vec<ObjectId>,
+    /// The kind of event that made the ability trigger, for abilities that trigger on
+    /// another ability triggering ("whenever a permanent entering causes a triggered
+    /// ability to trigger", CR 603.2): whatever the wording of that ability's trigger
+    /// condition ("enters or attacks", "enters, if ...").
+    #[serde(default)]
+    pub triggered_by: Option<crate::events::TriggeringEvent>,
 }
 
 /// The kind of object on the stack.

@@ -75,12 +75,7 @@ impl KeywordRules for Dash {
             }
         }
         // "Dash costs you pay cost {1} less" (Warbringer).
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::Dash,
-            &cost,
-        ));
+        super::set_alternative_keyword_cost(g, p, KeywordKind::Dash, &cost, &mut opt);
         opt.tag = Some(DASH);
         vec![opt]
     }

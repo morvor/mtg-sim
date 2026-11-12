@@ -2,11 +2,12 @@
 //! cards. The total cost is the mana cost or alternative cost plus the additional costs
 //! and cost increases, minus the cost reductions (all of them after all of the increases,
 //! CR 601.2f, 118.9d), with effects that directly affect the total (Trinisphere's floor)
-//! applied after that; an effect that changes a keyword's cost ("Flashback costs you pay
-//! cost {2} less") changes that cost alone (`keyword-cost-reduction-bounded-by-the-
-//! keyword-cost`); convoke and delve then pay part of that total (CR 702.51b, 702.66b),
-//! and the total is locked in before the mana abilities are activated and the costs paid
-//! (CR 601.2g–h).
+//! applied after that; an effect that reduces an alternative keyword cost ("Flashback costs
+//! you pay cost {2} less") reduces it after the cost increases and additional costs
+//! applied to it (CR 118.9d, `keyword-cost-reduction-on-an-alternative-cost-after-increases`,
+//! `alternative-keyword-cost-reduction-reduces-additional-costs`); convoke and delve then
+//! pay part of that total (CR 702.51b, 702.66b), and the total is locked in before the
+//! mana abilities are activated and the costs paid (CR 601.2g–h).
 
 use crate::r601_audit_common::*;
 use mtg_engine::keywords::KeywordKind;
@@ -280,36 +281,29 @@ fn a_cost_increaser_sacrificed_for_mana_while_paying_doesnt_change_the_locked_in
 }
 
 #[test]
-fn a_flashback_cost_reduction_reduces_only_the_flashback_cost() {
-    cr!("601.2f", "118.7a", "702.34a");
-    interp!("keyword-cost-reduction-bounded-by-the-keyword-cost");
+fn a_flashback_cost_reduction_comes_off_after_the_cost_increases() {
+    cr!("601.2f", "118.7a", "118.9d", "702.34a");
+    interp!("keyword-cost-reduction-on-an-alternative-cost-after-increases");
     ruling!(
         "Thalia, Guardian of Thraben",
         "start with the mana cost or alternative cost you're paying, add any cost increases, then apply any cost reductions"
     );
     supported("Catalyst Stone");
     supported("Deep Analysis");
-    // Catalyst Stone ("Flashback costs you pay cost {2} less") reduces Deep Analysis's
-    // flashback cost {1}{U}, Pay 3 life to {U}, Pay 3 life: only that cost's generic mana,
-    // so the second {1} of the reduction is lost. Thalia's {1} is added to the total:
-    // {1}{U}, not {U}.
+    // Catalyst Stone ("Flashback costs you pay cost {2} less") and Thalia on Deep
+    // Analysis's flashback cost {1}{U}, Pay 3 life: Thalia's {1} is applied to the
+    // flashback cost (CR 118.9d), and the reduction comes off after it: {1}{U} + {1} - {2}
+    // = {U}, Pay 3 life. (Reducing the flashback cost alone first would lose the second
+    // {1} and leave {1}{U}.)
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Catalyst Stone");
     t.battlefield(P1, "Thalia, Guardian of Thraben");
     t.lands(P0, "Island", 1);
     let analysis = t.graveyard(P0, "Deep Analysis");
-    assert!(!can_cast(&mut t, P0, analysis, FLASHBACK));
-    assert!(t
-        .cast(P0, analysis)
-        .method(FLASHBACK)
-        .target(P0)
-        .try_go()
-        .is_err());
-    assert_eq!(t.life(P0), 20);
-    t.lands(P0, "Wastes", 1);
     assert!(can_cast(&mut t, P0, analysis, FLASHBACK));
+    t.lands(P0, "Wastes", 1);
     t.cast(P0, analysis).method(FLASHBACK).target(P0).go();
-    assert_eq!(untapped_lands(&t, P0), 0);
+    assert_eq!(untapped_lands(&t, P0), 1);
     assert_eq!(t.life(P0), 17);
     t.resolve();
     assert_eq!(t.hand_size(P0), 2);
@@ -334,10 +328,8 @@ fn a_flashback_cost_reduction_reduces_only_the_flashback_cost() {
     assert!(can_cast(&mut t, P0, twice, FLASHBACK));
     t.cast(P0, twice).method(FLASHBACK).go();
     assert_eq!(untapped_lands(&t, P0), 0);
-    // Both effects on one flashback cost, each player's Catalyst Stone: the increase is
-    // added to Deep Analysis's flashback cost before the reduction is taken off it
-    // (CR 601.2f): {1}{U} + {2} - {2} = {1}{U}. Reducing first would leave {U} + {2} =
-    // {2}{U}.
+    // Both effects on one flashback cost, each player's Catalyst Stone: {1}{U} + {2} - {2}
+    // = {1}{U}.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Catalyst Stone");
     t.battlefield(P1, "Catalyst Stone");
@@ -352,32 +344,197 @@ fn a_flashback_cost_reduction_reduces_only_the_flashback_cost() {
 }
 
 #[test]
-fn a_dash_cost_reduction_reduces_only_the_dash_cost() {
-    cr!("601.2f", "118.7a", "702.109a");
-    interp!("keyword-cost-reduction-bounded-by-the-keyword-cost");
+fn a_dash_cost_reduction_comes_off_after_the_cost_increases() {
+    cr!("601.2f", "118.7a", "118.9d", "702.109a");
+    interp!("keyword-cost-reduction-on-an-alternative-cost-after-increases");
     ruling!(
         "Warbringer",
         "If a card’s dash cost includes one generic mana, that cost will be reduced by {1}."
     );
     supported("Warbringer");
     supported("Mardu Scout");
-    // Warbringer ("Dash costs you pay cost {2} less") reduces Mardu Scout's dash cost
-    // {1}{R} to {R}; the other {1} is lost. Sphere of Resistance's {1} is added to the
-    // total: {1}{R}, not {R}.
+    // Warbringer alone ("Dash costs you pay cost {2} less"): Mardu Scout's dash cost
+    // {1}{R} has one generic mana, so it's reduced by {1} only: {R}.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Warbringer");
-    t.battlefield(P1, "Sphere of Resistance");
     t.lands(P0, "Mountain", 1);
     let scout = t.hand(P0, "Mardu Scout");
-    assert!(!can_cast(&mut t, P0, scout, DASH));
-    assert!(t.cast(P0, scout).method(DASH).try_go().is_err());
-    t.lands(P0, "Mountain", 1);
     assert!(can_cast(&mut t, P0, scout, DASH));
     t.cast(P0, scout).method(DASH).go();
     assert_eq!(untapped_lands(&t, P0), 0);
     t.resolve();
     assert!(t.on_battlefield(scout));
+    // Warbringer and Sphere of Resistance: {1}{R} + {1} - {2} = {R}.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Warbringer");
+    t.battlefield(P1, "Sphere of Resistance");
+    t.lands(P0, "Mountain", 1);
+    let scout = t.hand(P0, "Mardu Scout");
+    assert!(can_cast(&mut t, P0, scout, DASH));
+    t.lands(P0, "Wastes", 1);
+    t.cast(P0, scout).method(DASH).go();
+    assert_eq!(untapped_lands(&t, P0), 1);
+    t.resolve();
+    assert!(t.on_battlefield(scout));
     assert!(t.obj_now(scout).has_keyword(KeywordKind::Haste));
+    // With Lodestone Golem as well: {1}{R} + {2} - {2} = {1}{R} (reducing the dash cost
+    // alone first would leave {R} + {2} = {2}{R}).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Warbringer");
+    t.battlefield(P1, "Sphere of Resistance");
+    t.battlefield(P1, "Lodestone Golem");
+    t.lands(P0, "Mountain", 1);
+    let scout = t.hand(P0, "Mardu Scout");
+    assert!(!can_cast(&mut t, P0, scout, DASH));
+    t.lands(P0, "Wastes", 1);
+    assert!(can_cast(&mut t, P0, scout, DASH));
+    t.lands(P0, "Wastes", 1);
+    t.cast(P0, scout).method(DASH).go();
+    assert_eq!(untapped_lands(&t, P0), 1);
+    t.resolve();
+    assert!(t.on_battlefield(scout));
+}
+
+#[test]
+fn an_alternative_keyword_cost_reduction_never_reduces_colored_mana() {
+    cr!("601.2f", "118.7a", "118.9d", "702.34a", "702.109a");
+    interp!("keyword-cost-reduction-on-an-alternative-cost-after-increases");
+    ruling!(
+        "Warbringer",
+        "Warbringer’s first ability can’t affect the colored mana requirement of a dash cost."
+    );
+    // Two Warbringers ({4} less) and Sphere of Resistance on Mardu Scout's dash cost:
+    // {1}{R} + {1} - {4} = {R}; the excess is lost, the {R} stays.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Warbringer");
+    t.battlefield(P0, "Warbringer");
+    t.battlefield(P1, "Sphere of Resistance");
+    let scout = t.hand(P0, "Mardu Scout");
+    assert!(!can_cast(&mut t, P0, scout, DASH));
+    t.lands(P0, "Wastes", 1);
+    assert!(!can_cast(&mut t, P0, scout, DASH));
+    t.lands(P0, "Mountain", 1);
+    assert!(can_cast(&mut t, P0, scout, DASH));
+    t.cast(P0, scout).method(DASH).go();
+    assert_eq!(untapped_lands(&t, P0), 1);
+    t.resolve();
+    assert!(t.on_battlefield(scout));
+    // Two Catalyst Stones and Thalia on Deep Analysis: {1}{U} + {1} - {4} = {U}, and the
+    // 3 life is still paid.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Catalyst Stone");
+    t.battlefield(P0, "Catalyst Stone");
+    t.battlefield(P1, "Thalia, Guardian of Thraben");
+    t.lands(P0, "Wastes", 2);
+    let analysis = t.graveyard(P0, "Deep Analysis");
+    assert!(!can_cast(&mut t, P0, analysis, FLASHBACK));
+    t.lands(P0, "Island", 1);
+    assert!(can_cast(&mut t, P0, analysis, FLASHBACK));
+    t.cast(P0, analysis).method(FLASHBACK).target(P0).go();
+    assert_eq!(untapped_lands(&t, P0), 2);
+    assert_eq!(t.life(P0), 17);
+}
+
+#[test]
+fn a_flashback_cost_reduction_reduces_an_additional_cost_paid_with_it() {
+    cr!("118.9d", "601.2f", "702.34a", "702.27a");
+    interp!("alternative-keyword-cost-reduction-reduces-additional-costs");
+    supported("Snapcaster Mage");
+    supported("Capsize");
+    // Snapcaster Mage gives Capsize flashback {1}{U}{U}. Its buyback cost {3} is applied to
+    // that alternative cost (CR 118.9d), so Catalyst Stone's reduction comes off it too:
+    // {1}{U}{U} + {3} - {2} = {2}{U}{U}. (Reducing the flashback cost alone would leave
+    // {U}{U} + {3} = {3}{U}{U}.) Flashback exiles it rather than buyback returning it.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Catalyst Stone");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let capsize = t.graveyard(P0, "Capsize");
+    t.lands(P0, "Island", 2);
+    let mage = t.hand(P0, "Snapcaster Mage");
+    t.answer_targets(P0, &[Entity::Object(capsize)]);
+    t.cast(P0, mage).go();
+    t.resolve_all();
+    assert!(t.obj_now(capsize).has_keyword(KeywordKind::Flashback));
+    t.lands(P0, "Island", 2);
+    t.lands(P0, "Wastes", 2);
+    let capsize = t.g.current(capsize);
+    t.cast(P0, capsize)
+        .method(FLASHBACK)
+        .kicked(true)
+        .target(bears)
+        .go();
+    assert_eq!(optional_costs_asked(&t, P0), vec!["buyback".to_string()]);
+    assert_eq!(untapped_lands(&t, P0), 0);
+    t.resolve();
+    assert!(t.in_hand(P1, "Grizzly Bears"));
+    assert!(t.in_exile("Capsize"));
+}
+
+#[test]
+fn a_flashback_cost_reduction_reduces_the_x_in_the_flashback_cost() {
+    cr!("601.2f", "107.3a", "118.9d", "702.34a");
+    interp!("keyword-cost-reduction-on-an-alternative-cost-after-increases");
+    ruling!(
+        "Devil's Play",
+        "start with the mana cost or alternative cost (such as a flashback cost) you're paying, add any cost increases, then apply any cost reductions"
+    );
+    ruling!(
+        "Lodestone Golem",
+        "The extra mana also doesn't change how many times you kicked the spell or what the value of X is"
+    );
+    supported("Devil's Play");
+    supported("Lodestone Golem");
+    // Devil's Play's flashback cost {X}{R}{R}{R} with X announced as 3 (before the total
+    // cost is determined, CR 107.3a, 601.2f) is {3}{R}{R}{R}; Lodestone Golem adds {1} and
+    // Catalyst Stone takes {2} off after it: {3}{R}{R}{R} + {1} - {2} = {2}{R}{R}{R}. X is
+    // still 3. (A reduction that skipped the X would leave {4}{R}{R}{R}.)
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Catalyst Stone");
+    t.battlefield(P1, "Lodestone Golem");
+    t.lands(P0, "Mountain", 3);
+    t.lands(P0, "Wastes", 1);
+    let play = t.graveyard(P0, "Devil's Play");
+    assert!(t
+        .cast(P0, play)
+        .method(FLASHBACK)
+        .x(3)
+        .target(P1)
+        .try_go()
+        .is_err());
+    t.lands(P0, "Wastes", 1);
+    let play = t.g.current(play);
+    let spell = t.cast(P0, play).method(FLASHBACK).x(3).target(P1).go();
+    assert_eq!(x_of(&t, spell), Some(3));
+    assert_eq!(untapped_lands(&t, P0), 0);
+    t.resolve();
+    assert_eq!(t.life(P1), 17);
+    assert!(t.in_exile("Devil's Play"));
+}
+
+#[test]
+fn trinispheres_floor_applies_after_an_alternative_keyword_cost_reduction() {
+    cr!("601.2f", "118.9d", "702.34a");
+    interp!("keyword-cost-reduction-on-an-alternative-cost-after-increases");
+    ruling!(
+        "Trinisphere",
+        "Finally, apply Trinisphere's effect if the mana component of the spell's cost is less than three mana"
+    );
+    // Deep Analysis's flashback cost under Thalia and Catalyst Stone: {1}{U} + {1} - {2} =
+    // {U}, Pay 3 life; Trinisphere then makes it three mana: {2}{U}. (Applying the floor
+    // before the reduction would leave {U}.)
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Catalyst Stone");
+    t.battlefield(P1, "Thalia, Guardian of Thraben");
+    t.battlefield(P1, "Trinisphere");
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Wastes", 1);
+    let analysis = t.graveyard(P0, "Deep Analysis");
+    assert!(!can_cast(&mut t, P0, analysis, FLASHBACK));
+    t.lands(P0, "Wastes", 1);
+    assert!(can_cast(&mut t, P0, analysis, FLASHBACK));
+    t.cast(P0, analysis).method(FLASHBACK).target(P0).go();
+    assert_eq!(untapped_lands(&t, P0), 0);
+    assert_eq!(t.life(P0), 17);
 }
 
 #[test]

@@ -81,12 +81,7 @@ impl KeywordRules for Sneak {
                 return vec![];
             }
         }
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::Sneak,
-            &cost,
-        ));
+        super::set_alternative_keyword_cost(g, p, KeywordKind::Sneak, &cost, &mut opt);
         // "Any time you could cast an instant during your declare blockers step."
         opt.flash = true;
         opt.tag = Some(SNEAK);

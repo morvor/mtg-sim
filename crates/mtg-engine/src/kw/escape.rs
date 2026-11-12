@@ -72,12 +72,7 @@ impl KeywordRules for Escape {
                 } else {
                     cost.clone()
                 };
-                opt.alt_cost = Some(super::modified_keyword_cost(
-                    g,
-                    p,
-                    KeywordKind::Escape,
-                    &cost,
-                ));
+                super::set_alternative_keyword_cost(g, p, KeywordKind::Escape, &cost, &mut opt);
                 opt.tag = Some(ESCAPE);
                 opt
             })

@@ -46,12 +46,7 @@ fn freerunning_option(g: &Game, p: PlayerId, card: ObjectId, cost: &Cost) -> Opt
             return None;
         }
     }
-    opt.alt_cost = Some(super::modified_keyword_cost(
-        g,
-        p,
-        KeywordKind::Freerunning,
-        cost,
-    ));
+    super::set_alternative_keyword_cost(g, p, KeywordKind::Freerunning, cost, &mut opt);
     opt.tag = Some(FREERUNNING);
     Some(opt)
 }

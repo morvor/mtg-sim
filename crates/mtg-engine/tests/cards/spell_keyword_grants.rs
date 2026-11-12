@@ -86,6 +86,62 @@ fn henzie_big_creature_spells_have_blitz_for_their_mana_cost() {
 }
 
 #[test]
+fn henzie_blitz_costs_cost_less_for_each_commander_cast_after_the_increases() {
+    cr!("702.152a", "118.9d", "601.2f", "118.7a");
+    interp!("keyword-cost-reduction-on-an-alternative-cost-after-increases");
+    assert_supported(&[
+        "Henzie \"Toolbox\" Torre",
+        "Gigantosaurus",
+        "Sphere of Resistance",
+        "Lodestone Golem",
+    ]);
+    const BLITZ: CastMethod = CastMethod::Keyword(KeywordKind::Blitz);
+    let mut t = TestGame::with_config(
+        2,
+        GameConfig {
+            variant: mtg_engine::game::Variant::Commander,
+            ..Default::default()
+        },
+    );
+    t.battlefield(P0, "Henzie \"Toolbox\" Torre");
+    t.battlefield(P1, "Sphere of Resistance");
+    t.battlefield(P1, "Lodestone Golem");
+    let giant = t.command(P0, "Hill Giant");
+    t.g.objects[giant.0 as usize].is_commander = true;
+    t.g.players[P0.idx()]
+        .commander_names
+        .push("Hill Giant".into());
+    t.g.recompute();
+    let giganto = t.hand(P0, "Gigantosaurus");
+    t.lands(P0, "Forest", 5);
+    // Gigantosaurus's blitz cost is its mana cost {G}{G}{G}{G}{G}; Sphere of Resistance
+    // and Lodestone Golem add {2} to it (CR 118.9d). Henzie's "Blitz costs you pay cost
+    // {1} less for each time you've cast your commander from the command zone this game"
+    // comes off after them (CR 601.2f): with one cast, {G}{G}{G}{G}{G} + {2} - {1}, six
+    // mana.
+    t.g.players[P0.idx()]
+        .commander_casts
+        .insert("Hill Giant".into(), 1);
+    assert!(t.cast(P0, giganto).method(BLITZ).try_go().is_err());
+    // With three casts, {G}{G}{G}{G}{G} + {2} - {3} = {G}{G}{G}{G}{G}: the third {1}
+    // finds no generic mana left (CR 118.7a). (Reducing the blitz cost alone first would
+    // leave {2}{G}{G}{G}{G}{G}.)
+    t.g.players[P0.idx()]
+        .commander_casts
+        .insert("Hill Giant".into(), 3);
+    let giganto = t.g.current(giganto);
+    t.cast(P0, giganto).method(BLITZ).go();
+    assert!(t
+        .g
+        .permanents()
+        .filter(|o| o.chars.name == "Forest")
+        .all(|o| o.tapped));
+    t.resolve_all();
+    let g = t.named_on_battlefield("Gigantosaurus")[0];
+    assert!(t.obj_now(g).has_keyword(KeywordKind::Haste));
+}
+
+#[test]
 fn bohn_cards_in_hand_have_foretell_for_their_mana_cost_reduced_by_two() {
     cr!("702.143a", "613.1f");
     assert_supported(&["Bohn, Beguiling Balladeer"]);

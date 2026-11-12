@@ -135,12 +135,7 @@ impl KeywordRules for Blitz {
             }
         }
         // "Blitz costs you pay cost {1} less ..." (Henzie "Toolbox" Torre).
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::Blitz,
-            &cost,
-        ));
+        super::set_alternative_keyword_cost(g, p, KeywordKind::Blitz, &cost, &mut opt);
         opt.tag = Some(paid_tag(kw));
         vec![opt]
     }

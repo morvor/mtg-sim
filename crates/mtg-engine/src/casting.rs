@@ -43,6 +43,11 @@ pub struct CastOption {
     /// is; `None` for the card's own alternative costs and a permission's. See
     /// `kw/offered_costs.rs`.
     pub alt_source: Option<crate::kw::offered_costs::AltCostSource>,
+    /// The generic mana the effects that reduce the costs of the keyword whose
+    /// alternative cost `alt_cost` is ("Flashback costs you pay cost {2} less") take off
+    /// the total cost, after every cost increase, as the other reductions are (CR 118.9d,
+    /// 601.2f; see `kw::set_alternative_keyword_cost`).
+    pub alt_cost_reduction: u32,
 }
 
 impl CastOption {
@@ -57,6 +62,7 @@ impl CastOption {
             tag: None,
             permission: None,
             alt_source: None,
+            alt_cost_reduction: 0,
         }
     }
 }
@@ -2545,8 +2551,16 @@ impl Game {
                 changes.add(self, &mut cost, &cm.change, &ctx);
             }
         }
-        // (Effects that modify the costs of a keyword, "Dash costs you pay cost {2} less",
-        // change that keyword's cost itself, see `kw::modified_keyword_cost`.)
+        // "Dash costs you pay cost {2} less": the cost increases are part of the
+        // alternative cost the spell is cast for (CR 118.9d), so the reduction comes off
+        // after them, as the total cost's other reductions do (`kw::set_alternative_keyword_cost`).
+        if opt.alt_cost.is_some() && opt.alt_cost_reduction > 0 {
+            changes
+                .reductions
+                .push(crate::activation_costs::Reduction::Generic(
+                    opt.alt_cost_reduction,
+                ));
+        }
         // "Spells you cast this way cost {2} less to cast": a reduction that comes with the
         // permission it's cast with.
         // So does one an effect casting the spell as it resolves gives ("That copy costs

@@ -304,6 +304,24 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: as the ruling says, for Rowan Kenrith: a creature that's tapped or came under the player's control that turn doesn't attack, and a cost to attack (Ghostly Prison) isn't one the player must pay (CR 508.1d), unless the creature can attack something else for free.
 - Recorded: test `tests/rulings/r_p060_combat.rs` (`rowans_attack_requirement_doesnt_force_creatures_that_cant_attack_or_costs`), citing it under Will Kenrith, which takes part as a planeswalker the creature may attack free of Ghostly Prison's cost.
 
+### Traveling Minister: Undead Butler's ruling about its reflexive trigger
+- Kind: misattached
+- Status: open for review
+- Ruling, Traveling Minister (2021-11-19): "After you exile Undead Butler from your graveyard, a second ability triggers. You choose the target creature card to return at that time."
+- Conflicts with: Traveling Minister has no trigger and exiles nothing: "{T}: Target creature gets +1/+0 until end of turn. You gain 1 life. Activate only as a sorcery." The ruling names and describes Undead Butler: "When this creature dies, you may exile it. When you do, return target creature card from your graveyard to your hand."
+- Evidence: the Innistrad: Crimson Vow Release Notes (2021-11-10; ormos mirror, Wayback capture 2021-11-28) list the ruling under Undead Butler, the card right after Traveling Minister in the notes; the data files Traveling Minister's own note ("If the target of Traveling Minister's activated ability isn't legal as it tries to resolve, you won't gain 1 life.") and this one under Traveling Minister, and none under Undead Butler. Found in work item rulings-P144.
+- Engine: as the ruling says, for Undead Butler: the reflexive trigger's target is chosen once Undead Butler has been exiled (CR 603.12), so a creature card put into the graveyard after the death trigger was put on the stack can be returned.
+- Recorded: test `tests/rulings/r_p144_misc.rs` (`undead_butler_return_trigger_targets_after_the_exile`), citing it under Traveling Minister, which is on the battlefield there (it can't take part).
+
+### Mount Doom: Moria Marauder's ruling about its last ability
+- Kind: misattached
+- Status: open for review
+- Ruling, Mount Doom (2023-06-16): "You must follow all normal timing rules for a card you play using Moria Marauder's last ability and, if it's a spell, you must pay its costs to cast it."
+- Conflicts with: Mount Doom lets no card be played: "{T}, Pay 1 life: Add {B} or {R}. / {1}{B}{R}, {T}: Mount Doom deals 1 damage to each opponent. / {5}{B}{R}, {T}, Sacrifice Mount Doom and a legendary artifact: Choose up to two creatures, then destroy the rest. Activate only as a sorcery." The ruling names and describes Moria Marauder's last ability: "Whenever a Goblin or Orc you control deals combat damage to a player, exile the top card of your library. You may play that card this turn."
+- Evidence: the data has the same ruling, with the same date, under Moria Marauder, the card it names; both are The Lord of the Rings: Tales of Middle-earth cards (rulings dated 2023-06-16). Mount Doom's other ruling ("For the last ability, none of the chosen creatures are targets of the ability. You may choose creatures with shroud, for example.") is about its own last ability. Found in the review of work item rulings-P144 (the text is in that batch).
+- Engine: as the ruling says, for Moria Marauder: a card exiled by its trigger is played with the normal timing rules, and a spell's costs are paid.
+- Recorded: test `tests/rulings/r_s23_timing.rs` (`moria_marauder_cards_follow_normal_timing_and_spells_cost_their_costs`), citing it under Moria Marauder, which the data also attaches it to (a citation covers the text on every card it's attached to); Mount Doom has no ability that could take part.
+
 ## Outdated rulings
 
 ### Souls of the Faultless: "you may choose either member of the attacking team"

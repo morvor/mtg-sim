@@ -8,6 +8,39 @@ use crate::types::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+/// The kind of event that made a triggered ability trigger (`EventInfo::triggered_by`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TriggeringEvent {
+    /// A permanent entering the battlefield.
+    Entered,
+    /// A permanent leaving the battlefield (`died`: for its owner's graveyard, CR 700.4).
+    LeftBattlefield { died: bool },
+    /// Creatures being declared as attackers.
+    Attacked,
+}
+
+impl TriggeringEvent {
+    /// The kind of `ev`, if it's one of the kinds recorded.
+    pub fn of(ev: &Event) -> Option<TriggeringEvent> {
+        match ev {
+            Event::ZoneChange {
+                to: Zone::Battlefield,
+                from,
+                ..
+            } if *from != Zone::Battlefield => Some(TriggeringEvent::Entered),
+            Event::ZoneChange {
+                from: Zone::Battlefield,
+                to,
+                ..
+            } if *to != Zone::Battlefield => Some(TriggeringEvent::LeftBattlefield {
+                died: matches!(to, Zone::Graveyard(_)),
+            }),
+            Event::AttackersDeclared { .. } => Some(TriggeringEvent::Attacked),
+            _ => None,
+        }
+    }
+}
+
 /// Why an object changed zones.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MoveCause {

@@ -120,12 +120,7 @@ impl KeywordRules for Bestow {
                 return vec![];
             }
         }
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::Bestow,
-            &cost,
-        ));
+        super::set_alternative_keyword_cost(g, p, KeywordKind::Bestow, &cost, &mut opt);
         vec![opt]
     }
 

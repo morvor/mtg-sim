@@ -474,7 +474,15 @@ fn until(
         crate::reveal::reveal_in(g, p, &revealed, Some(ctx));
         return (revealed, found);
     }
-    g.move_to_destination(revealed.clone(), &Destination::zone(ZoneKind::Exile), ctx);
+    // "Exile cards from the top of your library until you exile two nonland cards", "...
+    // until you exile cards with total mana value 4 or greater": the cards are exiled one at
+    // a time, in order, each its own event (Laelia, the Blade Reforged's ruling: "that
+    // player exiles those cards one at a time"), as `library::reveal_until` does.
+    let exile_zone = Destination::zone(ZoneKind::Exile);
+    for c in &revealed {
+        g.move_to_destination(vec![*c], &exile_zone, ctx);
+        g.one_at_a_time_step();
+    }
     // The objects the cards became (a card a replacement effect put elsewhere is followed
     // there).
     let all: Vec<ObjectId> = revealed.iter().map(|o| g.current(*o)).collect();
