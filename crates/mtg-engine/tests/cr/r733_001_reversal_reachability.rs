@@ -423,6 +423,9 @@ fn custom_effect_library(name: &str) -> Option<String> {
         // A creature type chosen and creatures of it beheld as a cost (Celestial Reunion,
         // `cost_sets.rs`): a hand and permanents, no library.
         mtg_engine::cost_sets::CHOOSE_TYPE_AND_BEHOLD,
+        // The card a madness ability discarded into exile notes that ability
+        // (`kw/madness.rs`): no library.
+        mtg_engine::kw::madness::EXILED_THIS_WAY,
     ];
     if NO_LIBRARY.iter().any(|p| name.starts_with(p)) {
         return None;
