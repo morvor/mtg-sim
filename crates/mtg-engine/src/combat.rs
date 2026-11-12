@@ -1168,25 +1168,13 @@ fn best_attack_paying(
         .collect();
     let mut best = (obeyed_attack_requirements(g, reqs, &[]), Vec::new());
     let space: f64 = free.iter().map(|(_, t)| (t.len() + 1) as f64).product();
-    if space <= 100_000.0 {
-        // Requirements still obeyable by creatures from index i on (for pruning).
-        // Requirements on a player's declaration as a whole may still be obeyed by any
-        // creature left.
-        let whole = reqs.iter().filter(|r| r.creature().is_none()).count() as u32;
-        let mut suffix = vec![whole; free.len() + 1];
-        for i in (0..free.len()).rev() {
-            let n = reqs
-                .iter()
-                .filter(|r| r.creature() == Some(free[i].0))
-                .count() as u32;
-            suffix[i] = suffix[i + 1] + n;
-        }
-        let mut cur = Vec::new();
-        attack_dfs(
-            g, &rules, options, &free, reqs, &suffix, 0, &mut cur, &mut best,
-        );
-    } else {
-        // Too many combinations: greedily attack with every creature that has requirements.
+    // Too many combinations to try them all: start from a greedy declaration (every
+    // creature with requirements attacks what obeys most of them), then search within a
+    // budget. The greedy one alone isn't enough: when it breaks a restriction ("No more
+    // than one creature can attack each combat"), the maximum must still be found, or a
+    // declaration obeying fewer requirements (even none) would be accepted (CR 508.1d).
+    let limited = space > 100_000.0;
+    if limited {
         let mut decl = Vec::new();
         for (c, ts) in &free {
             let mine: Vec<&AttackRequirement> =
@@ -1207,8 +1195,38 @@ fn best_attack_paying(
             best = (n, decl);
         }
     }
+    // Requirements still obeyable by creatures from index i on (for pruning).
+    // Requirements on a player's declaration as a whole may still be obeyed by any
+    // creature left.
+    let whole = reqs.iter().filter(|r| r.creature().is_none()).count() as u32;
+    let mut suffix = vec![whole; free.len() + 1];
+    for i in (0..free.len()).rev() {
+        let n = reqs
+            .iter()
+            .filter(|r| r.creature() == Some(free[i].0))
+            .count() as u32;
+        suffix[i] = suffix[i + 1] + n;
+    }
+    let mut cur = Vec::new();
+    let mut budget = if limited { SEARCH_BUDGET } else { u64::MAX };
+    attack_dfs(
+        g,
+        &rules,
+        options,
+        &free,
+        reqs,
+        &suffix,
+        0,
+        &mut cur,
+        &mut best,
+        &mut budget,
+    );
     best
 }
+
+/// The most nodes a search for the maximum number of requirements obeyed visits when
+/// there are too many declarations to try them all (CR 508.1d, 509.1c).
+const SEARCH_BUDGET: u64 = 200_000;
 
 #[allow(clippy::too_many_arguments)]
 fn attack_dfs(
@@ -1221,7 +1239,17 @@ fn attack_dfs(
     i: usize,
     cur: &mut Vec<(ObjectId, Entity)>,
     best: &mut (u32, Vec<(ObjectId, Entity)>),
+    budget: &mut u64,
 ) {
+    if *budget == 0 {
+        return;
+    }
+    *budget -= 1;
+    // More attackers than a "no more than N creatures can attack" restriction allows:
+    // adding attackers can't make it legal again.
+    if rules.max.is_some_and(|m| cur.len() > m) {
+        return;
+    }
     let now = obeyed_attack_requirements(g, reqs, cur);
     if i == free.len() {
         if now > best.0 && attack_restrictions_ok(g, rules, options, cur) {
@@ -1234,10 +1262,32 @@ fn attack_dfs(
     if now + suffix[i] <= best.0 {
         return;
     }
-    attack_dfs(g, rules, options, free, reqs, suffix, i + 1, cur, best);
+    attack_dfs(
+        g,
+        rules,
+        options,
+        free,
+        reqs,
+        suffix,
+        i + 1,
+        cur,
+        best,
+        budget,
+    );
     for t in free[i].1.clone() {
         cur.push((free[i].0, t));
-        attack_dfs(g, rules, options, free, reqs, suffix, i + 1, cur, best);
+        attack_dfs(
+            g,
+            rules,
+            options,
+            free,
+            reqs,
+            suffix,
+            i + 1,
+            cur,
+            best,
+            budget,
+        );
         cur.pop();
     }
 }
@@ -1965,25 +2015,12 @@ pub fn best_blocks(
         return best;
     }
     let space: f64 = choices.iter().map(|(_, s)| (s.len() + 1) as f64).product();
-    if space <= 100_000.0 {
-        // Requirements specific to blockers from index i on (for pruning).
-        let mut suffix = vec![0u32; choices.len() + 1];
-        for i in (0..choices.len()).rev() {
-            let b = choices[i].0;
-            let n = reqs
-                .iter()
-                .filter(|r| {
-                    matches!(r, BlockRequirement::Blocks(x) | BlockRequirement::BlocksAttacker(x, _) if *x == b)
-                })
-                .count() as u32;
-            suffix[i] = suffix[i + 1] + n;
-        }
-        let mut cur = Vec::new();
-        block_dfs(
-            g, &rules, options, &choices, reqs, &suffix, 0, &mut cur, &mut best,
-        );
-    } else {
-        // Too many combinations: each creature with a requirement blocks a single attacker.
+    // Too many combinations to try them all: start from a greedy declaration (each
+    // creature with a requirement blocks a single attacker), then search within a budget,
+    // so that a greedy declaration breaking a restriction ("No more than one creature can
+    // block each combat") doesn't leave the maximum unfound (CR 509.1c).
+    let limited = space > 100_000.0;
+    if limited {
         let mut decl = Vec::new();
         for r in reqs {
             match r {
@@ -2012,6 +2049,32 @@ pub fn best_blocks(
             best = (n, decl);
         }
     }
+    // Requirements specific to blockers from index i on (for pruning).
+    let mut suffix = vec![0u32; choices.len() + 1];
+    for i in (0..choices.len()).rev() {
+        let b = choices[i].0;
+        let n = reqs
+            .iter()
+            .filter(|r| {
+                matches!(r, BlockRequirement::Blocks(x) | BlockRequirement::BlocksAttacker(x, _) if *x == b)
+            })
+            .count() as u32;
+        suffix[i] = suffix[i + 1] + n;
+    }
+    let mut cur = Vec::new();
+    let mut budget = if limited { SEARCH_BUDGET } else { u64::MAX };
+    block_dfs(
+        g,
+        &rules,
+        options,
+        &choices,
+        reqs,
+        &suffix,
+        0,
+        &mut cur,
+        &mut best,
+        &mut budget,
+    );
     best
 }
 
@@ -2026,7 +2089,21 @@ fn block_dfs(
     i: usize,
     cur: &mut Vec<(ObjectId, ObjectId)>,
     best: &mut (u32, Vec<(ObjectId, ObjectId)>),
+    budget: &mut u64,
 ) {
+    if *budget == 0 {
+        return;
+    }
+    *budget -= 1;
+    // More blockers than a "no more than N creatures can block" restriction allows:
+    // adding blockers can't make it legal again.
+    if let Some(m) = rules.max {
+        let mut bs: Vec<ObjectId> = cur.iter().map(|(b, _)| *b).collect();
+        bs.dedup();
+        if bs.len() > m {
+            return;
+        }
+    }
     let now = obeyed_block_requirements(reqs, cur);
     if i == choices.len() {
         if now > best.0 && block_restrictions_ok(g, rules, options, cur) {
@@ -2050,12 +2127,34 @@ fn block_dfs(
     if now + suffix[i] + open_attacker_reqs <= best.0 {
         return;
     }
-    block_dfs(g, rules, options, choices, reqs, suffix, i + 1, cur, best);
+    block_dfs(
+        g,
+        rules,
+        options,
+        choices,
+        reqs,
+        suffix,
+        i + 1,
+        cur,
+        best,
+        budget,
+    );
     let b = choices[i].0;
     for set in &choices[i].1 {
         let len = cur.len();
         cur.extend(set.iter().map(|a| (b, *a)));
-        block_dfs(g, rules, options, choices, reqs, suffix, i + 1, cur, best);
+        block_dfs(
+            g,
+            rules,
+            options,
+            choices,
+            reqs,
+            suffix,
+            i + 1,
+            cur,
+            best,
+            budget,
+        );
         cur.truncate(len);
     }
 }
