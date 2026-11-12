@@ -733,7 +733,11 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
                 && payers.len() == 1
                 // "... loses 3 life unless ...": the amount is fixed as it's planned.
                 && (plannable(g, otherwise, ctx, p)
-                    || matches!(**otherwise, Effect::LoseLife { .. } | Effect::GainLife { .. }))
+                    || matches!(**otherwise, Effect::LoseLife { .. } | Effect::GainLife { .. })
+                    // "For each opponent, you create a token unless that player sacrifices
+                    // a creature" (Acererak the Archlich): each decides, then the
+                    // sacrifices and the token creation happen together (CR 101.4).
+                    || token_plan(g, otherwise, ctx).is_some())
         }
         Effect::Search { who, whose, .. } => {
             p.is_some_and(|p| g.eval_players(who, ctx) == vec![p])
@@ -1103,9 +1107,16 @@ fn plan(
             ..
         } if plannable(g, e, ctx, p) => {
             if let (Some(q), Some(part)) = (g.eval_player(who, ctx), choice_cost(cost)) {
+                // "You" in the cost is the player who pays it ("for each opponent, you
+                // create ... unless that player sacrifices a creature"), as paying it
+                // would see it (`Game::pay_cost`).
+                let payer = Ctx {
+                    controller: q,
+                    ..ctx.clone()
+                };
                 let cands = (!crate::multiplayer::cant_pay(g, q)
                     && crate::entry_costs::can_pay(g, q, cost, ctx))
-                .then(|| choice_cost_candidates(g, q, part, ctx))
+                .then(|| choice_cost_candidates(g, q, part, &payer))
                 .flatten();
                 let can = cands.is_some();
                 let pays = can
@@ -1117,13 +1128,14 @@ fn plan(
                     );
                 ctx.prev_happened = pays;
                 return match cands.filter(|_| pays) {
-                    Some(cands) => plan_choice_cost(g, q, part, cands, ctx),
+                    Some(cands) => plan_choice_cost(g, q, part, cands, &payer),
                     None => {
                         // CR 732.6: declining the [B] of "[A] unless [B]".
                         if can {
                             crate::shortcuts::declined_unless(g);
                         }
-                        plan(g, otherwise, ctx, p, earlier)
+                        token_plan(g, otherwise, ctx)
+                            .unwrap_or_else(|| plan(g, otherwise, ctx, p, earlier))
                     }
                 };
             }
@@ -1156,7 +1168,7 @@ fn plan(
                 if can {
                     crate::shortcuts::declined_unless(g);
                 }
-                plan(g, otherwise, ctx, p, earlier)
+                token_plan(g, otherwise, ctx).unwrap_or_else(|| plan(g, otherwise, ctx, p, earlier))
             }
         }
         // "Each player loses a third of their life": every amount is determined before
@@ -1244,6 +1256,39 @@ fn plan(
         }),
         other => Plan::Exec(other.clone()),
     }
+}
+
+/// The tokens "[create tokens] unless [a player pays]" creates when the player declines:
+/// created with the other players' actions (CR 101.4), as [`Plan::Tokens`]. Only tokens
+/// that don't enter attacking (what those attack is chosen as they're created).
+fn token_plan(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Plan> {
+    let Effect::CreateToken {
+        spec,
+        count,
+        controller,
+        tapped,
+        attacking: false,
+    } = e
+    else {
+        return None;
+    };
+    let n = g.eval_value(count, ctx).max(0) as u32;
+    let tokens = g
+        .eval_players(controller, ctx)
+        .into_iter()
+        .map(|q| {
+            let tc = TokenCreate {
+                chars: crate::tokens::token_characteristics_in(g, spec, ctx),
+                card: crate::tokens::predefined_card(spec),
+                tapped: *tapped,
+                attacking: None,
+                copy_of: None,
+                copy_exceptions: vec![],
+            };
+            (q, tc, n, ctx.source)
+        })
+        .collect();
+    Some(Plan::Tokens { tokens })
 }
 
 /// Performs one instruction for every player (see the module documentation).
