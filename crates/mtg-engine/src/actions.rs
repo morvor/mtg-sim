@@ -78,12 +78,10 @@ impl Game {
         // simultaneous events, they do so in APNAP order.
         let apnap = self.apnap();
         let mut order: Vec<usize> = (0..moves.len()).collect();
-        order.sort_by_key(|i| {
-            let o = self.obj(moves[*i].obj);
-            let p = match o.zone {
-                Zone::Battlefield | Zone::Stack => o.controller,
-                _ => o.owner,
-            };
+        order.sort_by_cached_key(|i| {
+            // The player who chooses for that move (an entering permanent's would-be
+            // controller, `entering-would-be-controller-chooses`).
+            let p = self.affected_player(&ReplEvent::Move(moves[*i].clone()));
             apnap.iter().position(|x| *x == p).unwrap_or(usize::MAX)
         });
         for (i, m) in order.into_iter().map(|i| (i, &moves[i])) {
@@ -741,12 +739,22 @@ impl Game {
                 // CR 122.6a: its controller puts them on it, unless the effect has another
                 // player put them (tribute's chosen opponent).
                 let ctl = self.obj(new_id).controller;
-                let counters_to_add: Vec<(CounterKind, u32, PlayerId)> = counters_to_add
+                // The counters of one kind it's given as it enters are put on it at once:
+                // one event, however many "enters with" effects contributed (CR 122.6,
+                // 614.1c), so Hardened Scales adds one to all of them
+                // (`entering-counters-one-event`).
+                let mut merged: Vec<(CounterKind, u32, PlayerId)> = Vec::new();
+                for (k, n, p) in counters_to_add
                     .into_iter()
                     .map(|(k, n)| (k, n, ctl))
                     .chain(m.etb.counters_by.iter().cloned())
-                    .collect();
-                for (k, n, putter) in counters_to_add {
+                {
+                    match merged.iter_mut().find(|(k2, _, p2)| *k2 == k && *p2 == p) {
+                        Some(e) => e.1 += n,
+                        None => merged.push((k, n, p)),
+                    }
+                }
+                for (k, n, putter) in merged {
                     // Counters placed as it enters are part of the ETB event; replacement
                     // effects on counters still apply (CR 614.16).
                     for e in self.replace(ReplEvent::AddCounters {

@@ -783,12 +783,29 @@ impl Game {
             Step::End => StepKind::End,
             _ => return false,
         };
-        // CR 614.1b: static "skip" effects replace the step with nothing.
-        if crate::skip::static_skip(self, kind, active) {
-            self.players[active.idx()].skips.push(kind);
+        // CR 614.1b: static "skip" effects and "skip your next [step]" effects replace the
+        // step with nothing. When both apply, the player chooses which one does (CR 616.1):
+        // a "next" one that doesn't waits for the next step it can skip (CR 614.10a), and
+        // one that does is used up (the static one then has no step to replace, 614.7).
+        let mut next_used = false;
+        if crate::skip::has_pending_skip(self, active, kind) {
+            let mut options = crate::skip::static_skip_options(self, kind, active);
+            if !options.is_empty() {
+                let k = options.len();
+                options.push(format!("Skip your next {kind:?} step (waiting to apply)"));
+                if let crate::decision::Answer::Index(i) = self.ask(
+                    active,
+                    crate::decision::Decision::ChooseReplacement { options },
+                ) {
+                    // With shared team turns, a skip of any player on the team (CR 805.8).
+                    next_used = i == k && crate::skip::consume_skip(self, active, kind);
+                }
+            }
         }
-        // With shared team turns, a skip of any player on the team (CR 805.8).
-        if crate::skip::consume_skip(self, active, kind) {
+        if next_used
+            || crate::skip::static_skip(self, kind, active)
+            || crate::skip::consume_skip(self, active, kind)
+        {
             if kind == StepKind::Combat {
                 // Skip the whole combat phase (only this one, not additional combat phases
                 // later in the turn).
