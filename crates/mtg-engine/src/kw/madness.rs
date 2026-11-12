@@ -17,8 +17,6 @@ use crate::keywords::{Keyword, KeywordKind};
 use crate::object::*;
 use crate::replacement::{EtbInfo, MoveEv};
 use crate::types::*;
-use std::collections::BTreeMap;
-use std::sync::{Mutex, OnceLock};
 
 /// The custom effect of the madness triggered ability (followed by `:` and the key of the
 /// madness ability's cost, see [`cost_key`]).
@@ -33,36 +31,25 @@ pub const MADNESS: &str = "madness";
 /// key of its cost, in `Choices::text`): its own two abilities are linked (CR 607.2),
 /// and of several madness abilities only the one whose replacement exiled the card
 /// triggers ("exiled this way"; Falkenrath Gorger's ruling: "you'll choose which madness
-/// ability exiles it").
-const EXILED_BY: u16 = u16::MAX - 3502;
+/// ability exiles it"). A reserved link, below the links of copied abilities (`0x4000`
+/// on, `layers::copied_link`) like the other reserved ones.
+const EXILED_BY: u16 = 0x3fb3;
 
 pub struct Madness;
 
-/// Madness costs by key: each madness ability's triggered ability casts the card for that
-/// ability's own cost, kept from when the ability triggered, even if the card has lost the
-/// ability since (Falkenrath Gorger leaving: "the madness ability will still let you cast
-/// that Vampire card for the appropriate cost even though it no longer has madness").
-fn costs() -> &'static Mutex<BTreeMap<String, Option<Cost>>> {
-    static C: OnceLock<Mutex<BTreeMap<String, Option<Cost>>>> = OnceLock::new();
-    C.get_or_init(Default::default)
-}
-
-/// The key of a madness ability's cost (`None`: "The madness cost is equal to its mana
-/// cost").
+/// The key of a madness ability: its cost itself, written out (`null`: "The madness cost
+/// is equal to its mana cost"), so that its triggered ability casts the card for that
+/// ability's own cost even if the card has lost the ability since (Falkenrath Gorger
+/// leaving: "the madness ability will still let you cast that Vampire card for the
+/// appropriate cost even though it no longer has madness").
 fn cost_key(kw: &Keyword) -> String {
-    let key = format!("{:?}", kw.cost);
-    costs()
-        .lock()
-        .unwrap()
-        .entry(key.clone())
-        .or_insert_with(|| kw.cost.clone());
-    key
+    serde_json::to_string(&kw.cost).unwrap_or_default()
 }
 
 /// The madness cost the ability with cost key `key` casts `card` for. A madness ability
 /// granted with "The madness cost is equal to its mana cost" has no cost of its own.
 fn madness_cost(g: &Game, card: ObjectId, key: &str) -> Option<Cost> {
-    let cost = costs().lock().unwrap().get(key).cloned()?;
+    let cost: Option<Cost> = serde_json::from_str(key).ok()?;
     Some(match cost {
         Some(c) => c,
         // A card with no mana cost has an unpayable madness cost (CR 118.6).
@@ -84,8 +71,10 @@ impl KeywordRules for Madness {
     fn derived(&self, kw: &Keyword) -> Option<Vec<Ability>> {
         let text = KeywordKind::Madness.name();
         let key = cost_key(kw);
-        // The discard into exile, after which the card notes that this ability exiled it
-        // (the first madness ability to, when several apply).
+        // The discard into exile, after which the card notes that this ability exiled it.
+        // When a card has several madness abilities, its owner chooses which one to apply
+        // (CR 616.1; Falkenrath Gorger's ruling): that one exiles it and is noted; the
+        // others, applied after it, change nothing.
         let mut exile = StaticAbility::new(StaticEffect::Replacement(ReplacementDef {
             event: ReplacementEvent::Discard(PlayerFilter::Any, Filter::Source),
             action: ReplacementAction::Then(
@@ -106,8 +95,14 @@ impl KeywordRules for Madness {
             Body::effect(Effect::Custom(format!("{CAST_MADNESS}:{key}").into())),
         );
         cast.zone = FunctionZone::Exile;
+        // The replacement effect names its cost, so that a player choosing which of two
+        // madness abilities exiles the card can tell them apart.
+        let exile_text = match &kw.cost {
+            Some(c) => format!("{text} {}", crate::resolve::describe_cost(c)),
+            None => format!("{text} (cost equal to its mana cost)"),
+        };
         Some(vec![
-            AbilityDef::new(AbilityKind::Static(exile), text),
+            AbilityDef::new(AbilityKind::Static(exile), exile_text),
             AbilityDef::new(AbilityKind::Triggered(cast), text),
         ])
     }
@@ -223,7 +218,9 @@ pub fn cast_madness(g: &mut Game, ctx: &mut Ctx, key: &str) {
 /// (the object it was in exile) can find the object it became.
 pub fn found_after_madness(g: &Game, discarded: ObjectId) -> Option<ObjectId> {
     let o = g.try_obj(discarded)?;
-    if o.zone != Zone::Exile || !o.chars.has_keyword(KeywordKind::Madness) {
+    // A madness ability exiled it: the card noted which one (it may have lost the ability
+    // since, as when Falkenrath Gorger leaves the battlefield).
+    if o.zone != Zone::Exile || !o.linked_choices.contains_key(&EXILED_BY) {
         return None;
     }
     // It was discarded into exile (not exiled from a hand some other way).

@@ -3,6 +3,7 @@
 //! battlefield: its own card, the source leaving before the madness trigger resolves,
 //! and two madness abilities.
 
+use crate::r_p041_common::{apply_first, apply_first_not};
 use crate::r_p146_common::discard;
 use crate::r_p157_common::*;
 use crate::r_s04_common::add_mana;
@@ -95,7 +96,7 @@ fn falkenrath_gorger_doesnt_give_itself_madness() {
 
 #[test]
 fn falkenrath_gorger_leaving_doesnt_stop_the_madness_cast() {
-    cr!("702.35a", "603.4", "113.7a");
+    cr!("702.35a", "113.7a");
     ruling!(
         "Falkenrath Gorger",
         "If Falkenrath Gorger leaves the battlefield before the madness trigger has resolved for a Vampire card that gained madness with its ability, the madness ability will still let you cast that Vampire card for the appropriate cost even though it no longer has madness."
@@ -117,41 +118,80 @@ fn falkenrath_gorger_leaving_doesnt_stop_the_madness_cast() {
 
 #[test]
 fn falkenrath_gorger_choose_which_madness_ability_exiles_it() {
-    cr!("616.1", "702.35a");
+    cr!("616.1", "616.1e", "702.35a");
     ruling!(
         "Falkenrath Gorger",
         "If you discard a Vampire creature card that already has a madness ability, you'll choose which madness ability exiles it. You may choose either the one it normally has or the one it gains from Falkenrath Gorger."
     );
-    // Stromkirk Occultist: mana cost {2}{R}, madness {1}{R}. With {1}{R} available, it can
-    // be cast after one choice (its own madness) and not after the other (the Gorger's,
-    // {2}{R}): each choice's own madness ability triggers, for its own cost.
-    let mut cast = vec![];
-    for pick in [0usize, 1] {
+    // Stromkirk Occultist: mana cost {2}{R}, madness {1}{R}. P0 chooses between its own
+    // madness ability and the Gorger's (its mana cost); only the chosen one triggers, and
+    // the card is cast for that one's cost: with {1}{R} available, only its own can be
+    // paid.
+    for (own, cast) in [(true, true), (false, false)] {
         let mut t = TestGame::new(2);
         t.battlefield(P0, "Falkenrath Gorger");
         let v = t.hand(P0, "Stromkirk Occultist");
         let m = mark(&t);
-        t.answer(P0, DecisionKind::Replacement, mtg_engine::decision::Answer::Index(pick));
+        let log = if own {
+            apply_first(&mut t, P0, "{1}{R}")
+        } else {
+            apply_first_not(&mut t, P0, "{1}{R}")
+        };
         discard(&mut t, P0, v);
-        let options: Vec<usize> = t.asked()[m..]
+        let asked: Vec<PlayerId> = t.asked()[m..]
             .iter()
-            .filter_map(|(p, d)| match d {
-                Decision::ChooseReplacement { options, .. } if *p == P0 => Some(options.len()),
-                _ => None,
-            })
+            .filter(|(_, d)| matches!(d, Decision::ChooseReplacement { .. }))
+            .map(|(p, _)| *p)
             .collect();
-        assert_eq!(options, vec![2], "a choice between the two madness abilities");
+        assert_eq!(asked, vec![P0], "the card's owner chooses (CR 616.1)");
+        let options = log.lock().unwrap()[0].clone();
+        assert_eq!(options.len(), 2, "{options:?}");
+        assert!(
+            options.iter().filter(|o| o.contains("{1}{R}")).count() == 1,
+            "the two abilities are told apart: {options:?}"
+        );
         assert!(t.in_exile("Stromkirk Occultist"));
         assert_eq!(triggers_on_stack(&t, "adness"), 1, "only the one that exiled it");
         add_mana(&mut t, P0, ManaType::R, 1);
         add_mana(&mut t, P0, ManaType::C, 1);
         t.answer_yes(P0, true);
         t.resolve_all();
-        cast.push(t.named_on_battlefield("Stromkirk Occultist").len() == 1);
-        if !cast[pick] {
-            assert!(t.in_graveyard(P0, "Stromkirk Occultist"));
-        }
+        assert_eq!(
+            t.named_on_battlefield("Stromkirk Occultist").len() == 1,
+            cast,
+            "own madness chosen: {own}"
+        );
+        assert_eq!(t.in_graveyard(P0, "Stromkirk Occultist"), !cast);
     }
-    cast.sort();
-    assert_eq!(cast, vec![false, true]);
+}
+
+#[test]
+fn falkenrath_gorger_gone_the_discarded_card_is_still_found_after_madness() {
+    cr!("702.35c", "400.7k");
+    // P0 discards Vampire Interloper (madness from the Gorger); Pitchstone Wall's ability
+    // ("Whenever you discard a card, you may sacrifice this creature. If you do, return
+    // the discarded card from your graveyard to your hand.") is put on the stack first.
+    // The Gorger leaves, the Vampire isn't cast and goes to the graveyard: the Wall's
+    // ability still finds the discarded card there, though it no longer has madness.
+    supported("Pitchstone Wall");
+    let mut t = TestGame::new(2);
+    let gorger = t.battlefield(P0, "Falkenrath Gorger");
+    let wall = t.battlefield(P0, "Pitchstone Wall");
+    let v = t.hand(P0, "Vampire Interloper");
+    t.answer(
+        P0,
+        DecisionKind::Order,
+        mtg_engine::decision::Answer::Indices(vec![0, 1]),
+    );
+    discard(&mut t, P0, v);
+    assert_eq!(t.stack_len(), 2);
+    assert_eq!(top_name(&t), "Vampire Interloper ability", "the madness trigger on top");
+    kill(&mut t, gorger);
+    t.answer_yes(P0, false);
+    t.resolve();
+    assert!(t.in_graveyard(P0, "Vampire Interloper"));
+    t.answer_yes(P0, true);
+    t.resolve();
+    assert!(!t.on_battlefield(wall));
+    assert!(t.in_hand(P0, "Vampire Interloper"));
 }
