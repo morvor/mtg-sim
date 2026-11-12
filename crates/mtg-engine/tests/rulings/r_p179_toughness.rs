@@ -397,7 +397,7 @@ fn cleric_class_creature_dealt_lethal_damage_dies_before_the_counter() {
 #[test]
 fn cleric_class_level_3_uses_toughness_on_the_battlefield() {
     cr!("716.2a", "608.2h");
-    interp!("returned-card-values-current-on-the-battlefield");
+    interp!("returned-card-values-by-wording");
     ruling!(
         "Cleric Class",
         "When Cleric Class's level 3 ability resolves, you gain life equal to the creature's toughness as it exists on battlefield, which may be different than its toughness in the graveyard."

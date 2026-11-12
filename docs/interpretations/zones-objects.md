@@ -221,7 +221,7 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Code: `crates/mtg-engine/src/zones.rs` (`exiled_card_lki`); `crates/mtg-engine/src/eval.rs` (`Value::PowerOf`, `Value::ToughnessOf`).
 - Tests: `tests/rulings/r_p077_graveyard_cards.rs` (`exiled_cards_power_and_toughness_as_they_last_existed_in_the_graveyard`).
 
-## returned-card-values-current-on-the-battlefield: "Its" mana value, power or toughness, for a card the effect itself returned from a graveyard to the battlefield, are the permanent's current values
+## returned-card-values-by-wording: "Its" mana value, power or toughness, for a card the effect itself returned from a graveyard to the battlefield, are the permanent's current values
 - Kind: interpretation
 - Status: provisional
 - Rules: 608.2h "... the effect uses the current information of that object if it’s in the public zone it was expected to be in; if it’s no longer in that zone, or if the effect has moved it from a public zone to a hidden zone, the effect uses the object’s last known information. ..." / 400.7j "If an effect causes an object to move to a public zone, other parts of that effect can find that object. ..." / Cleric Class ruling (2021-07-23): "When Cleric Class's level 3 ability resolves, you gain life equal to the creature's toughness as it exists on battlefield, which may be different than its toughness in the graveyard." / Sister Hospitaller ruling (2022-10-07): "Use the mana value of the card as it last existed in the graveyard to determine the amount of life you gain." / Vanish into Memory ruling (2017-03-14): "... Since the card returned to the battlefield has no toughness, you discard no cards."
