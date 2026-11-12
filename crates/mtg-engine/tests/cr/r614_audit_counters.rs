@@ -112,3 +112,35 @@ fn a_clone_copying_nyxathid_chooses_an_opponent_of_its_own_controller() {
     cands.sort_by_key(|e| e.player().map(|p| p.0));
     assert_eq!(cands, vec![Entity::Player(P0), Entity::Player(P2)]);
 }
+
+/// P0 casts Evil Reawakened returning the Spike Feeder in P0's graveyard.
+fn reawaken_feeder(t: &mut TestGame) -> ObjectId {
+    supported("Evil Reawakened");
+    let feeder = t.graveyard(P0, "Spike Feeder");
+    cast_resolve(t, P0, "Evil Reawakened", &[obj(feeder)]);
+    t.g.current(feeder)
+}
+
+#[test]
+fn evil_reawakened_counters_and_spike_feeders_are_one_entry_for_hardened_scales() {
+    cr!("614.15", "614.1c", "122.6");
+    interp!("entering-counters-one-event");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Hardened Scales");
+    let feeder = reawaken_feeder(&mut t);
+    // Two additional from the spell's self-replacement effect, two of its own, plus one.
+    assert_eq!(plus_counters(&t, feeder), 5);
+}
+
+#[test]
+fn evil_reawakened_applies_before_essence_of_the_wild_and_its_counters_stay() {
+    cr!("614.15", "616.1a", "616.1c", "616.1f");
+    supported("Essence of the Wild");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Essence of the Wild");
+    let feeder = reawaken_feeder(&mut t);
+    assert_eq!(t.obj_now(feeder).chars.name.as_str(), "Essence of the Wild");
+    // The spell's two additional counters, but not Spike Feeder's own two (it's already
+    // a copy of Essence of the Wild when its own ability would apply).
+    assert_eq!(plus_counters(&t, feeder), 2);
+}

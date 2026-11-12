@@ -342,3 +342,48 @@ fn master_biomancer_still_gives_counters_to_a_creature_entering_as_essence_of_th
     assert_eq!(plus_counters(&t, bears), 2);
     assert!(t.obj_now(bears).chars.has_subtype("Mutant"));
 }
+
+/// P0 controls Leyline of the Void and Megrim and casts Mind Rot on P1, whose hand is
+/// Wilt-Leaf Liege and Grizzly Bears; P1's answers are `picks`.
+fn mind_rot_liege_under_leyline(picks: &[usize]) -> TestGame {
+    supported("Wilt-Leaf Liege");
+    supported("Leyline of the Void");
+    supported("Megrim");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Leyline of the Void");
+    t.battlefield(P0, "Megrim");
+    t.hand(P1, "Wilt-Leaf Liege");
+    t.hand(P1, "Grizzly Bears");
+    pick_replacements(&mut t, P1, picks);
+    cast_resolve(&mut t, P0, "Mind Rot", &[Entity::Player(P1)]);
+    t
+}
+
+#[test]
+fn a_discarded_wilt_leaf_liege_goes_where_its_owner_chooses_and_was_still_discarded() {
+    cr!("616.1", "616.1e", "616.1f", "701.9a");
+    ruling!(
+        "Wilt-Leaf Liege",
+        "and both Wilt-Leaf Liege's ability and another ability (such as that of an opponent's Leyline of the Void) instruct you to put Wilt-Leaf Liege somewhere else instead of putting it into your graveyard, you choose which one to apply."
+    );
+    ruling!(
+        "Wilt-Leaf Liege",
+        "If you discard Wilt-Leaf Liege and put it onto the battlefield, you've still discarded it. Abilities that trigger when you discard a card will still trigger."
+    );
+    let probe = mind_rot_liege_under_leyline(&[]);
+    let choices = replacement_choices(&probe);
+    assert_eq!(choices.len(), 1, "only the Liege has two effects: {choices:?}");
+    assert_eq!(choices[0].0, P1);
+    let opts = choices[0].1.clone();
+    // The Liege's own effect: it's put onto the battlefield.
+    let t = mind_rot_liege_under_leyline(&[option_index(&opts, "Wilt-Leaf Liege")]);
+    assert_eq!(t.named_on_battlefield("Wilt-Leaf Liege").len(), 1);
+    assert!(t.in_exile("Grizzly Bears"));
+    // Both cards were discarded: Megrim dealt 2 damage for each.
+    assert_eq!(t.life(P1), 16);
+    // Leyline of the Void's: it's exiled.
+    let t = mind_rot_liege_under_leyline(&[option_index(&opts, "Leyline of the Void")]);
+    assert!(t.named_on_battlefield("Wilt-Leaf Liege").is_empty());
+    assert!(t.in_exile("Wilt-Leaf Liege"));
+    assert_eq!(t.life(P1), 16);
+}

@@ -940,6 +940,19 @@ impl Game {
                         && !d.face_down
                         && d.with_counters.is_empty())
             });
+            // "If [a player] would discard [a card], put it [somewhere] instead of into
+            // [the] graveyard" (Wilt-Leaf Liege, Library of Leng, madness): once another
+            // effect has the discarded card go somewhere else (Leyline of the Void exiles
+            // it), it would no longer be put into a graveyard, so the effect no longer
+            // applies (CR 616.1f). ("Instead of putting it anywhere else" still does.)
+            if !matches!(m.to, Zone::Graveyard(_)) {
+                out.retain(|c| {
+                    !(matches!(
+                        c.def.event,
+                        ReplacementEvent::Discard(..) | ReplacementEvent::DiscardCausedBy { .. }
+                    ) && matches!(c.def.action, ReplacementAction::MoveInstead(_)))
+                });
+            }
         }
         out
     }
