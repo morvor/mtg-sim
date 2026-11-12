@@ -117,3 +117,24 @@ fn a_band_member_removed_from_combat_stays_blocked_and_its_blocker_still_divides
     assert_eq!(damage(&t, hero), 0);
     assert_eq!(t.life(P1), 20);
 }
+
+#[test]
+fn one_creature_blocking_a_band_blocks_its_member_with_menace() {
+    cr!("702.22h", "702.111b", "509.1b");
+    ruling!(
+        "Benalish Hero",
+        "The band can be blocked by any creature that could block a single creature in the band."
+    );
+    let mut t = TestGame::new(2);
+    // Wayward Giant: 4/5 menace. One creature can't block it, but blocking the Hero blocks
+    // the band.
+    let (hero, wayward, giant) = band_attack(&mut t, "Wayward Giant", false);
+    assert!(blocked(&t, wayward));
+    assert!(blockers_of(&t, wayward).contains(&giant));
+    assert!(blockers_of(&t, hero).contains(&giant));
+    // Blocking the menace creature itself with one creature is still illegal.
+    let mut t = TestGame::new(2);
+    let (hero, wayward, giant) = band_attack(&mut t, "Wayward Giant", true);
+    assert!(blocking(&t, giant).is_empty());
+    assert!(!blocked(&t, hero) && !blocked(&t, wayward));
+}
