@@ -128,7 +128,7 @@ fn an_added_creature_subtype_disappears_while_the_permanent_isnt_a_creature() {
 
 #[test]
 fn tezzerets_minus_two_keeps_a_vehicles_printed_power_and_toughness() {
-    cr!("301.7", "613.4b", "611.2a");
+    cr!("301.7b", "613.4b", "611.2a");
     ruling!(
         "Tezzeret, Betrayer of Flesh",
         "If you activate Tezzeret's second loyalty ability targeting a Vehicle, it will have its printed power and toughness."
@@ -217,7 +217,7 @@ fn ashiok_puts(t: &mut TestGame, cards: &[&str], pick: &str, x: i64) -> ObjectId
 
 #[test]
 fn ashiok_puts_a_bestow_card_in_as_a_creature_and_x_is_zero() {
-    cr!("702.103f", "107.3m", "110.2");
+    cr!("702.103b", "107.3g", "107.3m", "202.3e", "110.2");
     ruling!(
         "Ashiok, Nightmare Weaver",
         "If you put a creature card with bestow onto the battlefield, it will be a creature on the battlefield, not an Aura."
@@ -258,7 +258,7 @@ fn ashiok_puts_a_bestow_card_in_as_a_creature_and_x_is_zero() {
 
 #[test]
 fn ageless_sentinels_becomes_a_bird_giant() {
-    cr!("205.1b", "611.2a", "509.1");
+    cr!("205.1a", "611.2a", "509.1");
     ruling!(
         "Ageless Sentinels",
         "It becomes both creature type Giant and creature type Bird."
@@ -347,7 +347,7 @@ fn reanimated_zombies_keep_their_colors_and_types() {
 
 #[test]
 fn new_blood_changes_types_in_the_type_line_and_text_but_not_the_name() {
-    cr!("612.2", "201.4b");
+    cr!("612.1", "612.2");
     ruling!(
         "New Blood",
         "New Blood changes the creature type each time it appears in the creature's type line and/or rules text. It doesn't change the name of the card or any instances of the word being used as part of a card's name."
@@ -370,6 +370,22 @@ fn new_blood_changes_types_in_the_type_line_and_text_but_not_the_name() {
     // "Other Vampires get +1/+1": the Goblin no longer gets it, the Vampires do.
     assert_eq!(t.pt(gob), (1, 1));
     assert_eq!(t.pt(v2), (2, 2));
+    // Rat -> Vampire on Relentless Rats: "named Relentless Rats" in its text is part of a
+    // card name and isn't changed, so it still counts the other Relentless Rats.
+    supported("Relentless Rats");
+    let mut t = TestGame::new(2);
+    let rats = t.battlefield(P1, "Relentless Rats");
+    t.battlefield(P1, "Relentless Rats");
+    t.battlefield(P0, "Vampire Interloper");
+    assert_eq!(t.pt(rats), (3, 3));
+    choose_words(&mut t, P0, &["Rat", "Vampire"]);
+    cast_at(&mut t, P0, "New Blood", &[obj(rats)]);
+    t.resolve_all();
+    assert_eq!(ctl(&t, rats), P0);
+    let c = &t.obj_now(rats).chars;
+    assert!(c.has_subtype("Vampire") && !c.has_subtype("Rat"));
+    assert_eq!(c.name, "Relentless Rats");
+    assert_eq!(t.pt(rats), (3, 3), "still counts the other Relentless Rats");
 }
 
 #[test]
@@ -581,7 +597,7 @@ fn gornogs_bonus_follows_the_number_of_cowards() {
 
 #[test]
 fn effects_that_animate_or_change_a_permanent_last_indefinitely() {
-    cr!("611.2a", "611.2b", "514.2");
+    cr!("611.2a", "514.2");
     ruling!(
         "Siege of Towers",
         "The Mountain will remain a creature for the rest of the game. It doesn't have a creature type."
@@ -758,7 +774,7 @@ fn losing_all_abilities_lasts_indefinitely() {
 
 #[test]
 fn phyrexian_scriptures_artifact_outlasts_the_saga() {
-    cr!("611.2a", "714.4");
+    cr!("611.2a", "714.2b");
     ruling!(
         "Phyrexian Scriptures",
         "The effect of Phyrexian Scriptures's first chapter ability lasts indefinitely. It doesn't expire when Phyrexian Scriptures leaves the battlefield."
@@ -859,7 +875,7 @@ fn gaeas_liege_makes_a_land_only_a_forest_but_still_basic() {
 
 #[test]
 fn kyoshis_island_keeps_its_land_types_and_abilities() {
-    cr!("611.2a", "305.7", "714.2b");
+    cr!("611.2a", "205.1b", "305.6", "714.2b");
     ruling!(
         "The Legend of Kyoshi // Avatar Kyoshi",
         "The effect making the land an Island doesn't have a duration and will last indefinitely while that land is on the battlefield. The land retains any land types and abilities it already had. An Island has the ability \"{T}: Add {U}.\""
@@ -996,14 +1012,17 @@ fn kheru_lich_lord_exile_abilities_belong_to_the_ability_not_the_creature() {
     );
     let setup = |t: &mut TestGame| -> ObjectId {
         t.battlefield(P0, "Kheru Lich Lord");
-        let card = t.graveyard(P0, "Grizzly Bears");
+        let early = t.graveyard(P0, "Grizzly Bears");
         t.lands(P0, "Swamp", 3);
         t.set_step(P1, Step::End);
         t.answer_yes(P0, true);
         t.advance_to(P0, Step::Upkeep);
         t.settle();
-        // On the stack: nothing chosen yet.
-        assert_eq!(t.zone(card), Zone::Graveyard(P0));
+        assert_eq!(t.stack_len(), 1);
+        // In response, the Bears leave the graveyard and a Hill Giant card arrives: the
+        // card is chosen only as the ability resolves, so the Giant is returned.
+        exile(t, early);
+        let card = t.graveyard(P0, "Hill Giant");
         t.resolve_all();
         let b = t.g.current(card);
         assert!(t.on_battlefield(b));
@@ -1030,15 +1049,15 @@ fn kheru_lich_lord_exile_abilities_belong_to_the_ability_not_the_creature() {
     assert!(!has_kw(&t, b, KeywordKind::Flying));
     t.advance_to(P0, Step::End);
     t.resolve_all();
-    assert!(t.in_exile("Grizzly Bears"));
+    assert!(t.in_exile("Hill Giant"));
     // ... and dying is replaced by exile, also without abilities.
     let mut t = TestGame::new(2);
     let b = setup(&mut t);
     cast_at(&mut t, P1, "Turn to Frog", &[obj(b)]);
     t.resolve_all();
     kill(&mut t, b);
-    assert!(t.in_exile("Grizzly Bears"));
-    assert!(!t.in_graveyard(P0, "Grizzly Bears"));
+    assert!(t.in_exile("Hill Giant"));
+    assert!(!t.in_graveyard(P0, "Hill Giant"));
 }
 
 #[test]
@@ -1105,7 +1124,7 @@ fn souvenir_snatcher_keeps_an_artifact_that_becomes_a_creature() {
 
 #[test]
 fn risky_moves_control_change_outlasts_the_turn_and_the_enchantment() {
-    cr!("611.2a", "611.2b", "705.2");
+    cr!("611.2a", "705.2");
     ruling!(
         "Risky Move",
         "The change of control of creatures does not end at end of turn or even when this card leaves the battlefield."

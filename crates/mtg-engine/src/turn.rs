@@ -655,7 +655,7 @@ impl Game {
                         }
                         self.begin_turn(p, true);
                         for (mut ctx, e) in at_start {
-                            self.exec(&e, &mut ctx);
+                            crate::next_turn::exec_for_this_turn(self, &e, &mut ctx);
                         }
                         return;
                     }

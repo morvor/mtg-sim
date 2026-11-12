@@ -133,7 +133,7 @@ fn two_turns(t: &mut TestGame) {
 
 #[test]
 fn control_changes_with_no_duration_outlast_the_turn() {
-    cr!("611.2a", "613.1b", "514.2");
+    cr!("611.2a", "613.1b", "514.2", "400.7", "800.4a");
     ruling!(
         "Lullmage's Domination",
         "Once Lullmage's Domination resolves, the control effect lasts until the creature leaves the battlefield or you lose the game. It doesn't expire at the end of turn."
@@ -192,12 +192,15 @@ fn control_changes_with_no_duration_outlast_the_turn() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     steal(&mut t, "Lullmage's Domination", bears);
     concede(&mut t, P0);
+    // Back under its owner's control on the battlefield (not exiled as an object P0 still
+    // controlled as they left).
+    assert!(t.on_battlefield(bears));
     assert_eq!(ctl(&t, bears), P1);
 }
 
 #[test]
 fn control_that_lasts_ignores_the_creatures_power_later() {
-    cr!("611.2a", "608.2b");
+    cr!("611.2a", "611.2c");
     ruling!(
         "Beguiler of Wills",
         "The control-changing effect lasts indefinitely, even if the power of the creature becomes greater than the number of creatures you control after the ability resolves."
@@ -245,7 +248,7 @@ fn role_reversal_lasts_after_the_permanents_stop_sharing_a_type() {
 
 #[test]
 fn control_outlasts_the_source_leaving_or_changing_hands() {
-    cr!("611.2a", "611.2b", "613.1b");
+    cr!("611.2a", "613.1b");
     ruling!(
         "Emrakul, the World Anew",
         "The control-change effect of Emrakul's first ability lasts indefinitely. It doesn't wear off during the cleanup step or when Emrakul leaves the battlefield."
@@ -420,7 +423,7 @@ fn liliana_emblem_creatures_are_exiled_if_you_leave() {
 
 #[test]
 fn admiral_beckett_brass_control_outlasts_the_admiral() {
-    cr!("611.2a", "611.2b", "613.1b");
+    cr!("611.2a", "613.1b");
     ruling!(
         "Admiral Beckett Brass",
         "The control-change effect of Admiral Beckett Brass's triggered ability lasts indefinitely. It doesn't wear off during the cleanup step or when you lose control of Admiral Beckett Brass."
@@ -447,35 +450,44 @@ fn admiral_beckett_brass_control_outlasts_the_admiral() {
 
 #[test]
 fn admiral_beckett_brass_counts_a_teammates_pirates_in_two_headed_giant() {
-    cr!("810.2", "510.2");
+    cr!("810.2", "810.7", "805.10b", "810.9");
     ruling!(
         "Admiral Beckett Brass",
         "In a Two-Headed Giant game, combat damage dealt by Pirates your teammate controls will count when checking for Admiral Beckett Brass's ability."
     );
-    let mut t = crate::r_p050_common::two_headed_giant();
-    t.battlefield(P0, "Admiral Beckett Brass");
-    // Two Pirates of P0's and one of P1's (P0's teammate) attack the other team.
-    let ps = [
-        vanilla(&mut t, P0, "Test Pirate", "Creature — Human Pirate", (1, 1)),
-        vanilla(&mut t, P0, "Test Pirate", "Creature — Human Pirate", (1, 1)),
-        vanilla(&mut t, P1, "Test Pirate", "Creature — Human Pirate", (1, 1)),
-    ];
-    let ring = t.battlefield(P2, "Sol Ring");
-    t.advance_to(P0, Step::BeginningOfCombat);
-    let life = t.life(P2);
-    let decl: Vec<(ObjectId, Entity)> = ps.iter().map(|p| (*p, pl(P2))).collect();
-    t.attack(&decl, &[]);
-    // P0's Pirates are 2/2 with the Admiral; the teammate's isn't boosted.
-    assert_eq!(t.life(P2), life - 5, "the three Pirates hit P2");
-    t.answer_targets(P0, &[obj(ring)]);
-    t.advance_to(P0, Step::End);
-    t.resolve_all();
-    assert_eq!(ctl(&t, ring), P0);
+    // Two Pirates of P0's and one of P1's (P0's teammate) attack the other team: all three
+    // at P2, or the teammate's at P3 (then no single player was dealt combat damage by
+    // three Pirates, CR 810.9: damage is dealt to each player individually).
+    for split in [false, true] {
+        let mut t = crate::r_p050_common::two_headed_giant();
+        t.battlefield(P0, "Admiral Beckett Brass");
+        let ps = [
+            vanilla(&mut t, P0, "Test Pirate", "Creature — Human Pirate", (1, 1)),
+            vanilla(&mut t, P0, "Test Pirate", "Creature — Human Pirate", (1, 1)),
+            vanilla(&mut t, P1, "Test Pirate", "Creature — Human Pirate", (1, 1)),
+        ];
+        let ring = t.battlefield(P2, "Sol Ring");
+        t.advance_to(P0, Step::BeginningOfCombat);
+        let life = t.life(P2);
+        let decl: Vec<(ObjectId, Entity)> = ps
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (*p, pl(if split && i == 2 { P3 } else { P2 })))
+            .collect();
+        t.attack(&decl, &[]);
+        // P0's Pirates are 2/2 with the Admiral; the teammate's isn't boosted. (P2 and P3
+        // share their team's life total.)
+        assert_eq!(t.life(P2), life - 5, "the three Pirates hit P2's team");
+        t.answer_targets(P0, &[obj(ring)]);
+        t.advance_to(P0, Step::End);
+        t.resolve_all();
+        assert_eq!(ctl(&t, ring), if split { P2 } else { P0 }, "split {split}");
+    }
 }
 
 #[test]
 fn captivating_vampire_control_and_vampire_type_have_no_duration() {
-    cr!("611.2a", "611.2b", "613.1b", "613.1d");
+    cr!("611.2a", "613.1b", "613.1d", "613.7");
     ruling!(
         "Captivating Vampire",
         "The effect of Captivating Vampire’s activated ability has no duration. You retain control of the affected creature until the game ends, the creature leaves the battlefield, or a later effect causes someone else to gain control of it. It doesn’t matter whether Captivating Vampire remains on the battlefield. Similarly, the affected creature remains a Vampire in addition to its other types until the game ends, the creature leaves the battlefield, or a later effect changes its types or subtypes."
@@ -499,6 +511,12 @@ fn captivating_vampire_control_and_vampire_type_have_no_duration() {
     give_control(&mut t, bears, P1);
     assert_eq!(ctl(&t, bears), P1);
     assert!(t.obj_now(bears).chars.has_subtype("Vampire"));
+    // A later effect that sets its creature types (Turn to Frog, CR 613.7 timestamps)
+    // overrides it: a Frog, not a Vampire.
+    cast_at(&mut t, P0, "Turn to Frog", &[obj(bears)]);
+    t.resolve_all();
+    let c = &t.obj_now(bears).chars;
+    assert!(c.has_subtype("Frog") && !c.has_subtype("Vampire") && !c.has_subtype("Bear"));
 }
 
 #[test]
@@ -583,6 +601,8 @@ fn olivia_voldaren_ability_does_nothing_if_you_lost_control_of_her() {
     act_only(&mut t, P0, olivia, 1, &[obj(v)]);
     give_control(&mut t, olivia, P1);
     t.resolve_all();
+    // The target is still legal: the ability resolves, with no effect.
+    assert!(ability_resolved_from(&t, olivia));
     assert_eq!(ctl(&t, v), P1);
     // Keeping control: it works.
     let mut t = TestGame::new(2);
@@ -607,7 +627,7 @@ fn confiscation_coup_can_pay_zero_energy_for_a_zero_mana_value_permanent() {
 
 #[test]
 fn rags_riches_each_opponent_chooses_then_you_take_them_all_untargeted() {
-    cr!("101.4", "608.2c", "115.1");
+    cr!("101.4", "608.2c", "115.1", "702.11b");
     ruling!(
         "Rags // Riches",
         "In a multiplayer game, each opponent in turn order chooses a creature they control, if they control any creatures. After each opponent has done so, you gain control of each chosen creature simultaneously."
@@ -789,10 +809,15 @@ fn juxtapose_exchanges_permanents_with_shroud() {
 
 #[test]
 fn dacks_emblem_trigger_resolves_before_the_spell() {
-    cr!("603.3", "405.5", "114.4");
+    cr!("603.3", "405.5", "114.4", "611.2a");
     ruling!(
         "Dack Fayden",
         "The ability of Dack's emblem will resolve before the spell that caused it to trigger."
+    );
+    // (Its other half, the -2's effect outlasting Dack, is tested above.)
+    ruling!(
+        "Dack Fayden",
+        "The effect of Dack's second ability and the effect of the emblem's ability last indefinitely."
     );
     let mut t = TestGame::new(2);
     let d = walker(&mut t, P0, "Dack Fayden", 6);
@@ -809,6 +834,12 @@ fn dacks_emblem_trigger_resolves_before_the_spell() {
     assert_eq!(t.stack_len(), 1, "Giant Growth is still on the stack");
     t.resolve_all();
     assert_eq!(t.pt(bears), (5, 5));
+    // The emblem's control change lasts indefinitely (Dack himself is gone: he used his
+    // last loyalty on the emblem); Giant Growth's +3/+3 wore off.
+    assert!(!t.on_battlefield(d));
+    two_turns(&mut t);
+    assert_eq!(ctl(&t, bears), P0);
+    assert_eq!(t.pt(bears), (2, 2));
 }
 
 #[test]
@@ -905,7 +936,7 @@ fn elrond_a_player_with_several_votes_may_choose_the_same_creature() {
     supported("Brago's Representative");
     // P1 has two votes (Brago's Representative), both fellowship, choosing the Bears twice.
     let mut t = TestGame::new(2);
-    t.battlefield(P1, "Brago's Representative");
+    let brago = t.battlefield(P1, "Brago's Representative");
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.answer(P0, DecisionKind::Option, Answer::Index(1));
     t.answer(P1, DecisionKind::Option, Answer::Index(0));
@@ -917,12 +948,20 @@ fn elrond_a_player_with_several_votes_may_choose_the_same_creature() {
     t.g.flush_events();
     t.settle();
     t.resolve_all();
-    let chooses = t.asked()[from..]
+    let chooses: Vec<Decision> = t.asked()[from..]
         .iter()
         .filter(|(p, d)| *p == P1 && matches!(d, Decision::ChooseEntities { .. }))
-        .count();
-    assert_eq!(chooses, 2, "one choice per fellowship vote");
+        .map(|(_, d)| d.clone())
+        .collect();
+    assert_eq!(chooses.len(), 2, "one choice per fellowship vote");
+    // The second choice still offers the Bears and P1 chose them again: only the Bears
+    // changed hands (Brago's Representative wasn't taken in their place).
+    assert!(matches!(
+        &chooses[1],
+        Decision::ChooseEntities { candidates, .. } if candidates.contains(&obj(bears))
+    ));
     assert_eq!(ctl(&t, bears), P0);
+    assert_eq!(ctl(&t, brago), P1);
     // One aid vote.
     assert_eq!(t.counters(elrond, "+1/+1"), 1);
 }

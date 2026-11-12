@@ -13,7 +13,7 @@ use mtg_engine::*;
 
 #[test]
 fn lucius_stays_in_the_graveyard_if_its_target_leaves_first() {
-    cr!("608.2b", "603.3d");
+    cr!("608.2b", "603.7");
     ruling!(
         "Lucius the Eternal",
         "If the target creature leaves the battlefield before Lucius the Eternal's ability resolves, Lucius will stay in your graveyard and will not be exiled or return to the battlefield."
@@ -103,7 +103,7 @@ fn cyclopean_giant_stays_in_the_graveyard_if_its_trigger_doesnt_resolve() {
 
 #[test]
 fn great_hall_animated_the_turn_it_came_under_your_control_cant_tap_or_attack() {
-    cr!("302.6", "305.1");
+    cr!("302.6", "602.5a");
     ruling!(
         "Great Hall of the Biblioplex",
         "If this land becomes a creature but you haven't controlled it continuously since your most recent turn began, you won't be able to activate its mana ability or attack with it that turn."
@@ -284,13 +284,14 @@ fn liliana_plus_one_with_an_empty_hand() {
 
 #[test]
 fn chance_for_glory_skipped_extra_turn_never_triggers() {
-    cr!("614.10", "603.7", "500.7");
+    cr!("614.10", "603.7", "500.7", "724.1d", "724.1e");
     ruling!(
         "Chance for Glory",
         "If you somehow skip the extra turn Chance for Glory gives you or skip that turn’s end step, the delayed triggered ability never triggers."
     );
     supported("Chance for Glory");
     supported("Stranglehold");
+    supported("Sundial of the Infinite");
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Stranglehold");
     t.set_step(P0, Step::PrecombatMain);
@@ -316,6 +317,62 @@ fn chance_for_glory_skipped_extra_turn_never_triggers() {
     t.settle();
     t.resolve_all();
     assert!(t.has_lost(P0));
+    // The extra turn's end step is skipped (Sundial of the Infinite ends the turn in its
+    // main phase): the delayed trigger never triggers, then or at a later end step.
+    let mut t = TestGame::new(2);
+    let sundial = t.battlefield(P0, "Sundial of the Infinite");
+    t.set_step(P0, Step::PrecombatMain);
+    cast_at(&mut t, P0, "Chance for Glory", &[]);
+    t.resolve_all();
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    t.advance_to(P0, Step::PrecombatMain);
+    assert!(t.g.turn.extra);
+    act(&mut t, P0, sundial, 0, &[]);
+    t.advance_to(P1, Step::PrecombatMain);
+    assert!(!t.has_lost(P0));
+    t.advance_to(P0, Step::End);
+    t.settle();
+    t.resolve_all();
+    t.advance_to(P1, Step::Upkeep);
+    assert!(!t.has_lost(P0));
+}
+
+/// The same for the other "that turn's end step" template, a delayed ability waiting for
+/// a player's next turn (Oracle en-Vec): if that turn ends before its end step, it never
+/// triggers, and nothing is destroyed at a later end step.
+#[test]
+fn oracle_en_vec_end_step_of_a_turn_ended_early_never_comes() {
+    cr!("603.7a", "724.1d", "724.1e");
+    supported("Oracle en-Vec");
+    supported("Sundial of the Infinite");
+    for end_early in [true, false] {
+        let mut t = TestGame::new(2);
+        let oracle = t.battlefield(P0, "Oracle en-Vec");
+        let sundial = t.battlefield(P1, "Sundial of the Infinite");
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.set_step(P0, Step::PrecombatMain);
+        t.answer_choose(P1, &[obj(bears)]);
+        act(&mut t, P0, oracle, 0, &[pl(P1)]);
+        // P1's turn: the Bears must attack if able; P1 ends the turn in its first main
+        // phase instead (or the Bears are tapped and can't attack).
+        t.advance_to(P1, Step::PrecombatMain);
+        if end_early {
+            act(&mut t, P1, sundial, 0, &[]);
+        } else {
+            t.g.tap(bears);
+        }
+        t.advance_to(P0, Step::PrecombatMain);
+        t.advance_to(P0, Step::End);
+        t.settle();
+        t.resolve_all();
+        t.advance_to(P1, Step::Upkeep);
+        assert_eq!(
+            t.on_battlefield(bears),
+            end_early,
+            "ended early: {end_early}"
+        );
+    }
 }
 
 #[test]
@@ -401,7 +458,7 @@ fn cocoons_creature_can_still_be_untapped_by_effects() {
 
 #[test]
 fn life_matrix_only_the_creatures_controller_can_remove_the_counter() {
-    cr!("602.2", "113.6");
+    cr!("602.2");
     ruling!(
         "Life Matrix",
         "Once the counter is placed on the creature, the ability to remove it can only be activated by the player who controls the creature."
@@ -423,7 +480,7 @@ fn life_matrix_only_the_creatures_controller_can_remove_the_counter() {
 
 #[test]
 fn quarum_trench_gnomes_replace_only_white_mana() {
-    cr!("614.1a", "106.6");
+    cr!("614.1a", "106.12b");
     ruling!(
         "Quarum Trench Gnomes",
         "The ability only replaces white mana produced by the Plains. If a Plains somehow tries to produce mana of a different color (for instance, if you control a Joiner Adept), this effect will not cause it to produce colorless mana."
@@ -482,7 +539,7 @@ fn hidden_spider_checks_the_spell_for_flying() {
 
 #[test]
 fn dread_slaver_does_nothing_if_undying_returned_the_card_first() {
-    cr!("603.3b", "608.2b", "400.7");
+    cr!("603.3b", "400.7");
     ruling!(
         "Dread Slaver",
         "The card will return to the battlefield under your control only if it's still in the graveyard when the ability resolves. If it's not (perhaps because an ability like undying has already returned it to the battlefield), nothing happens."
@@ -523,30 +580,37 @@ fn hall_of_the_bandit_lord_mana_on_an_additional_cost_gives_haste() {
         "Hall of the Bandit Lord",
         "The creature has haste if the mana is spent to cover any cost of the spell, even an additional cost."
     );
-    supported("Kavu Titan");
-    let mut t = TestGame::new(2);
-    t.set_step(P0, Step::PrecombatMain);
-    let hall = t.battlefield(P0, "Hall of the Bandit Lord");
-    // Kavu Titan ({1}{G}, kicker {2}{G}) kicked: {3}{G}{G}. The mana cost is paid by
-    // {G}{G}; the Hall's {C} and two more cover the kicker.
-    t.activate(P0, hall, 0, &[]).expect("Hall");
-    assert_eq!(t.life(P0), 17);
-    mana(&mut t, P0, ManaType::G, 2);
-    mana(&mut t, P0, ManaType::C, 2);
-    let c = t.hand(P0, "Kavu Titan");
-    t.cast(P0, c).kicked(true).go();
-    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
-    t.resolve_all();
-    let kavu = t.named_on_battlefield("Kavu Titan")[0];
-    assert_eq!(t.counters(kavu, "+1/+1"), 3);
-    assert!(t
-        .obj_now(kavu)
-        .has_keyword(mtg_engine::keywords::KeywordKind::Haste));
+    supported("Llanowar Elite");
+    // Llanowar Elite (mana cost {G}, kicker {8}) kicked: {8}{G}. The mana cost has no
+    // generic part, so the Hall's {C} can only pay part of the kicker.
+    for with_hall in [true, false] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let hall = t.battlefield(P0, "Hall of the Bandit Lord");
+        if with_hall {
+            t.activate(P0, hall, 0, &[]).expect("Hall");
+            assert_eq!(t.life(P0), 17);
+        }
+        mana(&mut t, P0, ManaType::G, 1);
+        mana(&mut t, P0, ManaType::C, if with_hall { 7 } else { 8 });
+        let c = t.hand(P0, "Llanowar Elite");
+        t.cast(P0, c).kicked(true).go();
+        assert_eq!(t.g.player(P0).mana_pool.total(), 0);
+        t.resolve_all();
+        let elite = t.named_on_battlefield("Llanowar Elite")[0];
+        assert_eq!(t.counters(elite, "+1/+1"), 5, "kicked");
+        assert_eq!(
+            t.obj_now(elite)
+                .has_keyword(mtg_engine::keywords::KeywordKind::Haste),
+            with_hall,
+            "with the Hall's mana: {with_hall}"
+        );
+    }
 }
 
 #[test]
 fn ghouls_night_out_creatures_enter_together_and_see_each_other() {
-    cr!("603.6a", "101.4");
+    cr!("603.6a");
     ruling!(
         "Ghouls' Night Out",
         "The creatures will enter the battlefield simultaneously. They will see each other enter for the purposes of triggered abilities."

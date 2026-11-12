@@ -160,9 +160,33 @@ fn start(g: &mut Game, due: impl Fn(&Game, &Scheduled) -> bool) {
     for (p, s) in now {
         let mut ctx = s.ctx;
         ctx.iter_player = Some(p);
-        g.exec(&s.effect, &mut ctx);
+        if s.part == NextTurnPart::Turn {
+            exec_for_this_turn(g, &s.effect, &mut ctx);
+        } else {
+            g.exec(&s.effect, &mut ctx);
+        }
     }
     g.dirty = true;
+}
+
+/// Performs, as a turn begins, an effect created for "that turn" — what waits for a
+/// player's next turn ("At the beginning of that turn's end step, destroy each of the
+/// chosen creatures that didn't attack this turn", Oracle en-Vec) or happens as an extra
+/// turn begins ("Take an extra turn after this one. At the beginning of that turn's end
+/// step, you lose the game.") — as an effect of this turn: the delayed triggered
+/// abilities it creates for the beginning of a step trigger only at that step of this
+/// turn (CR 603.7b, "this turn"). If the turn ends without that step (it's ended early,
+/// CR 724.1d–e), they never trigger, rather than waiting for that step of a later turn
+/// (Chance for Glory's ruling).
+pub fn exec_for_this_turn(g: &mut Game, effect: &Effect, ctx: &mut Ctx) {
+    let before: Vec<u32> = g.delayed_triggers.iter().map(|d| d.id).collect();
+    g.exec(effect, ctx);
+    for d in g.delayed_triggers.iter_mut() {
+        if d.once && !before.contains(&d.id) && matches!(d.trigger, TriggerCond::BeginningOf { .. })
+        {
+            d.trigger = TriggerCond::ThisTurn(Box::new(d.trigger.clone()));
+        }
+    }
 }
 
 /// "Until end of combat on your next turn" (Brazen Cannonade): as a combat phase or a turn

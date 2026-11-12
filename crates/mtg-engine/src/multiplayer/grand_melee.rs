@@ -344,7 +344,7 @@ fn begin_marker_turn(g: &mut Game, i: usize, extra: bool) {
     // What happens as the extra turn begins ("At the beginning of that turn's end step,
     // ..."), now that it has its number.
     for (mut ctx, e) in actions {
-        g.exec(&e, &mut ctx);
+        crate::next_turn::exec_for_this_turn(g, &e, &mut ctx);
     }
 }
 
