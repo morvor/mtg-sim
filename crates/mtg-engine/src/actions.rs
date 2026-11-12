@@ -1674,6 +1674,9 @@ impl Game {
             // An object that has left its zone is a new object (CR 400.7); counters can't
             // be removed from its last known information.
             Entity::Object(o) if !self.is_live(o) => 0,
+            // Counters remain on a phased-out permanent (CR 702.26b, 702.26d): a vanishing
+            // trigger it phased out in response to removes nothing.
+            Entity::Object(o) if crate::kw::phasing::is_phased_out(self, o) => 0,
             Entity::Object(o) => self.obj(o).counter(kind),
             Entity::Player(p) => self.player(p).counter(kind),
         };
