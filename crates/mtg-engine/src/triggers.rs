@@ -2662,14 +2662,12 @@ impl Game {
             // "The sacrificed creature" of an enters ability refers to the permanent its
             // spell's costs sacrificed (Adipose Offspring's emerge, CR 702.119a), as it last
             // existed on the battlefield (its ruling; CR 608.2h): the cost objects that were
-            // permanents, by their last known information.
+            // sacrificed (this turn, as the spell was cast), by their last known
+            // information — not those the costs tapped, returned or exiled.
             let sacrificed: Vec<Entity> = ci
                 .cost_objects
                 .iter()
-                .filter(|o| {
-                    self.try_obj(**o)
-                        .is_some_and(|o| o.zone == Zone::Battlefield)
-                })
+                .filter(|o| self.history.sacrificed.iter().any(|(_, s)| s == *o))
                 .map(|o| Entity::Object(*o))
                 .collect();
             if !sacrificed.is_empty() {
