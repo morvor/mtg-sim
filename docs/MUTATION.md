@@ -79,7 +79,7 @@ Each surviving mutant is classified as
 | stack.rs | 361 | 37 (1/10) | 33 | 3 | 0 | 1 | 91.7% | 94.4% (34/36) |
 | replacement.rs | 361 | 37 (1/10) | 28 | 6 | 0 | 3 | 82.4% | 82.4% (28/34; its two tests' mutants are equivalent now) |
 | triggers.rs | 474 | 48 (1/10) | 32 | 16 | 0 | 0 | 66.7% | 75.0% (36/48) |
-| triggers.rs (2026-11-11, after the triggers audit; 13 of 55 sampled reached when written, see below) | 541 | 55 (1/10) | 11 | 2 | 0 | 0 | 84.6% | 84.6% (both survivors equivalent) |
+| triggers.rs (2026-11-11, after the triggers audit; 17 of 55 sampled reached when written, see below) | 541 | 55 (1/10) | 14 | 3 | 0 | 0 | 82.4% | 82.4% (all three survivors equivalent) |
 | resolve.rs | 314 | 32 (1/10) | 22 | 8 | 0 | 2 | 73.3% | 86.7% (26/30) |
 | actions.rs | 390 | 39 (1/10) | 27 | 5 | 3 | 4 | 85.7% | 85.7% (no new tests: no killable survivor found) |
 | layers.rs | 423 | 43 (1/10) | 34 | 5 | 1 | 3 | 87.5% | 87.5% (no killable survivor) |
@@ -431,8 +431,8 @@ implementer's last commit `7ee1be9`: 55 of 541 mutants (round-robin 0/10). Line 
 additional time" effects in `check_batch_triggers`, the cause object in the
 `AbilityTriggered` arm of `trigger_matches_ctx`) aren't in the measured copy. The run was
 still going when the audit landed (about five minutes per mutant, more beside the review's
-own builds): 13 of the 55 were reached when this was written, 11 caught, 2 missed, 0
-timeouts, 0 unviable, kill rate **84.6%** (11/13); both survivors are equivalent. The
+own builds): 17 of the 55 were reached when this was written, 14 caught, 3 missed, 0
+timeouts, 0 unviable, kill rate **82.4%** (14/17); all three survivors are equivalent. The
 first run's `269:73` survivor is gone with the code it mutated (see "triggers.rs" above).
 
 - `triggers.rs:17:5: replace keyword_has_trigger -> bool with true`: **(a) equivalent (dead
@@ -442,6 +442,11 @@ first run's `269:73` survivor is gone with the code it mutated (see "triggers.rs
   `DONE_ONCE` count is only ever inserted as it's incremented (`or_insert(0) += 1` in
   `resolve_ability`, `stack.rs`), and `triggers_this_turn` is cleared as each turn begins
   (`turn.rs`), so a present count is at least 1 and `> 0` and `>= 0` agree.
+- `triggers.rs:877:40: replace += with *= in Game::detect_triggers` (the order number of a
+  detected trigger): **(a) equivalent in practice**, as `688:40` in the first run. The
+  counter only grows (the other detection paths still increment it), so the pending
+  triggers' numbers stay non-decreasing in detection order, and the stable sort in
+  `put_triggers_on_stack`, the number's only reader, keeps that order.
 - One sampled mutant not yet reached has a test written for it in the review:
   `triggers.rs:2169:33: replace && with || in Game::trigger_matches_ctx` (`LoseControl` on a
   control change: the change is from the ability's controller *and* of the object it names).
@@ -450,12 +455,13 @@ first run's `269:73` survivor is gone with the code it mutated (see "triggers.rs
   permanents; one trigger, for Khârn) fails with it applied to the worktree and passes
   without it.
 - Remaining (not reached when this was written, to be tested one at a time as the layers.rs
-  second run's last 16 were, or with a new `scripts/mutants.sh triggers` run): the 42
-  sampled mutants from `700:13` on, in source order: `700:13`, `766:32`, `854:25`, `877:40`,
-  `936:25` and `978:24` (`detect_triggers`); `1056:39` (`fire_once_delayed`), `1094:9` (`additional_triggers`), `1135:9` (`trigger_matches`),
-  the 29 in `trigger_matches_ctx` (`1172:25` to `2426:50`, with `player_event`'s `2309:25`),
-  `2528:39` (`put_triggers_on_stack`), `2612:45` (`put_trigger_on_this_stack`), `2681:38`
-  (`resolve_trigger_immediately`) and `2728:9` (`on_sacrifice`).
+  second run's last 16 were, or with a new `scripts/mutants.sh triggers` run): the 38
+  sampled mutants from `936:25` on, in source order: `936:25` and `978:24`
+  (`detect_triggers`); `1056:39` (`fire_once_delayed`); `1094:9` (`additional_triggers`);
+  `1135:9` (`trigger_matches`); the 29 in `trigger_matches_ctx` (`1172:25` to `2426:50`, with
+  `player_event`'s `2309:25`);
+  `2528:39` (`put_triggers_on_stack`); `2612:45` (`put_trigger_on_this_stack`); `2681:38`
+  (`resolve_trigger_immediately`); and `2728:9` (`on_sacrifice`).
 
 ### resolve.rs
 
@@ -866,5 +872,5 @@ the review, see "layers.rs, second run" above): 53 of 53 sampled mutants tested,
 timeouts (**88.7%**), 6 equivalent survivors.
 
 2026-11-11: `triggers.rs` was re-sampled after the `engine-audit-1/triggers` tests (see
-"triggers.rs, second run" above): 13 of 55 sampled mutants reached when the audit landed, 11
-killed (**84.6%**), 2 equivalent survivors; the other 42 remain to be tested.
+"triggers.rs, second run" above): 17 of 55 sampled mutants reached when the audit landed, 14
+killed (**82.4%**), 3 equivalent survivors; the other 38 remain to be tested.
