@@ -219,7 +219,7 @@ fn dubious_challenge_choices() {
 
 #[test]
 fn dubious_challenge_may_exile_nothing() {
-    cr!("608.2c", "107.1c");
+    cr!("608.2c", "608.2d");
     ruling!(
         "Dubious Challenge",
         "You may choose to exile no creature cards, even if there are one or more among the top ten cards of your library."
@@ -336,80 +336,107 @@ fn court_of_bounty_land_isnt_your_land_play() {
 
 #[test]
 fn court_of_ambition_opponents_choose_in_turn_order_then_discard_together() {
-    cr!("101.4", "101.4a", "701.9a");
+    cr!("101.4", "101.4a", "608.2e", "701.9a");
     ruling!(
         "Court of Ambition",
         "As Court of Ambition's second ability resolves, first the next opponent in turn order chooses whether they are discarding or not. If they are, they choose a card without revealing it (or two cards without revealing them, if you're the monarch), then each other opponent in turn order does the same. Then each chosen card is discarded simultaneously, and finally each player who couldn't or didn't discard loses the appropriate amount of life."
     );
     supported("Court of Ambition");
+    // P1's Court, at P1's upkeep (P0 is the monarch): the opponents in turn order are P2,
+    // then P0. P2 discards, P0 doesn't.
     let mut t = TestGame::new(3);
-    t.battlefield(P0, "Court of Ambition");
-    t.g.monarch = Some(P1);
-    t.set_step(P2, Step::End);
-    let c1 = t.hand(P1, "Island");
-    // P1 discards; P2 has no cards and loses 3.
-    t.answer_yes(P1, true);
-    t.answer_choose(P1, &[obj(c1)]);
+    t.battlefield(P1, "Court of Ambition");
+    t.g.monarch = Some(P0);
+    t.set_step(P0, Step::End);
+    let c2 = t.hand(P2, "Island");
+    t.hand(P0, "Island");
+    t.answer_yes(P2, true);
+    t.answer_choose(P2, &[obj(c2)]);
+    t.answer_yes(P0, false);
+    // When P0 decides, P2's chosen card hasn't been discarded yet.
+    let seen = crate::r_s01_common::watch(
+        &mut t,
+        P0,
+        |d| matches!(d, Decision::YesNo { .. }),
+        |g| g.player(P2).hand.len(),
+    );
     let m = mark(&t);
-    t.advance_to(P0, Step::Upkeep);
+    t.advance_to(P1, Step::Upkeep);
     t.resolve_all();
-    let order: Vec<PlayerId> = t.asked()[m..]
-        .iter()
-        .filter(|(p, d)| {
-            *p != P0 && matches!(d, Decision::YesNo { .. } | Decision::ChooseEntities { .. })
-        })
-        .map(|(p, _)| *p)
-        .collect();
-    assert_eq!(order.first(), Some(&P1), "{order:?}");
-    assert!(t.in_graveyard(P1, "Island"));
-    assert_eq!(t.life(P1), 20);
-    assert_eq!(t.life(P2), 17);
+    let mut order: Vec<PlayerId> = vec![];
+    for (p, d) in &t.asked()[m..] {
+        if *p != P1
+            && matches!(d, Decision::YesNo { .. } | Decision::ChooseEntities { .. })
+            && order.last() != Some(p)
+        {
+            order.push(*p);
+        }
+    }
+    assert_eq!(order, vec![P2, P0]);
+    assert_eq!(*seen.lock().unwrap(), vec![1], "nothing discarded before P0 decided");
+    assert!(t.in_graveyard(P2, "Island"));
+    assert!(t.in_hand(P0, "Island"));
+    assert_eq!(t.life(P2), 20);
+    assert_eq!(t.life(P0), 17);
 }
 
 #[test]
 fn regnas_sanction_foes_choose_in_turn_order_then_tap_together() {
-    cr!("101.4", "608.2c");
+    cr!("101.4", "101.4b", "608.2e");
     ruling!(
         "Regna's Sanction",
         "When Regna’s Sanction resolves and your foes perform their actions, first the next foe in turn order (or, if it’s a foe’s turn, that foe) chooses an untapped creature they control, then each other foe in turn order does the same, then all other creatures those players control are tapped at the same time. Foes will know choices made by earlier players when making their choices."
     );
     supported("Regna's Sanction");
+    // P1 casts it in P1's turn, choosing foe for everyone (P1 controls no creature): the
+    // foes choose in turn order from P1, P2 and then P0.
     let mut t = TestGame::new(3);
-    let a1 = t.battlefield(P1, "Grizzly Bears");
-    let a2 = t.battlefield(P1, "Hill Giant");
-    let b1 = t.battlefield(P2, "Grizzly Bears");
-    let b2 = t.battlefield(P2, "Hill Giant");
-    // P0 chooses foe for both opponents (and friend for itself).
+    let a1 = t.battlefield(P2, "Grizzly Bears");
+    let a2 = t.battlefield(P2, "Hill Giant");
+    let b1 = t.battlefield(P0, "Grizzly Bears");
+    let b2 = t.battlefield(P0, "Hill Giant");
+    t.set_step(P1, Step::PrecombatMain);
     for _ in 0..3 {
-        t.answer(P0, DecisionKind::Option, Answer::Index(1));
+        t.answer(P1, DecisionKind::Option, Answer::Index(1));
     }
-    t.answer_choose(P1, &[obj(a2)]);
-    t.answer_choose(P2, &[obj(b1)]);
+    t.answer_choose(P2, &[obj(a2)]);
+    t.answer_choose(P0, &[obj(b1)]);
+    // When P0 chooses, P2's choice is known and nothing has been tapped yet.
+    let seen = crate::r_s01_common::watch(
+        &mut t,
+        P0,
+        |d| matches!(d, Decision::ChooseEntities { .. }),
+        |g| {
+            let tapped = g.battlefield.iter().filter(|o| g.obj(**o).tapped).count();
+            let known = g.known_apnap_choices(P0);
+            (tapped, known.iter().filter(|(p, c)| *p == P2 && c.is_some()).count())
+        },
+    );
     let m = mark(&t);
-    cast_at(&mut t, P0, "Regna's Sanction", &[]);
+    cast_at(&mut t, P1, "Regna's Sanction", &[]);
     t.resolve_all();
     let order: Vec<PlayerId> = choosers(&t, m)
         .into_iter()
-        .filter(|p| *p != P0)
+        .filter(|p| *p != P1)
         .collect();
-    assert_eq!(order, vec![P1, P2]);
+    assert_eq!(order, vec![P2, P0]);
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen.first().map(|s| s.0), Some(0), "tapped together, after the choices");
+    assert!(seen.first().is_some_and(|s| s.1 > 0), "P2's choice is known");
     assert!(tapped(&t, a1) && !tapped(&t, a2));
     assert!(!tapped(&t, b1) && tapped(&t, b2));
 }
 
 #[test]
 fn mythos_of_snapdax_choices_in_turn_order_then_sacrifice_together() {
-    cr!("101.4", "701.21a");
+    cr!("101.4", "608.2e", "701.21a");
     ruling!(
         "Mythos of Snapdax",
         "As Mythos of Snapdax resolves, first you choose which permanents you control won’t be sacrificed, then each other player in turn order does the same, knowing the choices made before them. Then each nonland permanent not chosen is sacrificed at the same time."
     );
     supported("Mythos of Snapdax");
+    // P1 casts it in P1's turn: P1 chooses, then P2, then P0.
     let mut t = TestGame::new(3);
-    let mine = [
-        t.battlefield(P0, "Grizzly Bears"),
-        t.battlefield(P0, "Hill Giant"),
-    ];
     let p1 = [
         t.battlefield(P1, "Grizzly Bears"),
         t.battlefield(P1, "Hill Giant"),
@@ -418,19 +445,30 @@ fn mythos_of_snapdax_choices_in_turn_order_then_sacrifice_together() {
         t.battlefield(P2, "Grizzly Bears"),
         t.battlefield(P2, "Hill Giant"),
     ];
+    let mine = [
+        t.battlefield(P0, "Grizzly Bears"),
+        t.battlefield(P0, "Hill Giant"),
+    ];
     t.battlefield(P0, "Blood Artist");
-    t.answer_choose(P0, &[obj(mine[0])]);
+    t.set_step(P1, Step::PrecombatMain);
     t.answer_choose(P1, &[obj(p1[1])]);
     t.answer_choose(P2, &[obj(p2[0])]);
+    t.answer_choose(P0, &[obj(mine[0])]);
+    // When P0 chooses, nothing has been sacrificed yet.
+    let seen = crate::r_s01_common::watch(
+        &mut t,
+        P0,
+        |d| matches!(d, Decision::ChooseEntities { .. }),
+        |g| g.battlefield.len(),
+    );
     let m = mark(&t);
-    cast_at(&mut t, P0, "Mythos of Snapdax", &[]);
+    cast_at(&mut t, P1, "Mythos of Snapdax", &[]);
     t.resolve();
-    let order = choosers(&t, m);
-    let pos = |p| order.iter().position(|q| *q == p).unwrap();
-    assert!(pos(P0) < pos(P1) && pos(P1) < pos(P2), "{order:?}");
-    assert!(t.on_battlefield(mine[0]) && !t.on_battlefield(mine[1]));
+    assert_eq!(choosers(&t, m), vec![P1, P2, P0]);
+    assert_eq!(*seen.lock().unwrap(), vec![7], "nothing sacrificed before P0 chose");
     assert!(!t.on_battlefield(p1[0]) && t.on_battlefield(p1[1]));
     assert!(t.on_battlefield(p2[0]) && !t.on_battlefield(p2[1]));
+    assert!(t.on_battlefield(mine[0]) && !t.on_battlefield(mine[1]));
     // All at once: Blood Artist (sacrificed too) sees every other creature die.
     assert_eq!(triggers_on_stack(&t, "dies"), 4);
 }
