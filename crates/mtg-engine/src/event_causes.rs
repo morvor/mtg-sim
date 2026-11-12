@@ -67,6 +67,19 @@ impl Cause {
     }
 }
 
+/// `ctx` for player `p` paying a cost that the resolving spell or ability asks of them
+/// ("... unless that player sacrifices a creature", CR 118.12): "you" in the cost is `p`,
+/// and what paying it does is still caused by that spell or ability and its controller, as
+/// while `p` performs part of it ([`Effect::AsPlayer`]): a player under Sigarda, Host of
+/// Herons can't sacrifice a permanent to pay an opponent's (its rulings).
+pub fn payer_ctx(ctx: &Ctx, p: PlayerId) -> Ctx {
+    Ctx {
+        controller: p,
+        resolving_controller: Some(ctx.resolving_controller.unwrap_or(ctx.controller)),
+        ..ctx.clone()
+    }
+}
+
 /// Who puts counters, and how (CR 122.6, 122.6a).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CounterPut {

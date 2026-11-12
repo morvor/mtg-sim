@@ -166,8 +166,13 @@ fn headliner_scarlett_permission_lasts_the_turn_even_if_she_leaves() {
 fn headliner_scarlett_card_cant_be_played_after_that_turn() {
     // "this turn": the permission to play it ends with the turn; the card stays face down
     // in exile. (Having been allowed to look at it, the player may still look at it while
-    // it stays exiled: CR 406.3.)
+    // it stays exiled: CR 406.3. The ruling's "can't look at" and "no one can look at it"
+    // are set aside by the user's decision of Nov 12; docs/RULING_DISCREPANCIES.md.)
     cr!("611.2a", "406.3");
+    ruling!(
+        "Headliner Scarlett",
+        "or play the card exiled with Headliner Scarlett that turn. It remains face down in exile"
+    );
     let mut t = TestGame::new(2);
     t.lands(P0, "Forest", 2);
     let (_, bears) = scarlett_exiles(&mut t, "Grizzly Bears");
@@ -178,6 +183,42 @@ fn headliner_scarlett_card_cant_be_played_after_that_turn() {
     assert!(t.cast(P0, bears).try_go().is_err());
     assert!(mtg_engine::facedown::can_look_at(&t.g, P0, bears));
     assert!(!mtg_engine::facedown::can_look_at(&t.g, P1, bears));
+}
+
+#[test]
+fn kaya_emblem_casts_a_legendary_card_headliner_scarlett_exiled_on_an_earlier_turn() {
+    // P0 was allowed to look at the face-down card Headliner Scarlett exiled, so P0 may
+    // still look at it after that turn (CR 406.3), and Kaya the Inexorable's emblem ("you
+    // may cast a legendary spell ... from among cards you own in exile") may cast it on a
+    // later upkeep (CR 406.3b). The user's decision of Nov 12 sets aside the ruling's
+    // "no one can look at it" (docs/RULING_DISCREPANCIES.md).
+    cr!("406.3", "406.3b");
+    ruling!(
+        "Kaya the Inexorable",
+        "If you own a face-down card in exile, Kaya’s emblem will let you cast it only if you can look at the card"
+    );
+    assert_supported(&["Headliner Scarlett", "Kaya the Inexorable", "Isamaru, Hound of Konda"]);
+    let mut t = TestGame::new(2);
+    let (scarlett, isamaru) = scarlett_exiles(&mut t, "Isamaru, Hound of Konda");
+    t.advance_to(P0, Step::PrecombatMain);
+    let kaya = t.battlefield(P0, "Kaya the Inexorable");
+    t.g.obj_mut(kaya).counters.insert("loyalty".into(), 7);
+    t.activate(P0, kaya, 2, &[]).unwrap();
+    t.resolve_all();
+    // Scarlett leaves, so no new card is exiled on the next upkeep.
+    t.g.destroy(scarlett, None);
+    t.settle();
+    t.advance_to(P1, Step::Upkeep);
+    // The look outlasts the turn of the permission.
+    assert!(t.obj_now(isamaru).face_down);
+    assert!(mtg_engine::facedown::can_look_at(&t.g, P0, isamaru));
+    t.answer_choose(P0, &[Entity::Object(t.g.current(isamaru))]);
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    let now = t.g.current(isamaru);
+    assert!(t.on_battlefield(now), "{}", t.dump_log());
+    assert_eq!(t.named_on_battlefield("Isamaru, Hound of Konda"), vec![now]);
 }
 
 #[test]
