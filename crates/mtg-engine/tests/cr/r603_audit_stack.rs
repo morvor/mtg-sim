@@ -482,31 +482,118 @@ fn strict_proctor_doesnt_count_an_ability_that_matched_a_card_leaving_any_zone()
     assert_eq!(t.hand_size(P0), hand + 1, "not countered");
 }
 
+/// P0 reanimates Elvish Visionary ("When this creature enters, draw a card.") with
+/// Zombify while `setup` is on the battlefield and P0 controls Desecrated Tomb ("Whenever
+/// one or more creature cards leave your graveyard, create a 1/1 black Bat creature token
+/// with flying."). Returns how many Bats P0 made and how many cards the Visionary's
+/// ability drew.
+fn reanimate_with_tomb(setup: &[(PlayerId, &str)]) -> (usize, usize) {
+    let mut t = TestGame::new(2);
+    for (p, name) in setup {
+        t.battlefield(*p, name);
+    }
+    t.battlefield(P0, "Desecrated Tomb");
+    for _ in 0..4 {
+        t.library_top(P0, "Island");
+    }
+    let elf = t.graveyard(P0, "Elvish Visionary");
+    t.lands(P0, "Swamp", 4);
+    let zombify = t.hand(P0, "Zombify");
+    let hand = t.hand_size(P0) - 1;
+    t.cast(P0, zombify).target(elf).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(elf)), "{setup:?}");
+    (tokens_named(&t, P0, "Bat"), t.hand_size(P0) - hand)
+}
+
 #[test]
-fn torpor_orb_and_panharmonicon_still_judge_a_reanimation_as_one_zone_change() {
-    cr!("603.2d");
+fn torpor_orb_and_its_family_dont_stop_a_leaves_your_graveyard_ability_on_a_reanimation() {
+    cr!("603.2", "603.6a", "603.10a");
+    interp!("ability-triggered-cause-is-the-event");
+    ruling!(
+        "Torpor Orb",
+        "Torpor Orb stops a creature's own enters-the-battlefield triggered abilities as well as other triggered abilities that would trigger when a creature enters the battlefield."
+    );
+    ruling!(
+        "Elesh Norn, Mother of Machines",
+        "Elesh Norn's second and third ability each affects a permanent's own enters-the-battlefield triggered abilities as well as other triggered abilities that trigger when that permanent enters the battlefield."
+    );
+    supported("Torpor Orb");
+    supported("Hushbringer");
+    supported("Elesh Norn, Mother of Machines");
+    supported("Desecrated Tomb");
+    supported("Elvish Visionary");
+    // The card leaving the graveyard and the permanent entering are two separate things
+    // (decided by the user, Nov 12): "Creatures entering don't cause abilities to trigger"
+    // stops the reanimated Visionary's own enters ability, but not Desecrated Tomb's,
+    // whose trigger event is the card leaving the graveyard.
+    assert_eq!(reanimate_with_tomb(&[]), (1, 1), "nothing in the way");
+    assert_eq!(reanimate_with_tomb(&[(P0, "Torpor Orb")]), (1, 0));
+    // Hushbringer ("Creatures entering or dying don't cause abilities to trigger.").
+    assert_eq!(reanimate_with_tomb(&[(P1, "Hushbringer")]), (1, 0));
+    // An opponent's Elesh Norn: "Permanents entering don't cause abilities of permanents
+    // your opponents control to trigger."
+    assert_eq!(
+        reanimate_with_tomb(&[(P1, "Elesh Norn, Mother of Machines")]),
+        (1, 0)
+    );
+}
+
+#[test]
+fn panharmonicon_yarok_and_elesh_norn_dont_double_a_leaves_your_graveyard_ability() {
+    cr!("603.2", "603.2d", "603.6a");
+    interp!("ability-triggered-cause-is-the-event");
+    ruling!(
+        "Panharmonicon",
+        "Panharmonicon affects a permanent's own enters-the-battlefield triggered abilities as well as other triggered abilities that trigger when that permanent enters the battlefield."
+    );
+    ruling!(
+        "Yarok, the Desecrated",
+        "Yarok affects a permanent's own enters-the-battlefield triggered abilities as well as other triggered abilities that trigger when that permanent enters the battlefield."
+    );
+    ruling!(
+        "Elesh Norn, Mother of Machines",
+        "Elesh Norn's second and third ability each affects a permanent's own enters-the-battlefield triggered abilities as well as other triggered abilities that trigger when that permanent enters the battlefield."
+    );
+    supported("Panharmonicon");
+    supported("Yarok, the Desecrated");
+    supported("Elesh Norn, Mother of Machines");
+    supported("Desecrated Tomb");
+    supported("Elvish Visionary");
+    // "If an artifact or creature entering causes a triggered ability of a permanent you
+    // control to trigger, that ability triggers an additional time": the Visionary's own
+    // enters ability triggers twice, Desecrated Tomb's once (decided by the user, Nov 12).
+    for statik in [
+        "Panharmonicon",
+        "Yarok, the Desecrated",
+        "Elesh Norn, Mother of Machines",
+    ] {
+        assert_eq!(reanimate_with_tomb(&[(P0, statik)]), (1, 2), "{statik}");
+    }
+}
+
+#[test]
+fn a_single_leaves_your_graveyard_ability_is_judged_like_a_one_or_more_one() {
+    cr!("603.2", "603.2d");
     interp!("ability-triggered-cause-is-the-event");
     supported("Torpor Orb");
     supported("Panharmonicon");
-    supported("Desecrated Tomb");
-    // The user's decision of Nov 12 is about the abilities that trigger on another ability
-    // triggering. The static abilities of the same template still judge the zone change as
-    // a whole, a question not yet asked (docs/agents/finish-line-plan.md §5, "Revisit
-    // later"): Torpor Orb ("Creatures entering don't cause abilities to trigger.") stops
-    // Desecrated Tomb's ability on a reanimation, and Panharmonicon ("If an artifact or
-    // creature entering causes a triggered ability of a permanent you control to trigger,
-    // that ability triggers an additional time.") makes it trigger twice.
-    for (statik, bats) in [("Torpor Orb", 0), ("Panharmonicon", 2)] {
+    supported("Syr Konrad, the Grim");
+    // Syr Konrad, the Grim's "... or a creature card leaves your graveyard, Syr Konrad
+    // deals 1 damage to each opponent" triggers once per card (not "one or more"): neither
+    // Torpor Orb nor Panharmonicon changes it on a reanimation.
+    for statik in ["Torpor Orb", "Panharmonicon"] {
         let mut t = TestGame::new(2);
         t.battlefield(P0, statik);
-        t.battlefield(P0, "Desecrated Tomb");
+        t.battlefield(P0, "Syr Konrad, the Grim");
         let bears = t.graveyard(P0, "Grizzly Bears");
         t.lands(P0, "Swamp", 4);
         let zombify = t.hand(P0, "Zombify");
         t.cast(P0, zombify).target(bears).go();
+        t.resolve();
+        assert_eq!(triggers_of(&t, "Syr Konrad, the Grim"), 1, "{statik}");
         t.resolve_all();
-        assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "{statik}");
-        assert_eq!(tokens_named(&t, P0, "Bat"), bats, "{statik}");
+        assert_eq!(t.life(P1), 19, "{statik}");
     }
 }
 

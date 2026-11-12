@@ -9,6 +9,15 @@
 //! Replacement effects and "as [this] enters" abilities, which aren't triggered
 //! abilities, still apply. The text is parsed in `oracle/patterns/r603_torpor.rs`.
 //!
+//! A card put onto the battlefield from another zone both leaves that zone and enters the
+//! battlefield, two separate things: an ability whose matched trigger event is the card
+//! leaving the zone it came from ("Whenever one or more creature cards leave your
+//! graveyard", Desecrated Tomb on a reanimation) isn't caused to trigger by the permanent
+//! entering, so these statics don't stop it (decided by the user, Nov 12; interpretation
+//! `ability-triggered-cause-is-the-event`; `Game::matched_leaving_as_it_entered`). A
+//! creature dying is judged as a whole: Hushbringer stops a "from anywhere" ability of
+//! another permanent (its rulings).
+//!
 //! The permanent is looked at as it exists on the battlefield: after entering, or
 //! immediately before dying. A permanent entering at the same time as the static's
 //! source is affected (its statics apply once it's on the battlefield); so is one dying
@@ -146,7 +155,8 @@ fn statics<'a>(
 }
 
 /// Whether `ev` is a permanent entering that causes no ability at all to trigger because
-/// of such a static ability.
+/// of such a static ability (an ability that matched the card leaving the zone it came
+/// from can still trigger: see [`suppressed_for`]).
 pub fn entering_triggers_nothing(g: &Game, ev: &Event) -> bool {
     let Some((kind @ "enter", obj)) = event_object(ev) else {
         return false;
@@ -159,16 +169,23 @@ pub fn entering_triggers_nothing(g: &Game, ev: &Event) -> bool {
 /// Whether `ev` doesn't cause the triggered ability of `src` (controlled by `src_ctl`;
 /// no source: a delayed triggered ability without one)
 /// to trigger, the ability looking back in time (`look_back`, CR 603.10a) or not.
+/// `left_zone`: the ability's trigger event that matched `ev`, a card put onto the
+/// battlefield from another zone, is the card leaving that zone, which the permanent
+/// entering doesn't cause (`ability-triggered-cause-is-the-event`).
 pub fn suppressed_for(
     g: &Game,
     ev: &Event,
     src: Option<ObjectId>,
     src_ctl: PlayerId,
     look_back: bool,
+    left_zone: bool,
 ) -> bool {
     let Some((kind, obj)) = event_object(ev) else {
         return false;
     };
+    if kind == "enter" && left_zone {
+        return false;
+    }
     // The dying card's own "put into a graveyard from anywhere" ability (it doesn't look
     // back) still triggers.
     if kind == "die" && !look_back {
