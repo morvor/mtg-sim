@@ -292,7 +292,8 @@ def exempt_texts(names, cards, texts):
     for oids, needle, _ in exemptions(names, cards):
         for o in oids:
             for t in texts.get(o, ()):
-                if needle in normalize(t):
+                # An empty needle names only a blank ruling (one with no text at all).
+                if (needle in normalize(t)) if needle else not normalize(t):
                     out.add(t)
     return out
 

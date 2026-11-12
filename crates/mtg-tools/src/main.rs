@@ -1000,13 +1000,18 @@ fn match_ruling_refs<'a>(
         }
         let n = mtg_data::normalize_text(needle);
         let mut found = false;
-        if !n.is_empty() {
-            for c in &cs {
-                for r in rulings.for_oracle_id(&c.oracle_id) {
-                    if mtg_data::normalize_text(&r.comment).contains(&n) {
-                        hit.insert((c.oracle_id.clone(), r.comment.clone()));
-                        found = true;
-                    }
+        for c in &cs {
+            for r in rulings.for_oracle_id(&c.oracle_id) {
+                let text = mtg_data::normalize_text(&r.comment);
+                // An empty needle names only a blank ruling (one with no text at all).
+                let matches = if n.is_empty() {
+                    text.is_empty()
+                } else {
+                    text.contains(&n)
+                };
+                if matches {
+                    hit.insert((c.oracle_id.clone(), r.comment.clone()));
+                    found = true;
                 }
             }
         }
