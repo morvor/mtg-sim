@@ -19,7 +19,10 @@ explain it, is exempt only by a register decision about that question (Gnoll War
 X", by `x-in-a-cost-equal-to-a-cards-mana-cost-is-0`; Arbiter of Knollridge's, by
 `arbiter-of-knollridge-uses-controllers-range`; Fiery Annihilation's "is an illegal target
 when Fiery Annihilation begins to resolve", by
-`dependent-target-checked-against-an-illegal-target`). A ruling the data attaches to the
+`dependent-target-checked-against-an-illegal-target`; or by the user's decision on that
+ruling, logged in `docs/RULING_DISCREPANCIES.md`, when the engine simply follows the CR and
+no register entry is needed: Headliner Scarlett's "no one can look at it", by the decision
+of Nov 12, the engine following CR 406.3). A ruling the data attaches to the
 wrong card is never exempt: it is tested on the card it describes and cited under the card it is
 attached to.
 Every exemption whose reason calls the ruling outdated, superseded, overridden,
