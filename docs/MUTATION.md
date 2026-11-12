@@ -79,6 +79,7 @@ Each surviving mutant is classified as
 | stack.rs | 361 | 37 (1/10) | 33 | 3 | 0 | 1 | 91.7% | 94.4% (34/36) |
 | replacement.rs | 361 | 37 (1/10) | 28 | 6 | 0 | 3 | 82.4% | 82.4% (28/34; its two tests' mutants are equivalent now) |
 | triggers.rs | 474 | 48 (1/10) | 32 | 16 | 0 | 0 | 66.7% | 75.0% (36/48) |
+| triggers.rs (2026-11-11, after the triggers audit; 17 of 55 sampled reached when written, see below) | 541 | 55 (1/10) | 14 | 3 | 0 | 0 | 82.4% | 82.4% (all three survivors equivalent) |
 | resolve.rs | 314 | 32 (1/10) | 22 | 8 | 0 | 2 | 73.3% | 86.7% (26/30) |
 | actions.rs | 390 | 39 (1/10) | 27 | 5 | 3 | 4 | 85.7% | 85.7% (no new tests: no killable survivor found) |
 | layers.rs | 423 | 43 (1/10) | 34 | 5 | 1 | 3 | 87.5% | 87.5% (no killable survivor) |
@@ -373,7 +374,14 @@ so on refer to); the field is only read by abilities whose wording refers to it.
   in a batch's look-back snapshot have left the battlefield): **(b) not killed**. An object
   that left has a new id (CR 400.7), so its old id is never live and the `!is_live` half
   decides; the mutant differs only for a source still on the battlefield that lost the
-  triggered ability between the event and the check, which no test sets up.
+  triggered ability between the event and the check, which no test sets up. 2026-11-11:
+  that case was an engine bug (CR 603.10a: the abilities that existed immediately before
+  the event look back, also on a permanent that stays but lost the ability because of the
+  event), found by the `engine-audit-1/triggers` audit. The code is gone:
+  `check_batch_triggers` adds every snapshot source that doesn't have the ability now,
+  pinned by `a_one_or_more_ability_lost_because_of_the_event_still_triggers_on_it`
+  (`tests/cr/r603_audit_simultaneous.rs`: an artifact with a "one or more creatures you
+  control die" ability only while you control a Cleric, and a Wrath).
 - `triggers.rs:602:29: replace && with || in Game::detect_triggers` (abilities of a
   permanent that phases out, and of what's attached to it, that look back for the phasing
   event): **(a) equivalent**. The extra abilities the mutant adds don't trigger on a
@@ -413,6 +421,47 @@ so on refer to); the field is only read by abilities whose wording refers to it.
   supported yet, so the test uses a custom permanent. Killed by
   `tests/cr/r120_010_excess_combat_damage_trigger.rs` (a 3/3 blocked by a 1/1 deals
   excess combat damage).
+
+### triggers.rs, second run (2026-11-11)
+
+Run after the `engine-audit-1/triggers` tests (the implementer's 74 tests in
+`tests/cr/r603_audit_*.rs`, with that audit's three engine fixes) against the file at the
+implementer's last commit `7ee1be9`: 55 of 541 mutants (round-robin 0/10). Line numbers are
+`7ee1be9`'s; the review's later edits to the file (the look-back snapshot of the "triggers an
+additional time" effects in `check_batch_triggers`, the cause object in the
+`AbilityTriggered` arm of `trigger_matches_ctx`) aren't in the measured copy. The run was
+still going when the audit landed (about five minutes per mutant, more beside the review's
+own builds): 17 of the 55 were reached when this was written, 14 caught, 3 missed, 0
+timeouts, 0 unviable, kill rate **82.4%** (14/17); all three survivors are equivalent. The
+first run's `269:73` survivor is gone with the code it mutated (see "triggers.rs" above).
+
+- `triggers.rs:17:5: replace keyword_has_trigger -> bool with true`: **(a) equivalent (dead
+  code)**, as in the first run: the function still has no caller.
+- `triggers.rs:561:49: replace > with >= in Game::check_batch_triggers` ("Do this only once
+  each turn", CR 603.2h: whether the action was taken this turn): **(a) equivalent**. The
+  `DONE_ONCE` count is only ever inserted as it's incremented (`or_insert(0) += 1` in
+  `resolve_ability`, `stack.rs`), and `triggers_this_turn` is cleared as each turn begins
+  (`turn.rs`), so a present count is at least 1 and `> 0` and `>= 0` agree.
+- `triggers.rs:877:40: replace += with *= in Game::detect_triggers` (the order number of a
+  detected trigger): **(a) equivalent in practice**, as `688:40` in the first run. The
+  counter only grows (the other detection paths still increment it), so the pending
+  triggers' numbers stay non-decreasing in detection order, and the stable sort in
+  `put_triggers_on_stack`, the number's only reader, keeps that order.
+- One sampled mutant not yet reached has a test written for it in the review:
+  `triggers.rs:2169:33: replace && with || in Game::trigger_matches_ctx` (`LoseControl` on a
+  control change: the change is from the ability's controller *and* of the object it names).
+  `a_lose_control_of_itself_ability_ignores_the_permanents_taken_with_it`
+  (`tests/cr/r603_audit_lookback.rs`: Insurrection takes Khârn the Betrayer with two other
+  permanents; one trigger, for Khârn) fails with it applied to the worktree and passes
+  without it.
+- Remaining (not reached when this was written, to be tested one at a time as the layers.rs
+  second run's last 16 were, or with a new `scripts/mutants.sh triggers` run): the 38
+  sampled mutants from `936:25` on, in source order: `936:25` and `978:24`
+  (`detect_triggers`); `1056:39` (`fire_once_delayed`); `1094:9` (`additional_triggers`);
+  `1135:9` (`trigger_matches`); the 29 in `trigger_matches_ctx` (`1172:25` to `2426:50`, with
+  `player_event`'s `2309:25`);
+  `2528:39` (`put_triggers_on_stack`); `2612:45` (`put_trigger_on_this_stack`); `2681:38`
+  (`resolve_trigger_immediately`); and `2728:9` (`on_sacrifice`).
 
 ### resolve.rs
 
@@ -821,3 +870,7 @@ simultaneous.rs). Re-running a file later: `scripts/mutants.sh <stem>` for a new
 2026-11-10: `layers.rs` was re-sampled after the `engine-audit-1/layers` tests (66 tests after
 the review, see "layers.rs, second run" above): 53 of 53 sampled mutants tested, 45 killed and 2
 timeouts (**88.7%**), 6 equivalent survivors.
+
+2026-11-11: `triggers.rs` was re-sampled after the `engine-audit-1/triggers` tests (see
+"triggers.rs, second run" above): 17 of 55 sampled mutants reached when the audit landed, 14
+killed (**82.4%**), 3 equivalent survivors; the other 38 remain to be tested.
