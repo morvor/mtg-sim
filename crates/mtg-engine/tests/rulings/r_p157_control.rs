@@ -81,7 +81,7 @@ fn rainbow_vale_tapped_during_an_end_step_changes_at_the_next_turns_end_step() {
 
 #[test]
 fn rainbow_vale_the_activating_player_chooses_the_opponent_as_the_trigger_resolves() {
-    cr!("603.7d", "603.7a", "608.2d");
+    cr!("603.7e", "603.7a", "608.2d");
     ruling!(
         "Rainbow Vale",
         "If control of Rainbow Vale has somehow changed before the “at end of turn” ability resolves, the player who activated the mana ability (not the current controller of Rainbow Vale) chooses one of their opponents to gain control of it."

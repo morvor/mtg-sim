@@ -47,7 +47,7 @@ fn hungry_lynx_the_opponent_who_creates_the_rat_owns_it() {
 
 #[test]
 fn hungry_lynx_protection_from_rats_means_four_things() {
-    cr!("702.16b", "702.16c", "702.16d", "702.16e", "704.5m");
+    cr!("702.16b", "702.16c", "702.16d", "702.16e", "702.16f", "704.5m", "704.5n");
     ruling!(
         "Hungry Lynx",
         "If a permanent has protection from Rats, it means four things: 1) Damage from a source that’s a Rat that would be dealt to that permanent is prevented. 2) Auras and Equipment that are somehow Rats can’t be attached to that permanent. 3) Rats can’t block that permanent. 4) That permanent can’t be the target of abilities of Rats or spells that are somehow Rats."
@@ -81,6 +81,24 @@ fn hungry_lynx_protection_from_rats_means_four_things() {
     t.g.attach(aura, obj(bears));
     t.settle();
     assert!(t.on_battlefield(aura));
+    // 2) An Equipment that's a Rat attached to the Lynx becomes unattached (it stays on
+    // the battlefield); attached to the Bears, it stays attached.
+    let shiv = custom_card(
+        "Rat Shiv",
+        "Kindred Artifact — Rat Equipment",
+        "{1}",
+        None,
+        "Equipped creature gets +1/+1.\nEquip {1}",
+    );
+    let eq = t.custom(P0, shiv.clone(), Zone::Battlefield);
+    t.g.attach(eq, obj(lynx));
+    t.settle();
+    assert!(t.on_battlefield(eq));
+    assert_eq!(t.obj_now(eq).attached_to, None, "a Rat Equipment can't equip the Lynx");
+    let eq = t.custom(P0, shiv, Zone::Battlefield);
+    t.g.attach(eq, obj(bears));
+    t.settle();
+    assert_eq!(t.obj_now(eq).attached_to, Some(obj(bears)));
     // 4) Spells that are Rats can't target it: the Rat Aura spell.
     t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
     let spell = t.custom(P1, def, Zone::Hand(P1));
@@ -131,7 +149,7 @@ fn hungry_lynx_nothing_else_is_prevented() {
 
 #[test]
 fn hungry_lynx_dying_with_a_rat_triggers_but_gets_no_counter() {
-    cr!("603.10a", "603.2", "608.2b");
+    cr!("603.10a", "603.2", "700.4");
     ruling!(
         "Hungry Lynx",
         "If Hungry Lynx dies at the same time as a Rat, its ability triggers, but Hungry Lynx won't be on the battlefield as that ability resolves. It can’t be saved by the +1/+1 counter that would have been put on it. The same is true of any other Cats you control that die at the same time. Your remaining Cats will each get a +1/+1 counter."

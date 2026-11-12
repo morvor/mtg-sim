@@ -1,7 +1,7 @@
 //! Rulings batch P157 — copies: Narset's Reversal (copying a spell, then returning it to
 //! its owner's hand, CR 707.10, 704.5e), Sea Gate Stormcaller's delayed trigger, copies of
-//! permanent spells becoming tokens (CR 707.10f, 111.12), token copies of tokens (X is
-//! 0, CR 107.3f), copied enters abilities (Mythos of Illuna), last known information of
+//! permanent spells becoming tokens (CR 707.10f, 608.3f), token copies of tokens (X is
+//! 0, CR 107.3g), copied enters abilities (Mythos of Illuna), last known information of
 //! a copied permanent (Scute Swarm), new targets for copies (Increasing Vengeance), and
 //! base power and toughness set by Will, Scholar of Frost (CR 613.4b).
 
@@ -50,7 +50,6 @@ fn narsets_reversal_returning_a_copy_makes_it_cease_to_exist() {
         "If a copy of a spell is returned to its owner’s hand, it’s moved there, then it will cease to exist as a state-based action."
     );
     let mut t = TestGame::new(2);
-    let bears = t.battlefield(P0, "Hill Giant");
     let shock = cast_at(&mut t, P1, "Shock", &[pl(P0)]);
     // P1 copies its own Shock with Twincast (the copy also at P0).
     t.answer_yes(P1, false);
@@ -60,7 +59,8 @@ fn narsets_reversal_returning_a_copy_makes_it_cease_to_exist() {
     assert_eq!(copies.len(), 1);
     let copy = copies[0];
     let hand = t.hand_size(P1);
-    // P0 reverses the copy: P0's copy of it goes at the Giant... no: at P1.
+    // P0 reverses the copy: P0's own copy of it is aimed at P1, and the copy returns to
+    // P1's hand.
     cast_at(&mut t, P0, "Narset's Reversal", &[obj(copy)]);
     t.answer_yes(P0, true);
     t.answer_targets(P0, &[pl(P1)]);
@@ -72,12 +72,11 @@ fn narsets_reversal_returning_a_copy_makes_it_cease_to_exist() {
     // P0's copy hit P1; the original Shock hit P0.
     assert_eq!(t.life(P1), 18);
     assert_eq!(t.life(P0), 18);
-    let _ = bears;
 }
 
 #[test]
 fn narsets_reversal_copies_any_instant_or_sorcery_and_keeps_x() {
-    cr!("707.10", "707.10c", "107.3c");
+    cr!("707.10", "707.10c", "107.3a");
     ruling!(
         "Narset's Reversal",
         "Narset’s Reversal can copy any instant or sorcery spell, not just one with targets."
@@ -113,7 +112,7 @@ fn narsets_reversal_copies_any_instant_or_sorcery_and_keeps_x() {
 
 #[test]
 fn hazel_and_octomancer_token_copies_have_x_zero() {
-    cr!("107.3f", "707.2", "202.3");
+    cr!("107.3g", "202.3e", "707.2");
     ruling!(
         "Hazel of the Rootbloom",
         "If the copied token has {X} in its mana cost, X is 0."
@@ -144,7 +143,7 @@ fn hazel_and_octomancer_token_copies_have_x_zero() {
 
 #[test]
 fn sea_gate_stormcaller_copies_even_if_it_left_or_the_spell_was_countered() {
-    cr!("603.7c", "707.10", "608.2h");
+    cr!("113.7a", "603.7a", "707.10", "608.2h");
     ruling!(
         "Sea Gate Stormcaller",
         "A copy is created even if Sea Gate Stormcaller leaves the battlefield before its delayed triggered ability is created."
@@ -220,7 +219,7 @@ fn sea_gate_stormcaller_x_counts_for_mana_value_and_the_copy_keeps_it() {
 
 #[test]
 fn tomb_of_horrors_adventurer_copied_permanent_spells_arent_created_tokens() {
-    cr!("707.10f", "111.12", "614.1a");
+    cr!("707.10f", "608.3f", "614.1a");
     ruling!(
         "Tomb of Horrors Adventurer",
         "A resolving copy of a permanent spell becomes a token, so the token isn't “created.” Effects that care about a token being created won't interact with a token that enters the battlefield because the triggered ability copied a permanent spell."
@@ -352,7 +351,7 @@ fn increasing_vengeance_copies_new_targets_each() {
 
 #[test]
 fn rowans_emblem_pays_two_only_once() {
-    cr!("118.8", "707.10");
+    cr!("118.12", "707.10");
     ruling!(
         "Rowan, Scholar of Sparks // Will, Scholar of Frost",
         "For Rowan’s emblem, you can pay {2} only once. You can’t pay more to copy the spell more than once."
@@ -378,7 +377,7 @@ fn rowans_emblem_pays_two_only_once() {
 
 #[test]
 fn wills_base_power_and_toughness_under_other_modifications() {
-    cr!("613.4b", "613.4c", "613.3");
+    cr!("613.4", "613.4b", "613.4c");
     ruling!(
         "Rowan, Scholar of Sparks // Will, Scholar of Frost",
         "For Will’s first loyalty ability, any effects that modify a creature’s power and/or toughness without setting them to a specific value (i.e. ones that don’t affect base power and/or toughness) will apply after its base power and toughness are set, regardless of the order those effects were created. The same is true for counters that modify its power and toughness."

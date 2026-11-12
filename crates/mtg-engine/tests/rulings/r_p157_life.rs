@@ -1,7 +1,7 @@
 //! Rulings batch P157 — life lost and gained: "if you lost life last turn" (First
 //! Response, Paladin of Atonement), "the first time each turn" (Vengeful Warchief),
 //! triggers on paying life as a cost (CR 601.2i, 602.2b), last known toughness (CR
-//! 603.10a), damage to each opponent in Two-Headed Giant (CR 810.7), and intervening "if"
+//! 603.10a), damage to each opponent in Two-Headed Giant (CR 810.9), and intervening "if"
 //! clauses checked twice (Aerith, CR 603.4).
 
 use crate::r_p157_common::*;
@@ -40,19 +40,26 @@ fn first_response_lost_life_last_turn_one_soldier() {
         "Only one Soldier will be created no matter how much life was lost."
     );
     supported("First Response");
+    // P0's only life loss is 2 damage, after which P0 gains 8 life, all before First
+    // Response is on the battlefield.
     let mut t = TestGame::new(2);
-    // P0 is dealt 2 damage, gains 8 life, and loses 3 more, all before First Response
-    // is on the battlefield.
     shocked(&mut t, P0);
     gain(&mut t, P0, 8);
-    lose(&mut t, P0, 3);
-    assert_eq!(t.life(P0), 23);
+    assert_eq!(t.life(P0), 26);
     t.battlefield(P0, "First Response");
     to_upkeep(&mut t, P1);
     t.resolve_all();
     assert_eq!(with_subtype(&t, P0, "Soldier").len(), 1);
     // In P1's turn P0 lost no life: nothing at P0's upkeep.
     to_upkeep(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(with_subtype(&t, P0, "Soldier").len(), 1);
+    // Losing life twice, 7 in all: still one Soldier.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "First Response");
+    shocked(&mut t, P0);
+    lose(&mut t, P0, 5);
+    to_upkeep(&mut t, P1);
     t.resolve_all();
     assert_eq!(with_subtype(&t, P0, "Soldier").len(), 1);
 }
@@ -95,7 +102,7 @@ fn paladin_of_atonement_cares_only_whether_you_lost_life() {
 
 #[test]
 fn paladin_of_atonement_gains_its_last_known_toughness() {
-    cr!("603.10a", "119.3");
+    cr!("603.10a", "119.3", "107.1b");
     ruling!(
         "Paladin of Atonement",
         "To determine how much life you gain for the last ability, use Paladin of Atonement’s toughness as it last existed on the battlefield. If its toughness was less than 0, you won’t gain life. (You also won’t lose life.)."
@@ -120,7 +127,7 @@ fn paladin_of_atonement_gains_its_last_known_toughness() {
 
 #[test]
 fn vengeful_warchief_not_if_you_already_lost_life_this_turn_and_one_counter() {
-    cr!("603.2", "603.10");
+    cr!("603.2", "119.3");
     ruling!(
         "Vengeful Warchief",
         "If Vengeful Warchief comes under your control after you’ve already lost life in a turn, its ability can’t trigger during that turn."
@@ -148,7 +155,7 @@ fn vengeful_warchief_not_if_you_already_lost_life_this_turn_and_one_counter() {
 
 #[test]
 fn paying_life_triggers_after_activation_before_resolution() {
-    cr!("602.2b", "601.2i", "603.3", "118.3");
+    cr!("602.2b", "601.2i", "603.3", "119.4");
     ruling!(
         "Vengeful Warchief",
         "If you pay life to cast a spell or activate an ability, you don’t put a +1/+1 counter on Vengeful Warchief until after you’ve finished casting that spell or activating that ability. You put the counter on Vengeful Warchief before that spell or ability resolves."

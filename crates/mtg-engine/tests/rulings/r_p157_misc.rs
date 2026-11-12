@@ -82,6 +82,9 @@ fn sefris_looks_at_the_card_in_the_graveyard() {
 #[test]
 fn emeria_shepherd_nonland_permanent_cards() {
     cr!("110.4", "109.2");
+    // The ruling predates battles: under today's rules (CR 110.4) a battle card is a
+    // nonland permanent card too (`docs/RULING_DISCREPANCIES.md`, "Not yet
+    // investigated").
     ruling!(
         "Emeria Shepherd",
         "A \"nonland permanent card\" is an artifact, creature, enchantment, or planeswalker card."
@@ -94,6 +97,7 @@ fn emeria_shepherd_nonland_permanent_cards() {
         t.graveyard(P0, "Grizzly Bears"),
         t.graveyard(P0, "Pacifism"),
         t.graveyard(P0, "Chandra Nalaar"),
+        t.graveyard(P0, "Invasion of Zendikar"),
     ];
     let no = [
         t.graveyard(P0, "Forest"),
@@ -119,7 +123,7 @@ fn emeria_shepherd_nonland_permanent_cards() {
 
 #[test]
 fn urzas_rage_and_devious_cover_up_uncounterable_targets() {
-    cr!("701.6b", "608.2c", "115.1");
+    cr!("101.2", "701.6a", "608.2c", "115.1");
     ruling!(
         "Urza's Rage",
         "A spell or ability that counters spells can still target Urza's Rage. When that spell or ability resolves, Urza's Rage won't be countered, but any additional effects of that spell or ability will still happen."
@@ -175,7 +179,7 @@ fn devious_cover_up_cant_target_itself() {
 
 #[test]
 fn the_eagles_are_coming_counts_returned_tokens() {
-    cr!("111.8", "603.7c", "704.5d");
+    cr!("603.7a", "608.2h", "704.5d");
     ruling!(
         "The Eagles Are Coming!",
         "Any creature tokens that were returned to your hand are counted by the delayed triggered ability. You'll get a Bird Soldier token for each of them."
@@ -286,7 +290,7 @@ fn cleansing_meditation_auras_return_onto_permanents_already_there() {
 
 #[test]
 fn behind_the_mask_overwrites_earlier_setting_effects_only() {
-    cr!("613.4b", "613.4c", "613.3");
+    cr!("613.4", "613.4b", "613.4c");
     ruling!(
         "Behind the Mask",
         "Behind the Mask will overwrite any previous effects that set a creature or Vehicle's power and toughness to specific numbers. Effects that otherwise modify its power and toughness will still apply no matter when they took effect. The same is true for +1/+1 counters."
@@ -558,7 +562,7 @@ fn the_necrobloom_dredge_any_draw_one_dredge_per_draw() {
 
 #[test]
 fn emiel_triggers_for_creatures_it_flickers() {
-    cr!("603.6a", "610.3");
+    cr!("603.6a", "400.7");
     ruling!(
         "Emiel the Blessed",
         "Emiel's second ability triggers whenever any creature other than itself enters the battlefield under your control, including those returned by its first ability."
@@ -598,7 +602,7 @@ fn fblthp_shuffles_before_the_spell_even_if_countered() {
 
 #[test]
 fn fblthp_must_be_on_the_battlefield_to_trigger() {
-    cr!("603.6", "113.6");
+    cr!("603.2", "113.6");
     ruling!(
         "Fblthp, the Lost",
         "Fblthp's last ability triggers only if it's on the battlefield when it becomes the target of a spell."

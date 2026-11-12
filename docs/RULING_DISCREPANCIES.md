@@ -670,6 +670,20 @@ decides whether they become a conflict case.
   `hexproof_until_it_deals_damage_targets_chosen_after_the_damage`). Whether the Core Set
   2019 release notes (2018; ormos mirror) have the same spelling wasn't checked: the mirror
   wasn't reachable from that session. No kind fits a misspelled name.
+- **Emeria Shepherd, Ajani Unyielding, Genesis Hydra, Illuna, Apex of Wishes** (rulings-P157
+  review): "A "nonland permanent card" is an artifact, creature, enchantment, or planeswalker
+  card." (Emeria Shepherd, 2015-08-25) and "A nonland permanent card is an artifact,
+  creature, enchantment, or planeswalker card." (Ajani Unyielding 2017-02-09, Genesis Hydra
+  2017-11-17, Illuna, Apex of Wishes 2020-04-17) beside CR 110.4: "There are six permanent
+  types: artifact, battle, creature, enchantment, land, and planeswalker. ..." The rulings
+  were written before battles existed (the battle card type came with March of the Machine,
+  2023; the CR texts of that change weren't read in this review), so read as a definition
+  they leave out battle cards, which are nonland permanent cards today. Possibly outdated.
+  The rulings stay cited for the card types they name (`tests/rulings/r_p157_misc.rs`,
+  `emeria_shepherd_nonland_permanent_cards`; `tests/rulings/r_p013_cast_trigger_effects.rs`,
+  `ajani_unyielding_takes_artifact_creature_enchantment_and_planeswalker_cards`); the engine
+  follows CR 110.4 (in the first of those tests, Invasion of Zendikar, a battle card, is
+  among the cards Emeria Shepherd's ability can target).
 - Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (copying errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the

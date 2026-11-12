@@ -34,7 +34,7 @@ fn p0_upkeep(t: &mut TestGame) {
 
 #[test]
 fn evolutionary_escalation_targets_on_the_stack_and_one_illegal() {
-    cr!("603.3d", "608.2b", "117.5");
+    cr!("603.3d", "608.2b", "117.5", "503.1a");
     ruling!(
         "Evolutionary Escalation",
         "You choose two targets for Evolutionary Escalation’s ability as it’s put onto the stack. No player may cast spells or activate abilities during your turn before this happens."
@@ -44,25 +44,53 @@ fn evolutionary_escalation_targets_on_the_stack_and_one_illegal() {
         "If one target becomes illegal before Evolutionary Escalation’s ability resolves, you’ll put three +1/+1 counters on the target that’s still legal."
     );
     supported("Evolutionary Escalation");
+    // The game runs through P0's next upkeep: the first time P0 gets priority in it, the
+    // ability is already on the stack, its targets chosen (CR 117.5).
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Evolutionary Escalation");
     let mine = t.battlefield(P0, "Grizzly Bears");
     let theirs = t.battlefield(P1, "Savannah Lions");
     t.answer_targets(P0, &[obj(mine)]);
     t.answer_targets(P0, &[obj(theirs)]);
-    // When the upkeep begins, the ability is put on the stack with its targets before
-    // P0 receives priority (CR 117.5): nobody can act before the targets are chosen.
+    pass_turn(&mut t);
+    let seen = watch(
+        &mut t,
+        P0,
+        |d| matches!(d, Decision::Priority { .. }),
+        |g| {
+            let targets = g
+                .stack
+                .last()
+                .and_then(|s| g.obj(*s).stack.as_deref())
+                .map_or(0, |si| {
+                    si.chosen
+                        .iter()
+                        .flat_map(|c| c.targets.iter())
+                        .map(|slot| slot.len())
+                        .sum::<usize>()
+                });
+            (g.turn.active, g.turn.step, g.stack.len(), targets)
+        },
+    );
+    t.advance_to(P0, Step::Draw);
+    let first = seen
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|(p, step, ..)| *p == P0 && *step == Step::Upkeep)
+        .copied();
+    assert_eq!(first, Some((P0, Step::Upkeep, 1, 2)), "the trigger first, with both targets");
+    assert_eq!((plus(&t, mine), plus(&t, theirs)), (3, 3));
+    // The opponent's creature leaves: P0's still gets three counters.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Evolutionary Escalation");
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Savannah Lions");
+    t.answer_targets(P0, &[obj(mine)]);
+    t.answer_targets(P0, &[obj(theirs)]);
     p0_upkeep(&mut t);
-    assert_eq!(t.g.turn.step, Step::Upkeep);
     let trig = *t.g.stack.last().expect("on the stack");
     assert_eq!(stack_targets(&t, trig), vec![obj(mine), obj(theirs)]);
-    let asked = t.asked();
-    let (_, last) = asked.last().unwrap();
-    assert!(
-        matches!(last, Decision::ChooseTargets { .. }),
-        "no priority since the upkeep began: {last:?}"
-    );
-    // The opponent's creature leaves: P0's still gets three counters.
     kill(&mut t, theirs);
     t.resolve_all();
     assert_eq!(plus(&t, mine), 3);
@@ -87,7 +115,7 @@ fn evolutionary_escalation_without_two_legal_targets_is_removed() {
 
 #[test]
 fn fiery_justice_division_chosen_as_cast_at_least_one_each() {
-    cr!("601.2d", "115.10");
+    cr!("601.2c", "601.2d");
     ruling!(
         "Fiery Justice",
         "You choose how many targets Fiery Justice has and how the damage is divided as you cast it. Each target for its damage-dealing effect must receive at least 1 damage."
@@ -357,6 +385,7 @@ fn skullwinder_opponent_chosen_after_the_card_returns_and_they_choose_theirs() {
     assert!(t.in_hand(P1, "Savannah Lions"));
     assert!(t.in_graveyard(P1, "Hill Giant"));
     let seen = seen.lock().unwrap();
+    assert!(!seen.is_empty(), "P0 chose the opponent");
     assert!(seen.iter().all(|in_hand| *in_hand), "{seen:?}");
 }
 
@@ -478,7 +507,7 @@ fn faiths_shield_illegal_target_no_protection_for_anyone() {
             .all(|(_, d)| !matches!(d, Decision::ChooseOption { .. })),
         "no color is chosen"
     );
-    // Nothing got protection from red: Shock can target P0 and the Lions.
+    // Nothing got protection from red: a red source's damage to P0 and the Giant is dealt.
     let goblin = t.battlefield(P1, "Raging Goblin");
     damage(&mut t, goblin, pl(P0), 1);
     damage(&mut t, goblin, obj(giant), 1);
@@ -488,7 +517,7 @@ fn faiths_shield_illegal_target_no_protection_for_anyone() {
 
 #[test]
 fn faiths_shield_player_protection_from_a_color() {
-    cr!("702.16b", "702.16c", "702.16e", "303.4d");
+    cr!("702.16b", "702.16c", "702.16e", "303.4a", "704.5m");
     ruling!(
         "Faith's Shield",
         "A player with protection from a color can’t be damaged, enchanted (including by Curses), or targeted by anything of that color."
@@ -530,6 +559,13 @@ fn faiths_shield_player_protection_from_a_color() {
     let cands = target_choices(&t, P1, m, "");
     assert!(!cands.is_empty());
     assert!(cands.iter().all(|c| !c.contains(&pl(P0))));
+    t.resolve_all();
+    // A red Curse that somehow becomes attached to P0 is put into its owner's graveyard.
+    let curse = t.battlefield(P1, "Curse of the Pierced Heart");
+    t.g.attach(curse, pl(P0));
+    t.settle();
+    assert!(t.in_graveyard(P1, "Curse of the Pierced Heart"));
+    assert!(!t.on_battlefield(curse));
 }
 
 #[test]
