@@ -577,7 +577,7 @@ fn set_library(t: &mut TestGame, p: PlayerId, cards: &[&str]) {
 
 #[test]
 fn guff_rewrites_history_each_controller_casts_the_card_they_exiled() {
-    cr!("101.4", "608.2c", "608.2g", "608.2h");
+    cr!("101.4", "608.2c", "608.2g", "608.2h", "601.2c");
     interp!("guff-players-who-controlled");
     compiles("Guff Rewrites History");
     // P0 controls P1's Llanowar Elves; P1 controls its own Grizzly Bears.

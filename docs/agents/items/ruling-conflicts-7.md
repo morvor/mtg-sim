@@ -60,6 +60,23 @@ Investigated and implemented (Nov 12) by an independent investigator; the advers
   - Hex (2005-10-01): "You must target six different creatures. If you can't, you can't cast Hex. ..."; Whiplash Trap (2009-10-01): "You must target two creatures as you cast Whiplash Trap. If you can't (because just one creature is on the battlefield, perhaps), you can't cast the spell."
   - Blue Dragon ("target creature an opponent controls gets -3/-0, up to one other target creature gets -2/-0, and up to one other target creature gets -1/-0"), 2021-07-23: "The last two targets are optional, but the first target is not. If an opponent has at least one creature the ability could target, you must choose a target to get -3/-0. (Note that the last two targets can be any creature, not just one an opponent controls.)"
 
+**The per-player target rulings by date and kind** (R: a required target for each player; U: up to one).
+
+| Date | Card | Kind | R/U | What it says about a player's target |
+|---|---|---|---|---|
+| 2004-10-04 | Blatant Thievery | sorcery | R | nothing on a player with none ("You gain control of only one permanent from each player.") |
+| 2010-06-15 | The Dead Shall Serve | scheme trigger | U | you may choose no target for an opponent |
+| 2012-06-01 | Mass Mutiny | sorcery | U (errata) | "up to one" was omitted and added by errata; castable with no target for an opponent without a creature |
+| 2013-01-21 (FAQ) | Sylvan Primordial | enters trigger | R | the cycle's "up to the number of opponents" bullet (since replaced) |
+| 2013-01-24 | Diluvian, Luminate, Molten, Sepulchral Primordial | enters trigger | U | "up to the number of opponents you have, one target per opponent" |
+| 2014-02-01 | Sylvan Primordial | enters trigger | R | must target one for an opponent who has one; silent otherwise |
+| 2018-07-13 | Vaevictis Asmadi, the Dire | attack trigger | R | removed from the stack if any player controls no permanents; you target your own too |
+| 2020-04-17 | Decoy Gambit | instant | U | an opponent for whom no target was chosen can't have you draw |
+| 2021-04-16 | Nils, Discipline Enforcer | end-step trigger | U | a target for each player is optional |
+| 2024-02-02 | Frenzied Gorespawn | enters trigger | R | nothing on targets |
+
+No ruling speaks to an activated ability with targets for each player.
+
 **Readings tried.**
 - **Adopted:** the text defines one required target per named player (601.2c), so a player with no legal target makes the requirement impossible: 601.2 (spell), 602.2 (activated ability), 603.3d (triggered ability). Every ruling above fits it.
 - **The engine's earlier reading:** a player with no legal target gets none and the rest goes ahead, reading Sylvan Primordial's "If an opponent has any legal permanents to target" as implying that an opponent without one is skipped. Rejected: it contradicts Vaevictis's ruling and 603.3d's words, it would have made Mass Mutiny's errata unnecessary for casting it, and the Sylvan Primordial ruling was written to forbid fewer targets, not to allow them. The same conditional words on Blue Dragon describe a single required target, where skipping isn't possible.
@@ -90,7 +107,7 @@ No card in the pool has a required per-player target on an activated ability (th
 **Tests** (`tests/rulings/per_player_required_targets.rs`, 10 tests, one of them a custom card's activated ability; cited rulings: Vaevictis × 2, Sylvan Primordial, Mass Mutiny, Molten Primordial; `interp!("per-player-required-targets")` in each). Break-check: with the three engine files reverted to 086b682, the six tests of the new behavior fail (Vaevictis's ability removed, the enters-abilities table, Blatant Thievery, Guff Rewrites History's caster, the activated ability, Mysterious Stranger with Ground Seal), and so does the reworked Guff Rewrites History test in `tests/cards/cards6_per_player_results.rs`; the four of unchanged behavior pass (two "must target" when a target exists, Turf War's counters, Mass Mutiny). With only the pattern file reverted, Mysterious Stranger's first case fails (its ability was removed).
 
 **Remaining gaps.**
-- Release notes of Commander Masters (Guff Rewrites History), Ravnica: Clue Edition (Frenzied Gorespawn), Duskmourn Commander (Chaos Is My Plaything), Streets of New Capenna Commander (Turf War) and Fallout (Mysterious Stranger) not read: magic.wizards.com, web.archive.org and mtg.wiki are outside this session's allowed hosts, and ormos ends in February 2023. Scryfall's rulings, which include release-notes rulings, have nothing on their targets.
+- Release notes of Commander Masters (Guff Rewrites History), Ravnica: Clue Edition (Frenzied Gorespawn), Duskmourn Commander (Chaos Is My Plaything) and Fallout (Mysterious Stranger) not read: magic.wizards.com, web.archive.org and mtg.wiki are outside this session's allowed hosts, and ormos ends in February 2023. Scryfall's rulings, which include release-notes rulings, have nothing on their targets. Read and silent: the Streets of New Capenna Release Notes (2022-04-20; ormos, Wayback capture 2022-04-23), whose Commander section has no entry for Turf War, and the Commander 2015 Release Notes (2015-11-11; ormos), none for Blatant Thievery (a reprint there).
 - A required per-player slot that must differ from another required slot ("another target") isn't checked for castability across the two slots (`required_slots` leaves per-player slots out); no card has one.
 - Mysterious Stranger still fails the round-trip check (as before); its new player filter renders through the history-filter renderer.
 

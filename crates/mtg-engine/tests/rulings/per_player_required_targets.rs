@@ -212,7 +212,7 @@ fn enters_abilities_with_a_required_target_for_each_player_need_one_for_every_pl
 
 #[test]
 fn turf_war_counters_go_on_a_land_of_each_player() {
-    cr!("603.3d", "608.2c");
+    cr!("603.3d", "601.2c");
     interp!("per-player-required-targets");
     supported("Turf War");
     let mut t = TestGame::new(2);
