@@ -95,7 +95,7 @@ pub fn check_free_cast_costs(fc: &FreeCaster) {
     let mut t = TestGame::new(2);
     let spell = (fc.place)(&mut t, name);
     let zone = t.zone(spell);
-    let lib = t.library_size(P0);
+    let lib = t.library_size(P0) - usize::from(zone == Zone::Library(P0));
     (fc.run)(&mut t, spell, &|_| {});
     assert_eq!(t.library_size(P0), lib, "the spell wasn't cast");
     // It stays where it was (or where the effect exiled it before offering to cast it).
