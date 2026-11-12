@@ -110,3 +110,64 @@ fn a_creature_that_cant_be_regenerated_dies_into_kalitas_despite_its_shield() {
     assert_eq!(t.zone(t.g.current(skel)), Zone::Exile);
     assert_eq!(t.named_on_battlefield("Zombie Token").len(), 1);
 }
+
+#[test]
+fn laboratory_maniac_wins_on_the_second_of_thought_reflections_two_draws() {
+    cr!("614.11", "614.11a", "616.2", "104.2b");
+    supported("Laboratory Maniac");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Laboratory Maniac");
+    t.battlefield(P0, "Thought Reflection");
+    // One card left: as the draw would happen the library isn't empty, so only Thought
+    // Reflection applies. Of its two draws, the first takes the last card; the second is
+    // replaced by Laboratory Maniac's effect.
+    let lib = t.g.players[0].library.clone();
+    t.g.players[0].library = vec![lib[0]];
+    cast_resolve(&mut t, P0, "Opt", &[]);
+    assert_eq!(t.library_size(P0), 0);
+    assert!(t.has_lost(P1));
+    assert!(!t.has_lost(P0));
+}
+
+/// P1's Drudge Skeletons, enchanted with Hyena Umbra and with a regeneration shield, is
+/// the target of P0's Murder; P1's answers are `picks`.
+fn murder_umbra_skeletons(picks: &[usize]) -> (TestGame, ObjectId, ObjectId) {
+    supported("Hyena Umbra");
+    let mut t = TestGame::new(2);
+    let skel = t.battlefield(P1, "Drudge Skeletons");
+    let umbra = t.battlefield(P1, "Hyena Umbra");
+    t.g.attach(umbra, obj(skel));
+    t.lands(P1, "Swamp", 1);
+    t.activate(P1, skel, 0, &[]).expect("regenerate");
+    t.resolve_all();
+    pick_replacements(&mut t, P1, picks);
+    cast_resolve(&mut t, P0, "Murder", &[obj(skel)]);
+    (t, skel, umbra)
+}
+
+#[test]
+fn umbra_armor_or_regeneration_the_controller_chooses_and_the_other_waits() {
+    cr!("616.1", "616.1e", "614.8", "702.89a", "614.3");
+    let (probe, _, _) = murder_umbra_skeletons(&[]);
+    let (who, opts) = replacement_choices(&probe)[0].clone();
+    assert_eq!(who, P1);
+    // Umbra armor: the Aura is destroyed instead; the Skeletons stay untapped, and the
+    // shield is still there for the next destruction this turn.
+    let (mut t, skel, umbra) = murder_umbra_skeletons(&[option_index(&opts, "Hyena Umbra")]);
+    assert!(t.on_battlefield(skel));
+    assert!(!t.obj_now(skel).tapped);
+    assert!(t.in_graveyard(P1, "Hyena Umbra"));
+    assert!(!t.on_battlefield(umbra));
+    cast_resolve(&mut t, P0, "Murder", &[obj(skel)]);
+    assert!(t.on_battlefield(skel), "the regeneration shield is used now");
+    assert!(t.obj_now(skel).tapped);
+    // Regeneration: tapped, and the Aura stays.
+    let regen = opts
+        .iter()
+        .position(|o| !o.contains("Hyena Umbra"))
+        .expect("the regeneration shield");
+    let (t, skel, umbra) = murder_umbra_skeletons(&[regen]);
+    assert!(t.on_battlefield(skel));
+    assert!(t.obj_now(skel).tapped);
+    assert!(t.on_battlefield(umbra));
+}

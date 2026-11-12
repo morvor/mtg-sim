@@ -301,3 +301,44 @@ fn voice_of_all_entering_under_essence_of_the_wild_never_chooses_a_color() {
     );
     assert_eq!(t.obj_now(voice).choices.color, None);
 }
+
+#[test]
+fn players_dealt_damage_at_once_choose_in_apnap_order() {
+    cr!("616.1", "101.4");
+    supported("Earthquake");
+    for active in [P0, P1] {
+        let mut t = TestGame::new(2);
+        t.set_step(active, Step::PrecombatMain);
+        t.battlefield(P0, "Furnace of Rath");
+        t.battlefield(P0, "Urza's Armor");
+        t.battlefield(P1, "Urza's Armor");
+        t.lands(active, "Mountain", 3);
+        let quake = t.hand(active, "Earthquake");
+        t.cast(active, quake).x(2).go();
+        t.resolve_all();
+        let askers: Vec<PlayerId> = replacement_choices(&t).iter().map(|c| c.0).collect();
+        let other = if active == P0 { P1 } else { P0 };
+        assert_eq!(askers, vec![active, other]);
+        // The default answer applies Furnace of Rath first: 4 - 1 = 3 each.
+        assert_eq!((t.life(P0), t.life(P1)), (17, 17));
+    }
+}
+
+#[test]
+fn master_biomancer_still_gives_counters_to_a_creature_entering_as_essence_of_the_wild() {
+    cr!("616.1c", "616.1f", "614.12");
+    ruling!(
+        "Essence of the Wild",
+        "External abilities may still affect how a creature enters."
+    );
+    supported("Essence of the Wild");
+    supported("Master Biomancer");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Essence of the Wild");
+    t.battlefield(P0, "Master Biomancer");
+    let bears = cast_resolve(&mut t, P0, "Grizzly Bears", &[]);
+    let bears = t.g.current(bears);
+    assert_eq!(t.obj_now(bears).chars.name.as_str(), "Essence of the Wild");
+    assert_eq!(plus_counters(&t, bears), 2);
+    assert!(t.obj_now(bears).chars.has_subtype("Mutant"));
+}
