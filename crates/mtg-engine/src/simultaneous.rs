@@ -712,6 +712,11 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
         // (Zndrsplt's Judgment): the players choose in turn, then the tokens are created
         // (CR 101.4, 608.2e).
         Effect::CreateTokenCopy { of, .. } => has_choice(of) && chosen_by(g, &[of], ctx, p),
+        // "Each foe chooses one untapped creature they control, then taps the rest"
+        // (Regna's Sanction): the players choose in turn, then the permanents are all
+        // tapped together (CR 101.4, 608.2e). (What's chosen as they're tapped is still
+        // chosen in turn.)
+        Effect::Tap { what } | Effect::Untap { what } => !has_choice(what),
         // Whoever makes the choices: no control changes until all are made.
         Effect::GainControl { .. } => true,
         // "For each creature, its controller sacrifices it unless they pay X life" (Killing

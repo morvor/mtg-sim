@@ -2668,6 +2668,24 @@ impl Game {
                 si.x = Some(x);
             }
         } else if let Some(ci) = etb_cast {
+            // "The sacrificed creature" of an enters ability refers to the permanent its
+            // spell's costs sacrificed (Adipose Offspring's emerge, CR 702.119a), as it last
+            // existed on the battlefield (its ruling; CR 608.2h): the cost objects that were
+            // sacrificed (this turn, as the spell was cast), by their last known
+            // information — not those the costs tapped, returned or exiled.
+            let sacrificed: Vec<Entity> = ci
+                .cost_objects
+                .iter()
+                .filter(|o| self.history.sacrificed.iter().any(|(_, s)| s == *o))
+                .map(|o| Entity::Object(*o))
+                .collect();
+            if !sacrificed.is_empty() {
+                self.saved_ctx
+                    .entry(id)
+                    .or_default()
+                    .vars
+                    .insert(vars::SACRIFICED, sacrificed);
+            }
             // CR 107.3m: the permanent's enters ability uses its spell's value of X.
             if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
                 si.x = ci.x.or(chosen_x);
