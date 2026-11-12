@@ -222,7 +222,7 @@ fn two_hellcarver_demons_resolve_one_after_the_other() {
 
 #[test]
 fn values_counted_as_the_ability_resolves() {
-    cr!("608.2h", "608.2b");
+    cr!("608.2h", "307.1");
     supported("Sanar, Innovative First-Year");
     ruling!(
         "Sanar, Innovative First-Year",
@@ -260,7 +260,17 @@ fn values_counted_as_the_ability_resolves() {
     t.answer_choose_moved(P0, &[obj(lib[0]), obj(lib[2])]);
     t.resolve_all();
     assert!(exiled(&t, lib[0]) && exiled(&t, lib[2]));
-    // Giant Growth (a third nonland card) wasn't revealed, so it stays in the library.
+    // Giant Growth (a third nonland card) wasn't revealed: with X = 3 it would have been
+    // (revealed cards that aren't exiled are shuffled back, so where it ends up doesn't
+    // tell).
+    let revealed = |t: &TestGame, id: ObjectId| {
+        t.g.turn_events.iter().chain(t.g.events.iter()).any(|e| {
+            matches!(e, mtg_engine::events::Event::Custom { name, obj: Some(o), .. }
+                if name == mtg_engine::reveal::REVEALED && *o == id)
+        })
+    };
+    assert!(revealed(&t, lib[0]) && revealed(&t, lib[1]) && revealed(&t, lib[2]));
+    assert!(!revealed(&t, lib[3]));
     assert_eq!(t.zone(lib[3]), Zone::Library(P0));
     // The sorcery: not during combat, yes in a main phase with {R}.
     crate::r_p144_common::check_cast_timing(&mut t, lib[0], ManaType::R, 1);
@@ -268,7 +278,7 @@ fn values_counted_as_the_ability_resolves() {
 
 #[test]
 fn witch_king_uses_power_on_resolution_or_last_known() {
-    cr!("608.2h", "608.2b", "113.7a");
+    cr!("608.2h");
     supported("Witch-king, Sky Scourge");
     ruling!(
         "Witch-king, Sky Scourge",
@@ -300,7 +310,7 @@ fn witch_king_uses_power_on_resolution_or_last_known() {
 
 #[test]
 fn geistflame_reservoir_counters_are_removed_as_a_cost() {
-    cr!("601.2b", "602.2b", "118.3");
+    cr!("601.2b", "602.2b", "601.2h");
     supported("Geistflame Reservoir");
     ruling!(
         "Geistflame Reservoir",
@@ -323,7 +333,7 @@ fn geistflame_reservoir_counters_are_removed_as_a_cost() {
 
 #[test]
 fn eruth_replacement_with_a_short_library() {
-    cr!("614.1a", "121.3", "704.5b");
+    cr!("614.1a", "614.6", "704.5b");
     supported("Eruth, Tormented Prophet");
     ruling!(
         "Eruth, Tormented Prophet",
@@ -374,7 +384,7 @@ fn bruse_tarl_leaving_after_first_strike_damage_stops_regular_damage() {
 
 #[test]
 fn sacrifice_costs_can_use_the_source_or_any_artifact() {
-    cr!("602.2b", "118.3");
+    cr!("602.2b", "701.21a");
     supported("Dark-Dweller Oracle");
     ruling!(
         "Dark-Dweller Oracle",

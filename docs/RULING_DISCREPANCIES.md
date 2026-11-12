@@ -303,6 +303,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: as the ruling says, for Undead Butler: the reflexive trigger's target is chosen once Undead Butler has been exiled (CR 603.12), so a creature card put into the graveyard after the death trigger was put on the stack can be returned.
 - Recorded: test `tests/rulings/r_p144_misc.rs` (`undead_butler_return_trigger_targets_after_the_exile`), citing it under Traveling Minister, which is on the battlefield there (it can't take part).
 
+### Mount Doom: Moria Marauder's ruling about its last ability
+- Kind: misattached
+- Status: open for review
+- Ruling, Mount Doom (2023-06-16): "You must follow all normal timing rules for a card you play using Moria Marauder's last ability and, if it's a spell, you must pay its costs to cast it."
+- Conflicts with: Mount Doom lets no card be played: "{T}, Pay 1 life: Add {B} or {R}. / {1}{B}{R}, {T}: Mount Doom deals 1 damage to each opponent. / {5}{B}{R}, {T}, Sacrifice Mount Doom and a legendary artifact: Choose up to two creatures, then destroy the rest. Activate only as a sorcery." The ruling names and describes Moria Marauder's last ability: "Whenever a Goblin or Orc you control deals combat damage to a player, exile the top card of your library. You may play that card this turn."
+- Evidence: the data has the same ruling, with the same date, under Moria Marauder, the card it names; both are The Lord of the Rings: Tales of Middle-earth cards (rulings dated 2023-06-16). Mount Doom's other ruling ("For the last ability, none of the chosen creatures are targets of the ability. You may choose creatures with shroud, for example.") is about its own last ability. Found in the review of work item rulings-P144 (the text is in that batch).
+- Engine: as the ruling says, for Moria Marauder: a card exiled by its trigger is played with the normal timing rules, and a spell's costs are paid.
+- Recorded: test `tests/rulings/r_s23_timing.rs` (`moria_marauder_cards_follow_normal_timing_and_spells_cost_their_costs`), citing it under Moria Marauder, which the data also attaches it to (a citation covers the text on every card it's attached to); Mount Doom has no ability that could take part.
+
 ## Outdated rulings
 
 ### Souls of the Faultless: "you may choose either member of the attacking team"

@@ -1,6 +1,6 @@
 //! Rulings batch P144 — repeatable impulse draw: the permission to play an exiled card
 //! comes from a resolved ability, so it lasts for its duration even after the source
-//! leaves the battlefield or changes control (CR 611.2a, 610.3); a card that isn't played
+//! leaves the battlefield or changes control (CR 611.2a); a card that isn't played
 //! simply stays in exile once the permission ends; and a permission tied to an object
 //! doesn't carry over to a new object (CR 400.7).
 
@@ -45,7 +45,7 @@ type Setup = fn(&mut TestGame) -> ObjectId;
 
 #[test]
 fn the_card_stays_playable_after_the_source_leaves_or_changes_control() {
-    cr!("611.2a", "610.3");
+    cr!("611.2a");
     ruling!(
         "Hedron Detonator",
         "You may play the card exiled with Hedron Detonator even if Hedron Detonator leaves the battlefield or you lose control of it."
@@ -121,13 +121,22 @@ fn the_card_stays_playable_after_the_source_leaves_or_changes_control() {
             }
             to_main(&mut t);
             assert!(bolt_castable(&mut t, bolt), "{card}");
+            if card == "Elkin Bottle" {
+                // "the cards remain waiting until played or until the beginning of your
+                // next upkeep": still castable on P1's turn, no longer at P0's upkeep.
+                t.advance_to(P1, Step::PrecombatMain);
+                assert!(bolt_castable(&mut t, bolt), "{card}: P1's turn");
+                t.advance_to(P0, Step::Upkeep);
+                assert_eq!(t.zone(bolt), Zone::Exile);
+                assert!(!bolt_castable(&mut t, bolt), "{card}: P0's next upkeep");
+            }
         }
     }
 }
 
 #[test]
 fn elkin_bottle_card_waits_until_the_next_upkeep_and_then_stays_exiled() {
-    cr!("611.2a", "611.2b", "121.1", "406.3");
+    cr!("611.2a", "121.1", "701.9a", "118.3");
     supported("Elkin Bottle");
     let mut t = TestGame::new(2);
     let lib = on_top(&mut t, P0, &["Lightning Bolt", "Wastes", "Wastes"]);
@@ -361,7 +370,7 @@ fn possibility_technician_permission_needs_only_a_kavu() {
 
 #[test]
 fn furious_rise_card_stays_playable_after_furious_rise_leaves() {
-    cr!("611.2a", "611.2b");
+    cr!("611.2a");
     supported("Furious Rise");
     ruling!(
         "Furious Rise",
@@ -388,7 +397,7 @@ fn furious_rise_card_stays_playable_after_furious_rise_leaves() {
 
 #[test]
 fn redcap_gutter_dweller_trigger_resolves_after_it_leaves() {
-    cr!("603.4", "608.2h", "113.7a");
+    cr!("113.7a", "400.7");
     supported("Redcap Gutter-Dweller");
     ruling!(
         "Redcap Gutter-Dweller",

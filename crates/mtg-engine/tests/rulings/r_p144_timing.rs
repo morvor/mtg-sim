@@ -1,8 +1,9 @@
 //! Rulings batch P144 — repeatable impulse draw: a card exiled by one of these abilities
-//! is played with the normal timing rules and costs (CR 305.1, 305.2, 307.1, 601.2f-h):
-//! a land only in a main phase with the stack empty and a land play available, a sorcery
-//! or creature only in a main phase with the stack empty, paying its mana cost. One table
-//! case per card (the rulings restate the same rule for each card's own wording).
+//! is played with the normal timing rules and costs (CR 305.1, 305.2, 505.6b, 307.1,
+//! 302.1, 601.2f-h): a land only in a main phase with the stack empty and a land play
+//! available, a sorcery or creature only in a main phase with the stack empty, paying its
+//! mana cost. One table case per card (the rulings restate the same rule for each card's
+//! own wording).
 
 use crate::r_p107_common::{act, mana};
 use crate::r_p144_common::*;
@@ -50,7 +51,7 @@ const LAND_CREATURE: &[Exiled] = &[Exiled::Land, Exiled::Creature];
 
 #[test]
 fn impulse_draw_cards_follow_normal_timing_and_costs() {
-    cr!("305.1", "305.2", "307.1", "302.1", "601.2f", "601.2h");
+    cr!("305.1", "305.2", "505.6b", "307.1", "302.1", "601.2f", "601.2h");
     let cases = [
         Case {
             card: "Furious Rise",

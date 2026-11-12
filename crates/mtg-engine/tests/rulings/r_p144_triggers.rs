@@ -213,7 +213,7 @@ fn syr_carah_triggers_for_each_player_even_as_she_dies() {
 
 #[test]
 fn outpost_siege_dragons_sees_a_manifested_noncreature_leave() {
-    cr!("701.40a", "708.2", "603.6c");
+    cr!("701.40a", "708.2", "603.6c", "603.10a");
     supported("Outpost Siege");
     ruling!(
         "Outpost Siege",
@@ -238,7 +238,7 @@ fn outpost_siege_dragons_sees_a_manifested_noncreature_leave() {
 
 #[test]
 fn laelia_counts_each_exile_and_any_player() {
-    cr!("702.85a", "603.2c", "702.66a");
+    cr!("702.85a", "701.57a", "603.2c", "702.66a");
     supported("Laelia, the Blade Reforged");
     ruling!(
         "Laelia, the Blade Reforged",
@@ -280,6 +280,20 @@ fn laelia_counts_each_exile_and_any_player() {
     assert_eq!(t.zone(lib[2]), Zone::Hand(P0));
     assert!(!exiled(&t, lib[3]));
     assert_eq!(t.counters(l, counters::PLUS1), 3);
+    // "Exile cards from the top of your library until you exile cards with total mana
+    // value 4 or greater" (Improvisation Capstone): Island, Island, Craw Wurm.
+    supported("Improvisation Capstone");
+    let mut t = TestGame::new(2);
+    let l = t.battlefield(P0, "Laelia, the Blade Reforged");
+    let lib = on_top(&mut t, P0, &["Island", "Island", "Craw Wurm", "Wastes"]);
+    let ic = t.hand(P0, "Improvisation Capstone");
+    mana(&mut t, P0, ManaType::R, 7);
+    t.answer_choose(P0, &[]);
+    t.cast(P0, ic).go();
+    t.resolve_all();
+    assert!(lib[..3].iter().all(|c| exiled(&t, *c)));
+    assert!(!exiled(&t, lib[3]));
+    assert_eq!(t.counters(l, counters::PLUS1), 3);
 
     ruling!(
         "Laelia, the Blade Reforged",
@@ -309,7 +323,7 @@ fn laelia_counts_each_exile_and_any_player() {
 
 #[test]
 fn tectonic_giant_triggers_once_per_spell_and_chooses_on_resolution() {
-    cr!("603.2", "115.3", "608.2c");
+    cr!("603.2", "115.3", "608.2d");
     supported("Tectonic Giant");
     ruling!(
         "Tectonic Giant",
@@ -381,7 +395,7 @@ fn ob_nixilis_looks_at_the_total_combat_damage() {
 
 #[test]
 fn flame_channeler_ignores_damage_dealt_by_fighting_creatures() {
-    cr!("701.14b", "120.1");
+    cr!("701.14a", "120.1");
     supported("Flame Channeler // Embodiment of Flame");
     ruling!(
         "Flame Channeler // Embodiment of Flame",
@@ -401,7 +415,7 @@ fn flame_channeler_ignores_damage_dealt_by_fighting_creatures() {
 
 #[test]
 fn spinneret_and_spiderling_is_one_spider_and_need_not_attack() {
-    cr!("205.3", "508.1");
+    cr!("205.3m", "508.1");
     supported("Spinneret and Spiderling");
     ruling!(
         "Spinneret and Spiderling",
@@ -581,11 +595,12 @@ fn vance_s_blasting_cannons_third_spell_trigger() {
     assert!(t.on_battlefield(v));
     t.answer_yes(P0, true);
     let o2 = t.hand(P0, "Ornithopter");
-    t.cast(P0, o2).go();
+    let third = t.cast(P0, o2).go();
     t.settle();
     assert_eq!(t.stack_len(), 2);
     t.resolve_all();
     assert_eq!(t.obj_now(v).chars.name.as_str(), "Spitfire Bastion");
+    assert!(t.on_battlefield(third));
     // The Cannons entering after the third spell: no trigger for that spell (or a later
     // fourth one).
     let mut t = TestGame::new(2);
@@ -617,7 +632,27 @@ fn vance_s_blasting_cannons_third_spell_trigger() {
     let spell = t.cast(P0, o).go();
     t.settle();
     assert_eq!(t.stack_len(), 2);
+    // The trigger is on top of the spell: it resolves first (the Cannons transform while
+    // the Ornithopter is still on the stack).
+    assert_eq!(t.g.stack[0], spell);
+    t.answer_yes(P0, true);
+    t.resolve();
+    assert_eq!(t.obj_now(v).chars.name.as_str(), "Spitfire Bastion");
+    assert_eq!(t.g.stack, vec![spell]);
+    // Countered before the trigger resolves: the trigger still resolves.
+    let mut t = TestGame::new(2);
+    let v = t.battlefield(P0, "Vance's Blasting Cannons");
+    for _ in 0..2 {
+        let o = t.hand(P0, "Ornithopter");
+        t.cast(P0, o).go();
+        t.resolve_all();
+    }
+    let o = t.hand(P0, "Ornithopter");
+    let spell = t.cast(P0, o).go();
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
     counter_spell(&mut t, spell);
+    assert_eq!(t.stack_len(), 1);
     t.answer_yes(P0, true);
     t.resolve_all();
     assert_eq!(t.obj_now(v).chars.name.as_str(), "Spitfire Bastion");

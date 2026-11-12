@@ -72,13 +72,21 @@ fn ral_flips_as_the_trigger_resolves_and_enters_with_loyalty_per_spell_cast() {
         "Ral, Monsoon Mage // Ral, Leyline Prodigy",
         "You flip a coin as Ral, Monsoon Mage's triggered ability resolves. No player may take actions between seeing the result of the flip and the effects that occur based on the result of the flip."
     );
-    let from = t.asked().len();
+    // No coin has been flipped while the trigger waits on the stack; resolving it flips
+    // one, and its result (Ral exiled and returned transformed) happens in that same
+    // resolution, with the Bolt still on the stack.
+    let flips = |t: &TestGame| {
+        t.g.turn_events
+            .iter()
+            .chain(t.g.events.iter())
+            .filter(|e| matches!(e, mtg_engine::events::Event::CoinFlipped { won: true, .. }))
+            .count()
+    };
+    assert_eq!(flips(&t), 0);
+    assert_eq!(t.obj_now(ral).chars.name.as_str(), "Ral, Monsoon Mage");
     t.answer_yes(P0, true);
     t.resolve();
-    // Nobody got priority during the resolution: the flip and its result together.
-    assert!(!t.asked()[from..]
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::Priority { .. })));
+    assert_eq!(flips(&t), 1);
     let r = t.g.current(ral);
     assert!(t.on_battlefield(r));
     assert_eq!(t.obj_now(r).chars.name.as_str(), "Ral, Leyline Prodigy");
@@ -90,7 +98,7 @@ fn ral_flips_as_the_trigger_resolves_and_enters_with_loyalty_per_spell_cast() {
 
 #[test]
 fn ral_leyline_prodigy_activates_only_at_sorcery_speed_the_turn_he_enters() {
-    cr!("606.3", "307.1");
+    cr!("606.3");
     supported(RAL);
     ruling!(
         "Ral, Monsoon Mage // Ral, Leyline Prodigy",
@@ -208,6 +216,12 @@ fn ral_ultimate_casts_free_x_spells_with_x_0_and_normal_timing() {
     assert!(!can_cast(&mut t, P0, lib[1], CastMethod::Free));
     assert!(can_cast(&mut t, P0, lib[2], CastMethod::Free));
     to_main(&mut t);
+    assert!(can_cast(&mut t, P0, lib[1], CastMethod::Free));
+    // Not while a spell is on the stack (the instant still can be).
+    crate::r_p071_common::p1_bolt_on_stack(&mut t);
+    assert!(!can_cast(&mut t, P0, lib[1], CastMethod::Free));
+    assert!(can_cast(&mut t, P0, lib[2], CastMethod::Free));
+    t.resolve_all();
     assert!(can_cast(&mut t, P0, lib[1], CastMethod::Free));
 }
 

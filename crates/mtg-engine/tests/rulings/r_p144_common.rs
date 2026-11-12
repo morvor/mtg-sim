@@ -4,6 +4,7 @@
 
 #![allow(dead_code)]
 
+use crate::r_p071_common::p1_bolt_on_stack;
 use crate::r_p107_common::mana;
 use crate::r_s02_common::{can_cast, can_play_land};
 use mtg_engine::mana::ManaType;
@@ -61,7 +62,8 @@ pub fn tap_all(t: &mut TestGame) {
 
 /// The exiled land card `land` (followed across zone changes) may be played by P0 only in
 /// a main phase with the stack empty and only with a land play available (CR 305.1,
-/// 305.2, 505.6b): not during combat, yes in the main phase, no once P0 has played a land.
+/// 305.2, 505.6b): not during combat, yes in the main phase, not while a spell is on the
+/// stack, no once P0 has played a land.
 pub fn check_land_timing(t: &mut TestGame, land: ObjectId) {
     assert_eq!(t.zone(land), Zone::Exile, "the land card isn't in exile");
     assert!(!t.obj_now(land).face_down, "exiled face down");
@@ -74,6 +76,13 @@ pub fn check_land_timing(t: &mut TestGame, land: ObjectId) {
         can_play_land(t, P0, land),
         "the land can't be played in a main phase"
     );
+    p1_bolt_on_stack(t);
+    assert!(
+        !can_play_land(t, P0, land),
+        "a land played while a spell is on the stack"
+    );
+    t.resolve_all();
+    assert!(can_play_land(t, P0, land), "the stack is empty again");
     t.g.players[P0.idx()].lands_played_this_turn = 1;
     assert!(!can_play_land(t, P0, land), "a second land play");
     t.g.players[P0.idx()].lands_played_this_turn = played;
@@ -82,7 +91,8 @@ pub fn check_land_timing(t: &mut TestGame, land: ObjectId) {
 /// The exiled nonland card `card` (followed across zone changes; a sorcery or creature
 /// card whose mana cost is `n` mana of type `ty`, e.g. Lava Spike {R} or Grizzly Bears
 /// {1}{G} as two green) may be cast by P0 only in a main phase with the stack empty, and
-/// only by paying its mana cost (CR 307.1, 302.1, 601.2f-h).
+/// only by paying its mana cost (CR 307.1, 302.1, 601.2f-h): not during combat, not
+/// without the mana, yes in the main phase with it, not while a spell is on the stack.
 pub fn check_cast_timing(t: &mut TestGame, card: ObjectId, ty: ManaType, n: u32) {
     assert_eq!(t.zone(card), Zone::Exile, "the card isn't in exile");
     assert!(!t.obj_now(card).face_down, "exiled face down");
@@ -102,6 +112,16 @@ pub fn check_cast_timing(t: &mut TestGame, card: ObjectId, ty: ManaType, n: u32)
     assert!(
         can_cast(t, P0, card, CastMethod::Normal),
         "can't be cast in a main phase with its mana"
+    );
+    p1_bolt_on_stack(t);
+    assert!(
+        !can_cast(t, P0, card, CastMethod::Normal),
+        "cast while a spell is on the stack"
+    );
+    t.resolve_all();
+    assert!(
+        can_cast(t, P0, card, CastMethod::Normal),
+        "the stack is empty again"
     );
     t.g.players[P0.idx()].mana_pool = Default::default();
 }
