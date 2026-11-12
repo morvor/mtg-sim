@@ -106,7 +106,7 @@ fn a_phased_out_creature_cant_be_exchanged() {
 
 #[test]
 fn an_effect_naming_a_phased_out_permanent_doesnt_affect_it_once_it_phases_in() {
-    cr!("702.26e", "702.26f", "611.2c");
+    cr!("702.26e", "611.2c");
     ruling!(
         "The Moment",
         "A creature phased out by The Moment doesn't phase in during its controller's untap step as normal. Rather, it phases in immediately after The Moment leaves the battlefield."
@@ -206,6 +206,38 @@ fn no_counter_moves_onto_a_creature_that_phased_out() {
     assert!(t.in_graveyard(P0, "Simic Initiate"));
 }
 
+#[test]
+fn a_phased_out_permanent_isnt_untapped() {
+    cr!("702.26b", "702.26c", "502.3");
+    supported("Goblin Sharpshooter");
+    let mut t = TestGame::new(2);
+    // "This creature doesn't untap during your untap step. Whenever a creature dies, untap
+    // this creature. {T}: This creature deals 1 damage to any target."
+    let shooter = t.battlefield(P0, "Goblin Sharpshooter");
+    let elves = t.battlefield(P1, "Llanowar Elves");
+    t.activate(P0, shooter, 0, &[Entity::Object(elves)])
+        .expect("ping");
+    t.resolve();
+    assert!(t.in_graveyard(P1, "Llanowar Elves"));
+    assert!(t.obj_now(shooter).tapped);
+    // The untap trigger is on the stack when the Sharpshooter phases out: a phased-out
+    // permanent can't be untapped.
+    assert_eq!(t.stack_len(), 1);
+    ripple(&mut t, P0, shooter);
+    t.resolve_all();
+    assert!(t.obj_now(shooter).tapped);
+    // It phases in during P0's untap step, still tapped, and doesn't untap then.
+    to_upkeep(&mut t, P0);
+    t.settle();
+    assert!(!phased_out(&t, shooter));
+    assert!(t.obj_now(shooter).tapped);
+    // Phased in, the trigger untaps it.
+    let ogre = t.battlefield(P1, "Gray Ogre");
+    t.g.destroy(ogre, None);
+    t.resolve_all();
+    assert!(!t.obj_now(shooter).tapped);
+}
+
 /// Advances to `p`'s next upkeep (its untap step's phasing done), triggered abilities not
 /// yet put on the stack.
 fn to_upkeep(t: &mut TestGame, p: PlayerId) {
@@ -269,7 +301,7 @@ fn phasing_in_doesnt_trigger_enters_abilities() {
 
 #[test]
 fn shimmering_efreet_phasing_in_alone_phases_itself_out() {
-    cr!("702.26a", "702.26c", "603.3d");
+    cr!("702.26a", "702.26c", "608.2b");
     ruling!(
         "Shimmering Efreet",
         "If it phases in and no other creatures are on the battlefield, it will phase itself back out."
@@ -482,6 +514,7 @@ fn damage_to_a_creature_that_phased_out_isnt_dealt() {
     // removed from combat): the damage to it isn't dealt.
     assert_eq!(t.stack_len(), 1);
     ripple(&mut t, P1, giant);
+    assert!(!t.g.is_blocking(giant), "removed from combat");
     t.resolve_all();
     assert_eq!(damage_on(&t, giant), 0);
     // The Giant phases in during P1's untap step, undamaged, and is still there.

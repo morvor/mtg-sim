@@ -1288,8 +1288,9 @@ impl Game {
     ) -> bool {
         let o = self.obj(obj);
         // Only a permanent: an object that has left the battlefield keeps its zone as
-        // last known information, but it's no longer there to tap (CR 400.7).
-        if !self.is_in_zone(obj, Zone::Battlefield) || o.tapped {
+        // last known information, but it's no longer there to tap (CR 400.7); a phased-out
+        // permanent can't be affected (CR 702.26b).
+        if !self.is_in_zone(obj, Zone::Battlefield) || o.tapped || o.phased_out {
             return false;
         }
         crate::kw::before_tap(self, obj);
@@ -1306,7 +1307,8 @@ impl Game {
 
     pub fn untap(&mut self, obj: ObjectId) -> bool {
         let o = self.obj(obj);
-        if !self.is_in_zone(obj, Zone::Battlefield) || !o.tapped {
+        // A phased-out permanent can't be affected (CR 702.26b): it stays tapped.
+        if !self.is_in_zone(obj, Zone::Battlefield) || !o.tapped || o.phased_out {
             return false;
         }
         // CR 122.1d: a stun counter's replacement effect.

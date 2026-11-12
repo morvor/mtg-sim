@@ -210,7 +210,7 @@ fn a_card_cast_from_exile_and_exiled_again_is_no_longer_exiled_with_its_source()
 
 #[test]
 fn counters_that_remain_on_a_moving_object_dont_bring_effects_along() {
-    cr!("400.7", "122.2", "611.2b");
+    cr!("400.7", "611.2c");
     ruling!(
         "Skullbriar, the Walking Grave",
         "such as Aven Mimeomancer's, stop applying to Skullbriar once it leaves the battlefield. Even though Skullbriar retains the counters, it becomes a new object"
