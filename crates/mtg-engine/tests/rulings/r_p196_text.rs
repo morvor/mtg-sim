@@ -23,7 +23,10 @@ fn protections(t: &TestGame, id: ObjectId) -> Vec<String> {
 #[test]
 fn sleight_of_mind_can_target_a_card_without_color_words() {
     cr!("612.2", "115.1");
-    ruling!("Sleight of Mind", "Can target a card with no color words on it.");
+    ruling!(
+        "Sleight of Mind",
+        "Can target a card with no color words on it."
+    );
     supported("Sleight of Mind");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -52,12 +55,15 @@ fn sleight_of_mind_must_choose_a_different_color_word() {
     assert_eq!(lists.len(), 2);
     assert!(lists[0].iter().any(|w| w == "black"));
     assert!(!lists[1].iter().any(|w| w == "black"));
-    assert_eq!(protections(&t, knight), vec!["Some(Color(Red))".to_string()]);
+    assert_eq!(
+        protections(&t, knight),
+        vec!["Some(Color(Red))".to_string()]
+    );
 }
 
 #[test]
 fn glamerdye_changes_color_words_but_not_names_or_mana_symbols() {
-    cr!("612.2", "201.2", "107.4");
+    cr!("612.2", "107.4");
     ruling!(
         "Glamerdye",
         "Glamerdye affects each instance of the chosen word in the text box of the spell or permanent, as long as it's being used as a color word. Glamerdye won't change such words in card names, such as White Knight. It also won't change mana symbols."
@@ -71,7 +77,10 @@ fn glamerdye_changes_color_words_but_not_names_or_mana_symbols() {
     cast_at(&mut t, P0, "Glamerdye", &[obj(knight)]);
     t.resolve_all();
     assert_eq!(t.obj_now(knight).chars.name, "White Knight");
-    assert_eq!(protections(&t, knight), vec!["Some(Color(Black))".to_string()]);
+    assert_eq!(
+        protections(&t, knight),
+        vec!["Some(Color(Black))".to_string()]
+    );
     // Paragon of Gathering Mists: "Other blue creatures you control get +1/+1. {U}, {T}:
     // Another target blue creature you control gains flying until end of turn."
     // blue -> red: red creatures get +1/+1, and the ability still costs {U}.
@@ -87,8 +96,11 @@ fn glamerdye_changes_color_words_but_not_names_or_mana_symbols() {
     // Activating it takes blue mana and targets the red creature.
     t.g.players[0].mana_pool.empty();
     mana(&mut t, P0, mtg_engine::mana::ManaType::R, 2);
+    t.answer_targets(P0, &[obj(red)]);
     let r = crate::r_s06_common::activate_containing(&mut t, P0, paragon, "{T}");
     assert!(r.is_err(), "{{U}} can't be paid with red mana");
+    t.clear_answers();
+    assert!(!t.obj_now(paragon).tapped);
     mana(&mut t, P0, mtg_engine::mana::ManaType::U, 1);
     t.answer_targets(P0, &[obj(red)]);
     crate::r_s06_common::activate_containing(&mut t, P0, paragon, "{T}").unwrap();
@@ -145,7 +157,7 @@ fn glamerdye_cant_affect_fear() {
 
 #[test]
 fn glamerdye_changes_only_printed_and_copied_words() {
-    cr!("612.1", "612.2", "707.2");
+    cr!("612.1", "612.2", "612.3", "707.2");
     ruling!(
         "Glamerdye",
         "Glamerdye changes only words actually printed on the spell or permanent (if it's a card), words that are part of the spell or permanent's original characteristics as stated by the effect that created it (if it's a token or a copy of a spell), or words that were granted to the spell or permanent as part of a copy effect. It won't change words that are granted to the spell or permanent by any other effects. For example, if an Aura grants a creature protection from blue, you can change that to protection from red by targeting the Aura, but not by targeting the creature. Glamerdye also can't change what color was chosen for a permanent (such as Painter's Servant) as it entered."
@@ -168,7 +180,10 @@ fn glamerdye_changes_only_printed_and_copied_words() {
     let s = cast_at(&mut t, P0, "Glamerdye", &[obj(ward)]);
     assert_eq!(crate::r_s25_common::targets_of(&t, s), vec![obj(ward)]);
     t.resolve_all();
-    assert_eq!(protections(&t, bears), vec!["Some(Color(Green))".to_string()]);
+    assert_eq!(
+        protections(&t, bears),
+        vec!["Some(Color(Green))".to_string()]
+    );
     // A Clone copying White Knight: the copied words change.
     let mut t = TestGame::new(2);
     let knight = t.battlefield(P1, "White Knight");
@@ -176,12 +191,21 @@ fn glamerdye_changes_only_printed_and_copied_words() {
     t.answer_yes(P1, true);
     let clone = t.enter(P1, "Clone");
     t.settle();
-    assert_eq!(protections(&t, clone), vec!["Some(Color(Black))".to_string()]);
+    assert_eq!(
+        protections(&t, clone),
+        vec!["Some(Color(Black))".to_string()]
+    );
     choose_words(&mut t, P0, &["black", "green"]);
     cast_at(&mut t, P0, "Glamerdye", &[obj(clone)]);
     t.resolve_all();
-    assert_eq!(protections(&t, clone), vec!["Some(Color(Green))".to_string()]);
-    assert_eq!(protections(&t, knight), vec!["Some(Color(Black))".to_string()]);
+    assert_eq!(
+        protections(&t, clone),
+        vec!["Some(Color(Green))".to_string()]
+    );
+    assert_eq!(
+        protections(&t, knight),
+        vec!["Some(Color(Black))".to_string()]
+    );
     // Painter's Servant with blue chosen keeps blue whatever words change.
     let mut t = TestGame::new(2);
     choose_color(&mut t, P1, Color::Blue);
@@ -198,8 +222,228 @@ fn glamerdye_changes_only_printed_and_copied_words() {
 }
 
 #[test]
+fn glamerdye_changes_the_words_a_token_or_a_spell_copy_was_created_with() {
+    cr!("612.2", "612.4", "707.10", "608.2b");
+    ruling!(
+        "Glamerdye",
+        "words that are part of the spell or permanent's original characteristics as stated by the effect that created it (if it's a token or a copy of a spell)"
+    );
+    supported("Hunted Horror");
+    supported("Doom Blade");
+    // Hunted Horror: P1 creates two 3/3 Centaurs with protection from black; black ->
+    // red on one of them.
+    let mut t = TestGame::new(2);
+    t.answer_targets(P0, &[pl(P1)]);
+    t.enter(P0, "Hunted Horror");
+    t.g.flush_events();
+    t.resolve_all();
+    let centaurs: Vec<ObjectId> =
+        t.g.permanents()
+            .filter(|o| o.controller == P1 && o.is_token())
+            .map(|o| o.id)
+            .collect();
+    assert_eq!(centaurs.len(), 2);
+    for c in &centaurs {
+        assert_eq!(protections(&t, *c), vec!["Some(Color(Black))".to_string()]);
+    }
+    choose_words(&mut t, P0, &["black", "red"]);
+    cast_at(&mut t, P0, "Glamerdye", &[obj(centaurs[0])]);
+    t.resolve_all();
+    assert_eq!(
+        protections(&t, centaurs[0]),
+        vec!["Some(Color(Red))".to_string()]
+    );
+    assert_eq!(
+        protections(&t, centaurs[1]),
+        vec!["Some(Color(Black))".to_string()]
+    );
+    // A copy of Doom Blade ("Destroy target nonblack creature.") aimed at the red Hill
+    // Giant: black -> red on the copy makes the Giant an illegal target for it.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let blade = cast_at(&mut t, P0, "Doom Blade", &[obj(bears)]);
+    cast_at(&mut t, P0, "Twincast", &[obj(blade)]);
+    crate::r_s25_common::change_copy_targets(&mut t, P0, &[Some(obj(giant))]);
+    t.resolve();
+    let copy = crate::r_s25_common::spell_copies(&t)[0];
+    assert_eq!(crate::r_s25_common::targets_of(&t, copy), vec![obj(giant)]);
+    choose_words(&mut t, P0, &["black", "red"]);
+    cast_at(&mut t, P0, "Glamerdye", &[obj(copy)]);
+    t.resolve();
+    assert_eq!(t.stack_len(), 2);
+    t.resolve_all();
+    assert!(t.on_battlefield(giant));
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    // Without the change, the copy destroys the Giant.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let blade = cast_at(&mut t, P0, "Doom Blade", &[obj(bears)]);
+    cast_at(&mut t, P0, "Twincast", &[obj(blade)]);
+    crate::r_s25_common::change_copy_targets(&mut t, P0, &[Some(obj(giant))]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}
+
+/// Empties P0's mana pool and gives P0 one mana of `ty`.
+fn pool_only(t: &mut TestGame, ty: mtg_engine::mana::ManaType) {
+    t.g.players[0].mana_pool.empty();
+    mana(t, P0, ty, 1);
+}
+
+#[test]
+fn glamerdye_leaves_a_hybrid_mana_symbol_alone() {
+    cr!("612.2", "107.4e");
+    ruling!("Glamerdye", "It also won't change mana symbols.");
+    supported("Stillmoon Cavalier");
+    use mtg_engine::mana::ManaType;
+    // Stillmoon Cavalier (protection from white and from black; "{W/B}: ... gains flying"):
+    // white -> red makes it protection from red; {W/B} stays {W/B}.
+    let mut t = TestGame::new(2);
+    let cav = t.battlefield(P0, "Stillmoon Cavalier");
+    choose_words(&mut t, P0, &["white", "red"]);
+    cast_at(&mut t, P0, "Glamerdye", &[obj(cav)]);
+    t.resolve_all();
+    let prot = protections(&t, cav).join(" ");
+    assert!(prot.contains("Red") && prot.contains("Black") && !prot.contains("White"));
+    pool_only(&mut t, ManaType::R);
+    let r = crate::r_s06_common::activate_containing(&mut t, P0, cav, "flying");
+    assert!(r.is_err(), "{{W/B}} can't be paid with red mana");
+    pool_only(&mut t, ManaType::W);
+    crate::r_s06_common::activate_containing(&mut t, P0, cav, "flying").unwrap();
+    t.resolve_all();
+    assert!(t.obj_now(cav).has_keyword(KeywordKind::Flying));
+}
+
+#[test]
+fn glamerdye_leaves_a_phyrexian_mana_symbol_alone() {
+    cr!("612.2", "107.4f", "119.4");
+    ruling!("Glamerdye", "It also won't change mana symbols.");
+    supported("Unctus, Grand Metatect");
+    use mtg_engine::mana::ManaType;
+    use mtg_engine::types::CardType;
+    // Unctus ("{U/P}: Until end of turn, target creature you control becomes a blue
+    // artifact ..."): blue -> green makes the creature green; {U/P} stays {U/P}, which P0
+    // at 1 life can pay only with blue mana.
+    let mut t = TestGame::new(2);
+    let unctus = t.battlefield(P0, "Unctus, Grand Metatect");
+    let giant = t.battlefield(P0, "Hill Giant");
+    choose_words(&mut t, P0, &["blue", "green"]);
+    cast_at(&mut t, P0, "Glamerdye", &[obj(unctus)]);
+    t.resolve_all();
+    t.g.players[0].life = 1;
+    pool_only(&mut t, ManaType::G);
+    t.answer_targets(P0, &[obj(giant)]);
+    let r = crate::r_s06_common::activate_containing(&mut t, P0, unctus, "{U/P}");
+    assert!(r.is_err(), "{{U/P}} can't be paid with green mana");
+    t.clear_answers();
+    pool_only(&mut t, ManaType::U);
+    t.answer_targets(P0, &[obj(giant)]);
+    crate::r_s06_common::activate_containing(&mut t, P0, unctus, "{U/P}").unwrap();
+    t.resolve_all();
+    let o = t.obj_now(giant);
+    assert!(o.is(CardType::Artifact));
+    assert!(o.chars.colors.contains(Color::Green) && !o.chars.colors.contains(Color::Blue));
+}
+
+#[test]
+fn glamerdye_leaves_the_symbol_krrik_pays_life_for_alone() {
+    cr!("612.2", "118.3", "119.4");
+    ruling!("Glamerdye", "It also won't change mana symbols.");
+    supported("K'rrik, Son of Yawgmoth");
+    use mtg_engine::mana::ManaType;
+    // K'rrik ("For each {B} in a cost, you may pay 2 life rather than pay that mana.
+    // Whenever you cast a black spell, put a +1/+1 counter on K'rrik."): black -> red
+    // changes the trigger, not the {B}.
+    let mut t = TestGame::new(2);
+    let krrik = t.battlefield(P0, "K'rrik, Son of Yawgmoth");
+    choose_words(&mut t, P0, &["black", "red"]);
+    cast_at(&mut t, P0, "Glamerdye", &[obj(krrik)]);
+    t.resolve_all();
+    t.g.players[0].mana_pool.empty();
+    let shock = t.hand(P0, "Shock");
+    assert!(
+        t.cast(P0, shock).target(P1).try_go().is_err(),
+        "life can't pay {{R}}"
+    );
+    t.clear_answers();
+    let duress = t.hand(P0, "Duress");
+    t.cast(P0, duress).target(P1).go();
+    assert_eq!(t.life(P0), 18);
+    t.resolve_all();
+    assert_eq!(t.counters(krrik, "+1/+1"), 0, "a black spell");
+    mana(&mut t, P0, ManaType::R, 1);
+    let shock = t.g.current(shock);
+    t.cast(P0, shock).target(P1).go();
+    t.resolve_all();
+    assert_eq!(t.counters(krrik, "+1/+1"), 1, "a red spell");
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn glamerdye_leaves_the_symbol_of_a_cost_increase_alone() {
+    cr!("612.2", "107.4a", "601.2f");
+    ruling!("Glamerdye", "It also won't change mana symbols.");
+    supported("Andradite Leech");
+    use mtg_engine::mana::ManaType;
+    // Andradite Leech ("Black spells you cast cost {B} more to cast."): black -> red makes
+    // red spells cost {B} more.
+    let mut t = TestGame::new(2);
+    let leech = t.battlefield(P0, "Andradite Leech");
+    choose_words(&mut t, P0, &["black", "red"]);
+    cast_at(&mut t, P0, "Glamerdye", &[obj(leech)]);
+    t.resolve_all();
+    pool_only(&mut t, ManaType::R);
+    let shock = t.hand(P0, "Shock");
+    assert!(
+        t.cast(P0, shock).target(P1).try_go().is_err(),
+        "Shock costs {{R}}{{B}}"
+    );
+    t.clear_answers();
+    mana(&mut t, P0, ManaType::B, 1);
+    let shock = t.g.current(shock);
+    t.cast(P0, shock).target(P1).go();
+    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    // A black spell costs just its own {B}.
+    pool_only(&mut t, ManaType::B);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let dis = t.hand(P0, "Disfigure");
+    t.cast(P0, dis).target(bears).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn glamerdye_changes_the_color_word_of_a_devotion() {
+    cr!("612.2", "700.5", "700.5a");
+    ruling!(
+        "Glamerdye",
+        "Glamerdye affects each instance of the chosen word in the text box of the spell or permanent, as long as it's being used as a color word."
+    );
+    supported("Erebos, God of the Dead");
+    // Erebos ("As long as your devotion to black is less than five, Erebos isn't a
+    // creature."): black -> red, with five red mana symbols among P0's permanents.
+    use mtg_engine::types::CardType;
+    let mut t = TestGame::new(2);
+    let erebos = t.battlefield(P0, "Erebos, God of the Dead");
+    t.battlefield(P0, "Fire Elemental");
+    t.battlefield(P0, "Fire Elemental");
+    t.battlefield(P0, "Raging Goblin");
+    assert!(!t.obj_now(erebos).is(CardType::Creature));
+    choose_words(&mut t, P0, &["black", "red"]);
+    cast_at(&mut t, P0, "Glamerdye", &[obj(erebos)]);
+    t.resolve_all();
+    assert!(t.obj_now(erebos).is(CardType::Creature));
+    assert_eq!(t.pt(erebos), (5, 7));
+}
+
+#[test]
 fn glamerdye_lasts_and_follows_a_permanent_spell_onto_the_battlefield() {
-    cr!("611.2a", "612.2", "400.7");
+    cr!("611.2a", "612.2", "400.7", "400.7a");
     ruling!(
         "Glamerdye",
         "Glamerdye's effect has no duration. It will last until the game ends or the affected spell or permanent leaves the relevant zone, with the following exception: If Glamerdye affects an artifact, creature, enchantment, or planeswalker spell, it will also affect the permanent that spell becomes when it resolves."
@@ -211,13 +455,20 @@ fn glamerdye_lasts_and_follows_a_permanent_spell_onto_the_battlefield() {
     cast_at(&mut t, P0, "Glamerdye", &[obj(spell)]);
     t.resolve_all();
     let knight = t.named_on_battlefield("White Knight")[0];
-    assert_eq!(protections(&t, knight), vec!["Some(Color(Red))".to_string()]);
+    assert_eq!(
+        protections(&t, knight),
+        vec!["Some(Color(Red))".to_string()]
+    );
     pass_turn(&mut t);
     pass_turn(&mut t);
-    assert_eq!(protections(&t, knight), vec!["Some(Color(Red))".to_string()]);
+    assert_eq!(
+        protections(&t, knight),
+        vec!["Some(Color(Red))".to_string()]
+    );
     // It ends when the permanent leaves the battlefield.
     crate::r_p189_common::bounce(&mut t, knight);
-    let card = t.g.find_in_zone(mtg_engine::object::Zone::Hand(P1), "White Knight")[0];
+    let card =
+        t.g.find_in_zone(mtg_engine::object::Zone::Hand(P1), "White Knight")[0];
     assert!(has_ability(&t, card, "black"));
 }
 
