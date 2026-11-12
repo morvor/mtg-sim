@@ -127,6 +127,9 @@ pub fn copy_spell_quiet(g: &mut Game, spell: ObjectId, controller: PlayerId) -> 
     }
     copy.prev = None;
     copy.next = None;
+    // Being a commander is a property of the card, not a copiable value (CR 903.3): a copy
+    // of a commander spell isn't a commander, nor is the token it becomes.
+    copy.is_commander = false;
     if let Some(si) = copy.stack.as_mut() {
         // A copy isn't cast (CR 707.10), so no mana was spent to cast it (it copies
         // decisions such as X and additional costs, not the payment).

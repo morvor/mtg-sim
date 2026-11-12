@@ -248,3 +248,29 @@ fn a_copy_of_an_adventure_isnt_exiled_on_an_adventure() {
     assert_eq!(t.g.exile.len(), 1, "only the card, on an adventure");
     assert_eq!(t.g.obj(t.g.exile[0]).kind, ObjKind::Card);
 }
+
+#[test]
+fn a_copy_of_a_commander_spell_isnt_a_commander() {
+    cr!("707.10", "707.10f", "903.3", "903.10a", "704.6c");
+    let mut t = TestGame::with_config(2, mtg_engine::game::GameConfig::commander_game());
+    let engine = t.battlefield(P0, "Lithoform Engine");
+    let card = t.command(P0, "Isamaru, Hound of Konda");
+    t.g.objects[card.0 as usize].is_commander = true;
+    let name = t.obj(card).card.as_ref().unwrap().name.clone();
+    t.g.players[0].commander_names.push(name);
+    t.lands(P0, "Plains", 1);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    let spell = t.cast(P0, card).go();
+    assert!(t.g.obj(spell).is_commander);
+    lithoform(&mut t, engine, 2, spell);
+    t.resolve();
+    let copy = *t.g.stack.last().unwrap();
+    // Being a commander isn't a characteristic: the copy isn't one.
+    assert!(!t.g.obj(copy).is_commander);
+    t.resolve();
+    let token = t.named_on_battlefield("Isamaru, Hound of Konda")[0];
+    assert!(!t.obj_now(token).is_commander);
+    // Its combat damage isn't commander damage.
+    t.g.deal_damage(token, Entity::Player(P1), 2, true);
+    assert!(t.player(P1).commander_damage.is_empty());
+}
