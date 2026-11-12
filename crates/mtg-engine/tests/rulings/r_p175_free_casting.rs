@@ -127,15 +127,16 @@ fn mindclaw_shaman_can_be_responded_to_but_not_while_resolving() {
     let spell = t.g.current(bolt);
     assert!(on_stack(&t, spell), "P0 cast the Bolt: {}", t.dump_log());
     assert_eq!(t.obj(spell).controller, P0);
-    assert!(t.asked()[from..].iter().all(|(p, d)| *p != P1
-        || !matches!(d, mtg_engine::decision::Decision::Priority { .. })));
+    assert!(t.asked()[from..]
+        .iter()
+        .all(|(p, d)| *p != P1 || !matches!(d, mtg_engine::decision::Decision::Priority { .. })));
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
 }
 
 #[test]
 fn havengul_lich_changes_the_zone_not_the_timing() {
-    cr!("307.1", "601.3", "117.1a");
+    cr!("302.1", "601.3", "117.1a");
     ruling!(
         "Havengul Lich",
         "Havengul Lich’s ability changes the zone you are permitted to cast the card from, not the times you are permitted to cast it."
@@ -166,7 +167,7 @@ fn havengul_lich_changes_the_zone_not_the_timing() {
 
 #[test]
 fn reversal_of_fortune_copy_of_a_split_card_casts_one_half() {
-    cr!("709.3", "707.12", "702.102c");
+    cr!("709.3", "709.3c", "707.12", "702.102a");
     ruling!(
         "Reversal of Fortune",
         "If the copied card is a split card, you may choose to cast either side of the split card but not both."
@@ -199,22 +200,41 @@ fn reversal_of_fortune_copy_of_a_split_card_casts_one_half() {
             _ => None,
         })
         .collect();
-    assert_eq!(opts, vec![vec!["Cast Turn".to_string(), "Cast Burn".to_string()]]);
+    assert_eq!(
+        opts,
+        vec![vec!["Cast Turn".to_string(), "Cast Burn".to_string()]]
+    );
     assert_eq!(t.life(P1), 18, "Burn: {}", t.dump_log());
     assert_eq!(t.pt(bears), (2, 2), "not Turn");
     assert!(t.in_hand(P1, "Turn // Burn"), "the card stays in P1's hand");
 }
 
-/// P0's Sen Triplets has targeted P1 this turn: P1 can't cast spells or activate
-/// abilities.
-fn sen_triplets() -> TestGame {
+/// P0's upkeep; with `triplets`, P0's Sen Triplets has targeted P1 this turn: P1 can't
+/// cast spells or activate abilities.
+fn sen_triplets(triplets: bool) -> TestGame {
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "Sen Triplets");
-    t.answer_targets(P0, &[pl(P1)]);
+    if triplets {
+        t.battlefield(P0, "Sen Triplets");
+        t.answer_targets(P0, &[pl(P1)]);
+    }
     t.set_step(P1, Step::End);
     t.advance_to(P0, Step::Upkeep);
     t.resolve_all();
     t
+}
+
+/// P1's Triskelion and a Desert Cerodon in P1's hand, with mana and priority: whether P1
+/// can activate each (Triskelion's ability, cycling).
+fn p1_can_activate(t: &mut TestGame, trisk: ObjectId) -> (bool, bool) {
+    let cycler = t.hand(P1, "Desert Cerodon");
+    lots(t, P1);
+    t.g.turn.priority = Some(P1);
+    t.g.recompute();
+    let acts = t.g.activatable_abilities(P1);
+    (
+        acts.iter().any(|(id, _)| *id == trisk),
+        acts.iter().any(|(id, _)| *id == cycler),
+    )
 }
 
 #[test]
@@ -229,22 +249,25 @@ fn sen_triplets_stops_activated_abilities_but_not_replacement_effects() {
         "Activated abilities are written in the form “[Cost]: [Effect].” Some keyword abilities (such as cycling) are activated abilities and will have colons in their reminder texts."
     );
     supported("Sen Triplets");
-    let mut t = sen_triplets();
+    let mut t = sen_triplets(true);
     // P1's permanents' replacement effects still apply: Triskelion enters with counters,
     // Caged Sun's color is chosen as it enters, a Tapland enters tapped.
     let trisk = t.enter(P1, "Triskelion");
     assert_eq!(t.counters(trisk, "+1/+1"), 3);
     let from = t.asked().len();
     t.enter(P1, "Caged Sun");
-    assert!(t.asked()[from..].iter().any(|(p, d)| *p == P1
-        && matches!(d, mtg_engine::decision::Decision::ChooseOption { .. })));
+    assert!(
+        t.asked()[from..]
+            .iter()
+            .any(|(p, d)| *p == P1
+                && matches!(d, mtg_engine::decision::Decision::ChooseOption { .. }))
+    );
     let tapland = t.enter(P1, "Coastal Tower");
     assert!(tapped(&t, tapland));
     // P1 can't activate abilities: cycling (a keyword activated ability) or Triskelion's.
-    let cycler = t.hand(P1, "Desert Cerodon");
-    lots(&mut t, P1);
-    t.g.turn.priority = Some(P1);
-    t.g.recompute();
-    let acts = t.g.activatable_abilities(P1);
-    assert!(acts.iter().all(|(id, _)| *id != cycler && *id != trisk), "{acts:?}");
+    assert_eq!(p1_can_activate(&mut t, trisk), (false, false));
+    // Control: without the Triplets' effect, P1 could activate both.
+    let mut t = sen_triplets(false);
+    let trisk = t.enter(P1, "Triskelion");
+    assert_eq!(p1_can_activate(&mut t, trisk), (true, true));
 }

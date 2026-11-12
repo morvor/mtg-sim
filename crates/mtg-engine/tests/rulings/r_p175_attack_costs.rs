@@ -14,7 +14,7 @@ fn tapped_lands(t: &TestGame, lands: &[ObjectId]) -> usize {
 
 #[test]
 fn windborn_muse_doesnt_tax_attacks_on_planeswalkers() {
-    cr!("508.1g", "508.1h", "506.3");
+    cr!("508.1c", "508.1h", "506.2");
     ruling!(
         "Windborn Muse",
         "Creatures may still attack planeswalkers you control without their controller paying a cost."
@@ -42,7 +42,7 @@ fn windborn_muse_doesnt_tax_attacks_on_planeswalkers() {
 
 #[test]
 fn two_propagandas_cost_four_per_attacker() {
-    cr!("508.1g", "508.1h");
+    cr!("508.1h", "508.1j");
     ruling!(
         "Propaganda",
         "If there is more than one Propaganda on the battlefield, the cost is cumulative."
@@ -64,7 +64,7 @@ fn two_propagandas_cost_four_per_attacker() {
 
 #[test]
 fn propaganda_is_paid_while_declaring_and_for_each_attack() {
-    cr!("508.1g", "508.1h", "508.1j", "505.1a");
+    cr!("508.1h", "508.1i", "508.1j", "500.8");
     ruling!(
         "Propaganda",
         "The payment is made during the declare attackers step at the same time you are declaring the attacker."
@@ -90,7 +90,15 @@ fn propaganda_is_paid_while_declaring_and_for_each_attack() {
     let ev = &t.g.turn_events;
     let began = ev
         .iter()
-        .position(|e| matches!(e, Event::StepBegan { step: Step::DeclareAttackers, .. }))
+        .position(|e| {
+            matches!(
+                e,
+                Event::StepBegan {
+                    step: Step::DeclareAttackers,
+                    ..
+                }
+            )
+        })
         .unwrap();
     let declared = ev
         .iter()
@@ -121,7 +129,7 @@ fn propaganda_is_paid_while_declaring_and_for_each_attack() {
 
 #[test]
 fn lightning_ragers_and_rite_of_the_raging_storm() {
-    cr!("508.1c", "111.4", "201.2");
+    cr!("508.1c", "111.4");
     ruling!(
         "Rite of the Raging Storm",
         "If Rite of the Raging Storm leaves the battlefield before attackers are declared, creatures named Lightning Rager can attack you or planeswalkers you control."

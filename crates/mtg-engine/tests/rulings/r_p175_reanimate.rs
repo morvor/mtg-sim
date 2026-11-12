@@ -44,7 +44,7 @@ fn declared_attackers(t: &TestGame) -> Vec<ObjectId> {
 
 #[test]
 fn thunderkin_awakener_returns_an_attacking_creature_that_never_attacked() {
-    cr!("506.3a", "508.4", "508.3a");
+    cr!("508.4", "508.3a");
     ruling!(
         "Thunderkin Awakener",
         "Although the returned creature is an attacking creature, it was never declared as an attacking creature. This means that abilities that trigger whenever a creature attacks (such as that of Thunderkin Awakener itself) won’t trigger when it enters the battlefield attacking."
@@ -81,7 +81,10 @@ fn thunderkin_awakener_toughness_is_checked_on_attack_and_resolution_with_lki() 
     assert_eq!(t.pt(tk).1, 3);
     kill(&mut t, tk);
     t.resolve_all();
-    assert!(t.on_battlefield(now(&t, card)), "returned using last known toughness");
+    assert!(
+        t.on_battlefield(now(&t, card)),
+        "returned using last known toughness"
+    );
     // Its toughness drops to 2 before resolution: the target is illegal.
     let mut t = TestGame::new(2);
     let card = t.graveyard(P0, "Terrain Elemental");
@@ -130,7 +133,7 @@ fn thunderkin_awakener_creature_that_left_isnt_sacrificed() {
 
 #[test]
 fn thunderkin_awakener_returned_creature_can_attack_a_planeswalker() {
-    cr!("508.4", "506.3a");
+    cr!("508.4");
     ruling!(
         "Thunderkin Awakener",
         "You choose which player or planeswalker the returned creature is attacking. It doesn’t have to be attacking the same player or planeswalker that Thunderkin Awakener is attacking."
@@ -142,15 +145,14 @@ fn thunderkin_awakener_returned_creature_can_attack_a_planeswalker() {
     t.answer_choose(P0, &[obj(pw)]);
     t.resolve_all();
     let back = now(&t, card);
-    let target = t
-        .g
-        .combat
-        .as_ref()
-        .unwrap()
-        .attackers
-        .iter()
-        .find(|a| a.id == back)
-        .map(|a| a.target);
+    let target =
+        t.g.combat
+            .as_ref()
+            .unwrap()
+            .attackers
+            .iter()
+            .find(|a| a.id == back)
+            .map(|a| a.target);
     assert_eq!(target, Some(Some(obj(pw))));
 }
 
@@ -168,7 +170,11 @@ fn apprentice_necromancer_cant_target_itself() {
     let from = t.asked().len();
     act(&mut t, P0, n, 0, &[obj(bears)]);
     let choices = target_choices(&t, P0, from, "");
-    assert_eq!(choices, vec![vec![obj(bears)]], "only the Bears, not itself");
+    assert_eq!(
+        choices,
+        vec![vec![obj(bears)]],
+        "only the Bears, not itself"
+    );
     assert!(t.in_graveyard(P0, "Apprentice Necromancer"));
     assert!(t.on_battlefield(now(&t, bears)));
     // With no other creature card in the graveyard, it can't be activated.
@@ -181,7 +187,7 @@ fn apprentice_necromancer_cant_target_itself() {
 
 #[test]
 fn corpse_dance_and_shallow_grave_exile_only_a_creature_still_there() {
-    cr!("603.7c", "400.7", "610.3c");
+    cr!("603.7c", "400.7");
     ruling!(
         "Corpse Dance",
         "Corpse Dance only exiles the card if the card is still on the battlefield at the beginning of the end step."

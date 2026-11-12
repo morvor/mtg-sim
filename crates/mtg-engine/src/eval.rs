@@ -1173,35 +1173,49 @@ impl Game {
     }
 
     /// For counting permanents "attached to" an object that has left the battlefield: the
-    /// ones that were attached to it as it last existed there and have left the
-    /// battlefield too (an Aura put into a graveyard as a state-based action), judged as
-    /// they last existed (CR 608.2h, 704.5m). Those still on the battlefield are among
-    /// [`Game::objects_matching`] already (`Filter::AttachedToAnyOf`).
+    /// ones attached to it as it last existed there (CR 608.2h) that the count of the
+    /// battlefield misses. One that has left the battlefield too (an Aura put into a
+    /// graveyard as a state-based action, CR 704.5m: a new object, CR 400.7) is judged as
+    /// it last existed; one attached to another object since is judged as it is. One
+    /// still unattached on the battlefield is among [`Game::objects_matching`] already
+    /// (`Filter::AttachedToAnyOf` follows its `last_attached_to`), and one that was
+    /// unattached before the object left isn't among those it records.
     fn left_attachments_matching(&self, f: &Filter, ctx: &Ctx) -> usize {
-        let host_sel = match f {
-            Filter::AttachedToAnyOf(s) => Some(s),
-            Filter::And(v) => v.iter().find_map(|x| match x {
-                Filter::AttachedToAnyOf(s) => Some(s),
-                _ => None,
-            }),
-            _ => None,
-        };
-        let Some(sel) = host_sel else {
-            return 0;
-        };
-        if f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
+        // Target legality looks at what is attached now, as `Filter::AttachedToAnyOf`.
+        if ctx.target_legality || f.zone().is_some_and(|z| z != ZoneKind::Battlefield) {
             return 0;
         }
+        let host = |x: &Filter| matches!(x, Filter::AttachedToAnyOf(_));
+        // The host selection, and the rest of the filter.
+        let (sel, rest) = match f {
+            Filter::AttachedToAnyOf(s) => (s, Filter::Any),
+            Filter::And(v) if v.iter().filter(|x| host(x)).count() == 1 => {
+                let Some(Filter::AttachedToAnyOf(s)) = v.iter().find(|x| host(x)) else {
+                    return 0;
+                };
+                (
+                    s,
+                    Filter::And(v.iter().filter(|x| !host(x)).cloned().collect()),
+                )
+            }
+            _ => return 0,
+        };
         let mut seen: Vec<ObjectId> = Vec::new();
-        for host in self.eval_sel(sel, ctx).iter().filter_map(|e| e.object()) {
-            if self.is_live(host) {
+        for h in self.eval_sel(sel, ctx).iter().filter_map(|e| e.object()) {
+            if self.is_live(h) {
                 continue;
             }
-            let Some(l) = self.obj(host).left_battlefield.as_deref() else {
+            let Some(l) = self.obj(h).left_battlefield.as_deref() else {
                 continue;
             };
             for a in &l.attachments {
-                if !self.is_live(*a) && !seen.contains(a) && self.matches(*a, f, ctx) {
+                // Still on the battlefield: counted there unless attached to another
+                // object since; phased out, it's treated as though it doesn't exist (CR
+                // 702.26b).
+                if self.is_live(*a) && (self.obj(*a).phased_out || self.matches(*a, f, ctx)) {
+                    continue;
+                }
+                if !seen.contains(a) && self.matches(*a, &rest, ctx) {
                     seen.push(*a);
                 }
             }

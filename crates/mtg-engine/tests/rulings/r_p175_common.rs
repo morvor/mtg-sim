@@ -97,13 +97,12 @@ pub fn make_token(t: &mut TestGame, p: PlayerId, spec: TokenSpec) -> ObjectId {
         &mut ctx,
     );
     t.g.recompute();
-    let tok = t
-        .g
-        .battlefield
-        .iter()
-        .copied()
-        .find(|id| !before.contains(id))
-        .expect("no token");
+    let tok =
+        t.g.battlefield
+            .iter()
+            .copied()
+            .find(|id| !before.contains(id))
+            .expect("no token");
     t.g.flush_events();
     t.settle();
     tok

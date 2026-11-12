@@ -641,6 +641,11 @@ fn spells_cast_from_an_opponents_cards_without_paying_their_mana_costs() {
         "Silent-Blade Oni",
         "If you cast a card without paying its mana cost, you can't choose to cast it for any alternative costs, such as evoke or the alternative cost provided by the morph ability."
     );
+    // Its other ruling's kicker part (its {X} and Fling parts: `r_p175_free_casting.rs`).
+    ruling!(
+        "Silent-Blade Oni",
+        "However, you can pay optional additional costs, such as kicker, and you must still pay mandatory additional costs"
+    );
     for via in [Via::JacesMindseeker, Via::SilentBladeOni] {
         check_all(via);
     }

@@ -31,7 +31,9 @@ fn exchange_of_words(t: &mut TestGame, a: ObjectId, b: ObjectId) -> ObjectId {
 
 #[test]
 fn exchange_of_words_exchanges_rules_text() {
-    cr!("612.1", "612.2", "208.1");
+    cr!("612.1", "612.5", "613.1c", "707.2", "208.1");
+    // The ruling's second sentence (flavor text and watermarks in Un- games) is exempt
+    // (docs/rulings-exemptions/rulings-P175.tsv); its first and last are tested here.
     ruling!(
         "Exchange of Words",
         "Exchanging two creatures’ text boxes means that each one loses its rules text and replaces it with the rules text the other one had."
@@ -46,6 +48,15 @@ fn exchange_of_words_exchanges_rules_text() {
     // Power and toughness aren't in the text box.
     assert_eq!(t.pt(angel), (4, 4));
     assert_eq!(t.pt(bears), (2, 2));
+    // "In both cases, this is a text-changing effect" (layer 3), not a copy effect: the
+    // exchanged text isn't among the copiable values, so a Clone entering as a copy of
+    // the Bears is a plain Grizzly Bears.
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[obj(bears)]);
+    let clone = t.enter(P0, "Clone");
+    t.resolve_all();
+    assert_eq!(t.obj_now(clone).chars.name.as_str(), "Grizzly Bears");
+    assert!(!kw(&t, clone, KeywordKind::Flying) && !kw(&t, clone, KeywordKind::Vigilance));
     // It ends once Exchange of Words leaves the battlefield.
     exile(&mut t, e);
     assert!(kw(&t, angel, KeywordKind::Flying) && !kw(&t, bears, KeywordKind::Flying));
@@ -83,7 +94,7 @@ fn exchange_of_words_lasts_while_it_remains_even_without_abilities() {
 
 #[test]
 fn exchange_of_words_that_leaves_or_loses_a_target_exchanges_nothing() {
-    cr!("608.2b", "611.2b");
+    cr!("608.2b", "611.2b", "702.11b");
     ruling!(
         "Exchange of Words",
         "If Exchange of Words leaves the battlefield before its enters-the-battlefield ability resolves, the text boxes are never exchanged. Neither creature is ever affected. The same is true if either of the two creatures becomes an illegal target before the enters-the-battlefield ability resolved."
@@ -104,11 +115,27 @@ fn exchange_of_words_that_leaves_or_loses_a_target_exchanges_nothing() {
             assert!(!kw(&t, bears, KeywordKind::Flying), "{leaves}");
         }
     }
+    // The Bears become an illegal target but stay on the battlefield (hexproof against
+    // P0's ability): neither creature is affected.
+    let mut t = TestGame::new(2);
+    let angel = t.battlefield(P1, "Serra Angel");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    exchange_of_words(&mut t, angel, bears);
+    crate::r_s26_common::modify_until_eot(
+        &mut t,
+        bears,
+        vec![Modification::AddKeyword(Keyword::new(
+            KeywordKind::Hexproof,
+        ))],
+    );
+    t.resolve_all();
+    assert!(kw(&t, angel, KeywordKind::Flying) && kw(&t, angel, KeywordKind::Vigilance));
+    assert!(!kw(&t, bears, KeywordKind::Flying) && !kw(&t, bears, KeywordKind::Vigilance));
 }
 
 #[test]
 fn exchange_of_words_doesnt_exchange_granted_abilities_or_stickers() {
-    cr!("612.1", "123.7", "613.1f");
+    cr!("612.3", "612.5", "123.7", "613.1c", "613.1f");
     ruling!(
         "Exchange of Words",
         "Notably, ability stickers (and other granted abilities) aren’t part of the rules text that get exchanged. Any ability stickers on either of the two permanents continue to apply to the permanent they are on."
@@ -171,7 +198,7 @@ fn frodo(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn frodo_ring_bearer_needs_only_one_blocker() {
-    cr!("509.1c", "509.1b");
+    cr!("509.1c");
     ruling!(
         "Frodo Baggins",
         "If Frodo Baggins is your Ring-bearer, only one creature is required to block it. Other creatures may also block it and are free to block other creatures or not block at all."
@@ -191,7 +218,7 @@ fn frodo_ring_bearer_needs_only_one_blocker() {
 
 #[test]
 fn frodo_ring_bearer_unblockable_or_costly_to_block_isnt_blocked() {
-    cr!("509.1c", "509.1d", "701.54c");
+    cr!("509.1b", "509.1c", "701.54c");
     ruling!(
         "Frodo Baggins",
         "If Frodo Baggins is your Ring-bearer but each creature the defending player controls can't block for any reason (such as by having greater power than Frodo along with the first ability of the Ring emblem), then Frodo Baggins isn't blocked. If there's a cost associated with blocking Frodo Baggins, the defending player isn't forced to pay that cost, so it doesn't have to be blocked in that case either."
@@ -240,6 +267,32 @@ fn choosing_the_same_ring_bearer_again_still_counts() {
     assert_eq!(drawn(&t, P0), 2);
 }
 
+#[test]
+fn choosing_the_same_ring_bearer_again_counts_for_other_than_conditions() {
+    cr!("701.54a", "603.4");
+    // The same ruling, for the cards whose abilities care about which creature was
+    // chosen: "if you chose a creature other than ~ as your Ring-bearer".
+    ruling!(
+        "Faramir, Field Commander",
+        "If the creature you choose as your Ring-bearer was already your Ring-bearer, that still counts as choosing that creature as your Ring-bearer for the purpose of abilities that trigger \"whenever you choose a creature as your Ring-bearer\" or abilities that care about which creature was chosen as your Ring-bearer."
+    );
+    supported("Faramir, Field Commander");
+    // Faramir: "Whenever the Ring tempts you, if you chose a creature other than Faramir as
+    // your Ring-bearer, create a 1/1 white Human Soldier creature token."
+    let mut t = TestGame::new(2);
+    let faramir = t.battlefield(P0, "Faramir, Field Commander");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    // The Bears twice (the second time already the Ring-bearer), then Faramir.
+    for (choice, made) in [(bears, 1), (bears, 2), (faramir, 2)] {
+        t.answer_choose(P0, &[obj(choice)]);
+        tempt(&mut t.g, P0, None);
+        t.g.flush_events();
+        t.resolve_all();
+        assert_eq!(ring_bearer(&t.g, P0), Some(choice));
+        assert_eq!(tokens(&t, P0).len(), made, "{choice:?}");
+    }
+}
+
 fn deck(cards: &[(&str, usize)]) -> Vec<Arc<CardDef>> {
     let mut d = Vec::new();
     for (n, k) in cards {
@@ -272,7 +325,10 @@ fn nazgul_deck_limits() {
     supported("Nazgûl");
     // Constructed: nine, not ten.
     assert!(check_constructed(&deck(&[("Nazgûl", 9), ("Swamp", 51)])).is_empty());
-    assert!(too_many(&check_constructed(&deck(&[("Nazgûl", 10), ("Swamp", 50)]))));
+    assert!(too_many(&check_constructed(&deck(&[
+        ("Nazgûl", 10),
+        ("Swamp", 50)
+    ]))));
     // Limited with ten in the pool: nine in the deck, the tenth in the sideboard.
     let pool = deck(&[("Nazgûl", 10), ("Grizzly Bears", 40)]);
     let d = deck(&[("Nazgûl", 9), ("Grizzly Bears", 31)]);

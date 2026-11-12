@@ -49,7 +49,7 @@ fn named_tokens(t: &TestGame, p: PlayerId, name: &str) -> Vec<ObjectId> {
 
 #[test]
 fn kari_zev_ragavan_wasnt_declared_and_is_exiled_at_end_of_combat() {
-    cr!("508.4", "603.7c", "506.3a");
+    cr!("508.3a", "508.4", "603.7");
     ruling!(
         "Kari Zev, Skyship Raider",
         "Although Ragavan is attacking, it was never declared as an attacking creature (for the purposes of abilities that trigger whenever a creature attacks, for example)."
@@ -70,7 +70,11 @@ fn kari_zev_ragavan_wasnt_declared_and_is_exiled_at_end_of_combat() {
     assert_eq!(ragavan.len(), 1);
     assert!(attacking(&t, ragavan[0]));
     assert!(!declared(&t).contains(&ragavan[0]));
-    assert_eq!(t.life(P1), 18, "Hellrider triggered for Kari Zev and itself only");
+    assert_eq!(
+        t.life(P1),
+        18,
+        "Hellrider triggered for Kari Zev and itself only"
+    );
     // Kari Zev leaves; Ragavan is still exiled at end of combat.
     kill(&mut t, kari);
     t.advance_to(P0, Step::EndOfCombat);
@@ -80,7 +84,7 @@ fn kari_zev_ragavan_wasnt_declared_and_is_exiled_at_end_of_combat() {
 
 #[test]
 fn tokens_entering_attacking_can_attack_a_different_player_or_planeswalker() {
-    cr!("508.4", "506.3a");
+    cr!("508.4");
     ruling!(
         "Kari Zev, Skyship Raider",
         "You choose which opponent or opposing planeswalker Ragavan is attacking as you create the token. It doesn't have to be the same player or planeswalker Kari Zev is attacking."
@@ -101,8 +105,16 @@ fn tokens_entering_attacking_can_attack_a_different_player_or_planeswalker() {
     let cases: [(&str, Option<&str>, &str); 4] = [
         ("Kari Zev, Skyship Raider", None, "Ragavan"),
         ("Tilonalli's Summoner", None, "Elemental"),
-        ("Fire Navy Trebuchet", Some("Grizzly Bears"), "Ballistic Boulder"),
-        ("Mordor Trebuchet", Some("Goblin Piker"), "Ballistic Boulder"),
+        (
+            "Fire Navy Trebuchet",
+            Some("Grizzly Bears"),
+            "Ballistic Boulder",
+        ),
+        (
+            "Mordor Trebuchet",
+            Some("Goblin Piker"),
+            "Ballistic Boulder",
+        ),
     ];
     for (card, with, token) in cases {
         supported(card);
@@ -135,7 +147,7 @@ fn tokens_entering_attacking_can_attack_a_different_player_or_planeswalker() {
 
 #[test]
 fn dalkovan_encampment_delayed_trigger_works_each_declaration_this_turn() {
-    cr!("603.7a", "603.7b", "508.1m", "505.1a");
+    cr!("603.7a", "603.7b", "508.1m", "500.8");
     ruling!(
         "Dalkovan Encampment",
         "Activating Dalkovan Encampment’s last ability creates a delayed triggered ability that will trigger each time you declare at least one creature as an attacker during a declare attackers step this turn."
@@ -172,13 +184,14 @@ fn dalkovan_encampment_delayed_trigger_works_each_declaration_this_turn() {
 
 #[test]
 fn dalkovan_encampment_needs_a_swamp_or_mountain_already() {
-    cr!("614.1c", "305.7");
+    cr!("614.1d", "614.12");
     ruling!(
         "Dalkovan Encampment",
         "You must already control a Swamp or Mountain as Dalkovan Encampment enters for it to enter untapped. If it enters at the same time as a Swamp or Mountain when you control no other Swamps or Mountains, it will enter tapped."
     );
     let mut t = TestGame::new(2);
-    let both = crate::r_p116_common::enter_together(&mut t, P0, &["Dalkovan Encampment", "Mountain"]);
+    let both =
+        crate::r_p116_common::enter_together(&mut t, P0, &["Dalkovan Encampment", "Mountain"]);
     let camp = both
         .iter()
         .copied()
@@ -204,7 +217,11 @@ fn zurgo_triggers_for_each_token_leaving_with_it() {
     assert_eq!(tokens(&t, P0).len(), 2);
     cast_at(&mut t, P0, "Wrath of God", &[]);
     t.resolve_all();
-    assert_eq!(t.life(P1), 18, "one trigger per token (not attacking: lose 1 each)");
+    assert_eq!(
+        t.life(P1),
+        18,
+        "one trigger per token (not attacking: lose 1 each)"
+    );
 }
 
 #[test]
@@ -232,7 +249,10 @@ fn cybermen_squadron_myriad_on_itself_and_separate_instances() {
         "Cybermen Squadron",
         "Cybermen Squadron will itself have myriad as long as it remains a nonlegendary artifact creature."
     );
-    ruling!("Cybermen Squadron", "Multiple instances of myriad trigger separately.");
+    ruling!(
+        "Cybermen Squadron",
+        "Multiple instances of myriad trigger separately."
+    );
     let mut t = TestGame::new(2);
     let c = t.battlefield(P0, "Cybermen Squadron");
     assert!(has_kw(&t, c, KeywordKind::Myriad));
@@ -282,6 +302,18 @@ fn stangg_tokens_doubled_by_a_replacement_are_still_sacrificed() {
     assert!(!named_tokens(&t, P0, "Stangg Twin").is_empty());
     end_step(&mut t);
     assert!(tokens(&t, P0).is_empty(), "all sacrificed");
+    // Divine Visitation: a 4/4 white Angel is created instead of Stangg Twin (different
+    // characteristics); it's sacrificed all the same.
+    supported("Divine Visitation");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Divine Visitation");
+    stangg_attacks(&mut t, &[]);
+    let angels = named_tokens(&t, P0, "Angel");
+    assert_eq!(angels.len(), 1);
+    assert!(named_tokens(&t, P0, "Stangg Twin").is_empty());
+    assert_eq!(t.pt(angels[0]), (4, 4));
+    end_step(&mut t);
+    assert!(tokens(&t, P0).is_empty(), "the Angel is sacrificed");
 }
 
 #[test]
@@ -305,7 +337,7 @@ fn stangg_tokens_another_player_controls_arent_sacrificed() {
 
 #[test]
 fn stangg_aura_token_that_cant_attach_isnt_created() {
-    cr!("303.4f", "303.4g", "301.5c");
+    cr!("303.4f", "303.4g", "701.3a", "702.16d");
     ruling!(
         "Stangg, Echo Warrior",
         "If, for any reason, an Aura token that would be created this way can't be attached to Stangg Twin, that token isn't created. If an Equipment token that can't be attached to Stangg Twin would be created, that token enters the battlefield unattached."

@@ -59,8 +59,12 @@ fn yosei_skips_as_many_untap_steps_as_times_it_died() {
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let lorthos = t.battlefield(P0, "Lorthos, the Tidemaker");
-    for _ in 0..2 {
+    for i in 0..2 {
+        // Lorthos and the Bears untapped again, so that each attack's ability shows.
+        untap(&mut t, lorthos);
+        untap(&mut t, bears);
         lorthos_taps(&mut t, lorthos, &[bears]);
+        assert!(tapped(&t, bears), "Lorthos's ability {i} tapped the Bears");
         t.set_step(P0, Step::PrecombatMain);
         t.g.combat = None;
     }
@@ -202,8 +206,19 @@ fn lorthos_targets_any_permanents() {
     tap(&mut t, tapped_one);
     let third = t.battlefield(P2, "Hill Giant");
     let lorthos = t.battlefield(P0, "Lorthos, the Tidemaker");
+    // More permanents than eight, so the limit shows.
+    t.lands(P2, "Forest", 6);
     // Lorthos attacks P1; it targets P0's own land, P1's tapped Bears and P2's Giant.
+    let from = t.asked().len();
     lorthos_taps(&mut t, lorthos, &[mine, tapped_one, third]);
+    assert_eq!(target_bounds(&t, P0, from), vec![(0, 8)]);
+    let cands = target_choices(&t, P0, from, "");
+    assert!(
+        [mine, tapped_one, third, lorthos]
+            .iter()
+            .all(|p| cands[0].contains(&obj(*p))),
+        "{cands:?}"
+    );
     for p in [mine, tapped_one, third] {
         assert!(tapped(&t, p));
     }
@@ -217,7 +232,7 @@ fn lorthos_targets_any_permanents() {
 
 #[test]
 fn due_respect_taps_only_permanents_entering_after_it_resolves() {
-    cr!("614.1c", "611.2a");
+    cr!("614.1d", "611.2a");
     ruling!(
         "Due Respect",
         "Due Respect won't tap any permanents that have entered before it resolved."
@@ -256,6 +271,12 @@ fn tempest_owl_kicked_taps_zero_to_three_tapped_or_untapped_permanents() {
         t.answer_targets(P0, &ts);
         t.resolve_all();
         assert_eq!(target_bounds(&t, P0, from), vec![(0, 3)]);
+        // The tapped Forest is a legal target as well as the untapped creatures.
+        let cands = target_choices(&t, P0, from, "");
+        assert!(
+            perms.iter().all(|p| cands[0].contains(&obj(*p))),
+            "{cands:?}"
+        );
         for (i, p) in perms.iter().enumerate() {
             assert_eq!(tapped(&t, *p), i < n || i == 2, "{n} targets, {i}");
         }
@@ -298,12 +319,7 @@ fn topple_the_statue_and_firbolg_flutist_target_regardless_of_tapped_status() {
 
 /// P0 casts Magma Opus dividing its damage `split` among `dmg` and tapping `taps`; the
 /// spell is left on the stack.
-fn magma_opus(
-    t: &mut TestGame,
-    dmg: &[Entity],
-    split: &[i64],
-    taps: &[ObjectId],
-) -> ObjectId {
+fn magma_opus(t: &mut TestGame, dmg: &[Entity], split: &[i64], taps: &[ObjectId]) -> ObjectId {
     lots(t, P0);
     lots(t, P0);
     let spell = t.hand(P0, "Magma Opus");
@@ -374,7 +390,10 @@ fn magma_opus_can_damage_and_tap_the_same_permanent() {
     let maw = t.battlefield(P1, "Colossal Dreadmaw");
     let land = t.battlefield(P1, "Forest");
     let spell = magma_opus(&mut t, &[obj(maw)], &[4], &[maw, land]);
-    assert_eq!(stack_targets(&t, spell), vec![obj(maw), obj(maw), obj(land)]);
+    assert_eq!(
+        stack_targets(&t, spell),
+        vec![obj(maw), obj(maw), obj(land)]
+    );
     t.resolve_all();
     assert!(tapped(&t, maw) && tapped(&t, land));
     assert_eq!(crate::r_p009_common::dmg(&t, maw), 4);

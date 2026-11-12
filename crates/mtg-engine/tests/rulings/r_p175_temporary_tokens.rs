@@ -4,7 +4,7 @@
 //! for the next spell (CR 601.2f, 702.41).
 
 use crate::r_p175_common::*;
-use crate::r_s06_common::attach_new;
+use crate::r_s06_common::{attach_new, attached_to};
 use crate::r_s26_common::new_tokens;
 use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
@@ -63,6 +63,26 @@ fn valduk_leaving_before_resolution_uses_what_was_last_attached() {
     kill(&mut t, v);
     t.resolve_all();
     assert_eq!(elementals(&t, P0), 1);
+    // The Bonesplitter attached to another creature after Valduk left (Magnetic Theft:
+    // "Attach target Equipment to target creature.") was still attached to Valduk as
+    // Valduk last existed.
+    supported("Magnetic Theft");
+    let (mut t, v) = valduk();
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let splitter = t.named_on_battlefield("Bonesplitter")[0];
+    kill(&mut t, v);
+    cast_at(&mut t, P0, "Magnetic Theft", &[obj(splitter), obj(bears)]);
+    t.resolve();
+    assert_eq!(attached_to(&t, splitter), Some(obj(bears)));
+    t.resolve_all();
+    assert_eq!(elementals(&t, P0), 2);
+    // Control: an Equipment attached to another creature all along isn't counted.
+    let (mut t, v) = valduk();
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attach_new(&mut t, P0, "Short Sword", bears);
+    kill(&mut t, v);
+    t.resolve_all();
+    assert_eq!(elementals(&t, P0), 2);
 }
 
 #[test]
@@ -82,7 +102,7 @@ fn valduk_tokens_are_exiled_even_if_valduk_left() {
 
 #[test]
 fn tokens_made_during_the_end_step_last_until_the_next_turns_end_step() {
-    cr!("603.7c", "513.1", "500.4");
+    cr!("603.7a", "513.1");
     ruling!(
         "Elemental Mastery",
         "If the ability is activated after the current turn's End step has begun, the tokens won't be exiled until the next turn's End step."

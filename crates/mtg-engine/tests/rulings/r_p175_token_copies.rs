@@ -6,7 +6,7 @@
 use crate::r_p175_common::*;
 use crate::r_s06_common::attach_new;
 use crate::r_s26_common::{dress_up, fresh, new_tokens};
-use mtg_engine::ability::TokenSpec;
+use mtg_engine::ability::{Modification, TokenSpec};
 use mtg_engine::decision::Decision;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -18,7 +18,11 @@ use mtg_engine::*;
 /// Spirit), as the effect that created it states.
 fn simple_token(t: &mut TestGame, enchantment: bool) -> ObjectId {
     let (name, ty, colors) = if enchantment {
-        ("Spirit", CardType::Enchantment, ColorSet::single(Color::White))
+        (
+            "Spirit",
+            CardType::Enchantment,
+            ColorSet::single(Color::White),
+        )
     } else {
         ("Thopter", CardType::Artifact, ColorSet::default())
     };
@@ -92,7 +96,10 @@ fn esper_terra(t: &mut TestGame, original: ObjectId) -> Vec<ObjectId> {
 
 /// Firion, Wild Rose Warrior on the battlefield; then `name` (a nontoken Equipment)
 /// enters under P0's control, made by `enter`. Returns (the Equipment, Firion's copies).
-fn firion(t: &mut TestGame, enter: impl FnOnce(&mut TestGame) -> ObjectId) -> (ObjectId, Vec<ObjectId>) {
+fn firion(
+    t: &mut TestGame,
+    enter: impl FnOnce(&mut TestGame) -> ObjectId,
+) -> (ObjectId, Vec<ObjectId>) {
     t.battlefield(P0, "Firion, Wild Rose Warrior");
     let before = t.g.battlefield.clone();
     let e = enter(t);
@@ -134,7 +141,10 @@ fn copied_artifact_enters_abilities_work() {
     );
     supported("Saheeli, the Gifted");
     supported("Red Sun's Twilight");
-    for (who, maker) in [("Saheeli", saheeli as Maker), ("Red Sun's Twilight", red_sun)] {
+    for (who, maker) in [
+        ("Saheeli", saheeli as Maker),
+        ("Red Sun's Twilight", red_sun),
+    ] {
         // Prophetic Prism: "When this artifact enters, draw a card."
         let mut t = TestGame::new(2);
         let prism = t.battlefield(P0, "Prophetic Prism");
@@ -152,7 +162,11 @@ fn copied_artifact_enters_abilities_work() {
         let sun = t.battlefield(P0, "Caged Sun");
         let from = t.asked().len();
         one(maker(&mut t, sun));
-        assert_eq!(options_asked(&t, from), 1, "{who}: color chosen for the token");
+        assert_eq!(
+            options_asked(&t, from),
+            1,
+            "{who}: color chosen for the token"
+        );
     }
 }
 
@@ -254,7 +268,11 @@ fn copies_of_tokens_use_the_original_token_characteristics() {
         dress_up(&mut t, tok);
         let copy = one(maker(&mut t, tok));
         let o = t.obj_now(copy);
-        assert_eq!(name(&t, copy), if ench { "Spirit" } else { "Thopter" }, "{who}");
+        assert_eq!(
+            name(&t, copy),
+            if ench { "Spirit" } else { "Thopter" },
+            "{who}"
+        );
         assert_eq!(t.pt(copy), (1, 1), "{who}");
         let colors = if ench {
             ColorSet::single(Color::White)
@@ -268,7 +286,7 @@ fn copies_of_tokens_use_the_original_token_characteristics() {
 
 #[test]
 fn copies_of_copies_enter_as_what_was_copied() {
-    cr!("707.3", "706.2");
+    cr!("707.2", "707.3", "707.9a");
     ruling!(
         "Saheeli, the Gifted",
         "If a copied artifact is copying something else (for example, if the copied artifact is a Sculpting Steel), then the token enters the battlefield as whatever that artifact copied."
@@ -346,13 +364,42 @@ fn token_copies_copy_only_the_printed_permanent() {
         "The token copies exactly what was printed on the original Equipment, with the listed exception (unless that Equipment is copying something else; see below). It doesn't copy whether that Equipment is tapped or untapped, whether it has any counters on it or any Auras or Equipment attached to it, or any non-copy effects that have changed its types, color, power and toughness, and so on."
     );
     // An Ornithopter (0/2 colorless artifact creature), tapped, with two +1/+1 counters,
-    // +3/+3 and green-blue, wearing Holy Strength and a Bonesplitter; Leafcrown Dryad (2/2
-    // green enchantment creature) the same for Esper Terra.
-    for (who, maker, card, pt, colors) in [
-        ("Red Sun's Twilight", red_sun as Maker, "Ornithopter", (0, 2), ColorSet::default()),
-        ("Cogwork Assembler", cogwork, "Ornithopter", (0, 2), ColorSet::default()),
-        ("Saheeli", saheeli, "Ornithopter", (0, 2), ColorSet::default()),
-        ("Esper Terra", esper_terra, "Leafcrown Dryad", (2, 2), ColorSet::single(Color::Green)),
+    // +3/+3, green-blue and an enchantment too, wearing Holy Strength and a Bonesplitter;
+    // Leafcrown Dryad (2/2 green enchantment creature) the same, an artifact too, for
+    // Esper Terra.
+    for (who, maker, card, pt, colors, added) in [
+        (
+            "Red Sun's Twilight",
+            red_sun as Maker,
+            "Ornithopter",
+            (0, 2),
+            ColorSet::default(),
+            CardType::Enchantment,
+        ),
+        (
+            "Cogwork Assembler",
+            cogwork,
+            "Ornithopter",
+            (0, 2),
+            ColorSet::default(),
+            CardType::Enchantment,
+        ),
+        (
+            "Saheeli",
+            saheeli,
+            "Ornithopter",
+            (0, 2),
+            ColorSet::default(),
+            CardType::Enchantment,
+        ),
+        (
+            "Esper Terra",
+            esper_terra,
+            "Leafcrown Dryad",
+            (2, 2),
+            ColorSet::single(Color::Green),
+            CardType::Artifact,
+        ),
     ] {
         let mut t = TestGame::new(2);
         let orig = t.battlefield(P0, card);
@@ -362,10 +409,20 @@ fn token_copies_copy_only_the_printed_permanent() {
             attach_new(&mut t, P1, "Bonesplitter", orig);
         }
         dress_up(&mut t, orig);
+        crate::r_s26_common::modify_until_eot(
+            &mut t,
+            orig,
+            vec![Modification::AddTypes(vec![added])],
+        );
+        assert!(t.obj_now(orig).is(added), "{who}");
         let tok = one(maker(&mut t, orig));
         assert_eq!(name(&t, tok), card, "{who}");
         assert_eq!(t.pt(tok), pt, "{who}");
         assert_eq!(t.obj_now(tok).chars.colors, colors, "{who}");
+        assert!(
+            !t.obj_now(tok).is(added),
+            "{who}: the added type isn't copied"
+        );
         assert!(fresh(&t, tok), "{who}");
     }
     // Firion: Bonesplitter tapped, with counters and recolored before the trigger resolves.
@@ -376,12 +433,10 @@ fn token_copies_copy_only_the_printed_permanent() {
     t.settle();
     dress_up(&mut t, b);
     t.resolve_all();
-    let tok = one(
-        new_tokens(&t, P0, &before)
-            .into_iter()
-            .filter(|id| *id != b)
-            .collect(),
-    );
+    let tok = one(new_tokens(&t, P0, &before)
+        .into_iter()
+        .filter(|id| *id != b)
+        .collect());
     assert_eq!(name(&t, tok), "Bonesplitter");
     assert_eq!(t.obj_now(tok).chars.colors, ColorSet::default());
     assert!(fresh(&t, tok));
