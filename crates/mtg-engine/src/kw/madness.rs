@@ -26,7 +26,7 @@ pub const CAST_MADNESS: &str = "madness_cast";
 /// The custom instruction a madness replacement effect performs right after the card is
 /// discarded into exile, and the custom trigger of its linked triggered ability ("When
 /// this card is exiled this way"), each followed by `:` and the key of its cost.
-const EXILED_THIS_WAY: &str = "madness_exiled";
+pub const EXILED_THIS_WAY: &str = "madness_exiled";
 /// The name recorded in `CastInfo::paid` when a spell is cast for its madness cost.
 pub const MADNESS: &str = "madness";
 /// The link under which the exiled card records which madness ability exiled it (the
