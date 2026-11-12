@@ -171,3 +171,44 @@ fn umbra_armor_or_regeneration_the_controller_chooses_and_the_other_waits() {
     assert!(t.obj_now(skel).tapped);
     assert!(t.on_battlefield(umbra));
 }
+
+#[test]
+fn rest_in_peace_destroyed_with_the_creatures_still_exiles_them_all() {
+    cr!("614.1a", "614.6", "603.10a");
+    supported("Akroma's Vengeance");
+    supported("Blood Artist");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Rest in Peace");
+    t.battlefield(P0, "Blood Artist");
+    t.battlefield(P1, "Grizzly Bears");
+    // Rest in Peace leaves at the same time as the creatures: it still applies to all of
+    // them (and to itself), so nothing dies and Blood Artist never triggers.
+    cast_resolve(&mut t, P0, "Akroma's Vengeance", &[]);
+    for n in ["Rest in Peace", "Blood Artist", "Grizzly Bears"] {
+        assert!(t.in_exile(n), "{n} is exiled");
+    }
+    // The spell itself is put into the graveyard after it resolves, with Rest in Peace
+    // gone.
+    assert!(t.in_graveyard(P0, "Akroma's Vengeance"));
+    assert_eq!(t.graveyard_size(P0) + t.graveyard_size(P1), 1);
+    assert_eq!(t.life(P1), 20);
+    assert_eq!(t.life(P0), 20);
+}
+
+#[test]
+fn a_land_put_onto_the_battlefield_tapped_under_spelunking_enters_untapped_without_a_choice() {
+    cr!("614.15", "616.1a", "614.1d");
+    supported("Spelunking");
+    supported("Rampant Growth");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Spelunking");
+    let forest = t.library_top(P0, "Forest");
+    t.answer_choose_moved(P0, &[obj(forest)]);
+    cast_resolve(&mut t, P0, "Rampant Growth", &[]);
+    let forest = t.g.current(forest);
+    assert!(t.on_battlefield(forest));
+    // "Tapped" is part of the spell's own instruction, applied first; then Spelunking's
+    // effect has it enter untapped.
+    assert!(!is_tapped(&t, forest));
+    assert!(replacement_choices(&t).is_empty());
+}

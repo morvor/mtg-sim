@@ -146,3 +146,17 @@ fn evil_reawakened_applies_before_essence_of_the_wild_and_its_counters_stay() {
     // Self-replacement, then copy: no order is left to choose (CR 616.1a, 616.1c).
     assert!(replacement_choices(&t).is_empty());
 }
+
+#[test]
+fn vorinclex_halves_the_counters_an_opponents_creature_enters_with_and_doubles_its_own() {
+    cr!("122.6a", "614.1c");
+    supported("Vorinclex, Monstrous Raider");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Vorinclex, Monstrous Raider");
+    // The entering creature's controller puts its counters on it.
+    let mine = cast_resolve(&mut t, P0, "Spike Feeder", &[]);
+    assert_eq!(plus_counters(&t, mine), 4);
+    t.set_step(P1, mtg_engine::turn::Step::PrecombatMain);
+    let theirs = cast_resolve(&mut t, P1, "Spike Feeder", &[]);
+    assert_eq!(plus_counters(&t, theirs), 1);
+}
