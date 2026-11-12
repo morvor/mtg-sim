@@ -139,7 +139,7 @@ fn thunderkin_awakener_returned_creature_can_attack_a_planeswalker() {
     let pw = t.battlefield(P1, "Ajani Goldmane");
     let card = t.graveyard(P0, "Terrain Elemental");
     thunderkin_attacks(&mut t, 2, Some(card));
-    t.answer(P0, DecisionKind::Any, Answer::Entities(vec![obj(pw)]));
+    t.answer_choose(P0, &[obj(pw)]);
     t.resolve_all();
     let back = now(&t, card);
     let target = t
