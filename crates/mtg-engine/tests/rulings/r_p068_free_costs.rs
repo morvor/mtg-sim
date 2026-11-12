@@ -35,6 +35,8 @@ enum Via {
     Crabomination,
     IdolOfEndurance,
     LongRangeSensor,
+    JacesMindseeker,
+    SilentBladeOni,
 }
 
 /// The kinds of cards a card can cast.
@@ -70,14 +72,16 @@ impl Via {
             Via::Crabomination => "Crabomination",
             Via::IdolOfEndurance => "Idol of Endurance",
             Via::LongRangeSensor => "Long-Range Sensor",
+            Via::JacesMindseeker => "Jace's Mindseeker",
+            Via::SilentBladeOni => "Silent-Blade Oni",
         }
     }
 
     fn kind(self) -> Kind {
         match self {
             Via::KeldonFlamesage => Kind::Small,
-            Via::CollectedConjuring => Kind::Sorcery,
-            Via::ReleaseToTheWind | Via::IdolOfEndurance => Kind::Creature,
+            Via::CollectedConjuring | Via::JacesMindseeker => Kind::Sorcery,
+            Via::ReleaseToTheWind | Via::IdolOfEndurance | Via::SilentBladeOni => Kind::Creature,
             Via::HeraldOfAmity => Kind::Aura,
             _ => Kind::Instant,
         }
@@ -221,6 +225,20 @@ impl Via {
                 t.answer_yes(p0, true);
                 c
             }
+            Via::JacesMindseeker => {
+                let c = t.library_top(P1, spell);
+                t.answer_targets(p0, &[Entity::Player(P1)]);
+                t.answer_choose_moved(p0, &[o(c)]);
+                t.answer_yes(p0, true);
+                c
+            }
+            Via::SilentBladeOni => {
+                t.battlefield(p0, "Silent-Blade Oni");
+                let c = t.hand(P1, spell);
+                t.answer_choose(p0, &[o(c)]);
+                t.answer_yes(p0, true);
+                c
+            }
         }
     }
 
@@ -344,6 +362,14 @@ impl Via {
                 let s = find(t, "Long-Range Sensor");
                 mana(t, p0, C, 1);
                 t.activate(p0, s, 0, &[]).unwrap();
+            }
+            Via::JacesMindseeker => {
+                t.enter(p0, "Jace's Mindseeker");
+            }
+            Via::SilentBladeOni => {
+                let oni = find(t, "Silent-Blade Oni");
+                attack_with(t, &[(oni, Entity::Player(P1))]);
+                t.advance_to(p0, Step::CombatDamage);
             }
         }
         t.resolve_all();
@@ -596,6 +622,26 @@ fn spells_cast_during_a_resolution_without_paying_their_mana_costs() {
         Via::Crabomination,
         Via::LongRangeSensor,
     ] {
+        check_all(via);
+    }
+}
+
+#[test]
+fn spells_cast_from_an_opponents_cards_without_paying_their_mana_costs() {
+    cr!("118.9", "118.9a", "601.2b", "601.2f", "608.2g");
+    // Jace's Mindseeker (an opponent mills five; cast an instant or sorcery among them),
+    // with Vandalblast's overload as the alternative cost.
+    ruling!(
+        "Jace's Mindseeker",
+        "If you cast a card “without paying its mana cost,” you can’t pay alternative costs such as overload costs. You can pay additional costs such as kicker costs. If the card has mandatory additional costs, you must pay those."
+    );
+    // Silent-Blade Oni (cast a spell from the damaged player's hand), with Wispmare's evoke
+    // and Kavu Titan's kicker ({X} and Fling: `r_p175_free_casting.rs`).
+    ruling!(
+        "Silent-Blade Oni",
+        "If you cast a card without paying its mana cost, you can't choose to cast it for any alternative costs, such as evoke or the alternative cost provided by the morph ability."
+    );
+    for via in [Via::JacesMindseeker, Via::SilentBladeOni] {
         check_all(via);
     }
 }
