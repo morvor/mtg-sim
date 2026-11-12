@@ -103,12 +103,7 @@ impl KeywordRules for Emerge {
                 return vec![];
             }
         }
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::Emerge,
-            &cost,
-        ));
+        super::set_alternative_keyword_cost(g, p, KeywordKind::Emerge, &cost, &mut opt);
         opt.tag = Some(EMERGE);
         vec![opt]
     }

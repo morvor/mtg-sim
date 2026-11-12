@@ -93,12 +93,7 @@ impl KeywordRules for Awaken {
         if !g.permanents().any(|o| o.controller == p && o.chars.is_land()) {
             return vec![];
         }
-        opt.alt_cost = Some(super::modified_keyword_cost(
-            g,
-            p,
-            KeywordKind::Awaken,
-            &cost,
-        ));
+        super::set_alternative_keyword_cost(g, p, KeywordKind::Awaken, &cost, &mut opt);
         opt.tag = Some(AWAKEN);
         vec![opt]
     }

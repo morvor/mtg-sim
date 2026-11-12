@@ -143,6 +143,7 @@ fn buyback_cost_reductions_dont_reduce_the_rest_of_the_cost() {
     cr!("702.27a", "601.2f");
     ruling!("Memory Crystal", "Can’t reduce the cost below zero.");
     ruling!("Memory Crystal", "Does not apply to other parts of the cost.");
+    interp!("keyword-cost-reduction-on-an-additional-cost-within-it");
     // Two Memory Crystals reduce Capsize's buyback {3} to {0}, but not its {1}{U}{U}.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Memory Crystal");
@@ -154,4 +155,28 @@ fn buyback_cost_reductions_dont_reduce_the_rest_of_the_cost() {
     assert_eq!(untapped_lands(&t, P0), 0);
     t.resolve();
     assert!(t.in_hand(P0, "Capsize"));
+}
+
+#[test]
+fn a_buyback_cost_reduction_doesnt_reduce_a_cost_increase() {
+    cr!("702.27a", "601.2f", "118.8", "118.7a");
+    ruling!(
+        "Memory Crystal",
+        "Only affects generic mana portions of Buyback costs."
+    );
+    interp!("keyword-cost-reduction-on-an-additional-cost-within-it");
+    assert_supported("Constant Mists");
+    // Constant Mists ({1}{G}, buyback: sacrifice a land) under Memory Crystal and Thalia:
+    // the buyback cost has no generic mana, so the reduction reduces nothing, neither
+    // Thalia's {1} nor the mana cost's: {1}{G} + {1} = {2}{G}, and a land sacrificed.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Memory Crystal");
+    t.battlefield(P1, "Thalia, Guardian of Thraben");
+    t.lands(P0, "Forest", 3);
+    let mists = t.hand(P0, "Constant Mists");
+    t.cast(P0, mists).kicked(true).go();
+    assert_eq!(untapped_lands(&t, P0), 0);
+    assert_eq!(t.named_on_battlefield("Forest").len(), 2);
+    t.resolve();
+    assert!(t.in_hand(P0, "Constant Mists"));
 }
