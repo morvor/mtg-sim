@@ -30,6 +30,8 @@ pub fn discover(g: &mut Game, p: PlayerId, n: u32, ctx: &mut Ctx) -> Option<Obje
         let Some(new) = g.move_object(top, Zone::Exile, MoveCause::Effect, Some(p)) else {
             break;
         };
+        // One card at a time: each its own event.
+        g.one_at_a_time_step();
         if g.obj(new).zone != Zone::Exile {
             // A replacement effect put it somewhere else; keep going.
             continue;

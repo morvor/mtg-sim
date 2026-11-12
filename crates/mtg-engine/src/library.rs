@@ -372,6 +372,35 @@ pub fn reveal_until(
         }
         revealed.push(c);
     }
+    // "Exile cards from the top of your library until you exile ...": the cards are
+    // exiled one at a time, in order, each its own event (Laelia, the Blade Reforged's
+    // rulings: "that player exiles those cards one at a time").
+    if found_to.zone == ZoneKind::Exile && rest_to.zone == ZoneKind::Exile {
+        let mut rest_moved = Vec::new();
+        for c in revealed {
+            rest_moved.extend(g.move_to_destination(vec![c], rest_to, ctx));
+            g.one_at_a_time_step();
+        }
+        let found_moved = match found {
+            Some(f) => {
+                let m = g.move_to_destination(vec![f], found_to, ctx);
+                g.one_at_a_time_step();
+                m
+            }
+            None => vec![],
+        };
+        let it: Vec<Entity> = found_moved.into_iter().map(Entity::Object).collect();
+        ctx.set_var(vars::IT, it.clone());
+        ctx.set_var(vars::DUG_FOUND, it.clone());
+        let mut dug = it;
+        dug.extend(rest_moved.iter().map(|o| Entity::Object(*o)));
+        ctx.set_var(
+            vars::REVEALED,
+            rest_moved.into_iter().map(Entity::Object).collect(),
+        );
+        crate::dig_steps::set_dug(ctx, dug);
+        return;
+    }
     if let Some(f) = found {
         // A library position "from the top" leaves the card where it is: a later
         // instruction says what happens to "that card".

@@ -99,6 +99,8 @@ fn cascade(g: &mut Game, ctx: &mut Ctx) {
         let Some(card) = g.move_object(top, Zone::Exile, MoveCause::Effect, Some(p)) else {
             break;
         };
+        // One card at a time: each its own event.
+        g.one_at_a_time_step();
         if g.obj(card).zone != Zone::Exile {
             continue;
         }
