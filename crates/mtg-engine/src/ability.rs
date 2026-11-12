@@ -842,8 +842,10 @@ pub struct TargetSpec {
     /// "For each opponent, ... up to one target creature that player controls": this
     /// instance of the word "target" is chosen once for each player in the game this
     /// filter matches, `min` to `max` targets for each, where the object filter's
-    /// `PlayerRel::Iterated` is that player. A player with no legal choice gets no
-    /// target; on resolution each target must still match for the player it was chosen
+    /// `PlayerRel::Iterated` is that player. With a `min` of 0 ("up to one") a player
+    /// with no legal choice gets no target; a required target that one of those players
+    /// can't get leaves the spell or ability without its required targets (CR 601.2c,
+    /// 603.3d). On resolution each target must still match for the player it was chosen
     /// for. See `per_player_targets.rs`.
     #[serde(default)]
     pub per_player: Option<PlayerFilter>,

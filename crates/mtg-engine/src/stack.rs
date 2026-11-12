@@ -395,9 +395,14 @@ impl Game {
 
     fn each_slot_possible(&self, specs: &[TargetSpec], ctx: &Ctx, stack_obj: ObjectId) -> bool {
         specs.iter().enumerate().all(|(i, s)| {
+            // Targets chosen for each player: each player the phrase names needs the
+            // targets the slot requires for them (`per_player_targets`).
+            if s.per_player.is_some() {
+                return s.condition.is_some()
+                    || crate::per_player_targets::possible(self, s, ctx, stack_obj);
+            }
             let min = self.target_min(s, ctx);
-            // Targets chosen for each player: a player with no legal choice gets none.
-            min == 0 || s.condition.is_some() || s.per_player.is_some() || {
+            min == 0 || s.condition.is_some() || {
                 let cands = if s.chosen_by_opponent && ctx.chosen_player.is_none() {
                     // The opponent who'll choose isn't chosen yet ("target creature of an
                     // opponent's choice they control"): possible with some opponent.
@@ -911,7 +916,9 @@ impl Game {
             } else {
                 ctx.controller
             };
-            // "For each opponent, ... up to one target creature that player controls".
+            // "For each opponent, ... [up to one] target creature that player controls": a
+            // player without the targets the slot requires leaves the spell or ability
+            // without its required targets (CR 601.2c, 603.3d).
             if spec.per_player.is_some() {
                 let exclude: Vec<Entity> = spec
                     .distinct_from
@@ -922,7 +929,7 @@ impl Game {
                     .collect();
                 let (t, ps) = crate::per_player_targets::choose(
                     self, spec, ctx, stack_obj, chooser, &exclude,
-                );
+                )?;
                 out[i] = t;
                 players[i] = ps;
                 continue;

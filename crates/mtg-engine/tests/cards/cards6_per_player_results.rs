@@ -577,30 +577,38 @@ fn set_library(t: &mut TestGame, p: PlayerId, cards: &[&str]) {
 
 #[test]
 fn guff_rewrites_history_each_controller_casts_the_card_they_exiled() {
-    cr!("101.4", "608.2c", "608.2g", "608.2h");
+    cr!("101.4", "608.2c", "608.2g", "608.2h", "601.2c");
     interp!("guff-players-who-controlled");
     compiles("Guff Rewrites History");
-    let mut t = TestGame::new(3);
-    // P0 controls P1's Llanowar Elves; P1 controls its own Grizzly Bears; P2 controls
-    // only a land (no legal target for P2).
-    let elves = t.battlefield(P1, "Llanowar Elves");
-    t.g.objects[elves.0 as usize].base_controller = P0;
-    t.g.recompute();
-    let bears = t.battlefield(P1, "Grizzly Bears");
+    // P0 controls P1's Llanowar Elves; P1 controls its own Grizzly Bears.
+    let setup = |players: usize| {
+        let mut t = TestGame::new(players);
+        let elves = t.battlefield(P1, "Llanowar Elves");
+        t.g.objects[elves.0 as usize].base_controller = P0;
+        t.g.recompute();
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        set_library(&mut t, P0, &["Plains", "Plains", "Divination", "Plains"]);
+        set_library(&mut t, P1, &["Island", "Island"]);
+        t.lands(P0, "Mountain", 3);
+        let guff = t.hand(P0, "Guff Rewrites History");
+        (t, elves, bears, guff)
+    };
+    // A third player who controls only a land has no legal target, and every player needs
+    // one: Guff Rewrites History can't be cast (register `per-player-required-targets`).
+    // A player who controlled none of those permanents is P2 in
+    // `guff_rewrites_history_a_player_whose_target_became_illegal_exiles_nothing`.
+    interp!("per-player-required-targets");
+    let (mut t, elves, bears, guff) = setup(3);
     t.battlefield(P2, "Forest");
-    set_library(&mut t, P0, &["Plains", "Plains", "Divination", "Plains"]);
-    set_library(&mut t, P1, &["Island", "Island"]);
-    set_library(&mut t, P2, &["Mountain", "Mountain", "Shock"]);
-    t.lands(P0, "Mountain", 3);
-    let guff = t.hand(P0, "Guff Rewrites History");
+    assert!(t.cast(P0, guff).target(elves).target(bears).try_go().is_err());
+    assert!(t.in_hand(P0, "Guff Rewrites History"));
+    let (mut t, elves, bears, guff) = setup(2);
     // A target for P0 (the Elves it controls) and one for P1 (its Bears).
     t.cast(P0, guff).target(elves).target(bears).go();
     t.resolve();
     // Both creatures went into P1's library; P0 (who controlled the Elves) and P1 each
     // exiled until a nonland card: P0 found Divination, P1 one of its two creatures.
     assert!(!t.on_battlefield(elves) && !t.on_battlefield(bears));
-    // P2 controlled none of those permanents: its library is untouched.
-    assert_eq!(t.library_size(P2), 3);
     // The lands exiled before the nonland cards went to the bottom.
     assert_eq!(t.library_size(P0), 3);
     assert!(!t.in_exile("Plains"));
