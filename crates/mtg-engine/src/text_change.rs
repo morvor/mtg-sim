@@ -183,13 +183,38 @@ impl Rewriter<'_> {
                         ("name", J::String(s)) if is_token_spec => {
                             J::String(self.replace_in_name(&s))
                         }
-                        ("SetColors" | "AddColors" | "ExactColors" | "colors", J::Number(n)) => {
-                            match n.as_u64() {
-                                Some(x) => J::Number(self.remap_colors(x).into()),
-                                None => J::Number(n),
-                            }
-                        }
+                        // Color sets named by color words ("becomes black", "black Zombie",
+                        // "your devotion to black").
+                        (
+                            "SetColors" | "AddColors" | "ExactColors" | "colors" | "Devotion",
+                            J::Number(n),
+                        ) => match n.as_u64() {
+                            Some(x) => J::Number(self.remap_colors(x).into()),
+                            None => J::Number(n),
+                        },
                         ("uid", v) | ("link", v) => v,
+                        // Mana symbols aren't color words (CR 107.4, 612.2): a cost's or a
+                        // cost change's {U} stays {U}, and so does the {B} of "For each {B}
+                        // in a cost, you may pay 2 life" (Glamerdye rulings).
+                        (
+                            "Colored" | "Hybrid" | "TwoHybrid" | "ColorlessHybrid" | "Phyrexian"
+                            | "PhyrexianHybrid" | "Half" | "PayLifeForMana",
+                            v,
+                        ) => v,
+                        // "costs {G} less to cast for each green creature you control": the
+                        // symbol stays, the words in the amount change.
+                        ("ReduceColored", J::Array(a)) => J::Array(
+                            a.into_iter()
+                                .enumerate()
+                                .map(|(i, x)| {
+                                    if i == 0 {
+                                        x
+                                    } else {
+                                        self.walk(x, Some("ReduceColored"))
+                                    }
+                                })
+                                .collect(),
+                        ),
                         (_, v) => self.walk(v, Some(k.as_str())),
                     };
                     out.insert(k, nv);
