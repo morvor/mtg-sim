@@ -328,8 +328,10 @@ impl Game {
             if o.chars.has_subtype("Saga") {
                 if let Some(final_ch) = crate::saga::final_chapter(o) {
                     // Only its chapter abilities keep it (not other triggered abilities).
+                    // A Saga that can't be sacrificed stays; nothing happens (CR 701.21a).
                     if o.counter(counters::LORE) >= final_ch
                         && !self.is_source_of_stack_trigger_where(id, crate::saga::is_chapter)
+                        && !self.cant_be_sacrificed(id)
                     {
                         sacrifice.push(id);
                     }

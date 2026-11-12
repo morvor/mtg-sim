@@ -75,3 +75,40 @@ fn a_saga_creature_that_lost_its_chapter_abilities_isnt_sacrificed() {
     assert!(t.on_battlefield(saga));
     assert_eq!(t.pt(saga), (1, 1));
 }
+
+#[test]
+fn a_saga_that_cant_be_sacrificed_stays_and_the_game_goes_on() {
+    cr!("704.5s", "701.21a", "704.3");
+    ruling!(
+        "Assault Suit",
+        "The equipped creature can't be sacrificed for any reason."
+    );
+    supported("Assault Suit");
+    let mut t = TestGame::new(2);
+    let saga = t.custom(
+        P0,
+        oracle_card(
+            "Summoned Saga",
+            "Enchantment Creature — Saga Spirit",
+            "{0}",
+            Some((3, 3)),
+            "I — You gain 1 life.\nII — You gain 2 life.",
+        ),
+        Zone::Battlefield,
+    );
+    let suit = t.battlefield(P0, "Assault Suit");
+    assert!(t.g.attach(suit, Entity::Object(saga)));
+    t.g.objects[saga.0 as usize]
+        .counters
+        .insert(counters::LORE.into(), 2);
+    t.g.dirty = true;
+    // Its controller can't sacrifice it: nothing happens, so the check doesn't repeat.
+    assert!(!t.g.check_sbas());
+    t.settle();
+    assert!(t.on_battlefield(saga));
+    assert!(t.g.result.is_none());
+    // Once the Suit is gone, the Saga is sacrificed.
+    t.g.destroy(suit, None);
+    t.settle();
+    assert!(t.in_graveyard(P0, "Summoned Saga"));
+}
