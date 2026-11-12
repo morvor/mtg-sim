@@ -132,3 +132,41 @@ fn deicide_checks_the_card_in_exile_for_a_god() {
     assert!(exiled(&t, in_graveyard), "{}", t.dump_log());
     assert_eq!(t.zone(in_hand), Zone::Hand(P1));
 }
+
+#[test]
+fn deicide_checks_the_card_in_exile_not_the_god_the_permanent_was() {
+    cr!("400.7j");
+    interp!("returned-card-values-by-wording");
+    ruling!(
+        "Deicide",
+        "Deicide looks at the card in exile, not the permanent that was exiled, to determine if it is a God. For each of the Gods in the Theros block, it won't matter what your devotion to its color(s) was. The card is a God card when not on the battlefield."
+    );
+    supported("Deicide");
+    supported("Copy Enchantment");
+    // The other way round: P1's Copy Enchantment entered as a copy of P0's Heliod, God of
+    // the Sun, and with P1's devotion to white at five (its own {W} and four Savannah
+    // Lions) it's a God creature on the battlefield. In exile it's Copy Enchantment, not a
+    // God card, so Deicide searches for nothing: the Heliod in P1's graveyard stays there,
+    // although P0 would choose to exile it if Deicide searched.
+    let mut t = TestGame::new(2);
+    for _ in 0..4 {
+        t.battlefield(P1, "Savannah Lions");
+    }
+    let heliod = t.battlefield(P0, "Heliod, God of the Sun");
+    t.answer_yes(P1, true);
+    t.answer_choose(P1, &[o(heliod)]);
+    let copy = t.enter(P1, "Copy Enchantment");
+    t.g.recompute();
+    assert_eq!(t.obj_now(copy).chars.name, "Heliod, God of the Sun");
+    assert!(t.obj_now(copy).is(CardType::Creature));
+    assert!(t.obj_now(copy).chars.has_subtype("God"));
+    let in_graveyard = t.graveyard(P1, "Heliod, God of the Sun");
+    let deicide = t.hand(P0, "Deicide");
+    mana(&mut t, P0, ManaType::W, 2);
+    t.answer_choose(P0, &[o(in_graveyard)]);
+    t.cast(P0, deicide).target(copy).go();
+    t.resolve_all();
+    assert!(exiled(&t, copy), "{}", t.dump_log());
+    assert_eq!(t.obj_now(copy).chars.name, "Copy Enchantment");
+    assert_eq!(t.zone(in_graveyard), Zone::Graveyard(P1), "{}", t.dump_log());
+}
