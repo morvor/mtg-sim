@@ -8,7 +8,7 @@
 //! Mutiny) allows a player none (CR 115.6). Register entry `per-player-required-targets`.
 
 use crate::r_p138_common::*;
-use crate::r_s01_common::stack_library;
+use crate::r_s01_common::{custom_card, stack_library};
 use mtg_engine::decision::{Action, Decision};
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -49,6 +49,14 @@ fn castable(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
     t.g.legal_actions(p)
         .iter()
         .any(|a| matches!(a, Action::Cast { card: c, .. } if *c == card))
+}
+
+/// Whether `p`'s legal actions include activating an ability of `source`.
+fn activatable(t: &mut TestGame, p: PlayerId, source: ObjectId) -> bool {
+    t.g.turn.priority = Some(p);
+    t.g.legal_actions(p)
+        .iter()
+        .any(|a| matches!(a, Action::Activate { source: s, .. } if *s == source))
 }
 
 #[test]
@@ -275,6 +283,37 @@ fn guff_rewrites_history_needs_a_target_for_its_caster_too() {
     let id = t.cast(P0, spell).go();
     assert_eq!(targets_of(&t, id).len(), 2);
     assert!(targets_of(&t, id).contains(&obj(elves)));
+}
+
+#[test]
+fn an_activated_ability_with_a_required_target_for_each_opponent_needs_one_for_each() {
+    cr!("602.2", "602.2b", "601.2c");
+    interp!("per-player-required-targets");
+    // No card in the pool has a required target for each player on an activated ability,
+    // so a custom one, compiled from its text: P2 controls no creature, so it can't be
+    // activated, and an attempt is reversed before its cost is paid.
+    let def = custom_card(
+        "Per-Player Warden",
+        "Artifact",
+        "{1}",
+        None,
+        "{T}: For each opponent, tap target creature that player controls.",
+    );
+    let mut t = TestGame::new(3);
+    let warden = t.custom(P0, def, Zone::Battlefield);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    assert!(!activatable(&mut t, P0, warden));
+    assert!(t.activate(P0, warden, 0, &[obj(bears)]).is_err());
+    assert!(!t.obj_now(warden).tapped);
+    assert_eq!(t.stack_len(), 0);
+    let giant = t.battlefield(P2, "Hill Giant");
+    assert!(activatable(&mut t, P0, warden));
+    t.clear_answers();
+    t.activate(P0, warden, 0, &[obj(bears), obj(giant)])
+        .expect("activated");
+    t.resolve_all();
+    assert!(t.obj_now(bears).tapped);
+    assert!(t.obj_now(giant).tapped);
 }
 
 #[test]

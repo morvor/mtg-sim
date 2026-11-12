@@ -136,9 +136,9 @@ pub fn choose(
     exclude: &[Entity],
 ) -> Option<(Vec<Entity>, Vec<PlayerId>)> {
     let reqs = requirements(g, spec, ctx, stack_obj, exclude);
-    // An assignment of their required targets to the players from `k` on, `own` of them
-    // for player `k`, leaving out the targets already `chosen` and `also`.
-    let rest = |k: usize, own: usize, chosen: &[Entity], also: &[Entity]| {
+    // An assignment of their required targets to the players from `k` on (`own` of them
+    // for player `k` when given), leaving out the targets already `chosen` and `also`.
+    let rest = |k: usize, own: Option<usize>, chosen: &[Entity], also: &[Entity]| {
         let needs: Vec<(usize, Vec<Entity>)> = reqs[k..]
             .iter()
             .enumerate()
@@ -149,12 +149,16 @@ pub fn choose(
                     .copied()
                     .filter(|e| !chosen.contains(e) && !also.contains(e))
                     .collect();
-                (if i == 0 { own } else { r.need }, cands)
+                let n = match own {
+                    Some(n) if i == 0 => n,
+                    _ => r.need,
+                };
+                (n, cands)
             })
             .collect();
         assign(&needs)
     };
-    rest(0, reqs.first().map_or(0, |r| r.need), &[], &[])?;
+    rest(0, None, &[], &[])?;
     let mut targets: Vec<Entity> = Vec::new();
     let mut players: Vec<PlayerId> = Vec::new();
     for (k, r) in reqs.iter().enumerate() {
@@ -165,7 +169,8 @@ pub fn choose(
             .iter()
             .copied()
             .filter(|e| {
-                !targets.contains(e) && rest(k, r.need.saturating_sub(1), &targets, &[*e]).is_some()
+                let more = r.need.saturating_sub(1);
+                !targets.contains(e) && rest(k, Some(more), &targets, &[*e]).is_some()
             })
             .collect();
         if cands.len() < r.need {
@@ -192,12 +197,12 @@ pub fn choose(
                     && v.len() <= max
                     && v.iter().all(|e| cands.contains(e))
                     && v.iter().enumerate().all(|(i, e)| !v[..i].contains(e))
-                    && rest(k + 1, 0, &targets, &v).is_some() =>
+                    && rest(k + 1, None, &targets, &v).is_some() =>
             {
                 v
             }
             // The fewest targets, leaving the later players theirs.
-            _ => rest(k, min, &targets, &[])
+            _ => rest(k, None, &targets, &[])
                 .and_then(|a| a.into_iter().next())
                 .unwrap_or_default(),
         };
