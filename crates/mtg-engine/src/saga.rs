@@ -34,6 +34,12 @@ pub fn chapter_numbers(o: &GameObject) -> Vec<u32> {
     v
 }
 
+/// Whether the ability is a chapter ability (CR 714.2).
+pub fn is_chapter(a: &Ability) -> bool {
+    matches!(&a.kind, AbilityKind::Triggered(t)
+        if matches!(&t.trigger, TriggerCond::Custom(name) if name.starts_with("chapter:")))
+}
+
 pub fn has_chapters(o: &GameObject) -> bool {
     !chapter_numbers(o).is_empty()
 }

@@ -327,7 +327,11 @@ impl Game {
             let o = self.obj(id);
             if o.chars.has_subtype("Saga") {
                 if let Some(final_ch) = crate::saga::final_chapter(o) {
-                    if o.counter(counters::LORE) >= final_ch && !self.is_source_of_stack_trigger(id)
+                    // Only its chapter abilities keep it (not other triggered abilities).
+                    // A Saga that can't be sacrificed stays; nothing happens (CR 701.21a).
+                    if o.counter(counters::LORE) >= final_ch
+                        && !self.is_source_of_stack_trigger_where(id, crate::saga::is_chapter)
+                        && !self.cant_be_sacrificed(id)
                     {
                         sacrifice.push(id);
                     }
@@ -426,7 +430,7 @@ impl Game {
             || !sacrifice.is_empty()
             || !commander_moves.is_empty();
         if !any {
-            return performed;
+            return crate::kw::state_based_actions_after_moves(self) || performed;
         }
 
         for id in cease {
@@ -547,7 +551,9 @@ impl Game {
         // Unattaching and removing counters happen at the same time as the zone changes
         // above. They're done afterward so that the last known information of a
         // permanent that left is from before any of these actions (CR 704.8); a
-        // permanent that left the battlefield needs neither.
+        // permanent that left the battlefield needs neither. So are the keywords' own
+        // state-based actions that change other permanents.
+        crate::kw::state_based_actions_after_moves(self);
         for id in unattach {
             if self.is_live(id) {
                 self.unattach(id);
@@ -589,12 +595,23 @@ impl Game {
     /// Whether the object is the source of a triggered ability that has triggered but not
     /// yet left the stack (CR 704.5s, 704.5v).
     pub fn is_source_of_stack_trigger(&self, id: ObjectId) -> bool {
-        self.pending_triggers.iter().any(|t| t.source == id)
-            || self.stack.iter().any(|s| {
-                matches!(
-                    self.obj(*s).stack.as_deref().map(|x| &x.kind),
-                    Some(StackKind::Triggered { source, .. }) if *source == id
-                )
-            })
+        self.is_source_of_stack_trigger_where(id, |_| true)
+    }
+
+    /// Whether the object is the source of a triggered ability matching `which` that has
+    /// triggered but not yet left the stack (a Saga's chapter abilities, CR 704.5s).
+    pub fn is_source_of_stack_trigger_where(
+        &self,
+        id: ObjectId,
+        which: impl Fn(&Ability) -> bool,
+    ) -> bool {
+        self.pending_triggers
+            .iter()
+            .any(|t| t.source == id && which(&t.ability)) || self.stack.iter().any(|s| {
+            matches!(
+                self.obj(*s).stack.as_deref().map(|x| &x.kind),
+                Some(StackKind::Triggered { source, ability }) if *source == id && which(ability)
+            )
+        })
     }
 }
