@@ -30,3 +30,16 @@ pub fn pump(t: &mut TestGame, id: ObjectId, p: i32, q: i32) {
         )],
     );
 }
+
+/// Queues `p`'s answer to a "choose a color" decision.
+pub fn choose_color(t: &mut TestGame, p: PlayerId, c: mtg_engine::types::Color) {
+    let i = mtg_engine::types::Color::ALL
+        .iter()
+        .position(|x| *x == c)
+        .unwrap();
+    t.answer(
+        p,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(i),
+    );
+}

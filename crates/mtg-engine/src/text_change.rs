@@ -190,6 +190,13 @@ impl Rewriter<'_> {
                             }
                         }
                         ("uid", v) | ("link", v) => v,
+                        // Mana symbols aren't color words (CR 107.4, 612.2): a cost's or
+                        // a cost change's {U} stays {U} (Glamerdye rulings).
+                        (
+                            "Colored" | "Hybrid" | "TwoHybrid" | "ColorlessHybrid" | "Phyrexian"
+                            | "PhyrexianHybrid" | "Half" | "ReduceColored",
+                            v,
+                        ) => v,
                         (_, v) => self.walk(v, Some(k.as_str())),
                     };
                     out.insert(k, nv);
