@@ -206,6 +206,189 @@ fn no_counter_moves_onto_a_creature_that_phased_out() {
     assert!(t.in_graveyard(P0, "Simic Initiate"));
 }
 
+/// Advances to `p`'s next upkeep (its untap step's phasing done), triggered abilities not
+/// yet put on the stack.
+fn to_upkeep(t: &mut TestGame, p: PlayerId) {
+    if t.g.turn.active == p {
+        let other = t.g.next_player(p);
+        t.advance_to(other, Step::Upkeep);
+    }
+    t.advance_to(p, Step::Upkeep);
+}
+
+#[test]
+fn phasing_in_doesnt_trigger_enters_abilities() {
+    cr!("702.26d", "702.26c");
+    ruling!(
+        "Phyrexian Dreadnought",
+        "Phasing in does not trigger \"enters\" abilities, so you don't have to sacrifice again if it phases in."
+    );
+    ruling!(
+        "Suleiman's Legacy",
+        "Does nothing to Djinns or Efreets that phase in while it is on the battlefield."
+    );
+    supported("Phyrexian Dreadnought");
+    supported("Suleiman's Legacy");
+    supported("Shimmering Efreet");
+    // Phyrexian Dreadnought ("When this creature enters, sacrifice it unless you sacrifice
+    // any number of creatures with total power 12 or greater") phases out and in.
+    let mut t = TestGame::new(2);
+    let dreadnought = t.battlefield(P0, "Phyrexian Dreadnought");
+    ripple(&mut t, P0, dreadnought);
+    to_upkeep(&mut t, P0);
+    t.settle();
+    assert!(!phased_out(&t, dreadnought));
+    assert_eq!(t.stack_len(), 0);
+    assert!(t.on_battlefield(dreadnought));
+    // P1's Shimmering Efreet (phasing) is phased out when P0's Suleiman's Legacy enters
+    // ("destroy all Djinns and Efreets"), and phases in under "Whenever a Djinn or Efreet
+    // enters, destroy it": neither touches it. (Its own "Whenever this creature phases
+    // in, target creature phases out" takes P0's Bears.)
+    let mut t = TestGame::new(2);
+    let efreet = t.battlefield(P1, "Shimmering Efreet");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    to_upkeep(&mut t, P1);
+    t.settle();
+    assert!(phased_out(&t, efreet));
+    t.advance_to(P0, Step::PrecombatMain);
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Plains", 1);
+    let legacy = t.hand(P0, "Suleiman's Legacy");
+    t.cast(P0, legacy).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(efreet));
+    t.answer_targets(P1, &[Entity::Object(bears)]);
+    to_upkeep(&mut t, P1);
+    t.settle();
+    assert!(!phased_out(&t, efreet));
+    assert_eq!(t.stack_len(), 1, "only the Efreet's own phase-in trigger");
+    t.resolve_all();
+    assert!(t.on_battlefield(efreet) && !phased_out(&t, efreet));
+    assert!(phased_out(&t, bears));
+}
+
+#[test]
+fn shimmering_efreet_phasing_in_alone_phases_itself_out() {
+    cr!("702.26a", "702.26c", "603.3d");
+    ruling!(
+        "Shimmering Efreet",
+        "If it phases in and no other creatures are on the battlefield, it will phase itself back out."
+    );
+    ruling!(
+        "Shimmering Efreet",
+        "If two of these phase in, they can both target the same creature and have just that one creature phase out."
+    );
+    supported("Shimmering Efreet");
+    // Alone: "Whenever this creature phases in, target creature phases out." has only
+    // itself to target.
+    let mut t = TestGame::new(2);
+    let efreet = t.battlefield(P0, "Shimmering Efreet");
+    to_upkeep(&mut t, P0);
+    t.settle();
+    assert!(phased_out(&t, efreet), "phasing: out at its controller's untap step");
+    to_upkeep(&mut t, P0);
+    t.settle();
+    assert!(!phased_out(&t, efreet));
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert!(phased_out(&t, efreet), "it phased itself back out");
+    // Two of them phase in together and both target P1's Giant: just the Giant phases out.
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Shimmering Efreet");
+    let b = t.battlefield(P0, "Shimmering Efreet");
+    let giant = t.battlefield(P1, "Hill Giant");
+    to_upkeep(&mut t, P0);
+    t.settle();
+    assert!(phased_out(&t, a) && phased_out(&t, b));
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    t.answer_targets(P0, &[Entity::Object(giant)]);
+    to_upkeep(&mut t, P0);
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
+    t.resolve_all();
+    assert!(phased_out(&t, giant));
+    assert!(!phased_out(&t, a) && !phased_out(&t, b));
+}
+
+#[test]
+fn a_phase_in_trigger_sees_the_permanents_phasing_in_with_it() {
+    cr!("702.26c", "702.26a", "603.2");
+    ruling!(
+        "King of the Oathbreakers",
+        "If King of the Oathbreakers phases in at the same time as one or more other Spirits you control, King of the Oathbreakers's last ability will trigger for each of them."
+    );
+    supported("King of the Oathbreakers");
+    supported("Clever Concealment");
+    let mut t = TestGame::new(2);
+    let king = t.battlefield(P0, "King of the Oathbreakers");
+    let kami = t.battlefield(P0, "Kami of Ancient Law");
+    // Both phase out ("Any number of target nonland permanents you control phase out";
+    // the King also phases each of them out as it becomes the target of a spell).
+    t.lands(P0, "Plains", 4);
+    let conceal = t.hand(P0, "Clever Concealment");
+    t.cast(P0, conceal)
+        .targets(&[Entity::Object(king), Entity::Object(kami)])
+        .go();
+    t.resolve_all();
+    assert!(phased_out(&t, king) && phased_out(&t, kami));
+    // They phase in together during P0's untap step: "Whenever King of the Oathbreakers or
+    // another Spirit you control phases in, create a tapped 1/1 white Spirit creature
+    // token with flying" triggers for each.
+    to_upkeep(&mut t, P0);
+    t.settle();
+    assert!(!phased_out(&t, king) && !phased_out(&t, kami));
+    assert_eq!(t.stack_len(), 2);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Spirit Token").len(), 2);
+}
+
+#[test]
+fn the_legend_rule_applies_once_a_phased_out_legend_phases_in() {
+    cr!("702.26b", "702.26c", "704.5j");
+    let mut t = TestGame::new(2);
+    let first = t.battlefield(P0, "Isamaru, Hound of Konda");
+    ripple(&mut t, P0, first);
+    // A second Isamaru while the first is phased out: one legend on the battlefield.
+    t.lands(P0, "Plains", 1);
+    let second = t.hand(P0, "Isamaru, Hound of Konda");
+    t.cast(P0, second).go();
+    t.resolve_all();
+    let second = t.g.current(second);
+    assert!(t.on_battlefield(first) && t.on_battlefield(second));
+    // The first phases in during P0's untap step: P0 keeps one of them.
+    t.answer_choose(P0, &[Entity::Object(second)]);
+    to_upkeep(&mut t, P0);
+    t.settle();
+    assert!(t.on_battlefield(second));
+    assert!(!t.on_battlefield(first));
+    assert!(t.in_graveyard(P0, "Isamaru, Hound of Konda"));
+}
+
+#[test]
+fn phasing_out_isnt_dying_for_morbid() {
+    cr!("702.26d");
+    supported("Tragic Slip");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    ripple(&mut t, P0, bears);
+    // "Target creature gets -1/-1 until end of turn. Morbid — That creature gets -13/-13
+    // until end of turn instead if a creature died this turn."
+    t.lands(P0, "Swamp", 2);
+    let slip = t.hand(P0, "Tragic Slip");
+    t.cast(P0, slip).target(giant).go();
+    t.resolve_all();
+    assert_eq!(pt(&mut t, giant), (2, 2));
+    // Once a creature has died, the same spell is -13/-13.
+    let ogre = t.battlefield(P1, "Gray Ogre");
+    t.g.destroy(ogre, None);
+    t.settle();
+    let slip = t.hand(P0, "Tragic Slip");
+    t.cast(P0, slip).target(giant).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+}
+
 #[test]
 fn damage_to_a_creature_that_phased_out_isnt_dealt() {
     cr!("702.26b", "506.4");
