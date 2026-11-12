@@ -12,6 +12,7 @@ pub use crate::r_p198_common::{act, act_only, ctl, pass_turn, to_upkeep};
 pub use crate::r_s01_common::{
     creatures, place, stack_library, supported, tokens, triggers_on_stack, with_subtype,
 };
+pub use crate::r_s33_common::set_life;
 use mtg_engine::decision::Decision;
 use mtg_engine::testing::*;
 use mtg_engine::*;
