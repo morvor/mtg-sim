@@ -288,7 +288,16 @@ pub fn become_copy(
     ctx: &mut crate::eval::Ctx,
 ) {
     use crate::game::{Affected, ContinuousEffect, Layer1};
-    let targets = g.resolve_objects(what, ctx);
+    // CR 702.26e: a phased-out permanent isn't among the objects it affects, even one it
+    // names specifically ("this creature becomes a copy").
+    let targets: Vec<ObjectId> = g
+        .resolve_objects(what, ctx)
+        .into_iter()
+        .filter(|o| !crate::kw::phasing::is_phased_out(g, *o))
+        .collect();
+    if targets.is_empty() {
+        return;
+    }
     // A creature that left the battlefield ("becomes a copy of that creature" after it
     // died) is copied as it last existed there (CR 608.2h), like a token copy of it.
     let Some(src) = crate::copy_rules::token_copy_sources(g, of, ctx)

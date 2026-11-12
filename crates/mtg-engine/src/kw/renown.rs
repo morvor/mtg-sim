@@ -36,9 +36,14 @@ pub fn is_renowned(g: &Game, id: ObjectId) -> bool {
 }
 
 /// Makes the permanent `id` renowned. Returns false if it isn't a permanent (only
-/// permanents can become renowned, CR 702.112b) or already was renowned.
+/// permanents can become renowned, CR 702.112b), already was renowned, or is phased out
+/// (it can't be affected, CR 702.26b).
 pub fn become_renowned(g: &mut Game, id: ObjectId) -> bool {
-    if !g.is_live(id) || g.obj(id).zone != Zone::Battlefield || g.obj(id).renowned {
+    if !g.is_live(id)
+        || g.obj(id).zone != Zone::Battlefield
+        || g.obj(id).renowned
+        || crate::kw::phasing::is_phased_out(g, id)
+    {
         return false;
     }
     g.objects[id.0 as usize].renowned = true;

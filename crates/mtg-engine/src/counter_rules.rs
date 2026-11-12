@@ -333,8 +333,9 @@ pub fn counter_limits(g: &Game, id: ObjectId) -> Vec<(CounterKind, u32)> {
 
 /// CR 122.5: moves up to `n` counters of a kind from one object to another: removes them
 /// from the first and puts them on the second. If either isn't possible — the objects are
-/// the same object, the first doesn't have such a counter, or either is no longer on the
-/// battlefield — no counter is moved. Returns the number moved.
+/// the same object, the first doesn't have such a counter, either is no longer on the
+/// battlefield or is phased out (CR 702.26b), or the second can't have such counters put
+/// on it — no counter is moved. Returns the number moved.
 pub fn move_counters(g: &mut Game, from: ObjectId, to: Entity, kind: &str, n: u32) -> u32 {
     move_counters_by(g, from, to, kind, n, None)
 }
@@ -350,11 +351,19 @@ pub fn move_counters_by(
     n: u32,
     source: Option<ObjectId>,
 ) -> u32 {
-    if to == Entity::Object(from) || !g.is_live(from) || g.obj(from).zone != Zone::Battlefield {
+    if to == Entity::Object(from)
+        || !g.is_live(from)
+        || g.obj(from).zone != Zone::Battlefield
+        || crate::kw::phasing::is_phased_out(g, from)
+    {
         return 0;
     }
     if let Entity::Object(t) = to {
-        if !g.is_live(t) || g.obj(t).zone != Zone::Battlefield {
+        if !g.is_live(t)
+            || g.obj(t).zone != Zone::Battlefield
+            || crate::kw::phasing::is_phased_out(g, t)
+            || counters_prevented(g, t, kind)
+        {
             return 0;
         }
     }

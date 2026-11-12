@@ -508,6 +508,19 @@ refresh for the new cards.
   - Tarmogoyf under Dress Down (`star-without-defining-ability-is-zero`): accepted.
   - Stinging Study: the player chooses the commander (item user-decisions-nov10, part B).
 
+### Revisit later (user, Nov 12)
+
+Readings the user accepted for now, but wants to look at again before calling the project done:
+- **Buyback and alternative-cost reductions.** The user: "I agree with the recommendations about buyback for now, but could discover that I am wrong about this in the future, so let's make sure it is noted somehow."
+  - Entry `keyword-cost-reduction-on-an-additional-cost-within-it`: Memory Crystal is bounded by the buyback cost.
+  - Entry `alternative-keyword-cost-reduction-reduces-additional-costs`: Catalyst Stone's reduction also comes off a buyback paid with flashback.
+- **The gaps in returned-card values.** The user: "I accept the recommendations and will try to resolve the gaps later." These are in entry `returned-card-values-by-wording`:
+  - "its power/toughness" after a graveyard return;
+  - a card that never arrives (Containment Priest with Reanimate);
+  - Deicide's searched name for a copied God.
+- **A phased-out source's characteristics.** Entry `phased-out-source-still-acts` (decided Nov 12) uses the source's characteristics while it is phased out, not its last known information. Example: Spikeshot Elder under Glorious Anthem deals 1, not 2.
+- **Loops:** a robust system later (D4, Nov 10).
+
 ### Already decided, not re-asked
 
 All 128 register entries (Oct 21, Nov 4, 5, 7 and 9); the Nov 5 conflict cases (template and

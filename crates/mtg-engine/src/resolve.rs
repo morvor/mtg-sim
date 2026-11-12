@@ -667,11 +667,16 @@ impl Game {
                 }
             }
             Effect::Fight { a, b } => {
-                // CR 701.14
+                // CR 701.14. A phased-out creature is treated as though it's not on the
+                // battlefield (CR 702.26d): it doesn't fight (701.14b).
                 let fighters = |g: &mut Game, s: &Sel, ctx: &mut Ctx| -> Vec<ObjectId> {
                     let v = g.resolve_objects(s, ctx);
                     v.into_iter()
-                        .filter(|o| g.is_live(*o) && g.obj(*o).is_creature())
+                        .filter(|o| {
+                            g.is_live(*o)
+                                && g.obj(*o).is_creature()
+                                && !crate::kw::phasing::is_phased_out(g, *o)
+                        })
                         .collect()
                 };
                 let (a, b) = match (a, b) {
@@ -928,11 +933,13 @@ impl Game {
                 if !about_affected && self.effect_expired(duration, ctx.source, ctx.controller) {
                     return;
                 }
+                // CR 702.26e: a phased-out permanent isn't among the objects it affects,
+                // even one it names specifically.
                 let objs: Vec<ObjectId> = self
                     .resolve_objects(what, ctx)
                     .into_iter()
                     .filter_map(|o| self.found_after_move(Entity::Object(o), ctx).object())
-                    .filter(|o| self.is_live(*o))
+                    .filter(|o| self.is_live(*o) && !crate::kw::phasing::is_phased_out(self, *o))
                     .collect();
                 ctx.set_var(
                     vars::MODIFIED,

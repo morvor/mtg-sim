@@ -48,10 +48,12 @@ pub fn plan_gain_control(
     if !about_affected && g.effect_expired(duration, ctx.source, ctx.controller) {
         return None;
     }
+    // CR 702.26e: a phased-out permanent isn't among the objects it affects, even one it
+    // names specifically.
     let objs: Vec<ObjectId> = g
         .resolve_objects(what, ctx)
         .into_iter()
-        .filter(|o| g.is_live(*o))
+        .filter(|o| g.is_live(*o) && !crate::kw::phasing::is_phased_out(g, *o))
         .collect();
     let p = g.eval_player(who, ctx)?;
     if objs.is_empty() {
@@ -153,9 +155,13 @@ pub fn gain_control(g: &mut Game, what: &Sel, who: &PlayerRef, duration: &Durati
     g.recompute();
 }
 
-/// Whether an object can have its control exchanged: a permanent or a spell.
+/// Whether an object can have its control exchanged: a permanent or a spell. A phased-out
+/// permanent can't be affected by it (CR 702.26b, 702.26e), so then no part of the
+/// exchange happens (701.12a).
 fn exchangeable(g: &Game, o: ObjectId) -> bool {
-    g.is_live(o) && matches!(g.obj(o).zone, Zone::Battlefield | Zone::Stack)
+    g.is_live(o)
+        && matches!(g.obj(o).zone, Zone::Battlefield | Zone::Stack)
+        && !crate::kw::phasing::is_phased_out(g, o)
 }
 
 fn distinct(v: Vec<ObjectId>) -> Vec<ObjectId> {

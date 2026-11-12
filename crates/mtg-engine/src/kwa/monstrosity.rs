@@ -20,8 +20,12 @@ pub const MONSTROUS: &str = "monstrous";
 
 /// "Monstrosity N" for `obj`: returns true if it became monstrous.
 pub fn monstrosity(g: &mut Game, obj: ObjectId, n: u32, source: Option<ObjectId>) -> bool {
-    // Only a permanent can become monstrous (CR 701.37b), and not again.
-    if !on_battlefield(g, obj) || g.obj(obj).monstrous {
+    // Only a permanent can become monstrous (CR 701.37b), and not again; a phased-out one
+    // can't be affected (CR 702.26b): no counters, and it doesn't become monstrous.
+    if !on_battlefield(g, obj)
+        || g.obj(obj).monstrous
+        || crate::kw::phasing::is_phased_out(g, obj)
+    {
         return false;
     }
     g.add_counters(Entity::Object(obj), counters::PLUS1, n, source);
