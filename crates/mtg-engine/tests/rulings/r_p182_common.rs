@@ -119,3 +119,10 @@ pub fn lands_of(t: &TestGame, p: PlayerId) -> usize {
         .filter(|o| o.controller == p && o.is(mtg_engine::types::CardType::Land))
         .count()
 }
+
+/// Whether the object (followed across zone changes) is an attacking creature now.
+pub fn attacking(t: &TestGame, id: ObjectId) -> bool {
+    let id = t.g.current(id);
+    t.g.is_attacking(id)
+}
+
