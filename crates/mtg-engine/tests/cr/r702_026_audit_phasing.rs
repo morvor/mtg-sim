@@ -390,6 +390,23 @@ fn phasing_out_isnt_dying_for_morbid() {
 }
 
 #[test]
+fn a_phased_out_source_still_deals_its_abilitys_damage() {
+    cr!("113.7a", "702.26b");
+    interp!("phased-out-source-still-acts");
+    supported("Prodigal Pyromancer");
+    let mut t = TestGame::new(2);
+    let pyro = t.battlefield(P0, "Prodigal Pyromancer");
+    // "{T}: This creature deals 1 damage to any target." It phases out in response:
+    // treated as though it doesn't exist, it's like a source that has left the
+    // battlefield, and it still deals the damage.
+    t.activate(P0, pyro, 0, &[Entity::Player(P1)])
+        .expect("ability");
+    ripple(&mut t, P0, pyro);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+}
+
+#[test]
 fn damage_to_a_creature_that_phased_out_isnt_dealt() {
     cr!("702.26b", "506.4");
     supported("Inferno Elemental");
