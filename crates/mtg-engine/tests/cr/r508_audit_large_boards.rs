@@ -95,3 +95,38 @@ fn many_blockers_that_must_block_and_a_maximum_of_one_blocker() {
     let blockers = t.g.blockers();
     assert_eq!(blockers.len(), 1, "exactly one creature blocks");
 }
+
+#[test]
+fn many_goaded_creatures_split_their_attacks_under_crawlspace() {
+    cr!("508.1c", "508.1d", "701.15b", "802.3a");
+    interp!("requirement-search-budget");
+    supported("Crawlspace");
+    // Three players: P1 goaded P0's twelve Bears; P2 controls Crawlspace ("No more than
+    // two creatures can attack you each combat"). Every Bear attacks (each obeys "attacks
+    // each combat if able"); two of them attack P2 (obeying "a player other than P1"),
+    // the rest P1.
+    let mut t = TestGame::with_config(
+        3,
+        mtg_engine::game::GameConfig {
+            attack_multiple_players: true,
+            ..Default::default()
+        },
+    );
+    t.battlefield(P2, "Crawlspace");
+    let bears: Vec<ObjectId> = (0..12)
+        .map(|_| t.battlefield(P0, "Grizzly Bears"))
+        .collect();
+    for b in &bears {
+        t.g.objects[b.0 as usize].goaded_by = vec![P1];
+    }
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, &[]);
+    go_to(&mut t, Step::DeclareAttackers);
+    let at = |p: PlayerId| {
+        bears
+            .iter()
+            .filter(|b| attacks(&t, **b) == Some(Entity::Player(p)))
+            .count()
+    };
+    assert_eq!((at(P1), at(P2)), (10, 2));
+}
