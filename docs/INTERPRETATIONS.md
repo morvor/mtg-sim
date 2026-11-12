@@ -9,14 +9,12 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | Kind | Decided | Provisional |
 |---|---:|---:|
 | interpretation | 100 | 0 |
-| deviation | 9 | 1 |
+| deviation | 10 | 0 |
 | policy | 34 | 0 |
 
 ## Provisional entries
 
-- **entering-counter-modifiers-after-enters-with** (deviation, [replacement-prevention](interpretations/replacement-prevention.md)): Effects that modify how many counters are put apply to a permanent's entry after all its "enters with" effects
-  - Question: Spike Feeder ("enters with two +1/+1 counters") enters under its controller's Master Biomancer ("enters with a number of additional +1/+1 counters ... equal to Master Biomancer's power") while an opponent controls Vorinclex, Monstrous Raider ("If an opponent would put one or more counters on a permanent or player, they put half that many ..."). Once Spike Feeder's effect has given it two counters, Vorinclex's effect applies too (616.2), and the controller may apply it before Master Biomancer's (616.1e): 2 halved is 1, plus 2 is 3, where applying Master Biomancer's first gives (2 + 2) / 2 = 2. Can the controller interleave them?
-  - Decision: (to be fixed later; the user, Nov 12) Not in the engine: the "enters with" effects are applied as the entry is replaced, and the effects that modify how many counters are put (Hardened Scales, Corpsejack Menace, Doubling Season, Vorinclex) to the counters of each kind it then enters with, in an order the controller chooses among themselves (`entering-counters-one-event`): Spike Feeder enters with 2 counters, not the 3 the controller could choose. Counters of one kind that different players put (tribute's opponent, CR 122.6a) are separate events, so Hardened Scales adds one to each.
+None.
 
 ## All entries
 
@@ -86,7 +84,7 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | `range-combat-trigger-events` | The trigger event of "attacks", "blocks" and "blocks or becomes blocked" is the creature alone (CR 801.7) | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
 | `venture-limit-looks-at-whole-turn` | "Can't venture into the dungeon more than once each turn" counts ventures earlier in the turn | interpretation | decided | [players-multiplayer](interpretations/players-multiplayer.md) |
 | `enter-sacrifice-instead-partial` | "Sacrifice two untapped lands instead. If you do, ..." with fewer than two sacrifices those it can, and ~ doesn't enter | interpretation | decided | [replacement-prevention](interpretations/replacement-prevention.md) |
-| `entering-counter-modifiers-after-enters-with` | Effects that modify how many counters are put apply to a permanent's entry after all its "enters with" effects | deviation | provisional | [replacement-prevention](interpretations/replacement-prevention.md) |
+| `entering-counter-modifiers-after-enters-with` | Effects that modify how many counters are put apply to a permanent's entry after all its "enters with" effects | deviation | decided | [replacement-prevention](interpretations/replacement-prevention.md) |
 | `entering-counters-one-event` | The counters of one kind a permanent enters with are put on it as one event, however many "enters with" effects contributed | interpretation | decided | [replacement-prevention](interpretations/replacement-prevention.md) |
 | `entering-would-be-controller-chooses` | For a permanent entering the battlefield, the player it would enter under the control of chooses among replacement effects | interpretation | decided | [replacement-prevention](interpretations/replacement-prevention.md) |
 | `next-time-damage-batch` | A one-use "the next time ... would deal damage / be dealt damage" effect applies to all the damage dealt at the same time | interpretation | decided | [replacement-prevention](interpretations/replacement-prevention.md) |
