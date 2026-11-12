@@ -97,3 +97,30 @@ fn copy_enchantment_copying_an_aura_with_nothing_to_enchant_doesnt_enter() {
     assert_eq!(t.obj_now(mine).attached_to, Some(Entity::Object(elves)));
     assert_eq!(t.hand_size(P1), hand - 1 + 1);
 }
+
+#[test]
+fn an_aura_or_equipment_that_becomes_a_creature_becomes_unattached() {
+    cr!("704.5m", "704.5p", "303.4d", "301.5c", "704.5f");
+    supported("Mycosynth Lattice");
+    supported("March of the Machines");
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let strength = t.battlefield(P0, "Holy Strength");
+    let splitter = t.battlefield(P0, "Bonesplitter");
+    assert!(t.g.attach(strength, Entity::Object(bears)));
+    assert!(t.g.attach(splitter, Entity::Object(bears)));
+    let land = t.battlefield(P1, "Forest");
+    t.battlefield(P1, "Mycosynth Lattice");
+    t.battlefield(P1, "March of the Machines");
+    // Every permanent is an artifact; every noncreature artifact a creature with power
+    // and toughness equal to its mana value. The Aura (mana value 1) is a 1/1 creature:
+    // it becomes unattached, then goes to the graveyard. The Equipment becomes unattached
+    // and stays a 1/1 creature. The land is a 0/0 and dies.
+    t.settle();
+    assert!(t.in_graveyard(P0, "Holy Strength"));
+    assert!(t.on_battlefield(splitter));
+    assert_eq!(t.obj_now(splitter).attached_to, None);
+    assert_eq!(t.pt(splitter), (1, 1));
+    assert!(!t.on_battlefield(land));
+    assert_eq!(t.pt(bears), (2, 2));
+}

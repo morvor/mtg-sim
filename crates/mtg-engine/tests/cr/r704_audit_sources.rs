@@ -112,3 +112,49 @@ fn a_saga_that_cant_be_sacrificed_stays_and_the_game_goes_on() {
     t.settle();
     assert!(t.in_graveyard(P0, "Summoned Saga"));
 }
+
+#[test]
+fn a_copy_of_a_chapter_ability_keeps_its_saga_until_it_leaves_the_stack() {
+    cr!("704.5s", "707.10", "707.10b");
+    interp!("copied-chapter-ability-keeps-saga");
+    supported("Strionic Resonator");
+    supported("Stifle");
+    let mut t = TestGame::new(2);
+    let saga = t.custom(
+        P0,
+        oracle_card(
+            "Short Saga",
+            "Enchantment — Saga",
+            "{0}",
+            None,
+            "I — You gain 1 life.\nII — You gain 2 life.",
+        ),
+        Zone::Battlefield,
+    );
+    t.g.add_counters(Entity::Object(saga), counters::LORE, 1, None);
+    t.resolve_all();
+    let resonator = t.battlefield(P0, "Strionic Resonator");
+    t.lands(P0, "Wastes", 2);
+    // Chapter II triggers; Strionic Resonator copies it.
+    t.g.add_counters(Entity::Object(saga), counters::LORE, 1, None);
+    t.settle();
+    let chapter = *t.g.stack.last().unwrap();
+    t.activate(P0, resonator, 0, &[Entity::Object(chapter)])
+        .expect("Strionic Resonator");
+    t.resolve();
+    assert_eq!(t.stack_len(), 2);
+    let copy = *t.g.stack.last().unwrap();
+    assert_ne!(copy, chapter);
+    // The chapter ability that triggered is countered; its copy, with the Saga as its
+    // source, is still on the stack.
+    t.lands(P1, "Island", 2);
+    let stifle = t.hand(P1, "Stifle");
+    t.cast(P1, stifle).target(chapter).go();
+    t.resolve();
+    assert_eq!(t.g.stack, vec![copy]);
+    assert!(t.on_battlefield(saga), "the copy keeps the Saga");
+    let life = t.life(P0);
+    t.resolve();
+    assert_eq!(t.life(P0), life + 2);
+    assert!(t.in_graveyard(P0, "Short Saga"));
+}
