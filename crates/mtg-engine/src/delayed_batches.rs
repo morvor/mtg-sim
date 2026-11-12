@@ -25,8 +25,15 @@ fn batched(t: &TriggerCond) -> Option<(&TriggerCond, BatchPer)> {
 }
 
 /// The delayed triggered abilities a batch of simultaneous events triggers. Those that
-/// trigger only once are removed (CR 603.7b).
-pub fn triggered_by_batch(g: &mut Game, batch: &[Event]) -> Vec<PendingTrigger> {
+/// trigger only once are removed (CR 603.7b). `entering_off` says, for each event, whether
+/// it's a permanent entering that causes no ability to trigger (Torpor Orb): such an event
+/// triggers only an ability whose trigger event is the card leaving the zone it came from
+/// (`ability-triggered-cause-is-the-event`).
+pub fn triggered_by_batch(
+    g: &mut Game,
+    batch: &[Event],
+    entering_off: &[bool],
+) -> Vec<PendingTrigger> {
     let mut out = Vec::new();
     for d in g.delayed_triggers.clone() {
         let Some((trigger, per)) = batched(&d.trigger) else {
@@ -37,7 +44,9 @@ pub fn triggered_by_batch(g: &mut Game, batch: &[Event]) -> Vec<PendingTrigger> 
         base.controller = d.performer.unwrap_or(d.controller);
         let infos: Vec<EventInfo> = batch
             .iter()
-            .flat_map(|ev| g.trigger_matches_ctx(trigger, &base, ev))
+            .zip(entering_off)
+            .filter(|(ev, off)| !**off || g.matched_leaving_as_it_entered(trigger, &base, ev))
+            .flat_map(|(ev, _)| g.trigger_matches_ctx(trigger, &base, ev))
             .collect();
         if infos.is_empty() {
             continue;

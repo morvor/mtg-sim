@@ -301,27 +301,29 @@ impl Game {
     fn check_batch_triggers(&mut self, batch: &[Event], born_later: &BTreeSet<ObjectId>) {
         // This turn's events before the batch (its own events are the last ones recorded).
         let before_batch = self.turn_events.len().saturating_sub(batch.len());
-        // Permanents whose entering triggers nothing (Torpor Orb) aren't part of it.
-        let kept: Vec<Event>;
-        let batch = if batch
+        // Permanents whose entering triggers nothing (Torpor Orb): their events trigger
+        // only the abilities that matched the card leaving the zone it came from
+        // (`ability-triggered-cause-is-the-event`).
+        let entering_off: Vec<bool> = batch
             .iter()
-            .any(|e| crate::kw::torpor::entering_triggers_nothing(self, e))
-        {
-            kept = batch
-                .iter()
-                .filter(|e| !crate::kw::torpor::entering_triggers_nothing(self, e))
-                .cloned()
-                .collect();
-            &kept[..]
-        } else {
-            batch
-        };
+            .map(|e| crate::kw::torpor::entering_triggers_nothing(self, e))
+            .collect();
         if batch.is_empty() {
             return;
         }
         // The initiative's "whenever one or more creatures a player controls deal combat
         // damage to the player who has the initiative" (CR 726.2).
-        crate::monarch_initiative::detect_batch(self, batch);
+        if entering_off.iter().any(|x| *x) {
+            let kept: Vec<Event> = batch
+                .iter()
+                .zip(&entering_off)
+                .filter(|(_, off)| !**off)
+                .map(|(e, _)| e.clone())
+                .collect();
+            crate::monarch_initiative::detect_batch(self, &kept);
+        } else {
+            crate::monarch_initiative::detect_batch(self, batch);
+        }
         let mut sources = self.current_trigger_sources();
         sources.retain(|(id, _, _)| !born_later.contains(id));
         // Leaves-the-battlefield look back in time (CR 603.10a): the abilities that existed
@@ -405,8 +407,13 @@ impl Game {
                 // CR 603.2d: how many additional times each event makes it trigger.
                 let mut extras: Vec<usize> = Vec::new();
                 let gone = looking_back.contains(&(src, a.uid));
-                for ev in batch {
+                for (ev, off) in batch.iter().zip(&entering_off) {
                     if gone && !looks_back(trigger, ev) {
+                        continue;
+                    }
+                    // Torpor Orb: only an ability that matched the card leaving the zone it
+                    // came from.
+                    if *off && !self.matched_leaving_as_it_entered(trigger, &base, ev) {
                         continue;
                     }
                     // CR 603.10a: an event that looks back is seen only by abilities that
@@ -434,6 +441,7 @@ impl Game {
                             Some(src),
                             ctl,
                             looks_back(trigger, ev),
+                            self.matched_leaving_as_it_entered(trigger, &base, ev),
                         )
                     {
                         continue;
@@ -454,7 +462,7 @@ impl Game {
                             } => Some(&**lb),
                             _ => None,
                         };
-                        let extra = self.additional_triggers(src, &t.trigger, ev, lb);
+                        let extra = self.additional_triggers(src, &t.trigger, &base, ev, lb);
                         extras.extend(std::iter::repeat_n(extra, matched.len()));
                     }
                     infos.extend(matched);
@@ -608,7 +616,11 @@ impl Game {
         }
         // Delayed triggered abilities about the batch ("whenever either of those creatures
         // deals combat damage this turn").
-        found.extend(crate::delayed_batches::triggered_by_batch(self, batch));
+        found.extend(crate::delayed_batches::triggered_by_batch(
+            self,
+            batch,
+            &entering_off,
+        ));
         // CR 801.7: only events entirely within the controller's range of influence.
         found.retain(|t| crate::multiplayer::range::trigger_in_range(self, t));
         for t in found {
@@ -705,10 +717,10 @@ impl Game {
         born_later: &BTreeSet<ObjectId>,
         control_before: &BTreeMap<ObjectId, PlayerId>,
     ) -> Vec<(u32, EventInfo)> {
-        // "Creatures entering don't cause abilities to trigger" (Torpor Orb).
-        if crate::kw::torpor::entering_triggers_nothing(self, ev) {
-            return vec![];
-        }
+        // "Creatures entering don't cause abilities to trigger" (Torpor Orb): only an
+        // ability whose trigger event is the card leaving the zone it came from can still
+        // trigger (`ability-triggered-cause-is-the-event`).
+        let entering_off = crate::kw::torpor::entering_triggers_nothing(self, ev);
         let lookback: Option<Arc<LookbackSnapshot>> = match ev {
             Event::ZoneChange {
                 lookback: Some(lb), ..
@@ -812,14 +824,24 @@ impl Game {
         }
         // The monarch's and the initiative's inherent triggered abilities (CR 725.2,
         // 726.2).
-        crate::monarch_initiative::detect(self, ev);
-        // Keywords' sourceless triggered abilities (e.g. speed's, CR 702.179d).
-        crate::kw::on_event(self, ev);
+        if !entering_off {
+            crate::monarch_initiative::detect(self, ev);
+            // Keywords' sourceless triggered abilities (e.g. speed's, CR 702.179d).
+            crate::kw::on_event(self, ev);
+        }
         let mut found: Vec<PendingTrigger> = Vec::new();
         for (src, ctl, a) in sources {
             let AbilityKind::Triggered(t) = &a.kind else {
                 continue;
             };
+            // Filters like "the chosen color" refer to the ability's linked choices.
+            let mut base = Ctx::new(Some(src), ctl);
+            base.link = a.link;
+            base.ability_uid = a.uid;
+            let left_zone = self.matched_leaving_as_it_entered(&t.trigger, &base, ev);
+            if entering_off && !left_zone {
+                continue;
+            }
             // "Creatures dying don't cause abilities to trigger" (Hushbringer), "...
             // abilities of permanents your opponents control" (Elesh Norn).
             // (Not an ability that triggers on sacrificing it.)
@@ -830,14 +852,11 @@ impl Game {
                     Some(src),
                     ctl,
                     looks_back(&t.trigger, ev),
+                    left_zone,
                 )
             {
                 continue;
             }
-            // Filters like "the chosen color" refer to the ability's linked choices.
-            let mut base = Ctx::new(Some(src), ctl);
-            base.link = a.link;
-            base.ability_uid = a.uid;
             let mut infos = self.trigger_matches_ctx(&t.trigger, &base, ev);
             // CR 805.4d: "each player's" step abilities about "that player" trigger for
             // each player on the active team.
@@ -881,7 +900,8 @@ impl Game {
                         .or_insert(0) += 1;
                 }
                 // CR 603.2d: effects may make an ability trigger additional times.
-                let times = 1 + self.additional_triggers(src, &t.trigger, ev, lookback.as_deref());
+                let times =
+                    1 + self.additional_triggers(src, &t.trigger, &base, ev, lookback.as_deref());
                 // "This ability triggers only once." / "only twice each turn": each time it
                 // would trigger, additional times included (Acrobatic Cheerleader's
                 // rulings).
@@ -959,6 +979,10 @@ impl Game {
             base.source = d.source;
             // "you" in its trigger condition is the player who performs it.
             base.controller = d.performer.unwrap_or(d.controller);
+            let left_zone = self.matched_leaving_as_it_entered(&d.trigger, &base, ev);
+            if entering_off && !left_zone {
+                continue;
+            }
             // "Creatures dying don't cause abilities to trigger" (Hushbringer).
             if !on_sacrifice(&d.trigger)
                 && crate::kw::torpor::suppressed_for(
@@ -967,6 +991,7 @@ impl Game {
                     d.source,
                     d.controller,
                     looks_back(&d.trigger, ev),
+                    left_zone,
                 )
             {
                 continue;
@@ -1101,14 +1126,20 @@ impl Game {
     /// they don't apply to delayed or reflexive triggered abilities. For an event that
     /// looks back in time (a permanent leaving the battlefield, CR 603.10a), the effects
     /// that applied immediately before it count, including those of permanents leaving
-    /// at the same time (Teysa Karlov dying with other creatures).
+    /// at the same time (Teysa Karlov dying with other creatures). An ability whose trigger
+    /// event that matched a card put onto the battlefield from another zone is the card
+    /// leaving that zone (`base`: the ability's context) isn't caused to trigger by the
+    /// permanent entering: "If a permanent entering causes ..." (Panharmonicon, Yarok,
+    /// Elesh Norn) doesn't count it (`ability-triggered-cause-is-the-event`).
     fn additional_triggers(
         &self,
         src: ObjectId,
         trigger: &TriggerCond,
+        base: &Ctx,
         ev: &Event,
         lookback: Option<&LookbackSnapshot>,
     ) -> usize {
+        let left_zone = self.matched_leaving_as_it_entered(trigger, base, ev);
         let effects: Vec<&(ObjectId, PlayerId, StaticEffect)> = match lookback {
             Some(lb)
                 if matches!(
@@ -1134,6 +1165,9 @@ impl Game {
                             // (sacrificing it) doesn't trigger on its dying.
                             !(matches!(**cond, TriggerCond::Dies(_)) && on_sacrifice(trigger))
                                 && !self.trigger_matches(cond, *s, *c, ev).is_empty()
+                                // The card leaving a zone as it enters isn't a permanent
+                                // entering.
+                                && !(left_zone && !self.matched_zone_left(cond, &ctx, ev))
                         })
                 }
                 _ => false,
@@ -2776,6 +2810,27 @@ impl Game {
         infos
     }
 
+    /// Whether `ev` is a card put onto the battlefield from another zone and the trigger
+    /// event of `t` that matched it is the card leaving the zone it came from, not the
+    /// permanent entering (decided by the user, Nov 12): the statics by which a permanent
+    /// entering doesn't cause abilities to trigger (Torpor Orb, `kw::torpor`) or causes them
+    /// to trigger an additional time (Panharmonicon, [`Game::additional_triggers`]) don't
+    /// apply to it. Interpretation `ability-triggered-cause-is-the-event`.
+    pub(crate) fn matched_leaving_as_it_entered(
+        &self,
+        t: &TriggerCond,
+        base: &Ctx,
+        ev: &Event,
+    ) -> bool {
+        matches!(
+            ev,
+            Event::ZoneChange {
+                to: Zone::Battlefield,
+                ..
+            }
+        ) && self.matched_zone_left(t, base, ev)
+    }
+
     /// Whether the trigger event of `t` that matched zone change `ev` is the object leaving
     /// the zone it came from ("leaves your graveyard", "leaves your hand": an origin and no
     /// destination) rather than its arrival in the new zone. With several trigger
@@ -2784,6 +2839,8 @@ impl Game {
     /// ability triggering, whichever comes first in its text.
     fn matched_zone_left(&self, t: &TriggerCond, base: &Ctx, ev: &Event) -> bool {
         match t {
+            // (Most abilities name no leaving: their conditions aren't matched again.)
+            TriggerCond::AnyOf(v) if !v.iter().any(names_zone_left) => false,
             TriggerCond::AnyOf(v) => {
                 let mut matched = v
                     .iter()
@@ -2806,6 +2863,28 @@ impl Game {
             } => true,
             _ => false,
         }
+    }
+}
+
+/// Whether some trigger condition of `t` is about an object leaving a zone (an origin and no
+/// destination), the only kind [`Game::matched_zone_left`] can find to have matched.
+fn names_zone_left(t: &TriggerCond) -> bool {
+    match t {
+        TriggerCond::AnyOf(v) => v.iter().any(names_zone_left),
+        TriggerCond::Where { trigger: c, .. }
+        | TriggerCond::Batched { trigger: c, .. }
+        | TriggerCond::FirstTimeEachTurn(c)
+        | TriggerCond::ThisTurn(c)
+        | TriggerCond::UntilYourNextTurn(c)
+        | TriggerCond::ThisCombat(c)
+        | TriggerCond::ForAsLongAs(c, _)
+        | TriggerCond::Noncombat(c) => names_zone_left(c),
+        TriggerCond::ZoneChange {
+            from: Some(_),
+            to: None,
+            ..
+        } => true,
+        _ => false,
     }
 }
 
