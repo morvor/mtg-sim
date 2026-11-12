@@ -414,3 +414,27 @@ fn creatures_that_die_blocking_together_werent_blocking_alone() {
     assert_eq!(t.graveyard_size(P1), 2);
     assert!(t.named_on_battlefield("Clue Token").is_empty());
 }
+
+#[test]
+fn a_restriction_on_attacking_a_specific_player_applies_only_to_attacks_on_that_player() {
+    cr!("802.3a", "508.1c", "508.5");
+    supported("Sea Monster");
+    // Sea Monster: "can't attack unless defending player controls an Island". P1 does,
+    // P2 doesn't.
+    let mut t = three_players();
+    let monster = t.battlefield(P0, "Sea Monster");
+    t.battlefield(P1, "Island");
+    t.set_step(P0, Step::BeginningOfCombat);
+    assert!(t.g.can_attack_target(monster, Entity::Player(P1)));
+    assert!(!t.g.can_attack_target(monster, Entity::Player(P2)));
+    declare(&mut t, &[(monster, Entity::Player(P2))]);
+    go_to(&mut t, Step::DeclareAttackers);
+    assert!(attackers(&t).is_empty());
+    let mut t = three_players();
+    let monster = t.battlefield(P0, "Sea Monster");
+    t.battlefield(P1, "Island");
+    t.set_step(P0, Step::BeginningOfCombat);
+    declare(&mut t, &[(monster, Entity::Player(P1))]);
+    go_to(&mut t, Step::DeclareAttackers);
+    assert_eq!(attacks(&t, monster), Some(Entity::Player(P1)));
+}

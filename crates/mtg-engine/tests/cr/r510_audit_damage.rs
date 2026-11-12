@@ -392,3 +392,47 @@ fn double_strike_and_trample_attacking_a_battle_it_defeated_deals_nothing_more()
     assert_eq!(attacks(&t, cc), None);
     assert_eq!(t.life(P1), 20);
 }
+
+#[test]
+fn deathtouch_damage_marked_in_the_first_step_doesnt_count_as_lethal_in_the_second() {
+    cr!("702.19b", "702.2c", "120.6", "510.4");
+    interp!("marked-deathtouch-damage-isnt-lethal-for-trample");
+    let mut t = TestGame::new(2);
+    // Crimson Caravaneer with deathtouch: a 1/2 double strike, trample, deathtouch; +3/+0.
+    let cc = t.battlefield(P0, "Crimson Caravaneer");
+    pump(&mut t, cc, 3);
+    give(&mut t, cc, KeywordKind::Deathtouch);
+    // Darksteel Myr made a 0/2: indestructible, it survives deathtouch damage.
+    let myr = t.battlefield(P1, "Darksteel Myr");
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P1);
+    ctx.targets = vec![vec![Entity::Object(myr)]];
+    t.g.exec(
+        &mtg_engine::ability::Effect::Modify {
+            what: mtg_engine::ability::Sel::Target(0),
+            mods: vec![mtg_engine::ability::Modification::ModifyPT(
+                mtg_engine::ability::Value::c(0),
+                mtg_engine::ability::Value::c(1),
+            )],
+            duration: mtg_engine::ability::Duration::EndOfTurn,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+    attack(&mut t, &[(cc, Entity::Player(P1))], &[(myr, cc)]);
+    t.script.lock().unwrap().asked.clear();
+    assign(&mut t, P0, &[1, 3]);
+    go_to(&mut t, Step::FirstStrikeDamage);
+    t.settle();
+    assert!(t.on_battlefield(myr));
+    assert_eq!(damage(&t, myr), 1);
+    assert_eq!(t.life(P1), 17);
+    // Second step: 1 marked of 2 toughness isn't lethal damage (CR 120.6); a nonzero
+    // amount from the deathtouch source is (CR 702.2c): 1 more must go to the Myr. All 4
+    // to the player is illegal and replaced by the default.
+    assign(&mut t, P0, &[0, 4]);
+    go_to(&mut t, Step::CombatDamage);
+    let d = damage_decisions(&t);
+    assert_eq!(d[1].3, vec![1]);
+    assert_eq!(damage(&t, myr), 2);
+    assert_eq!(t.life(P1), 14);
+}
