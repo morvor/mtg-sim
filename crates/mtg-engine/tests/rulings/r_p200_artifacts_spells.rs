@@ -145,7 +145,7 @@ fn camera(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn camera_copies_the_ability_without_granting_one() {
-    cr!("707.10", "113.2c");
+    cr!("707.10", "707.10b");
     ruling!(
         "Peter Parker's Camera",
         "Peter Parker's Camera's ability targets an ability that is on the stack and creates another instance of that ability on the stack. It doesn't cause any object to gain an ability."
@@ -422,7 +422,7 @@ fn counterbore_on_a_stolen_spell_searches_its_controller() {
 
 #[test]
 fn counterbore_on_an_uncounterable_spell_still_searches() {
-    cr!("701.6b", "608.2c");
+    cr!("113.6g", "608.2c");
     ruling!(
         "Counterbore",
         "If the targeted spell can’t be countered (it’s Vexing Shusher, for example), that spell will remain on the stack. Counterbore will continue to resolve. You still get to search for and exile all other cards with that name."
@@ -441,7 +441,7 @@ fn counterbore_on_an_uncounterable_spell_still_searches() {
 
 #[test]
 fn counterbore_must_find_graveyard_cards_but_may_leave_hidden_ones() {
-    cr!("701.19b", "400.2");
+    cr!("701.23b", "400.2");
     ruling!(
         "Counterbore",
         "The cards you’re searching for must be found if they’re in the graveyard, because that’s a zone everyone can see. Finding those cards in the hand and library is optional, though."
@@ -624,7 +624,7 @@ fn vendetta(t: &mut TestGame, name: &str, chosen: Option<Vec<Entity>>) -> usize 
 
 #[test]
 fn ancient_vendetta_names_on_resolution_any_name_up_to_four() {
-    cr!("608.2c", "201.3", "701.19b");
+    cr!("608.2c", "201.4", "701.23b");
     ruling!(
         "Ancient Vendetta",
         "You target a player as this spell is put on the stack, but you don’t name a card until it resolves. Notably, this means that players don’t get to respond to the spell knowing what card you will name."
@@ -664,7 +664,7 @@ fn ancient_vendetta_names_on_resolution_any_name_up_to_four() {
 
 #[test]
 fn ancient_vendetta_may_leave_found_cards() {
-    cr!("701.19b");
+    cr!("701.23b");
     ruling!(
         "Ancient Vendetta",
         "You don’t have to exile each card you find with that name. If you want to leave one in their graveyard, for example, you may."
@@ -684,7 +684,7 @@ fn ancient_vendetta_may_leave_found_cards() {
 
 #[test]
 fn scalpelexis_repeats_until_no_pair() {
-    cr!("510.2", "608.2c");
+    cr!("608.2c", "603.2");
     ruling!(
         "Scalpelexis",
         "The “repeat this process” means to repeat as often as it takes to not get a matching pair."

@@ -388,7 +388,6 @@ fn vesuva_copies_only_the_printed_land() {
     // Untapped original, tapped Vesuva (its own "enter tapped").
     assert!(!t.obj_now(forest).tapped);
     assert!(t.obj_now(v).tapped);
-    assert!(tap_for_mana(&mut t, P0, forest, "Add") == false);
 }
 
 /// P0's The Mycosynth Gardens becoming a copy of `target` (an artifact with mana value

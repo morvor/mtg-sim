@@ -490,7 +490,7 @@ fn idolized_ignores_creatures_put_onto_the_battlefield_attacking() {
 
 #[test]
 fn south_wind_avatar_one_trigger_per_life_gain_event() {
-    cr!("119.10", "603.2c");
+    cr!("119.9", "603.2c");
     ruling!(
         "South Wind Avatar",
         "If you gain an amount of life \"for each\" of something or \"equal to the number\" of something, that life is gained as one event and South Wind Avatar's last ability will trigger only once."
@@ -880,7 +880,7 @@ fn brutal_cathar_exile_lasts_through_transforming_until_it_leaves() {
 
 #[test]
 fn brutal_cathar_returns_the_card_with_nothing_in_between() {
-    cr!("610.3c", "707.2");
+    cr!("610.3", "610.3c", "707.5");
     ruling!(
         "Brutal Cathar // Moonrage Brute",
         "The exiled card returns to the battlefield immediately after this creature leaves the battlefield. Nothing happens between the two events, including state-based actions. The two creatures aren't on the battlefield at the same time. For example, if the returning creature is a Clone, it can't enter the battlefield as a copy of Brutal Cathar or Moonrage Brute."
