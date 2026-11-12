@@ -387,6 +387,59 @@ fn hollow_marauders_opponents_choose_in_turn_order_from_the_active_one() {
             assert!(t.in_graveyard(p, "Hill Giant"));
         }
     }
+    // All the cards are discarded together, after every choice: each opponent picks a
+    // Hill Giant (4) while none has been discarded, and would pick Grizzly Bears (2, so
+    // P0 would draw) if an earlier opponent's discard had already happened.
+    let mut t = TestGame::new(4);
+    for p in [P1, P2, P3] {
+        t.hand(p, "Hill Giant");
+        t.hand(p, "Grizzly Bears");
+        crate::r_s03_common::respond(&mut t, p, giant_unless_one_was_discarded);
+    }
+    t.answer(
+        P0,
+        DecisionKind::Targets,
+        Answer::Entities(vec![pl(P1), pl(P2), pl(P3)]),
+    );
+    let hand = t.hand_size(P0);
+    cast_resolve(&mut t, P0, "Hollow Marauder", "6B", &[]);
+    for p in [P1, P2, P3] {
+        assert!(t.in_graveyard(p, "Hill Giant"), "{p:?}: {}", t.dump_log());
+        assert!(t.in_hand(p, "Grizzly Bears"), "{p:?}");
+    }
+    assert_eq!(t.hand_size(P0), hand, "no card drawn");
+}
+
+/// Answers a choice of one card or creature with a Hill Giant, unless some player's
+/// `zone` (their graveyard, their hand) already holds a Hill Giant, then with another
+/// candidate: what a player choosing after an earlier choice had been carried out would
+/// see.
+fn giant_unless_moved(
+    g: &mtg_engine::game::Game,
+    d: &Decision,
+    zone: fn(PlayerId) -> Zone,
+) -> Option<Answer> {
+    let Decision::ChooseEntities { candidates, .. } = d else {
+        return None;
+    };
+    let moved = (0..g.players.len()).any(|i| {
+        g.zone_objects(zone(PlayerId(i as u8)))
+            .iter()
+            .any(|o| g.obj(*o).chars.name == "Hill Giant")
+    });
+    let giant = |e: &Entity| matches!(e, Entity::Object(o) if g.obj(*o).chars.name == "Hill Giant");
+    candidates
+        .iter()
+        .find(|e| giant(e) != moved)
+        .map(|e| Answer::Entities(vec![*e]))
+}
+
+fn giant_unless_one_was_discarded(g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+    giant_unless_moved(g, d, Zone::Graveyard)
+}
+
+fn giant_unless_one_was_returned(g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+    giant_unless_moved(g, d, Zone::Hand)
 }
 
 #[test]
@@ -449,5 +502,20 @@ fn valefors_opponents_choose_in_turn_order_and_the_creatures_return_together() {
     }
     for b in bears {
         assert!(t.on_battlefield(b));
+    }
+    // The creatures return together, after every choice: each opponent picks its Hill
+    // Giant (4) while none is in a hand, and would pick its Giant Spider (4) if an earlier
+    // opponent's creature had already returned.
+    let mut t = TestGame::new(4);
+    let mut spiders = vec![];
+    for p in [P1, P2, P3] {
+        t.battlefield(p, "Hill Giant");
+        spiders.push(t.battlefield(p, "Giant Spider"));
+        crate::r_s03_common::respond(&mut t, p, giant_unless_one_was_returned);
+    }
+    cast_resolve(&mut t, P0, "Summon: Valefor", "4U", &[]);
+    for (p, spider) in [P1, P2, P3].into_iter().zip(spiders) {
+        assert!(t.in_hand(p, "Hill Giant"), "{p:?}: {}", t.dump_log());
+        assert!(t.on_battlefield(spider), "{p:?}");
     }
 }
