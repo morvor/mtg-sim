@@ -162,6 +162,27 @@ fn cost_increases_apply_to_alternative_costs() {
     assert_eq!(mv(&t, spell), 4);
     t.resolve_all();
     assert_eq!(t.graveyard_size(P1), 0);
+    // Sphere of Resistance and Helm of Awakening ("Spells cost {1} less to cast."): the
+    // increase is added to the alternative cost before the reduction is taken off, so
+    // Ravenous Trap ({0} + {1} - {1}) and Demon of Death's Gate cost no mana. (Reduced
+    // first, {0} would stay {0} and then become {1}.)
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Sphere of Resistance");
+    t.battlefield(P1, "Helm of Awakening");
+    t.g.mill(P1, 3);
+    t.settle();
+    let trap = t.hand(P0, "Ravenous Trap");
+    let m = alt(&mut t, P0, trap);
+    let spell = t.cast(P0, trap).method(m).target(pl(P1)).go();
+    assert_eq!(mv(&t, spell), 4);
+    t.resolve_all();
+    assert_eq!(t.graveyard_size(P1), 0);
+    let (d, hawks) = demon(&mut t);
+    let m = alt(&mut t, P0, d);
+    t.answer_choose(P0, &hawks.iter().map(|h| obj(*h)).collect::<Vec<_>>());
+    t.cast(P0, d).method(m).go();
+    t.resolve_all();
+    assert_eq!(count_named(&t, "Demon of Death's Gate"), 1);
 }
 
 #[test]
@@ -247,7 +268,7 @@ fn opt(t: &mut TestGame, p: PlayerId) {
 
 #[test]
 fn mindbreak_traps_condition_needs_one_opponent_casting_three_spells_resolved_or_not() {
-    cr!("118.9", "601.2", "406.3", "701.6a");
+    cr!("118.9", "601.2", "406.2", "701.6a");
     ruling!(
         "Mindbreak Trap",
         "For Mindbreak Trap's alternative cost to apply, a single opponent must cast three or more spells. Three opponents each casting a single spell won't work, for example."

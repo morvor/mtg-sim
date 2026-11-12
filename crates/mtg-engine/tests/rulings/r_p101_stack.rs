@@ -1,8 +1,8 @@
 //! Rulings batch P101 — spells on the stack: gaining control of one (Commandeer, CR
-//! 110.2, 115.7, 608.2b, 608.2n, 702.27a), putting one into its owner's library (Subtlety:
+//! 112.2, 115.7, 608.2b, 608.2n, 702.27a), putting one into its owner's library (Subtlety:
 //! not countering it, CR 701.6a), copies keeping X and the division of damage (CR 707.10,
 //! 601.2d), and abilities that trigger on casting resolving first (Mizzix, Chalice of the
-//! Void: CR 603.3, 601.2i, 603.4).
+//! Void: CR 603.2, 603.3, 601.2i).
 
 use crate::r_p003_common::divide;
 use crate::r_p101_common::*;
@@ -30,7 +30,7 @@ fn commandeer(t: &mut TestGame, spell: ObjectId, new: Option<&[Entity]>) {
 
 #[test]
 fn commandeer_makes_you_the_spells_you_for_targets_and_effects() {
-    cr!("110.2", "115.7", "608.2b", "109.5");
+    cr!("112.2", "115.7", "608.2b", "608.2n", "109.5");
     ruling!(
         "Commandeer",
         "After Commandeer resolves, you control the targeted spell. Any instance of \"you\" in that spell's text now refers to you, \"an opponent\" refers to one of your opponents, and so on."
@@ -49,6 +49,15 @@ fn commandeer_makes_you_the_spells_you_for_targets_and_effects() {
     assert_eq!((t.hand_size(P0), t.hand_size(P1)), (h0 + 2, h1));
     assert!(t.in_graveyard(P1, "Divination"));
     assert!(!t.in_graveyard(P0, "Divination"));
+    // P1's Exsanguinate with X = 2 ("Each opponent loses X life. You gain life equal to the
+    // life lost this way."): P0's opponent, P1, loses 2, and P0 gains 2.
+    let mut t = TestGame::new(2);
+    t.set_step(P1, Step::PrecombatMain);
+    let ex = cast_x(&mut t, P1, "Exsanguinate", 2, &[]);
+    commandeer(&mut t, ex, None);
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1)), (22, 18));
+    assert!(t.in_graveyard(P1, "Exsanguinate"));
     // P1's Ranger's Guile ("Target creature you control gets +1/+1 and gains hexproof")
     // on P1's Grizzly Bears: under P0's control, the Bears is no longer a creature "you"
     // control. Kept, the spell doesn't resolve; P0 may change it to P0's Hill Giant.
@@ -75,7 +84,7 @@ fn commandeer_makes_you_the_spells_you_for_targets_and_effects() {
 
 #[test]
 fn commandeer_reevaluates_target_restrictions_for_you_before_new_targets() {
-    cr!("115.7", "608.2b", "608.2c");
+    cr!("115.7", "115.7d", "109.5");
     ruling!(
         "Commandeer",
         "The change of control happens before new targets are chosen, so any targeting restrictions such as \"target opponent\" or \"target creature you control\" are now made in reference to you, not the spell's original controller."
@@ -101,11 +110,37 @@ fn commandeer_reevaluates_target_restrictions_for_you_before_new_targets() {
     assert!(last.contains(&obj(giant)));
     assert!(!last.contains(&obj(other)));
     assert!(!last.contains(&obj(bears)));
+    // P1's Bump in the Night ("Target opponent loses 3 life.") at P0: P0 is no longer an
+    // opponent of the spell's controller. Kept, it doesn't resolve; P0 may change it to P1,
+    // the only player offered.
+    for change in [false, true] {
+        let mut t = TestGame::new(2);
+        t.set_step(P1, Step::PrecombatMain);
+        let bump = cast_new(&mut t, P1, "Bump in the Night", &[pl(P0)]);
+        let from = t.asked().len();
+        let new = [pl(P1)];
+        commandeer(&mut t, bump, change.then_some(&new[..]));
+        t.resolve_all();
+        if change {
+            let offered = target_candidates(&t, P0, from);
+            let last = offered.last().expect("asked for a new target");
+            assert!(
+                last.contains(&pl(P1)) && !last.contains(&pl(P0)),
+                "{last:?}"
+            );
+        }
+        assert_eq!(resolved(&t, bump), change, "change = {change}");
+        assert_eq!(
+            (t.life(P0), t.life(P1)),
+            if change { (20, 17) } else { (20, 20) },
+            "change = {change}"
+        );
+    }
 }
 
 #[test]
 fn commandeer_on_buyback_and_storm_spells() {
-    cr!("702.27a", "702.40a", "707.10", "110.2");
+    cr!("702.27a", "702.40a", "707.10", "112.2");
     ruling!(
         "Commandeer",
         "If you Commandeer a spell for which buyback has been paid, the card returns to its owner's hand."
@@ -324,7 +359,7 @@ fn mizzixs_trigger_comes_after_the_spell_is_cast_and_resolves_before_it() {
 
 #[test]
 fn chalice_of_the_void_compares_counters_as_the_spell_is_cast() {
-    cr!("603.2", "603.4", "608.2c");
+    cr!("603.2", "601.2i");
     ruling!(
         "Chalice of the Void",
         "The number of charge counters on Chalice of the Void matters only at the time the spell is cast. Changing the number of charge counters on Chalice of the Void after a spell has been cast won't change whether the ability triggers or counters the spell."

@@ -221,7 +221,7 @@ fn chrome_mox_offers_each_color_of_the_imprinted_card_and_never_colorless() {
 
 #[test]
 fn a_second_mox_opal_meets_the_legend_rule_before_either_can_tap() {
-    cr!("704.5j", "117.5", "602.5b");
+    cr!("704.5j", "117.5");
     ruling!(
         "Mox Opal",
         "If you control Mox Opal and one other artifact, then have a second Mox Opal enter the battlefield as your third artifact, you can't activate either one's mana ability before putting one into your graveyard due to the “legend rule.”"
@@ -330,8 +330,8 @@ fn culling_ritual_adds_black_or_green_for_each_permanent() {
     }
     cast_resolve(&mut t, P0, "Culling Ritual", "2BG", &[]);
     assert_eq!(t.g.player(P0).mana_pool.total(), 3, "{}", t.dump_log());
-    assert!(t.g.player(P0).mana_pool.count(ManaType::B) >= 1);
-    assert!(t.g.player(P0).mana_pool.count(ManaType::G) >= 1);
+    assert_eq!(t.g.player(P0).mana_pool.count(ManaType::B), 2);
+    assert_eq!(t.g.player(P0).mana_pool.count(ManaType::G), 1);
 }
 
 #[test]
@@ -365,7 +365,7 @@ fn mana_crypts_damage_follows_the_lost_flip_at_once() {
 
 #[test]
 fn tariff_is_paid_on_resolution_with_mana_abilities() {
-    cr!("608.2d", "605.3a", "118.3", "101.4");
+    cr!("608.2d", "605.3a", "118.12a", "101.4");
     ruling!(
         "Tariff",
         "You can use mana abilities during the resolution of this spell if the player decides to pay the mana cost."
@@ -376,7 +376,8 @@ fn tariff_is_paid_on_resolution_with_mana_abilities() {
     );
     supported("Tariff");
     // P1 taps two lands during the resolution to pay for Grizzly Bears ({1}{G}); P2
-    // declines for Hill Giant and sacrifices it; P0 controls no creatures.
+    // declines for Hill Giant and sacrifices it; P0 controls no creatures and isn't asked.
+    // The players choose in APNAP order: P1, then P2.
     let mut t = TestGame::new(3);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let giant = t.battlefield(P2, "Hill Giant");
@@ -384,9 +385,16 @@ fn tariff_is_paid_on_resolution_with_mana_abilities() {
     t.lands(P2, "Mountain", 4);
     t.answer_yes(P1, true);
     t.answer_yes(P2, false);
+    let from = t.asked().len();
     cast_resolve(&mut t, P0, "Tariff", "1W", &[]);
     assert!(t.on_battlefield(bears));
     assert_eq!(crate::r_s01_common::tapped_lands(&t, P1), 2);
     assert!(!t.on_battlefield(giant));
     assert_eq!(crate::r_s01_common::tapped_lands(&t, P2), 0);
+    let asked: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::YesNo { .. }))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(asked, [P1, P2], "{:?}", t.asked()[from..].to_vec());
 }

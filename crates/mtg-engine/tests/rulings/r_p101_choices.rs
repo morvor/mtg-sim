@@ -420,13 +420,21 @@ fn valefors_opponents_choose_in_turn_order_and_the_creatures_return_together() {
         "While resolving Valefor's first chapter ability, the next opponent in turn order chooses a creature with the greatest mana value among creatures they control, then each other opponent in turn order does the same. Then the chosen creatures are returned to their owners' hands simultaneously."
     );
     supported("Summon: Valefor");
-    // Three players: P1 has two Hill Giants (tied), P2 a Hill Giant and Grizzly Bears.
-    let mut t = TestGame::new(3);
-    let a = t.battlefield(P1, "Hill Giant");
-    let b = t.battlefield(P1, "Hill Giant");
-    let c = t.battlefield(P2, "Hill Giant");
-    let bears = t.battlefield(P2, "Grizzly Bears");
-    t.answer_choose(P1, &[obj(b)]);
+    // Four players: each opponent has two Hill Giants (tied) and a Grizzly Bears, so each
+    // chooses, in turn order from P0: P1, P2, P3.
+    let mut t = TestGame::new(4);
+    let mut giants = vec![];
+    let mut bears = vec![];
+    for p in [P1, P2, P3] {
+        giants.push((
+            t.battlefield(p, "Hill Giant"),
+            t.battlefield(p, "Hill Giant"),
+        ));
+        bears.push(t.battlefield(p, "Grizzly Bears"));
+    }
+    for (p, (_, second)) in [P1, P2, P3].into_iter().zip(&giants) {
+        t.answer_choose(p, &[obj(*second)]);
+    }
     let from = t.asked().len();
     cast_resolve(&mut t, P0, "Summon: Valefor", "4U", &[]);
     let order: Vec<PlayerId> = t.asked()[from..]
@@ -434,9 +442,12 @@ fn valefors_opponents_choose_in_turn_order_and_the_creatures_return_together() {
         .filter(|(p, d)| *p != P0 && matches!(d, Decision::ChooseEntities { .. }))
         .map(|(p, _)| *p)
         .collect();
-    assert_eq!(order.first(), Some(&P1), "{:?}", t.asked()[from..].to_vec());
-    assert!(t.on_battlefield(a));
-    assert_eq!(t.zone(b), Zone::Hand(P1));
-    assert_eq!(t.zone(c), Zone::Hand(P2));
-    assert!(t.on_battlefield(bears));
+    assert_eq!(order, [P1, P2, P3], "{:?}", t.asked()[from..].to_vec());
+    for (p, (first, second)) in [P1, P2, P3].into_iter().zip(&giants) {
+        assert!(t.on_battlefield(*first));
+        assert_eq!(t.zone(*second), Zone::Hand(p));
+    }
+    for b in bears {
+        assert!(t.on_battlefield(b));
+    }
 }

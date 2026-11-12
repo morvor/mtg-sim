@@ -1,10 +1,11 @@
 //! Rulings batch P101 — the Leylines on the battlefield: Leyline of Hope's replacement per
 //! life-gain event (CR 614.1a, 119.10) and its +2/+2 against marked damage (704.5g);
-//! Leyline of Punishment against prevention (615, 119.7) and life totals that would rise
-//! (119.5); Leyline of Vitality entering with a creature (603.6a); Leyline of Combustion's
-//! trigger (603.3); Leyline of the Meek and copies of tokens (111.1, 707.2); Leyline of
-//! Transformation's chosen type and enters replacements (614.12, 205.3m); Leyline of
-//! Resonance's copy (707.10); Leyline of the Void and discarded cards (614.6, 701.9).
+//! Leyline of Punishment against prevention (615.12) but not other replacements (614.9),
+//! and life totals that would rise (119.5); Leyline of Vitality entering with a creature
+//! (603.6a); Leyline of Combustion's trigger (603.3); Leyline of the Meek and copies of
+//! tokens (111.1, 707.2); Leyline of Transformation's chosen type and enters replacements
+//! (614.12, 205.3m); Leyline of Resonance's copy (707.10); Leyline of the Void and
+//! discarded cards (614.6, 701.9).
 
 use crate::r_p101_common::*;
 use crate::r_p152_common::gain;
@@ -136,7 +137,7 @@ fn leyline_of_hope_ignores_a_teammates_life_gain_in_two_headed_giant() {
 
 #[test]
 fn leyline_of_punishment_stops_prevention_but_not_its_other_effects() {
-    cr!("615.12", "609.7", "615.1a", "702.16e", "614.1a");
+    cr!("615.12", "615.1a", "702.16e", "614.1a");
     ruling!(
         "Leyline of Punishment",
         "Damage prevention shields don't have any effect. If a prevention effect has an additional effect, the additional effect will still work (if possible). Spells that create prevention effects can still be cast, and abilities that create prevention effects can still be activated."
@@ -147,10 +148,13 @@ fn leyline_of_punishment_stops_prevention_but_not_its_other_effects() {
     );
     supported("Leyline of Punishment");
     // Druid's Deliverance ("Prevent all combat damage that would be dealt to you this
-    // turn. Populate.") can be cast; it populates, and the combat damage is dealt.
+    // turn. Populate.") can be cast; it populates. Samite Healer's ability ("Prevent the
+    // next 1 damage that would be dealt to any target this turn.") can be activated. The
+    // combat damage is dealt all the same.
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Leyline of Punishment");
     create_token(&mut t, P0, "Thopter");
+    let healer = t.battlefield(P0, "Samite Healer");
     let giant = t.battlefield(P1, "Hill Giant");
     t.set_step(P1, Step::PrecombatMain);
     mana(&mut t, P0, "1G");
@@ -159,20 +163,33 @@ fn leyline_of_punishment_stops_prevention_but_not_its_other_effects() {
     t.cast(P0, dd).go();
     t.resolve_all();
     assert_eq!(tokens(&t, P0).len(), 2, "populated");
+    t.g.turn.priority = Some(P0);
+    act(&mut t, P0, healer, "Prevent the next 1 damage", &[pl(P0)]).expect("Samite Healer");
+    t.resolve_all();
+    assert!(t.obj_now(healer).tapped);
     t.set_step(P1, Step::BeginningOfCombat);
     t.attack(&[(giant, pl(P0))], &[]);
     assert_eq!(t.life(P0), 17);
     // Protection from red (Paladin en-Vec, 2/2) doesn't prevent Pyroclasm's 2 damage.
-    // Unbreathing Horde ("If Unbreathing Horde would be dealt damage, prevent that damage
-    // and remove a +1/+1 counter from it.") with three counters is dealt the 2 damage and
-    // still loses one counter (once, for the one source): a 2/2 with 2 damage.
+    // Unbreathing Horde (0/0: "If this creature would be dealt damage, prevent that damage
+    // and remove a +1/+1 counter from it.") with four counters is dealt the 2 damage and
+    // still loses one counter, once for the one source: a 3/3 with 2 damage.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Leyline of Punishment");
     let paladin = t.battlefield(P1, "Paladin en-Vec");
     let horde = t.battlefield(P1, "Unbreathing Horde");
-    put(&mut t, horde, counters::PLUS1, 3);
+    put(&mut t, horde, counters::PLUS1, 4);
     cast_resolve(&mut t, P0, "Pyroclasm", "1R", &[]);
     assert!(!t.on_battlefield(paladin));
+    assert_eq!(t.counters(horde, counters::PLUS1), 3, "{}", t.dump_log());
+    assert_eq!(dmg(&t, horde), 2);
+    assert!(t.on_battlefield(horde));
+    // With three counters, it dies: a 2/2 with 2 damage.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Leyline of Punishment");
+    let horde = t.battlefield(P1, "Unbreathing Horde");
+    put(&mut t, horde, counters::PLUS1, 3);
+    cast_resolve(&mut t, P0, "Pyroclasm", "1R", &[]);
     assert!(t.in_graveyard(P1, "Unbreathing Horde"), "{}", t.dump_log());
     // Without the Leyline, the Horde prevents it and loses a counter.
     let mut t = TestGame::new(2);
@@ -185,7 +202,7 @@ fn leyline_of_punishment_stops_prevention_but_not_its_other_effects() {
 
 #[test]
 fn leyline_of_punishment_doesnt_stop_replacements_that_dont_prevent() {
-    cr!("615.12", "614.1a");
+    cr!("615.12", "614.1a", "614.9");
     ruling!(
         "Leyline of Punishment",
         "Effects that replace or redirect damage without using the word \"prevent\" are not affected by Leyline of Punishment."
@@ -196,11 +213,20 @@ fn leyline_of_punishment_doesnt_stop_replacements_that_dont_prevent() {
     t.battlefield(P0, "Furnace of Rath");
     cast_resolve(&mut t, P0, "Shock", "R", &[pl(P1)]);
     assert_eq!(t.life(P1), 16);
+    // Pariah ("All damage that would be dealt to you is dealt to enchanted creature
+    // instead.") on P1's Hill Giant redirects P0's Shock at P1 to the Giant.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Leyline of Punishment");
+    let giant = t.battlefield(P1, "Hill Giant");
+    crate::r_s06_common::attach_new(&mut t, P1, "Pariah", obj(giant));
+    cast_resolve(&mut t, P0, "Shock", "R", &[pl(P1)]);
+    assert_eq!(t.life(P1), 20);
+    assert_eq!(dmg(&t, giant), 2);
 }
 
 #[test]
 fn leyline_of_punishment_stops_a_life_total_from_rising_but_not_from_falling() {
-    cr!("119.5", "119.7");
+    cr!("119.5");
     ruling!(
         "Leyline of Punishment",
         "If an effect says to set a player's life total to a certain number, and that number is higher than the player's current life total, that part of the effect won't do anything. (If the number is lower than the player's current life total, the effect will work as normal.)"
@@ -234,7 +260,7 @@ fn leyline_of_vitality_sees_a_creature_entering_with_it() {
 
 #[test]
 fn leyline_of_combustions_trigger_resolves_first_even_if_the_spell_is_countered() {
-    cr!("603.3", "603.3b");
+    cr!("603.3");
     ruling!(
         "Leyline of Combustion",
         "Leyline of Combustion's triggered ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered."

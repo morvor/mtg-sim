@@ -16,7 +16,7 @@ use smol_str::SmolStr;
 
 #[test]
 fn opening_hand_actions_come_after_mulligans_starting_player_first_for_each_wording() {
-    cr!("103.6", "103.6a", "103.6b", "103.5", "103.5c", "103.8");
+    cr!("103.6", "103.6a", "103.6b", "103.5", "103.5c");
     ruling!("Chancellor of the Spires", "A player's \"opening hand\" is the hand of cards the player has after all players have taken mulligans.");
     ruling!("Devourer of Destiny", "A player's \"opening hand\" is the hand of cards the player has after all players have taken mulligans.");
     ruling!("Gemstone Caverns", "A player's \"opening hand\" is the hand of cards the player has after all players have taken mulligans.");
@@ -234,7 +234,7 @@ fn providence_sets_life_to_26_by_gaining_or_losing_once_however_many_are_reveale
 
 #[test]
 fn once_upon_a_time_is_castable_at_the_earliest_in_the_first_upkeep() {
-    cr!("103.8", "502.4", "503.1", "117.3a", "305.2");
+    cr!("103.8", "502.4", "503.1", "117.3a", "305.1");
     ruling!(
         "Once Upon a Time",
         "The earliest opportunity you have to cast Once Upon a Time is during the first player's upkeep, before that player can play a land."

@@ -17,12 +17,56 @@ use mtg_engine::*;
 
 #[test]
 fn pyre_of_heroes_uses_the_sacrificed_back_faces_types_and_its_mana_value() {
-    cr!("608.2h", "712.8e", "202.3b", "205.3m");
+    cr!("608.2h", "712.8e", "712.8f", "202.3b", "205.3m");
     ruling!(
         "Pyre of Heroes",
         "Use the creature types and mana value of the creature you sacrificed as it existed on the battlefield to determine what creature card you can find. Notably, if you sacrifice a creature that's a double-faced permanent with its back face up, you'll use the characteristics of the back face, not the front face."
     );
     supported("Pyre of Heroes");
+    // The ruling (2021-02-05, Kaldheim, whose double-faced cards are modal) agrees with the
+    // CR: a permanent with its back face up has only its back face's characteristics (CR
+    // 712.8e, 712.8f), and its mana value "as it existed on the battlefield" is a modal
+    // back face's own, while a transforming back face's is calculated from its front face's
+    // mana cost (CR 712.8e, 202.3b; Liliana, Heretical Healer's ruling of 2016-04-08 says
+    // the same).
+    //
+    // Alrund, God of the Cosmos ({3}{U}{U}, God) with its back face, Hakka, Whispering
+    // Raven ({1}{U}, Bird), up: a Bird with mana value 3 (Eagle of the Watch) can be found;
+    // not a God with mana value 3 or 6, nor a Bird with mana value 6.
+    let mut t = TestGame::new(2);
+    let pyre = t.battlefield(P0, "Pyre of Heroes");
+    let hakka = crate::r_p212_common::back_face(
+        &mut t,
+        P0,
+        "Alrund, God of the Cosmos // Hakka, Whispering Raven",
+    );
+    assert_eq!(t.obj_now(hakka).chars.name, "Hakka, Whispering Raven");
+    assert_eq!(mv(&t, hakka), 2);
+    let lib = set_library(
+        &mut t,
+        P0,
+        &[
+            "Kefnet the Mindful",
+            "The Locust God",
+            "Duskrider Peregrine",
+            "Eagle of the Watch",
+        ],
+    );
+    t.answer_choose(P0, &[obj(hakka)]);
+    t.answer_choose(P0, &[obj(lib[3])]);
+    let from = t.asked().len();
+    mana(&mut t, P0, "2");
+    act(&mut t, P0, pyre, "Search your library", &[]).expect("Pyre");
+    t.resolve_all();
+    assert!(
+        was_offered(&t, P0, from, lib[3]),
+        "{:?}",
+        asked_of(&t, P0, from)
+    );
+    for c in &lib[..3] {
+        assert!(!was_offered(&t, P0, from, *c), "{}", t.obj(*c).chars.name);
+    }
+    assert_eq!(count_named(&t, "Eagle of the Watch"), 1);
     // Delver of Secrets ({U}, Human Wizard) transformed into Insectile Aberration (Human
     // Insect; mana value 1 from the front face's cost, CR 712.8e): an Insect with mana
     // value 2 (Kraul Harpooner) can be found; a Faerie Wizard (Spellstutter Sprite) can't.
@@ -124,18 +168,23 @@ fn abilities_that_may_be_activated_and_do_nothing() {
         "You may activate the last ability even if Steel Hellkite hasn't dealt combat damage to any players that turn. If you do, the ability won't do anything."
     );
     supported("Vivien on the Hunt");
-    // Vivien +2, declining to sacrifice: no search, the Bears stays.
+    // Vivien +2, declining to sacrifice: the Bears stays and nothing is searched for, not a
+    // Gray Ogre (3, for the Bears) nor a Raging Goblin (1, as for a mana value of 0).
     let mut t = TestGame::new(2);
     let vivien = t.battlefield(P0, "Vivien on the Hunt");
     let bears = t.battlefield(P0, "Grizzly Bears");
-    t.library_top(P0, "Hill Giant");
+    let lib = set_library(&mut t, P0, &["Raging Goblin", "Gray Ogre", "Island"]);
     t.answer_yes(P0, false);
+    t.answer_choose(P0, &[obj(lib[1])]);
+    t.answer_choose(P0, &[obj(lib[0])]);
     let loyalty = t.counters(vivien, "loyalty");
     t.activate(P0, vivien, 0, &[]).expect("Vivien +2");
     t.resolve_all();
     assert_eq!(t.counters(vivien, "loyalty"), loyalty + 2);
     assert!(t.on_battlefield(bears));
-    assert_eq!(count_named(&t, "Hill Giant"), 0);
+    assert_eq!(count_named(&t, "Gray Ogre"), 0);
+    assert_eq!(count_named(&t, "Raging Goblin"), 0);
+    assert_eq!(t.library_size(P0), 3);
     // Steel Hellkite with X = 0, no combat damage dealt: nothing is destroyed.
     let mut t = TestGame::new(2);
     let hellkite = t.battlefield(P0, "Steel Hellkite");
@@ -215,20 +264,29 @@ fn mutinous_massacre_untaps_and_hastes_every_creature() {
         "You’ll untap all creatures, including those you already control. They’ll also gain haste even if they were already untapped."
     );
     supported("Mutinous Massacre");
+    // P0's tapped Gray Ogre (3) came under P0's control this turn; P1's Air Elemental (5)
+    // is untapped. Neither has haste of its own.
     let mut t = TestGame::new(2);
-    let goblin = t.battlefield(P0, "Raging Goblin");
-    t.g.tap(goblin);
+    let ogre = t.battlefield_sick(P0, "Gray Ogre");
+    t.g.tap(ogre);
     let elemental = t.battlefield_sick(P1, "Air Elemental");
     let bears = t.battlefield(P1, "Grizzly Bears");
-    // Even: the Bears (2) is destroyed; the Goblin (1) and the Elemental (5) aren't.
+    for c in [ogre, elemental] {
+        assert!(!has_kw(&t, c, mtg_engine::keywords::KeywordKind::Haste));
+    }
+    // Even: the Bears (2) is destroyed; the Ogre (3) and the Elemental (5) aren't.
     crate::r_s03_common::respond(&mut t, P0, even);
     cast_resolve(&mut t, P0, "Mutinous Massacre", "3BBRR", &[]);
     assert!(!t.on_battlefield(bears));
-    for c in [goblin, elemental] {
+    for c in [ogre, elemental] {
         assert_eq!(t.obj_now(c).controller, P0);
         assert!(!t.obj_now(c).tapped);
         assert!(has_kw(&t, c, mtg_engine::keywords::KeywordKind::Haste));
     }
+    // Both can attack this turn.
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.attack(&[(ogre, pl(P1)), (elemental, pl(P1))], &[]);
+    assert_eq!(t.life(P1), 20 - 2 - 4);
 }
 
 /// Answers an odd/even choice with "even".
@@ -338,7 +396,8 @@ fn ugin_the_spirit_dragon_isnt_a_dragon() {
 
 #[test]
 fn kianne_counts_studied_cards_exiled_by_anything_and_imbraham_may_have_x_0() {
-    cr!("122.1", "607.1", "107.3", "406.6");
+    // Not linked abilities (CR 607): they count any study counters on cards P0 owns.
+    cr!("122.1", "107.3");
     ruling!(
         "Kianne, Dean of Substance // Imbraham, Dean of Theory",
         "The second abilities of both Kianne and Imbraham look at all cards you own in exile with study counters, even if they were exiled by a different permanent, such as another Kianne or Imbraham."
@@ -440,7 +499,7 @@ fn tenth_district_heros_second_ability_checks_for_a_detective_on_resolution() {
 
 #[test]
 fn boxing_rings_treasure_counts_any_fight() {
-    cr!("701.14a", "602.5b");
+    cr!("701.14a");
     ruling!(
         "Boxing Ring",
         "You may activate Boxing Ring's last ability if you control a creature that fought due to any effect, not just a creature that fought in the Boxing Ring."
@@ -506,6 +565,23 @@ fn arenas_fight_with_tapped_creatures_illegal_targets_and_current_power() {
     t.resolve_all();
     assert!(t.obj_now(bears).tapped);
     assert_eq!(dmg(&t, bears), 0);
+    // P1's target gains shroud (Lightning Greaves): the same. Both gain shroud: the ability
+    // doesn't resolve, and neither is tapped.
+    for both in [false, true] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let goblin = t.battlefield(P1, "Raging Goblin");
+        arena(&mut t, bears, goblin);
+        crate::r_s06_common::attach_new(&mut t, P1, "Lightning Greaves", obj(goblin));
+        if both {
+            crate::r_s06_common::attach_new(&mut t, P0, "Lightning Greaves", obj(bears));
+        }
+        t.resolve_all();
+        assert_eq!(t.obj_now(bears).tapped, !both, "both = {both}");
+        assert!(!t.obj_now(goblin).tapped, "both = {both}");
+        assert_eq!((dmg(&t, bears), dmg(&t, goblin)), (0, 0), "both = {both}");
+        assert!(t.on_battlefield(goblin));
+    }
     // Giant Growth in response: the Bears deals 5.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
