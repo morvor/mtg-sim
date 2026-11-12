@@ -541,7 +541,7 @@ fn bartered_cows_ability_is_triggered_not_activated() {
 
 #[test]
 fn fury_of_the_horde_outside_a_main_phase_only_untaps() {
-    cr!("500.8", "505.1a", "702.8b");
+    cr!("500.8", "702.8a");
     ruling!(
         "Fury of the Horde",
         "If it’s somehow not a main phase when Fury of the Horde resolves, all it does is untap all creatures that attacked that turn. No new phases are created."
@@ -563,7 +563,7 @@ fn fury_of_the_horde_outside_a_main_phase_only_untaps() {
 
 #[test]
 fn gusthas_scepter_triggers_on_losing_control_or_leaving() {
-    cr!("603.6a", "603.10a", "406.6");
+    cr!("603.6c", "603.10a", "406.6");
     ruling!(
         "Gustha's Scepter",
         "The last ability will trigger when a different player gains control of Gustha’s Scepter, as well as when Gustha’s Scepter leaves the battlefield."

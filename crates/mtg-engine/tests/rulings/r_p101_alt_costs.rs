@@ -33,7 +33,7 @@ fn demon(t: &mut TestGame) -> (ObjectId, Vec<ObjectId>) {
 
 #[test]
 fn demon_of_deaths_gates_alternative_cost_keeps_its_mana_value_and_timing() {
-    cr!("118.9", "118.9b", "118.9c", "202.3", "307.1", "117.1a");
+    cr!("118.9", "118.9c", "202.3", "302.1", "117.1a");
     ruling!(
         "Demon of Death's Gate",
         "Casting Demon of Death's Gate by paying its alternative cost doesn't change its mana cost or mana value."
@@ -296,7 +296,7 @@ fn mindbreak_traps_condition_needs_one_opponent_casting_three_spells_resolved_or
 
 #[test]
 fn archive_traps_condition_is_any_search_of_any_opponent() {
-    cr!("701.23a", "701.23b", "118.9", "701.17b");
+    cr!("701.23a", "118.9", "701.17a", "701.17b");
     ruling!(
         "Archive Trap",
         "A spell or ability causes a player to search their library only if it specifically contains the word “search” in its text. For example, if a spell or ability lets a player look at the top four cards of their library and do something with one of those cards, that’s not a search."
@@ -458,7 +458,7 @@ fn a_commander_free_spell_is_cast_with_no_one_acting_in_between() {
 
 #[test]
 fn summoning_trap_looks_at_all_of_a_short_library() {
-    cr!("401.6", "118.9");
+    cr!("608.2c");
     ruling!(
         "Summoning Trap",
         "If there are seven or fewer cards in your library, you'll look at all of them."

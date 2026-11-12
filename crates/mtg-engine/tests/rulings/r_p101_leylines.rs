@@ -18,7 +18,7 @@ use mtg_engine::*;
 
 #[test]
 fn leyline_of_hope_makes_marked_damage_lethal_when_it_leaves_or_life_drops() {
-    cr!("704.5g", "613.4c", "510.2", "514.2");
+    cr!("704.5g", "613.4c");
     ruling!(
         "Leyline of Hope",
         "Because damage remains marked on creatures until the damage is removed as the turn ends, nonlethal damage dealt to creatures you control may become lethal if Leyline of Hope leaves the battlefield or if your life total drops below 7 life more than your starting life total."
@@ -46,7 +46,7 @@ fn leyline_of_hope_makes_marked_damage_lethal_when_it_leaves_or_life_drops() {
 
 #[test]
 fn leyline_of_hope_applies_once_per_life_gain_event() {
-    cr!("614.1a", "616.1", "702.15b", "510.2", "119.10");
+    cr!("614.1a", "702.15b", "510.2", "119.10", "702.19b", "702.4b");
     ruling!(
         "Leyline of Hope",
         "Each creature with lifelink dealing combat damage causes a separate life-gaining event. For example, if two creatures you control with lifelink deal combat damage at the same time, Leyline of Hope's second ability will apply to those two events separately. However, if a single creature you control with lifelink deals combat damage to multiple permanents and/or players at the same time (perhaps because it has trample or was blocked by more than one creature), the ability will apply only once."
@@ -185,7 +185,7 @@ fn leyline_of_punishment_stops_prevention_but_not_its_other_effects() {
 
 #[test]
 fn leyline_of_punishment_doesnt_stop_replacements_that_dont_prevent() {
-    cr!("615.12", "614.1a", "614.9");
+    cr!("615.12", "614.1a");
     ruling!(
         "Leyline of Punishment",
         "Effects that replace or redirect damage without using the word \"prevent\" are not affected by Leyline of Punishment."
@@ -234,7 +234,7 @@ fn leyline_of_vitality_sees_a_creature_entering_with_it() {
 
 #[test]
 fn leyline_of_combustions_trigger_resolves_first_even_if_the_spell_is_countered() {
-    cr!("603.3", "603.3b", "117.3c");
+    cr!("603.3", "603.3b");
     ruling!(
         "Leyline of Combustion",
         "Leyline of Combustion's triggered ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered."
@@ -342,7 +342,7 @@ fn leyline_of_transformations_type_applies_before_enters_replacements_for_that_t
 
 #[test]
 fn leyline_of_resonances_copy_isnt_cast_and_may_keep_or_change_its_target() {
-    cr!("707.10", "707.10c", "115.7", "601.2");
+    cr!("707.10", "707.10c", "115.7d", "601.2");
     ruling!(
         "Leyline of Resonance",
         "The copy created by Leyline of Resonance's last ability will have the same targets (all the same creature you control) as the spell it's copying unless you choose new ones. You may change any number of the targets, including all of them or none of them. The new targets must be legal."
@@ -380,7 +380,7 @@ fn leyline_of_resonances_copy_isnt_cast_and_may_keep_or_change_its_target() {
 
 #[test]
 fn leyline_of_the_void_still_lets_discard_abilities_see_the_card_in_exile() {
-    cr!("614.6", "701.9a", "603.10a", "702.35a");
+    cr!("614.6", "701.9a", "702.35a");
     ruling!(
         "Leyline of the Void",
         "If your opponent discards a card while you control Leyline of the Void, abilities that check whether a card is discarded (such as Hollow One, or a madness ability of the discarded card) still work, even though that card never reaches that player's graveyard. In addition, spells or abilities that check the characteristics of the discarded card can find that card in exile."

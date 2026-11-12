@@ -91,7 +91,7 @@ fn even(_: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
 
 #[test]
 fn wave_of_terror_destroys_exactly_the_number_of_age_counters() {
-    cr!("702.24a", "503.1a", "504.1", "701.19c");
+    cr!("702.24a", "503.1a", "504.1");
     ruling!(
         "Wave of Terror",
         "This destroys creatures with mana value exactly equal to the appropriate number, not equal to or less than that number."
@@ -214,7 +214,7 @@ fn culling_scales_lets_you_choose_among_tied_lowest() {
 
 #[test]
 fn talion_may_choose_1_or_10() {
-    cr!("607.2a", "614.12b", "601.2");
+    cr!("614.1c", "603.2");
     ruling!(
         "Talion, the Kindly Lord",
         "The numbers you may choose include 1 and 10."
@@ -251,7 +251,7 @@ fn talion_may_choose_1_or_10() {
 
 #[test]
 fn nahiris_sacrifice_chooses_x_targets_and_division_as_it_is_cast() {
-    cr!("601.2b", "601.2c", "601.2d", "115.1d");
+    cr!("601.2b", "601.2c", "601.2d");
     ruling!(
         "Nahiri's Sacrifice",
         "You choose the value of X, the targets, and how damage will be divided as you cast Nahiri's Sacrifice."

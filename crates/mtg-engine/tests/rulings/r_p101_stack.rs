@@ -174,7 +174,7 @@ fn choose_bottom(_: &mtg_engine::game::Game, d: &Decision) -> Option<mtg_engine:
 
 #[test]
 fn subtlety_puts_a_creature_spell_into_its_library_by_its_owners_choice() {
-    cr!("701.6a", "115.1a", "401.4", "702.12b");
+    cr!("701.6a", "115.1d");
     ruling!(
         "Subtlety",
         "A spell that's put into its owner's library doesn't resolve, but it isn't countered. This will work on spells that say they can't be countered."
@@ -242,7 +242,7 @@ fn flare_of_duplications_copy_keeps_x() {
 
 #[test]
 fn deflecting_swat_keeps_the_division_of_damage_and_counters() {
-    cr!("601.2d", "115.7", "608.2c");
+    cr!("601.2d", "115.7d", "115.7f");
     ruling!(
         "Deflecting Swat",
         "If the target spell has damage divided as it was cast (like Mythos of Vadrok), the division can't be changed although the targets receiving that damage still can. The same is true of spells that distribute counters."
@@ -294,7 +294,7 @@ fn deflecting_swat_keeps_the_division_of_damage_and_counters() {
 
 #[test]
 fn mizzixs_trigger_comes_after_the_spell_is_cast_and_resolves_before_it() {
-    cr!("601.2i", "603.3", "601.2f", "122.1f");
+    cr!("601.2i", "603.3", "601.2f", "122.1");
     ruling!(
         "Mizzix of the Izmagnus",
         "You finish casting a spell, including paying its costs, before Mizzix's first ability triggers. The ability that gives you the experience counter will resolve before the spell that caused it to trigger."

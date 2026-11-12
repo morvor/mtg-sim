@@ -84,7 +84,7 @@ fn a_countered_or_fizzled_pact_makes_no_delayed_trigger() {
 
 #[test]
 fn a_pact_that_resolves_but_does_nothing_still_makes_you_pay() {
-    cr!("603.7a", "608.2c", "702.12b", "101.1");
+    cr!("603.7a", "608.2c", "702.12b", "104.3e");
     ruling!(
         "Pact of Negation",
         "If Pact of Negation resolves with a legal target but fails to counter that spell (most likely because that spell can't be countered), the delayed triggered ability will still trigger at the beginning of your next upkeep and you will have to pay. Or else."
@@ -336,7 +336,7 @@ fn culling_ritual_adds_black_or_green_for_each_permanent() {
 
 #[test]
 fn mana_crypts_damage_follows_the_lost_flip_at_once() {
-    cr!("705.2", "608.2c", "117.3b");
+    cr!("705.1", "608.2c");
     ruling!(
         "Mana Crypt",
         "No player may choose to take actions between determining the result of the flip and damage being dealt if you lost the flip."
