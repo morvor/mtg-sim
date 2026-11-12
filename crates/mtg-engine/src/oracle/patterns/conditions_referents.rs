@@ -63,6 +63,16 @@ pub fn parse_condition_with(c: &str, b: &mut Builder) -> Option<Condition> {
         .or_else(|| understood(super::conditions_compare::parse_without_targets(c, b)))
         .or_else(|| {
             let c2 = super::conditions_compare::referent_rewording(c)?;
+            // "Exile target enchantment. If the exiled card is a God card, ..." (Deicide):
+            // after a target permanent was exiled, "the exiled card" is the card in exile,
+            // the object the exile put there (CR 400.7j; `Effect::Exile` records it in
+            // `vars::IT`), not the permanent as it last existed: "Deicide looks at the card
+            // in exile, not the permanent that was exiled, to determine if it is a God." (a
+            // Theros God that isn't a creature isn't a God on the battlefield). "It" stays
+            // the target for the rest of the sentence ("its controller's graveyard").
+            if c.starts_with("the exiled card ") && it_is_a_target_permanent(b) {
+                b.it = Sel::Var(vars::IT);
+            }
             understood(referent_condition(&c2, b))
         });
     // Resolving a subject never changes what later pronouns mean, nor adds targets.
@@ -462,6 +472,18 @@ fn subject(c: &str, b: &mut Builder) -> Option<(Subject, String)> {
         }
     }
     Some((Subject::Object(sel), rest))
+}
+
+/// Whether "it" is a target permanent: a target object whose description names no zone
+/// other than the battlefield.
+fn it_is_a_target_permanent(b: &Builder) -> bool {
+    let Sel::Target(slot) = b.it else {
+        return false;
+    };
+    matches!(
+        b.targets.get(slot as usize).map(|t| &t.what),
+        Some(TargetKind::Object(f)) if matches!(f.zone(), None | Some(ZoneKind::Battlefield))
+    )
 }
 
 /// Whether the triggered ability being compiled is about an object `noun` names ("Whenever

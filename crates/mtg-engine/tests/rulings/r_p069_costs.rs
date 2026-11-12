@@ -460,6 +460,7 @@ fn ice_cauldron_mana_pays_additional_costs() {
 #[test]
 fn reanimate_life_loss_uses_the_card_in_the_graveyard() {
     cr!("608.2h", "722.3a");
+    interp!("returned-card-values-by-wording");
     ruling!(
         "Grave Researcher // Reanimate",
         "The amount of life you lose as Reanimate resolves is determined by the mana value of the card in your graveyard, not the creature once it's on the battlefield."
@@ -486,6 +487,7 @@ fn reanimate_life_loss_uses_the_card_in_the_graveyard() {
 #[test]
 fn reanimate_card_life_loss_uses_the_card_in_the_graveyard() {
     cr!("608.2h");
+    interp!("returned-card-values-by-wording");
     ruling!(
         "Reanimate",
         "The amount of life you lose is determined by the mana value of the card in your graveyard, not the creature once it's on the battlefield."
@@ -508,6 +510,7 @@ fn reanimate_card_life_loss_uses_the_card_in_the_graveyard() {
 #[test]
 fn phyrexian_delver_life_loss_uses_the_card_in_the_graveyard() {
     cr!("608.2h");
+    interp!("returned-card-values-by-wording");
     // The same wording as Reanimate's ("You lose life equal to that card's mana value.")
     // after a triggered ability's return to the battlefield: Clone ({3}{U}) enters as a
     // copy of Grizzly Bears (mana value 2), and P0 loses 4 life, the mana value of the

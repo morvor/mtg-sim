@@ -2,8 +2,9 @@
 //! permanent that left the battlefield (a sacrificed, destroyed or exiled copy whose mana
 //! value on the battlefield was the copied card's), a card that left the hand, and X in
 //! a mana cost off the stack (CR 202.3e). (Sister Hospitaller's "as it last existed in
-//! the graveyard" is left uncited: it conflicts with Cleric Class's ruling, see the
-//! provisional register entry `returned-card-values-current-on-the-battlefield`.)
+//! the graveyard", which this batch left uncited beside Cleric Class's ruling, is cited in
+//! `returned_card_values.rs`: work item ruling-conflicts-5, provisional register entry
+//! `returned-card-values-by-wording`.)
 
 use crate::r_p155_common::*;
 use mtg_engine::mana::ManaType;
