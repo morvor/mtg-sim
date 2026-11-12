@@ -1,15 +1,15 @@
 //! Rulings batch P090 — triggered abilities: Elesh Norn, Mother of Machines (CR 603.2d,
-//! 603.6a), "enter tapped" for an opponent's permanents entering alongside (CR 614.12),
-//! untap triggers waiting for the upkeep (CR 502.4, 503.1), King Macar's controller (CR
-//! 603.3a), and Doomed Necromancer's target chosen before its cost is paid (CR 602.2b,
-//! 601.2c).
+//! 603.6a), "enter tapped" for an opponent's permanents entering alongside (CR 614.12,
+//! 614.1d), untap triggers waiting for the upkeep (CR 502.4, 503.1a), King Macar's
+//! controller (CR 603.3a), and Doomed Necromancer's target chosen before its cost is paid
+//! (CR 602.2b, 601.2c).
 
+use crate::r_p108_common::two_headed_giant;
 use crate::r_s01_common::*;
 use crate::r_s04_common::ability_targets;
 use crate::r_s06_common::give_control;
 use crate::r_s24_common::{choose_creature_type, enter_together};
-use crate::r_p108_common::two_headed_giant;
-use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::decision::Decision;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -56,12 +56,17 @@ fn elesh_norn_triggers_twice_with_separate_choices() {
     t.enter(P0, "Fire Imp");
     t.settle();
     assert_eq!(t.stack_len(), 2);
-    assert!(t.g.stack.iter().all(|s| !crate::r_s04_common::is_spell_copy(&t, *s)), "not copies");
+    assert!(
+        t.g.stack
+            .iter()
+            .all(|s| !crate::r_s04_common::is_spell_copy(&t, *s)),
+        "not copies"
+    );
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
     assert_eq!(crate::r_s07_common::damage_on(&t, b), 2);
-    // A choice on resolution, made for each: Soul Warden's twin for "may" — Reclamation
-    // Sage ("you may destroy target artifact or enchantment"): yes once, no once.
+    // A choice on resolution, made for each instance: Reclamation Sage ("you may destroy
+    // target artifact or enchantment"): no once, yes once.
     supported("Reclamation Sage");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Elesh Norn, Mother of Machines");
@@ -91,7 +96,10 @@ fn elesh_norn_and_permanents_entering_with_it() {
     // Elesh Norn and Grizzly Bears enter together: Soul Warden triggers twice for each.
     enter_together(
         &mut t,
-        &[(P0, "Elesh Norn, Mother of Machines"), (P0, "Grizzly Bears")],
+        &[
+            (P0, "Elesh Norn, Mother of Machines"),
+            (P0, "Grizzly Bears"),
+        ],
     );
     assert_eq!(t.stack_len(), 4, "{}", t.dump_log());
     t.resolve_all();
@@ -115,12 +123,16 @@ fn two_elesh_norns_trigger_three_times() {
     assert_eq!(soul_warden_gains(&mut t, P0, P0, "Grizzly Bears"), 3);
     t.battlefield(P0, "Elesh Norn, Mother of Machines");
     assert_eq!(soul_warden_gains(&mut t, P0, P0, "Grizzly Bears"), 4);
-    assert_eq!(t.named_on_battlefield("Elesh Norn, Mother of Machines").len(), 3);
+    assert_eq!(
+        t.named_on_battlefield("Elesh Norn, Mother of Machines")
+            .len(),
+        3
+    );
 }
 
 #[test]
 fn elesh_norn_doesnt_affect_a_teammates_triggers() {
-    cr!("603.2d", "810.2");
+    cr!("603.2d", "102.3");
     ruling!(
         "Elesh Norn, Mother of Machines",
         "In a Two-Headed Giant game, Elesh Norn does not affect triggered abilities of permanents your teammate controls."
@@ -171,7 +183,7 @@ fn elesh_norn_leaves_as_enters_choices_and_replacements_alone() {
 
 #[test]
 fn kinjallis_sunwing_and_manglehorn_dont_tap_what_enters_alongside() {
-    cr!("614.12", "603.6a");
+    cr!("614.12", "614.1d");
     ruling!(
         "Kinjalli's Sunwing",
         "If a creature an opponent controls enters the battlefield at the same time that Kinjalli's Sunwing enters the battlefield under your control, Kinjalli's Sunwing's effect doesn't apply to your opponent's creature."
@@ -196,7 +208,7 @@ fn kinjallis_sunwing_and_manglehorn_dont_tap_what_enters_alongside() {
 
 #[test]
 fn wake_thrasher_untap_step_triggers_wait_for_upkeep() {
-    cr!("502.4", "503.1", "603.3b");
+    cr!("502.4", "503.1a", "603.3b");
     ruling!(
         "Wake Thrasher",
         "If permanents you control become untapped during your untap step, Wake Thresher’s ability will trigger that many times. However, since no player gets priority during the untap step, those abilities wait to be put on the stack until your upkeep starts. At that time, all your “beginning of upkeep” triggers will also trigger. You can put them and Wake Thresher’s abilities on the stack in any order."
@@ -209,7 +221,7 @@ fn wake_thrasher_untap_step_triggers_wait_for_upkeep() {
     supported("Well Rested");
     supported("Phyrexian Arena");
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "Wake Thrasher");
+    let thrasher = t.battlefield(P0, "Wake Thrasher");
     t.battlefield(P0, "Phyrexian Arena");
     let bears = t.battlefield(P0, "Grizzly Bears");
     crate::r_s06_common::attach_new(&mut t, P0, "Well Rested", bears);
@@ -232,6 +244,8 @@ fn wake_thrasher_untap_step_triggers_wait_for_upkeep() {
     assert!(!orders.is_empty(), "P0 orders the triggers");
     let hand = t.hand_size(P0);
     t.resolve_all();
+    // Wake Thrasher got +1/+1 three times, once for each permanent untapped.
+    assert_eq!(t.pt(thrasher), (4, 4));
     assert_eq!(t.counters(bears, "+1/+1"), 2);
     assert_eq!(t.hand_size(P0), hand + 2);
 }
@@ -258,7 +272,10 @@ fn king_macars_token_goes_to_the_controller_of_the_trigger() {
     give_control(&mut t, macar, P1);
     t.resolve_all();
     assert_eq!(t.zone(t.g.current(bears)), Zone::Exile, "{}", t.dump_log());
-    assert_eq!(crate::r_s05_common::tokens_with_subtype(&t, P0, "Gold").len(), 1);
+    assert_eq!(
+        crate::r_s05_common::tokens_with_subtype(&t, P0, "Gold").len(),
+        1
+    );
     assert!(crate::r_s05_common::tokens_with_subtype(&t, P1, "Gold").is_empty());
 }
 
@@ -279,5 +296,4 @@ fn doomed_necromancer_cant_target_itself() {
     assert!(crate::r_s02_common::can_activate(&mut t, P0, nec));
     let cands = ability_targets(&mut t, nec, 0);
     assert_eq!(cands, vec![Entity::Object(bears)]);
-    let _ = Answer::Default;
 }

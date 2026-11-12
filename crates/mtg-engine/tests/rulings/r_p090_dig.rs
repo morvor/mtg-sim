@@ -151,14 +151,20 @@ fn guild_feud_targets_the_opponent_who_goes_first() {
     let from = t.asked().len();
     t.advance_to(P0, Step::Upkeep);
     t.settle();
-    // One target: an opponent.
-    let targets: Vec<_> = asked_since(&t, from)
-        .into_iter()
-        .filter(|(_, d)| matches!(d, mtg_engine::decision::Decision::ChooseTargets { .. }))
-        .collect();
-    assert!(targets.len() <= 1);
+    // One target: the opponent.
+    assert_eq!(t.stack_len(), 1);
+    assert_eq!(
+        mtg_engine::copy::chosen_targets(&t.g, t.g.stack[0]),
+        vec![Entity::Player(P1)]
+    );
     t.resolve_all();
-    assert_eq!(*seen.lock().unwrap(), vec![true], "{:?}\n{}", asked_since(&t, from), t.dump_log());
+    assert_eq!(
+        *seen.lock().unwrap(),
+        vec![true],
+        "{:?}\n{}",
+        asked_since(&t, from),
+        t.dump_log()
+    );
     // They fought: Hill Giant (3/3) kills the Bears (2/2) and survives with 2 damage.
     assert!(t.in_graveyard(P0, "Grizzly Bears"), "{}", t.dump_log());
     assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
@@ -207,7 +213,12 @@ fn selective_adaptation_a_card_with_two_listed_keywords_stands_for_either() {
         let spell = t.hand(P0, "Selective Adaptation");
         t.cast(P0, spell).go();
         t.resolve();
-        assert_eq!(t.named_on_battlefield("Serra Angel").len(), 1, "{}", t.dump_log());
+        assert_eq!(
+            t.named_on_battlefield("Serra Angel").len(),
+            1,
+            "{}",
+            t.dump_log()
+        );
         if !angel_for_flying {
             assert!(t.in_hand(P0, "Wind Drake"), "{}", t.dump_log());
         }
@@ -306,7 +317,11 @@ fn creature_and_or_other_kind_choices() {
             let ids = stack_library(&mut t, P0, &lib);
             let chosen: Vec<ObjectId> = pick.iter().map(|i| ids[*i]).collect();
             cast_choosing(&mut t, spell, &chosen);
-            assert!(t.hand_size(P0) <= 1, "{spell} {pick:?}: {:?}", hand_names(&t, P0));
+            assert!(
+                t.hand_size(P0) <= 1,
+                "{spell} {pick:?}: {:?}",
+                hand_names(&t, P0)
+            );
         }
     }
     // Dryad Arbor stands for the creature or the land.
@@ -337,10 +352,26 @@ fn commune_and_aethermages_touch_put_everything_on_the_bottom_without_a_creature
     supported("Commune with Nature");
     supported("Aethermage's Touch");
     for (spell, n, top) in [
-        ("Commune with Nature", 5, ["Forest", "Shock", "Island", "Plains", "Swamp"]),
-        ("Commune with Nature", 5, ["Forest", "Grizzly Bears", "Island", "Plains", "Swamp"]),
-        ("Aethermage's Touch", 4, ["Forest", "Shock", "Island", "Plains", "Swamp"]),
-        ("Aethermage's Touch", 4, ["Forest", "Grizzly Bears", "Island", "Plains", "Swamp"]),
+        (
+            "Commune with Nature",
+            5,
+            ["Forest", "Shock", "Island", "Plains", "Swamp"],
+        ),
+        (
+            "Commune with Nature",
+            5,
+            ["Forest", "Grizzly Bears", "Island", "Plains", "Swamp"],
+        ),
+        (
+            "Aethermage's Touch",
+            4,
+            ["Forest", "Shock", "Island", "Plains", "Swamp"],
+        ),
+        (
+            "Aethermage's Touch",
+            4,
+            ["Forest", "Grizzly Bears", "Island", "Plains", "Swamp"],
+        ),
     ] {
         let mut t = TestGame::new(2);
         t.library_top(P0, "Mountain");
@@ -351,13 +382,17 @@ fn commune_and_aethermages_touch_put_everything_on_the_bottom_without_a_creature
         assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
         let bottom = library_bottom_n(&t, P0, n);
         assert_eq!(names_of(&t, &bottom), names_of(&t, &ids), "{spell}");
-        assert_eq!(names_of(&t, &library_top_n(&t, P0, 1)), ["Mountain"], "{spell}");
+        assert_eq!(
+            names_of(&t, &library_top_n(&t, P0, 1)),
+            ["Mountain"],
+            "{spell}"
+        );
     }
 }
 
 #[test]
 fn aethermages_touch_creature_leaving_first_isnt_returned() {
-    cr!("400.7", "603.4", "513.1a");
+    cr!("400.7");
     ruling!(
         "Aethermage's Touch",
         "If the creature that you put onto the battlefield leaves the battlefield before your next end step, it won't be returned to your hand at the beginning of your next end step."
@@ -378,7 +413,7 @@ fn aethermages_touch_creature_leaving_first_isnt_returned() {
 
 #[test]
 fn aethermages_touch_during_your_end_step_waits_for_the_next_one() {
-    cr!("603.2", "513.1a");
+    cr!("603.2b", "513.2");
     ruling!(
         "Aethermage's Touch",
         "If you put a creature onto the battlefield this way during your end step, it won't be returned to your hand until your next end step."
@@ -423,7 +458,10 @@ fn aethermages_touch_granted_trigger_isnt_copied() {
     t.resolve_all();
     assert!(t.in_hand(P0, "Serra Angel"));
     assert!(t.on_battlefield(copies[0]), "the token copy stays");
-    assert!(t.on_battlefield(bears), "the creature that became a copy stays");
+    assert!(
+        t.on_battlefield(bears),
+        "the creature that became a copy stays"
+    );
 }
 
 #[test]
@@ -437,7 +475,11 @@ fn adventure_awaits_draws_the_card_after_the_five() {
     let mut t = TestGame::new(2);
     t.library_top(P0, "Swamp");
     t.library_top(P0, "Mountain");
-    stack_library(&mut t, P0, &["Forest", "Shock", "Island", "Plains", "Grizzly Bears"]);
+    stack_library(
+        &mut t,
+        P0,
+        &["Forest", "Shock", "Island", "Plains", "Grizzly Bears"],
+    );
     cast_choosing(&mut t, "Adventure Awaits", &[]);
     assert_eq!(hand_names(&t, P0), ["Mountain"]);
 }
@@ -453,7 +495,7 @@ fn cantankerous_keepers_cost_reduction_doesnt_change_mana_value() {
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Llanowar Elves");
     t.battlefield(P0, "Elvish Mystic");
-    // Thalia adds {1} to noncreature spells only, so use Archon-free math: {5}{G} - 2.
+    // {5}{G} less {2} for the two Elves.
     t.lands(P0, "Forest", 4);
     let k = t.hand(P0, "Cantankerous Keepers");
     // Tap only the lands (the Elves stay untapped).
@@ -461,6 +503,29 @@ fn cantankerous_keepers_cost_reduction_doesnt_change_mana_value() {
     assert_eq!(t.zone(k), Zone::Stack, "castable for {{3}}{{G}}");
     assert_eq!(tapped_lands(&t, P0), 4);
     assert_eq!(crate::r_s08_common::mana_value(&t, k), 6);
+    // The cost increase first, then the reduction: with Sphere of Resistance ("Spells
+    // cost {1} more to cast.") and six Elves, {5}{G} plus {1} less {6} is {G} (reducing
+    // first would leave {1}{G}).
+    supported("Sphere of Resistance");
+    for elves in [5, 6] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Sphere of Resistance");
+        for _ in 0..elves {
+            t.battlefield(P0, "Elvish Warrior");
+        }
+        t.lands(P0, "Forest", 1);
+        let k = t.hand(P0, "Cantankerous Keepers");
+        let normal = mtg_engine::object::CastMethod::Normal;
+        let castable = crate::r_s02_common::can_cast(&mut t, P0, k, normal);
+        // With five Elves, {1}{G}: one Forest isn't enough.
+        assert_eq!(castable, elves == 6, "{elves} Elves");
+        if castable {
+            t.cast(P0, k).go();
+            assert_eq!(t.zone(k), Zone::Stack, "castable for {{G}}");
+            assert_eq!(tapped_lands(&t, P0), 1);
+            assert_eq!(crate::r_s08_common::mana_value(&t, k), 6);
+        }
+    }
 }
 
 #[test]
@@ -484,7 +549,7 @@ fn trackers_instincts_must_take_a_creature() {
 
 #[test]
 fn telling_time_with_fewer_than_three_cards() {
-    cr!("608.2c", "121.1");
+    cr!("608.2c");
     ruling!(
         "Telling Time",
         "If there are fewer than three cards in your library, follow the instructions in the order given for any cards that are there."

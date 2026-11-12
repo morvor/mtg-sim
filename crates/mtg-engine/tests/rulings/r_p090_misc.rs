@@ -126,7 +126,11 @@ fn ashlings_prerogative_x_is_zero_on_the_battlefield() {
     // as it enters, so it enters tapped and lacks haste.
     for (i, odd) in [(0usize, true), (1, false)] {
         let mut t = TestGame::new(2);
-        t.answer(P0, DecisionKind::Option, mtg_engine::decision::Answer::Index(i));
+        t.answer(
+            P0,
+            DecisionKind::Option,
+            mtg_engine::decision::Answer::Index(i),
+        );
         t.enter(P0, "Ashling's Prerogative");
         t.lands(P0, "Wastes", 3);
         let e = t.hand(P0, "Endless One");
@@ -206,10 +210,9 @@ fn ghitu_fire_flash_cost_isnt_part_of_its_mana_cost() {
     t.answer(P0, DecisionKind::X, mtg_engine::decision::Answer::Number(2));
     t.answer_targets(P0, &[Entity::Player(P1)]);
     t.g.turn.priority = Some(P0);
-    let s = t
-        .g
-        .cast_spell(P0, gf, CastMethod::Alternative(uid))
-        .expect("cast with flash");
+    let s =
+        t.g.cast_spell(P0, gf, CastMethod::Alternative(uid))
+            .expect("cast with flash");
     assert_eq!(tapped_lands(&t, P0), 5, "{{2}}{{R}} and {{2}} more");
     assert_eq!(crate::r_s08_common::mana_value(&t, s), 3);
     t.resolve_all();
@@ -237,7 +240,10 @@ fn phyrexian_censor_counts_non_phyrexian_spells() {
     t.cast(P0, arena).go();
     t.resolve_all();
     let thopter = t.hand(P0, "Ornithopter");
-    assert!(!castable(&mut t, P0, thopter), "an artifact spell is non-Phyrexian");
+    assert!(
+        !castable(&mut t, P0, thopter),
+        "an artifact spell is non-Phyrexian"
+    );
     // A Phyrexian creature spell is still allowed.
     let rager = t.hand(P0, "Phyrexian Rager");
     assert!(castable(&mut t, P0, rager));
@@ -259,7 +265,7 @@ fn phyrexian_censor_counts_non_phyrexian_spells() {
 
 #[test]
 fn psychic_symbiont_draws_even_if_the_opponent_has_no_cards() {
-    cr!("115.1", "701.9b");
+    cr!("115.1", "609.3");
     ruling!(
         "Psychic Symbiont",
         "Psychic Symbiont's last ability can target an opponent with no cards in hand. You'll draw a card even if no opponent discards a card."

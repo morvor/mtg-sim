@@ -1,11 +1,11 @@
 //! Rulings batch P090 — "if you gained life this turn" (infusion, Regal Bloodlord, Lunar
 //! Convocation, Markov Purifier, Starseer Mentor, Gwaihir): an intervening "if" clause
-//! checked as the end step begins (CR 603.4, 513.1a) against life gained, not the life
+//! checked as the end step begins (CR 603.4, 603.2b) against life gained, not the life
 //! total (CR 119.3, 119.9); and Tenured Concocter's "becomes the target" trigger (CR
 //! 603.2e, 115.3).
 
-use crate::r_s01_common::*;
 use crate::r_p108_common::two_headed_giant;
+use crate::r_s01_common::*;
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -38,7 +38,7 @@ fn to_end_step(t: &mut TestGame, p: PlayerId) -> usize {
 
 #[test]
 fn bloodlord_and_convocation_dont_trigger_without_life_gained_before_the_end_step() {
-    cr!("603.4", "513.1a");
+    cr!("603.4", "603.2b");
     ruling!(
         "Regal Bloodlord",
         "If you didn’t gain life during the turn before the end step begins, Regal Bloodlord’s last ability won’t trigger at all. Gaining life during the end step won’t cause the ability to trigger."
@@ -178,7 +178,7 @@ fn regal_bloodlord_ignores_a_teammates_life_gain() {
 
 #[test]
 fn starseer_mentor_the_opponent_may_always_lose_three_life() {
-    cr!("118.12", "608.2d");
+    cr!("118.12a", "608.2d");
     ruling!(
         "Starseer Mentor",
         "While resolving Starseer Mentor’s last ability, the target opponent chooses a card to be discarded without revealing it, chooses a nonland permanent to be sacrificed, or chooses to do neither. Then that player discards that card, sacrifices that permanent, or loses 3 life. That player can always choose to lose 3 life, even if they have cards to discard or nonland permanents to sacrifice."

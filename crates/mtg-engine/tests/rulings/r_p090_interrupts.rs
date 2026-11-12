@@ -1,6 +1,7 @@
 //! Rulings batch P090 — interrupts: Ertai's Meddling (a spell exiled with delay counters
 //! and put back onto the stack as a copy of the original spell, CR 707.2, 707.10a), and
-//! changing the target of a spell with a single target (Deflection, Meddle; CR 115.7).
+//! changing the target of a spell with a single target (Deflection, Meddle; CR 115.7,
+//! 115.9a).
 
 use crate::r_s01_common::*;
 use crate::r_s04_common::add_mana;
@@ -45,7 +46,12 @@ fn ertais_meddling_cant_be_cast_without_paying_its_mana_cost() {
     let bolt = t.hand(P1, "Lightning Bolt");
     let spell = t.cast(P1, bolt).target(P0).go();
     let em = t.hand(P0, "Ertai's Meddling");
-    assert!(!crate::r_s02_common::can_cast(&mut t, P0, em, CastMethod::Free));
+    assert!(!crate::r_s02_common::can_cast(
+        &mut t,
+        P0,
+        em,
+        CastMethod::Free
+    ));
     t.answer(P0, DecisionKind::X, Answer::Number(1));
     t.answer_targets(P0, &[Entity::Object(spell)]);
     t.g.turn.priority = Some(P0);
@@ -53,7 +59,12 @@ fn ertais_meddling_cant_be_cast_without_paying_its_mana_cost() {
     assert_eq!(t.zone(em), Zone::Hand(P0));
     // Positive control: paying {X}{U} with X = 1.
     t.lands(P0, "Island", 2);
-    assert!(crate::r_s02_common::can_cast(&mut t, P0, em, CastMethod::Normal));
+    assert!(crate::r_s02_common::can_cast(
+        &mut t,
+        P0,
+        em,
+        CastMethod::Normal
+    ));
 }
 
 #[test]
@@ -251,7 +262,13 @@ fn ertais_meddling_keeps_spliced_effects() {
     t.answer(P1, DecisionKind::OptionalCost, Answer::Bool(true));
     p1_next_upkeep(&mut t);
     t.resolve_all();
-    assert_eq!(t.life(P0), 18, "the spliced Glacial Ray's 2 damage {:?}\n{}", t.asked(), t.dump_log());
+    assert_eq!(
+        t.life(P0),
+        18,
+        "the spliced Glacial Ray's 2 damage {:?}\n{}",
+        t.asked(),
+        t.dump_log()
+    );
     let offered = asked_since(&t, from).iter().any(|(_, d)| {
         matches!(d, mtg_engine::decision::Decision::OptionalCost { name, .. } if name == "splice")
     });
@@ -261,7 +278,7 @@ fn ertais_meddling_keeps_spliced_effects() {
 
 #[test]
 fn deflection_needs_a_spell_with_a_single_target() {
-    cr!("115.7a", "115.7");
+    cr!("115.9a");
     ruling!(
         "Deflection",
         "If a spell targets multiple things, you can’t target it with Deflection, even if all but one of those targets has become illegal."
@@ -273,12 +290,7 @@ fn deflection_needs_a_spell_with_a_single_target() {
     let b = t.battlefield(P1, "Hill Giant");
     give_mana_for(&mut t, P1, "Seeds of Strength");
     let seeds = t.hand(P1, "Seeds of Strength");
-    let s = t
-        .cast(P1, seeds)
-        .target(a)
-        .target(a)
-        .target(b)
-        .go();
+    let s = t.cast(P1, seeds).target(a).target(a).target(b).go();
     assert_eq!(
         mtg_engine::copy::chosen_targets(&t.g, s),
         vec![Entity::Object(a), Entity::Object(a), Entity::Object(b)]
@@ -300,7 +312,7 @@ fn deflection_needs_a_spell_with_a_single_target() {
 
 #[test]
 fn meddle_needs_a_spell_whose_only_target_is_a_creature() {
-    cr!("115.7", "608.2c");
+    cr!("115.7", "115.9a", "608.2c");
     ruling!(
         "Meddle",
         "Only works on spells with a single target, where that target is a creature. Will not work on spells that target a single creature and a player, for example."
@@ -315,11 +327,7 @@ fn meddle_needs_a_spell_whose_only_target_is_a_creature() {
     let giant = t.battlefield(P0, "Hill Giant");
     t.lands(P1, "Mountain", 2);
     let arc = t.hand(P1, "Arc Trail");
-    let s = t
-        .cast(P1, arc)
-        .target(bears)
-        .target(P0)
-        .go();
+    let s = t.cast(P1, arc).target(bears).target(P0).go();
     assert_eq!(
         mtg_engine::copy::chosen_targets(&t.g, s),
         vec![Entity::Object(bears), Entity::Player(P0)]

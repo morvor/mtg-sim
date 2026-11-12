@@ -1,15 +1,15 @@
 //! Rulings batch P090 — cards put onto the battlefield from among the top cards of a
 //! library (Saheeli's Directive, Glimpse of Tomorrow, Mitotic Manipulation, Clone Shell,
 //! Muxus): simultaneous entry (CR 603.6a, 603.3b), counting (CR 608.2h) and information
-//! (CR 406.3, 701.20).
+//! (CR 406.3, 401.4).
 
 use crate::r_s01_common::*;
 use crate::r_s06_common::give_control;
 use crate::r_s11_common::empty_library;
 use crate::r_s13_common::{commander, commander_game};
+use mtg_engine::events::Event;
 use mtg_engine::object::Zone;
 use mtg_engine::reveal::REVEALED;
-use mtg_engine::events::Event;
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
@@ -40,8 +40,7 @@ fn saheelis_directive_artifacts_enter_together_with_their_own_mana_values() {
     let mut t = TestGame::new(2);
     t.lands(P0, "Mountain", 3);
     t.lands(P0, "Wastes", 2);
-    // X = 2: two Glint Hawk Idols (mana value 2 each, 4 in all) and a Bonesplitter
-    // (mana value 1).
+    // X = 2: two Glint Hawk Idols (mana value 2 each, 4 in all).
     let ids = stack_library(&mut t, P0, &["Glint Hawk Idol", "Glint Hawk Idol"]);
     t.answer_choose(P0, &[Entity::Object(ids[0]), Entity::Object(ids[1])]);
     let spell = t.hand(P0, "Saheeli's Directive");
@@ -50,7 +49,12 @@ fn saheelis_directive_artifacts_enter_together_with_their_own_mana_values() {
     let idols = t.named_on_battlefield("Glint Hawk Idol");
     assert_eq!(idols.len(), 2, "{}", t.dump_log());
     // Each saw the other: "Whenever another artifact you control enters" twice.
-    assert_eq!(triggers_on_stack(&t, "another artifact"), 2, "{}", t.dump_log());
+    assert_eq!(
+        triggers_on_stack(&t, "another artifact"),
+        2,
+        "{}",
+        t.dump_log()
+    );
 }
 
 /// Puts Omniscience onto P0's battlefield and casts Glimpse of Tomorrow from P0's hand
@@ -59,7 +63,9 @@ fn cast_glimpse(t: &mut TestGame) -> ObjectId {
     t.battlefield(P0, "Omniscience");
     let spell = t.hand(P0, "Glimpse of Tomorrow");
     t.g.turn.priority = Some(P0);
-    t.cast(P0, spell).method(mtg_engine::object::CastMethod::Free).go();
+    t.cast(P0, spell)
+        .method(mtg_engine::object::CastMethod::Free)
+        .go();
     spell
 }
 
@@ -81,15 +87,29 @@ fn glimpse_of_tomorrow_triggers_wait_and_go_on_in_apnap_order() {
     let seen = watch(
         &mut t,
         P0,
-        |d| matches!(d, mtg_engine::decision::Decision::ChooseTargets { .. }
-            | mtg_engine::decision::Decision::Order { .. }),
+        |d| {
+            matches!(
+                d,
+                mtg_engine::decision::Decision::ChooseTargets { .. }
+                    | mtg_engine::decision::Decision::Order { .. }
+            )
+        },
         |g| g.stack.len(),
     );
     cast_glimpse(&mut t);
     t.g.resolve_top();
     // (Glimpse of Tomorrow itself is still on the stack while it resolves.)
-    assert!(seen.lock().unwrap().iter().all(|n| *n <= 1), "{:?}", seen.lock().unwrap());
-    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "{}", t.dump_log());
+    assert!(
+        seen.lock().unwrap().iter().all(|n| *n <= 1),
+        "{:?}",
+        seen.lock().unwrap()
+    );
+    assert_eq!(
+        t.named_on_battlefield("Grizzly Bears").len(),
+        1,
+        "{}",
+        t.dump_log()
+    );
     assert_eq!(t.stack_len(), 0, "nothing on the stack before the settle");
     t.settle();
     // P0's Soul Warden saw the Bears (and Omniscience isn't a creature): one trigger;
@@ -145,7 +165,12 @@ fn glimpse_of_tomorrow_counts_tokens_which_dont_affect_the_reveal() {
     t.library_top(P0, "Grizzly Bears");
     cast_glimpse(&mut t);
     t.resolve();
-    assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1, "{}", t.dump_log());
+    assert_eq!(
+        t.named_on_battlefield("Hill Giant").len(),
+        1,
+        "{}",
+        t.dump_log()
+    );
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
     assert_eq!(t.named_on_battlefield("Omniscience").len(), 1);
     assert!(tokens(&t, P0).is_empty());
@@ -183,7 +208,7 @@ fn clone_shell_controlled_by_another_player() {
 
 #[test]
 fn mitotic_manipulation_one_card_named_like_a_permanent_now() {
-    cr!("608.2c", "201.2", "701.20a");
+    cr!("608.2c", "201.2a", "401.4");
     ruling!(
         "Mitotic Manipulation",
         "No matter how many of the seven cards have the same name as a permanent, you can put only one of them onto the battlefield."
@@ -237,7 +262,11 @@ fn mitotic_manipulation_one_card_named_like_a_permanent_now() {
             "both" => assert_eq!(bears + giants, 3, "{}", t.dump_log()),
             // A card in a graveyard, or a permanent that's gone by now, doesn't count.
             "Serra Angel" => assert!(t.named_on_battlefield("Serra Angel").is_empty()),
-            _ => assert!(t.named_on_battlefield("Ornithopter").is_empty(), "{}", t.dump_log()),
+            _ => assert!(
+                t.named_on_battlefield("Ornithopter").is_empty(),
+                "{}",
+                t.dump_log()
+            ),
         }
         // Six or seven cards went to the bottom, none of them revealed.
         assert!(revealed(&t).is_empty(), "{:?}", revealed(&t));
@@ -247,7 +276,7 @@ fn mitotic_manipulation_one_card_named_like_a_permanent_now() {
 
 #[test]
 fn muxus_bonus_is_locked_in_on_resolution() {
-    cr!("608.2h", "611.2c");
+    cr!("608.2h");
     ruling!(
         "Muxus, Goblin Grandee",
         "The bonus Muxus gets is determined only as its last ability resolves. Once that happens, the bonus won't change later in the turn even if the number of Goblins you control changes."

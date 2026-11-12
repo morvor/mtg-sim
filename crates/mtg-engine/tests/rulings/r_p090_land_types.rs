@@ -1,12 +1,12 @@
 //! Rulings batch P090 — land conversion: a land that becomes a basic land type loses its
 //! other land types and the abilities from its rules text and gains the type's mana
-//! ability (CR 305.7, 205.1b); "in addition to its other types" keeps them (CR 205.1b,
+//! ability (CR 305.7, 205.1a); "in addition to its other types" keeps them (CR 205.1b,
 //! 305.6). Its name, supertypes and other card types don't change.
 
 use crate::r_s01_common::*;
+use crate::r_s04_common::add_mana;
 use crate::r_s20_common::tap_for_mana;
 use crate::r_s35_common::pick_options;
-use crate::r_s04_common::add_mana;
 use mtg_engine::ability::AbilityKind;
 use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
@@ -47,7 +47,13 @@ fn land_types(t: &mut TestGame, id: ObjectId) -> Vec<&'static str> {
 
 /// Checks that `land` (originally `name`) is now exactly a Swamp: loses its other
 /// abilities and land types, taps for {B}, keeps its name, supertypes and card types.
-fn check_now_swamp(t: &mut TestGame, land: ObjectId, name: &str, sup: &[Supertype], creature: bool) {
+fn check_now_swamp(
+    t: &mut TestGame,
+    land: ObjectId,
+    name: &str,
+    sup: &[Supertype],
+    creature: bool,
+) {
     assert_eq!(land_types(t, land), ["Swamp"], "{name}");
     let o = t.obj_now(land);
     assert_eq!(o.chars.name, name);
@@ -56,7 +62,17 @@ fn check_now_swamp(t: &mut TestGame, land: ObjectId, name: &str, sup: &[Supertyp
     }
     assert!(o.chars.is(CardType::Land));
     assert_eq!(o.chars.is(CardType::Creature), creature, "{name}");
-    assert_eq!(activated(t, land), 1, "{name}: only the Swamp's mana ability: {:?}", t.obj_now(land).chars.abilities.iter().map(|a| a.text.to_string()).collect::<Vec<_>>());
+    assert_eq!(
+        activated(t, land),
+        1,
+        "{name}: only the Swamp's mana ability: {:?}",
+        t.obj_now(land)
+            .chars
+            .abilities
+            .iter()
+            .map(|a| a.text.to_string())
+            .collect::<Vec<_>>()
+    );
     assert!(
         tap_for_mana(t, P0, land, "{B}"),
         "{name}: tapped {} {}",
@@ -67,7 +83,7 @@ fn check_now_swamp(t: &mut TestGame, land: ObjectId, name: &str, sup: &[Supertyp
 
 #[test]
 fn becoming_a_basic_land_type_replaces_types_and_abilities_but_not_name_or_supertypes() {
-    cr!("305.7", "205.1b", "613.1d", "613.1f");
+    cr!("305.7", "205.1a", "613.1d", "613.1f");
     ruling!(
         "Convincing Mirage",
         "The affected land loses its existing land types and any abilities printed on it. It becomes the chosen basic land type and now has the ability to tap to add one mana of the appropriate color. Convincing Mirage's ability doesn't change the affected land's name or whether it's legendary or basic."
@@ -117,7 +133,7 @@ fn becoming_a_basic_land_type_replaces_types_and_abilities_but_not_name_or_super
 
 #[test]
 fn tide_shaper_makes_an_island_keeping_other_types() {
-    cr!("305.7", "205.1b", "611.2b");
+    cr!("305.7", "205.1a", "611.2b");
     ruling!(
         "Tide Shaper",
         "A land that becomes an Island gains \"{T}: Add {U}\" and loses all other abilities. It loses any other land types, but it doesn't lose any types or supertypes, such as creature, legendary, or snow."
@@ -132,7 +148,11 @@ fn tide_shaper_makes_an_island_keeping_other_types() {
     let cases: [(&str, &[Supertype], bool); 3] = [
         ("Dryad Arbor", &[], true),
         ("Pendelhaven", &[Supertype::Legendary], false),
-        ("Snow-Covered Forest", &[Supertype::Basic, Supertype::Snow], false),
+        (
+            "Snow-Covered Forest",
+            &[Supertype::Basic, Supertype::Snow],
+            false,
+        ),
     ];
     for (name, sup, creature) in cases {
         let mut t = TestGame::new(2);
@@ -189,10 +209,16 @@ fn gaining_basic_land_types_keeps_name_supertypes_and_abilities() {
     let land = t.battlefield(P0, "Pendelhaven");
     let c = t.battlefield(P0, "Navigator's Compass");
     pick_options(&mut t, P0, &["Swamp"]);
-    t.activate(P0, c, 0, &[Entity::Object(land)]).expect("activate");
+    t.activate(P0, c, 0, &[Entity::Object(land)])
+        .expect("activate");
     t.resolve_all();
     assert_eq!(land_types(&mut t, land), ["Swamp"]);
-    assert_eq!(activated(&mut t, land), 3, "{:?}", mana_abilities(&mut t, land));
+    assert_eq!(
+        activated(&mut t, land),
+        3,
+        "{:?}",
+        mana_abilities(&mut t, land)
+    );
     assert!(t.obj_now(land).chars.has_supertype(Supertype::Legendary));
     assert!(tap_for_mana(&mut t, P0, land, "{B}"));
 

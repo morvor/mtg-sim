@@ -670,6 +670,16 @@ decides whether they become a conflict case.
   `hexproof_until_it_deals_damage_targets_chosen_after_the_damage`). Whether the Core Set
   2019 release notes (2018; ormos mirror) have the same spelling wasn't checked: the mirror
   wasn't reachable from that session. No kind fits a misspelled name.
+- **Wake Thrasher** (rulings-P090 review): "If permanents you control become untapped during
+  your untap step, Wake Thresher’s ability will trigger that many times. However, since no
+  player gets priority during the untap step, those abilities wait to be put on the stack
+  until your upkeep starts. At that time, all your “beginning of upkeep” triggers will also
+  trigger. You can put them and Wake Thresher’s abilities on the stack in any order."
+  (2008-08-01) spells the card's name "Wake Thresher", twice. Nothing in the ruling depends
+  on the spelling: it stays cited, tested on Wake Thrasher
+  (`tests/rulings/r_p090_triggers.rs`, `wake_thrasher_untap_step_triggers_wait_for_upkeep`).
+  Whether the Eventide release notes (2008) have the same spelling wasn't checked (the
+  release notes in the ormos mirror start in 2013). No kind fits a misspelled name.
 - **Emeria Shepherd, Ajani Unyielding, Genesis Hydra, Illuna, Apex of Wishes** (rulings-P157
   review): "A "nonland permanent card" is an artifact, creature, enchantment, or planeswalker
   card." (Emeria Shepherd, 2015-08-25) and "A nonland permanent card is an artifact,

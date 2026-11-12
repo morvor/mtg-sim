@@ -1,6 +1,6 @@
 //! Rulings batch P090 — impulsive draw: cards exiled from the top of a library that may be
 //! played for a while (Magus of the Mind, Aminatou's Augury, Act on Impulse, Irascible
-//! Wolverine): free casting (CR 118.9), timing (CR 305.1, 305.2, 307.1), the land put
+//! Wolverine): free casting (CR 118.9), timing (CR 302.1, 305.1, 305.2), the land put
 //! onto the battlefield on resolution (CR 305.4), and Gunner Conscript's bonus (CR 120.6).
 
 use crate::r_s01_common::*;
@@ -37,7 +37,8 @@ fn magus_run(t: &mut TestGame, card: ObjectId, answers: &dyn Fn(&mut TestGame)) 
     let magus = t.battlefield(P0, "Magus of the Mind");
     with_only_top(t, |t| {
         add_mana(t, P0, ManaType::U, 1);
-        t.activate(P0, magus, 0, &[]).expect("activate Magus of the Mind");
+        t.activate(P0, magus, 0, &[])
+            .expect("activate Magus of the Mind");
         t.resolve_all();
     });
     assert_eq!(t.zone(card), Zone::Exile);
@@ -94,7 +95,12 @@ fn magus_and_augury_free_casts_pay_additional_costs_only() {
     let mut t = TestGame::new(2);
     let m = augury_place(&mut t, "Mulldrifter");
     augury_run(&mut t, m, &|_| {});
-    assert_eq!(t.named_on_battlefield("Mulldrifter").len(), 1, "{}", t.dump_log());
+    assert_eq!(
+        t.named_on_battlefield("Mulldrifter").len(),
+        1,
+        "{}",
+        t.dump_log()
+    );
 }
 
 /// A game where P0's library is three Forests and P0 controls Magus of the Mind.
@@ -115,7 +121,7 @@ fn exiled_of(t: &TestGame, ids: &[ObjectId]) -> Vec<ObjectId> {
 
 #[test]
 fn magus_of_the_mind_x_counts_spells_cast_this_turn() {
-    cr!("608.2h", "700.4");
+    cr!("608.2h");
     ruling!(
         "Magus of the Mind",
         "If no spells have been cast in the turn you activate Magus of the Mind’s ability, X is one."
@@ -139,7 +145,7 @@ fn magus_of_the_mind_x_counts_spells_cast_this_turn() {
 
 #[test]
 fn magus_of_the_mind_timing_and_cards_left_in_exile() {
-    cr!("307.1", "302.1", "611.2a");
+    cr!("302.1", "611.2a");
     ruling!(
         "Magus of the Mind",
         "You must follow the normal timing permissions and restrictions for cards you cast this way."
@@ -233,7 +239,11 @@ fn aminatous_augury_lands_only_on_resolution() {
     for i in [1, 2, 7] {
         assert_eq!(t.zone(ids[i]), Zone::Exile);
         assert!(!can_play_land(&mut t, P0, ids[i]), "{}", EIGHT[i]);
-        assert!(!can_cast(&mut t, P0, ids[i], CastMethod::Free), "{}", EIGHT[i]);
+        assert!(
+            !can_cast(&mut t, P0, ids[i], CastMethod::Free),
+            "{}",
+            EIGHT[i]
+        );
     }
     // A nonland card may be cast.
     assert!(can_cast(&mut t, P0, ids[3], CastMethod::Free));
@@ -273,7 +283,7 @@ fn act_on_impulse_lands_need_a_land_play() {
 
 #[test]
 fn irascible_wolverine_plays_follow_normal_costs_and_timing() {
-    cr!("305.1", "305.2", "601.2f", "116.2a");
+    cr!("305.1", "601.2f", "116.2a");
     ruling!(
         "Irascible Wolverine",
         "You pay all costs and follow all normal timing rules for a card played from exile with Irascible Wolverine’s first ability. For example, if the exiled card is a land card, you may play it only during your main phase while the stack is empty."
@@ -331,12 +341,14 @@ fn gunner_conscript_losing_an_attachment_can_make_damage_lethal() {
     crate::r_s02_common::destroy(&mut t, aura);
     t.settle();
     assert!(!t.on_battlefield(gc));
-    // Equipment becoming unattached.
+    // Equipment becoming unattached. Short Sword's own +1/+1 and Gunner Conscript's
+    // +1/+1 for it: 3 damage is lethal only without Gunner Conscript's bonus.
     let mut t = TestGame::new(2);
     let gc = t.battlefield(P0, "Gunner Conscript");
     let sword = crate::r_s06_common::attach_new(&mut t, P0, "Short Sword", gc);
+    assert_eq!(t.pt(gc), (base.0 + 2, base.1 + 2));
     let src = t.battlefield(P1, "Grizzly Bears");
-    crate::r_s06_common::damage(&mut t, src, base.1, gc);
+    crate::r_s06_common::damage(&mut t, src, base.1 + 1, gc);
     t.settle();
     assert!(t.on_battlefield(gc));
     t.g.unattach(sword);

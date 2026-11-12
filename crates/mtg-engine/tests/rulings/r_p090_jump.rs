@@ -9,6 +9,7 @@ use crate::r_s02_common::destroy;
 use crate::r_s06_common::{damage, has_kw};
 use crate::r_s07_common::damage_on;
 use crate::r_s20_common::to_beginning_of_combat;
+use crate::r_s21_common::legal_blocks;
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
@@ -97,7 +98,11 @@ fn flying_after_block(spell: &str) -> (TestGame, ObjectId, ObjectId) {
     let giant = t.battlefield(P1, "Hill Giant");
     to_beginning_of_combat(&mut t, P0);
     attack_with(&mut t, &[(bears, Entity::Player(P1))]);
-    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![(giant, bears)]));
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(giant, bears)]),
+    );
     crate::r_s21_common::go_to(&mut t, Step::DeclareBlockers);
     give_mana_for(&mut t, P0, spell);
     let s = t.hand(P0, spell);
@@ -123,14 +128,32 @@ fn flying_after_blocks_doesnt_undo_the_block() {
         supported(spell);
         let (t, bears, giant) = flying_after_block(spell);
         assert_eq!(t.life(P1), 20, "{spell}: the Bears stayed blocked");
-        assert!(damage_on(&t, giant) > 0 || !t.on_battlefield(giant), "{spell}");
+        assert!(
+            damage_on(&t, giant) > 0 || !t.on_battlefield(giant),
+            "{spell}"
+        );
         let _ = bears;
     }
+    // Cast in the declare attackers step, Mighty Leap does change what can block: the
+    // Hill Giant (no flying or reach) can't block the Bears any more.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    to_beginning_of_combat(&mut t, P0);
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    assert_eq!(t.g.turn.step, Step::DeclareAttackers);
+    let block = [(giant, bears)];
+    assert!(legal_blocks(&mut t, P1, &block));
+    give_mana_for(&mut t, P0, "Mighty Leap");
+    let s = t.hand(P0, "Mighty Leap");
+    t.cast(P0, s).target(bears).go();
+    t.resolve_all();
+    assert!(!legal_blocks(&mut t, P1, &block));
 }
 
 #[test]
 fn helitrooper_reduces_generic_equip_costs_only() {
-    cr!("702.6a", "601.2f", "118.7d");
+    cr!("702.6a", "601.2f", "118.7a");
     ruling!(
         "Helitrooper",
         "Helitrooper's last ability reduces only the amount of generic mana you pay for equip abilities that target Helitrooper. For example, it will reduce {2} to {0}, but it will have no effect on an equip cost of {G}."
@@ -225,6 +248,19 @@ fn landroval_triggers_per_player_attacked_by_two_creatures() {
     );
     assert_eq!(t.g.combat.as_ref().map(|c| c.attackers.len()), Some(3));
     assert_eq!(triggers_on_stack(&t, "gains flying"), 0);
+    // One at P1, one at a battle P1 protects: none.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Landroval, Horizon Witness");
+    let battle = t.battlefield(P0, "Invasion of Azgol");
+    t.g.objects[battle.0 as usize].choices.player = Some(P1);
+    let c: Vec<ObjectId> = (0..2).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
+    to_beginning_of_combat(&mut t, P0);
+    attack_with(
+        &mut t,
+        &[(c[0], Entity::Player(P1)), (c[1], Entity::Object(battle))],
+    );
+    assert_eq!(t.g.combat.as_ref().map(|c| c.attackers.len()), Some(2));
+    assert_eq!(triggers_on_stack(&t, "gains flying"), 0);
 }
 
 #[test]
@@ -274,8 +310,7 @@ fn gryffwing_cavalry_target_first_then_the_cost() {
         asked_since(t, from)
             .into_iter()
             .filter(|(p, d)| {
-                *p == P0
-                    && matches!(d, Decision::YesNo { .. } | Decision::OptionalCost { .. })
+                *p == P0 && matches!(d, Decision::YesNo { .. } | Decision::OptionalCost { .. })
             })
             .count()
     };
