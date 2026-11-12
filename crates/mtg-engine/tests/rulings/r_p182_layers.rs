@@ -24,7 +24,7 @@ fn is_creature(t: &TestGame, id: ObjectId) -> bool {
 
 #[test]
 fn karametra_is_a_creature_off_the_battlefield_and_on_the_stack() {
-    cr!("700.5", "611.3a");
+    cr!("700.5", "113.6");
     ruling!(
         "Karametra, God of Harvests",
         "The type-changing ability that can make Karametra not be a creature functions only on the battlefield. It's always a creature card in other zones, regardless of your devotion to its color. It's always a creature spell while it's on the stack."
@@ -61,7 +61,10 @@ fn karametra_as_it_enters_counts_devotion_without_itself_and_after_with_itself()
     t.resolve_all();
     let k = t.g.current(spell);
     assert!(t.on_battlefield(k) && is_creature(&t, k));
-    assert!(!t.g.obj(k).tapped, "not a creature as it entered: Thalia didn't apply");
+    assert!(
+        !t.g.obj(k).tapped,
+        "not a creature as it entered: Thalia didn't apply"
+    );
     assert_eq!(t.life(P0), 21, "a creature entered: Soul Warden triggered");
     // Seven Mystics: a creature already as it enters (six wouldn't do: it's not counted).
     let (mut t, _) = with_mystics(7);
@@ -80,7 +83,7 @@ fn karametra_as_it_enters_counts_devotion_without_itself_and_after_with_itself()
 
 #[test]
 fn karametra_not_a_creature_keeps_counters_types_and_abilities() {
-    cr!("205.1b", "122.1", "506.4", "613.1d", "613.1f", "700.5");
+    cr!("205.3d", "122.1", "506.4", "613.1d", "613.1f", "700.5");
     ruling!(
         "Karametra, God of Harvests",
         "Counters put on Karametra remain on it while it's not a creature, even if they have no effect."
@@ -121,6 +124,29 @@ fn karametra_not_a_creature_keeps_counters_types_and_abilities() {
     t.g.recompute();
     assert!(is_creature(&t, k));
     assert!(!attacking(&t, k));
+    // Blocking: removed from combat too (the attacker stays blocked).
+    let (mut t, mystics) = with_mystics(5);
+    let k = t.battlefield(P0, KARAMETRA);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.set_step(P1, mtg_engine::turn::Step::BeginningOfCombat);
+    t.answer(
+        P1,
+        DecisionKind::Attackers,
+        mtg_engine::decision::Answer::Attackers(vec![(giant, pl(P0))]),
+    );
+    t.answer(
+        P0,
+        DecisionKind::Blockers,
+        mtg_engine::decision::Answer::Blockers(vec![(k, giant)]),
+    );
+    t.advance_to(P1, mtg_engine::turn::Step::DeclareBlockers);
+    t.settle();
+    assert!(t.g.is_blocking(k));
+    destroy(&mut t, mystics[0]);
+    t.g.recompute();
+    assert!(!t.g.is_blocking(k), "removed from combat");
+    t.advance_to(P1, mtg_engine::turn::Step::EndOfCombat);
+    assert_eq!(t.life(P0), 20, "the Giant stays blocked");
     // Not a creature, its last ability still triggers.
     let (mut t, _) = with_mystics(0);
     let lib = set_library(&mut t, P0, &["Forest"]);
@@ -139,7 +165,10 @@ fn karametra_not_a_creature_keeps_counters_types_and_abilities() {
         k,
         vec![mtg_engine::ability::Modification::RemoveAllAbilities],
     );
-    assert!(!t.obj_now(k).has_keyword(KeywordKind::Indestructible), "it lost its abilities");
+    assert!(
+        !t.obj_now(k).has_keyword(KeywordKind::Indestructible),
+        "it lost its abilities"
+    );
     assert!(!is_creature(&t, k));
 }
 

@@ -33,7 +33,7 @@ fn cast_modes(
 
 #[test]
 fn archdruids_charm_second_mode_with_an_illegal_target() {
-    cr!("608.2b", "701.10");
+    cr!("608.2b");
     ruling!(
         "Archdruid's Charm",
         "If you choose the second mode and the creature you don't control is not a legal target as Archdruid's Charm resolves, you'll still put a +1/+1 counter on your creature."
@@ -46,7 +46,15 @@ fn archdruids_charm_second_mode_with_an_illegal_target() {
     let mut t = TestGame::new(2);
     let mine = t.battlefield(P0, "Grizzly Bears");
     let theirs = t.battlefield(P1, "Hill Giant");
-    cast_modes(&mut t, P0, "Archdruid's Charm", "GGG", &[1], &[obj(mine), obj(theirs)]).unwrap();
+    cast_modes(
+        &mut t,
+        P0,
+        "Archdruid's Charm",
+        "GGG",
+        &[1],
+        &[obj(mine), obj(theirs)],
+    )
+    .unwrap();
     destroy(&mut t, theirs);
     t.resolve_all();
     assert_eq!(t.counters(mine, counters::PLUS1), 1);
@@ -54,8 +62,15 @@ fn archdruids_charm_second_mode_with_an_illegal_target() {
     let mut t = TestGame::new(2);
     let mine = t.battlefield(P0, "Grizzly Bears");
     let theirs = t.battlefield(P1, "Hill Giant");
-    let spell =
-        cast_modes(&mut t, P0, "Archdruid's Charm", "GGG", &[1], &[obj(mine), obj(theirs)]).unwrap();
+    let spell = cast_modes(
+        &mut t,
+        P0,
+        "Archdruid's Charm",
+        "GGG",
+        &[1],
+        &[obj(mine), obj(theirs)],
+    )
+    .unwrap();
     crate::r_p152_common::bounce(&mut t, mine);
     t.resolve_all();
     assert!(crate::r_p108_common::resolved(&t, spell));
@@ -96,7 +111,7 @@ fn archdruids_charm_second_mode_needs_both_targets() {
 
 #[test]
 fn titanias_command_with_its_only_target_illegal_does_nothing() {
-    cr!("608.2b", "702.11b");
+    cr!("608.2b", "702.11c");
     ruling!(
         "Titania's Command",
         "If you choose the first mode and that player is an illegal target by the time Titania's Command would resolve, the spell is removed from the stack and none of its effects happen."
@@ -116,7 +131,7 @@ fn titanias_command_with_its_only_target_illegal_does_nothing() {
 
 #[test]
 fn cosmium_confluence_repeats_modes_in_the_order_chosen_and_picks_its_cave_on_resolution() {
-    cr!("700.2d", "700.2g", "608.2c");
+    cr!("700.2d", "608.2c", "608.2d");
     ruling!(
         "Cosmium Confluence",
         "If the same mode is chosen more than once, you choose their relative order as you cast the spell. For example, if you choose the last mode of Cosmium Confluence more than once, you choose the relative order to destroy the target enchantments."
@@ -140,13 +155,12 @@ fn cosmium_confluence_repeats_modes_in_the_order_chosen_and_picks_its_cave_on_re
     )
     .unwrap();
     t.resolve_all();
-    let gy: Vec<String> = t
-        .g
-        .player(P1)
-        .graveyard
-        .iter()
-        .map(|o| t.g.obj(*o).chars.name.to_string())
-        .collect();
+    let gy: Vec<String> =
+        t.g.player(P1)
+            .graveyard
+            .iter()
+            .map(|o| t.g.obj(*o).chars.name.to_string())
+            .collect();
     assert_eq!(gy, vec!["Wild Pair", "Endless Horizons", "Land Tax"]);
     // Find a Cave, then animate that one (no target).
     let mut t = TestGame::new(2);
@@ -200,7 +214,12 @@ fn crop_rotation_needs_exactly_one_land_sacrificed() {
     let mut t = TestGame::new(2);
     let c = t.hand(P0, "Crop Rotation");
     mana(&mut t, P0, "G");
-    assert!(!crate::r_s02_common::can_cast(&mut t, P0, c, CastMethod::Normal));
+    assert!(!crate::r_s02_common::can_cast(
+        &mut t,
+        P0,
+        c,
+        CastMethod::Normal
+    ));
     let mut t = TestGame::new(2);
     let lib = set_library(&mut t, P0, &["Maze's End"]);
     let forests = t.lands(P0, "Forest", 3);
@@ -292,7 +311,13 @@ fn disorienting_choice_opponents_decide_in_turn_order_then_exile_together() {
     t.answer_yes(P2, false);
     t.answer_choose(P0, &[obj(lib[0])]);
     let from = t.asked().len();
-    cast(&mut t, P0, "Disorienting Choice", "3G", &[obj(stone), obj(ring)]);
+    cast(
+        &mut t,
+        P0,
+        "Disorienting Choice",
+        "3G",
+        &[obj(stone), obj(ring)],
+    );
     t.resolve_all();
     let order: Vec<PlayerId> = t.asked()[from..]
         .iter()
@@ -326,10 +351,25 @@ fn dichotomancy_auras_cant_attach_to_permanents_entering_with_them() {
         for id in [bears, aura] {
             t.g.objects[id.0 as usize].tapped = true;
         }
+        let from = t.asked().len();
         cast(&mut t, P0, "Dichotomancy", "7UU", &[pl(P1)]);
         t.resolve_all();
         let new_bears = t.g.current(lib[0]);
         assert!(t.on_battlefield(new_bears) && t.g.obj(new_bears).controller == P0);
+        // What the Aura may enchant: only what was already on the battlefield.
+        let attach_choices: Vec<Vec<Entity>> = t.asked()[from..]
+            .iter()
+            .filter_map(|(_, d)| match d {
+                Decision::ChooseEntities {
+                    prompt, candidates, ..
+                } if prompt.contains("enchant") => Some(candidates.clone()),
+                _ => None,
+            })
+            .collect();
+        assert!(
+            attach_choices.iter().all(|c| !c.contains(&obj(new_bears))),
+            "{aura_name}: {attach_choices:?}"
+        );
         let found = t.g.current(lib[1]);
         if attaches {
             assert!(t.on_battlefield(found), "{aura_name}");
@@ -364,16 +404,22 @@ fn scholar_of_new_horizons_may_put_the_plains_into_hand() {
         "Scholar of New Horizons",
         "You may choose to put the card into your hand rather than onto the battlefield even if an opponent controls more lands than you."
     );
-    let mut t = TestGame::new(2);
-    let lib = set_library(&mut t, P0, &["Plains"]);
-    t.lands(P1, "Forest", 2);
-    let s = t.battlefield(P0, "Scholar of New Horizons");
-    crate::r_p003_common::put(&mut t, s, counters::PLUS1, 1);
-    t.answer_choose(P0, &[obj(s)]);
-    t.answer_choose(P0, &[obj(lib[0])]);
-    t.answer_yes(P0, false);
-    activate_resolve(&mut t, P0, s, "Search", "", &[]);
-    assert!(t.in_hand(P0, "Plains"));
+    // An opponent controls more lands: P0 is offered the battlefield and may decline it.
+    for battlefield in [true, false] {
+        let mut t = TestGame::new(2);
+        let lib = set_library(&mut t, P0, &["Plains"]);
+        t.lands(P1, "Forest", 2);
+        let s = t.battlefield(P0, "Scholar of New Horizons");
+        crate::r_p003_common::put(&mut t, s, counters::PLUS1, 1);
+        t.answer_choose(P0, &[obj(s)]);
+        t.answer_choose(P0, &[obj(lib[0])]);
+        t.answer_yes(P0, battlefield);
+        let from = t.asked().len();
+        activate_resolve(&mut t, P0, s, "Search", "", &[]);
+        assert!(crate::r_p152_common::asked_yes_no(&t, P0, from));
+        assert_eq!(tapped(&t, lib[0]), battlefield);
+        assert_eq!(t.in_hand(P0, "Plains"), !battlefield);
+    }
 }
 
 const GATES: [&str; 10] = [
@@ -414,7 +460,10 @@ fn mazes_end_returns_itself_as_a_cost_and_isnt_a_land_play() {
     let (m, lib) = maze(&mut t, &[], &["Azorius Guildgate"]);
     t.answer_choose(P0, &[obj(lib[0])]);
     activate(&mut t, P0, m, "Gate card", "3", &[]);
-    assert!(t.in_hand(P0, "Maze's End"), "returned as the ability is activated");
+    assert!(
+        t.in_hand(P0, "Maze's End"),
+        "returned as the ability is activated"
+    );
     assert_eq!(t.stack_len(), 1);
     t.resolve_all();
     assert!(t.on_battlefield(t.g.current(lib[0])));
@@ -436,14 +485,22 @@ fn mazes_end_checks_ten_differently_named_gates_as_it_resolves() {
     );
     // Nine names and a duplicate found: no win.
     let mut t = TestGame::new(2);
-    let (m, lib) = maze(&mut t, &GATES[..9], &["Azorius Guildgate", "Simic Guildgate"]);
+    let (m, lib) = maze(
+        &mut t,
+        &GATES[..9],
+        &["Azorius Guildgate", "Simic Guildgate"],
+    );
     t.battlefield(P0, "Boros Guildgate");
     t.answer_choose(P0, &[obj(lib[0])]);
     activate_resolve(&mut t, P0, m, "Gate card", "3", &[]);
     assert!(!t.has_lost(P1));
     // The tenth name found: P0 wins.
     let mut t = TestGame::new(2);
-    let (m, lib) = maze(&mut t, &GATES[..9], &["Azorius Guildgate", "Simic Guildgate"]);
+    let (m, lib) = maze(
+        &mut t,
+        &GATES[..9],
+        &["Azorius Guildgate", "Simic Guildgate"],
+    );
     t.answer_choose(P0, &[obj(lib[1])]);
     activate_resolve(&mut t, P0, m, "Gate card", "3", &[]);
     assert!(t.has_lost(P1));

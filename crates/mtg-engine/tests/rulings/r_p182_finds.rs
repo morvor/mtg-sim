@@ -25,7 +25,11 @@ fn offered(library: &[&str], run: impl FnOnce(&mut TestGame)) -> (TestGame, Vec<
 
 /// P0 activates the ability of the permanent `name` (on their battlefield) whose text
 /// contains `needle`, finding nothing.
-fn activated(name: &'static str, needle: &'static str, cost: &'static str) -> impl FnOnce(&mut TestGame) {
+fn activated(
+    name: &'static str,
+    needle: &'static str,
+    cost: &'static str,
+) -> impl FnOnce(&mut TestGame) {
     move |t: &mut TestGame| {
         let id = t.battlefield(P0, name);
         t.answer_choose(P0, &[]);
@@ -88,7 +92,13 @@ fn searches_for_a_land_type_find_nonbasic_lands_of_that_type() {
     });
     assert_eq!(
         o[0].names,
-        names(&["Breeding Pool", "Stomping Ground", "Temple Garden", "Overgrown Tomb", "Forest"])
+        names(&[
+            "Breeding Pool",
+            "Stomping Ground",
+            "Temple Garden",
+            "Overgrown Tomb",
+            "Forest"
+        ])
     );
     // Farseek: Plains, Island, Swamp or Mountain (a Forest too is fine; a plain Forest isn't).
     let (_, o) = offered(lib, |t| {
@@ -97,7 +107,13 @@ fn searches_for_a_land_type_find_nonbasic_lands_of_that_type() {
     });
     assert_eq!(
         o[0].names,
-        names(&["Breeding Pool", "Stomping Ground", "Temple Garden", "Overgrown Tomb", "Island"])
+        names(&[
+            "Breeding Pool",
+            "Stomping Ground",
+            "Temple Garden",
+            "Overgrown Tomb",
+            "Island"
+        ])
     );
     // Karametra: a creature spell is cast; any Forest or Plains card.
     let (_, o) = offered(lib, |t| {
@@ -108,7 +124,13 @@ fn searches_for_a_land_type_find_nonbasic_lands_of_that_type() {
     });
     assert_eq!(
         o[0].names,
-        names(&["Breeding Pool", "Stomping Ground", "Temple Garden", "Overgrown Tomb", "Forest"])
+        names(&[
+            "Breeding Pool",
+            "Stomping Ground",
+            "Temple Garden",
+            "Overgrown Tomb",
+            "Forest"
+        ])
     );
     // Perilous Forays and Slimefoot's Survey: a land card with a basic land type.
     let with_type = names(&[
@@ -151,13 +173,20 @@ fn slimefoots_survey_finds_two_of_one_type_and_counts_them_for_domain() {
         "The value of X is determined after you put the lands you searched for onto the battlefield."
     );
     let mut t = TestGame::new(2);
-    let lib = set_library(&mut t, P0, &["Forest", "Forest", "Island", "Swamp", "Plains"]);
+    let lib = set_library(
+        &mut t,
+        P0,
+        &["Forest", "Forest", "Island", "Swamp", "Plains"],
+    );
     t.battlefield(P0, "Plains");
     t.answer_choose(P0, &[obj(lib[0]), obj(lib[1])]);
     let from = t.asked().len();
     cast(&mut t, P0, "Slimefoot's Survey", "4G", &[]);
     t.resolve_all();
-    assert!(tapped(&t, lib[0]) && tapped(&t, lib[1]), "both Forests found");
+    assert!(
+        tapped(&t, lib[0]) && tapped(&t, lib[1]),
+        "both Forests found"
+    );
     // Plains and Forest (the Forests just found): the top two cards are looked at.
     let looked: Vec<_> = t.asked()[from..]
         .iter()
@@ -178,7 +207,10 @@ fn shard_convergence_finds_subtypes_and_needs_not_find_them_all() {
         "Shard Convergence",
         "Shard Convergence checks for cards with the subtypes Plains, Island, Swamp, and Mountain, not for cards with those names."
     );
-    ruling!("Shard Convergence", "You don’t have to find all four cards.");
+    ruling!(
+        "Shard Convergence",
+        "You don’t have to find all four cards."
+    );
     ruling!(
         "Shard Convergence",
         "you may find a Hallowed Fountain (which has subtypes Plains and Island) as the Plains card, and another Hallowed Fountain as the Island card"
@@ -198,7 +230,10 @@ fn shard_convergence_finds_subtypes_and_needs_not_find_them_all() {
     let o = offers(&t, P0, from);
     // Plains, Island, Swamp (there's no Mountain card: nothing to choose).
     assert_eq!(o.len(), 3, "{o:?}");
-    assert_eq!(o[0].names, names(&["Hallowed Fountain", "Hallowed Fountain"]));
+    assert_eq!(
+        o[0].names,
+        names(&["Hallowed Fountain", "Hallowed Fountain"])
+    );
     assert_eq!(o[1].names, names(&["Hallowed Fountain"]));
     assert_eq!(o[2].names, names(&["Swamp"]));
     assert!(o.iter().all(|x| x.min == 0));
@@ -206,7 +241,10 @@ fn shard_convergence_finds_subtypes_and_needs_not_find_them_all() {
         hand_of(&t, P0),
         names(&["Hallowed Fountain", "Hallowed Fountain"])
     );
-    assert!(t.g.player(P0).library.contains(&lib[2]), "the Swamp wasn't found");
+    assert!(
+        t.g.player(P0).library.contains(&lib[2]),
+        "the Swamp wasn't found"
+    );
 }
 
 #[test]
@@ -344,22 +382,42 @@ fn cards_with_a_stated_quality_neednt_be_found() {
 #[test]
 fn pattern_of_rebirth_search_is_optional() {
     cr!("603.5", "701.23a");
-    ruling!("Pattern of Rebirth", "Searching for a creature card is optional.");
-    let mut t = TestGame::new(2);
-    set_library(&mut t, P0, &["Grizzly Bears"]);
-    let bears = t.battlefield(P0, "Llanowar Sentinel");
-    crate::r_s06_common::attach_new(&mut t, P0, "Pattern of Rebirth", obj(bears));
-    t.answer_yes(P0, false);
-    destroy(&mut t, bears);
-    t.resolve_all();
-    assert_eq!(searches(&t, P0), 0);
-    assert_eq!(shuffles(&t, P0), 0);
-    assert_eq!(t.library_size(P0), 1);
+    ruling!(
+        "Pattern of Rebirth",
+        "Searching for a creature card is optional."
+    );
+    // The enchanted creature dies: its controller is asked, and searches only on a yes.
+    for search in [true, false] {
+        let mut t = TestGame::new(2);
+        let lib = set_library(&mut t, P0, &["Grizzly Bears"]);
+        let sentinel = t.battlefield(P0, "Llanowar Sentinel");
+        crate::r_s06_common::attach_new(&mut t, P0, "Pattern of Rebirth", obj(sentinel));
+        t.answer_yes(P0, search);
+        t.answer_choose(P0, &[obj(lib[0])]);
+        let from = t.asked().len();
+        destroy(&mut t, sentinel);
+        t.resolve_all();
+        assert!(
+            crate::r_p152_common::asked_yes_no(&t, P0, from),
+            "the search is offered"
+        );
+        let n = usize::from(search);
+        assert_eq!(
+            (searches(&t, P0), shuffles(&t, P0)),
+            (n, n),
+            "search: {search}"
+        );
+        assert_eq!(
+            t.on_battlefield(t.g.current(lib[0])),
+            search,
+            "search: {search}"
+        );
+    }
 }
 
 #[test]
 fn searches_by_subtype_or_name_find_exactly_those_cards() {
-    cr!("701.23a", "201.2", "205.3m");
+    cr!("701.23a", "205.3m");
     ruling!(
         "Self-Assembler",
         "Self-Assembler's ability can find any creature card with the Assembly-Worker subtype, not only creature cards named Assembly-Worker. Notably, it can't find Mishra's Factory."
@@ -377,28 +435,43 @@ fn searches_by_subtype_or_name_find_exactly_those_cards() {
         "An enchantment card is any Enchantment card, including Auras."
     );
     let (_, o) = offered(
-        &["Mishra's Self-Replicator", "Mishra's Factory", "Self-Assembler"],
+        &[
+            "Mishra's Self-Replicator",
+            "Mishra's Factory",
+            "Self-Assembler",
+        ],
         enters("Self-Assembler"),
     );
-    assert_eq!(o[0].names, names(&["Mishra's Self-Replicator", "Self-Assembler"]));
+    assert_eq!(
+        o[0].names,
+        names(&["Mishra's Self-Replicator", "Self-Assembler"])
+    );
     let (_, o) = offered(
         &["Festering Newt", "Bubbling Cauldron", "Grizzly Bears"],
         activated("Bogbrew Witch", "Search", "2"),
     );
     assert_eq!(o[0].names, names(&["Festering Newt", "Bubbling Cauldron"]));
-    // Fugitive of the Judoon's chapter III: a Human and an artifact are exiled.
-    let (_, o) = offered(&["The Tenth Doctor", "Doctor Spectrum"], |t| {
-        t.battlefield(P0, "Elite Vanguard");
-        t.battlefield(P0, "Mind Stone");
-        let saga = t.battlefield(P0, "Fugitive of the Judoon");
-        t.g.objects[saga.0 as usize]
-            .counters
-            .insert(counters::LORE.into(), 2);
-        t.answer_yes(P0, true);
-        t.answer_choose(P0, &[]);
-        crate::r_p003_common::put(t, saga, counters::LORE, 1);
-    });
-    assert_eq!(o.last().unwrap().names, names(&["The Tenth Doctor"]));
+    // Fugitive of the Judoon's chapter III: a Human and an artifact are exiled. Cult Healer
+    // (Human Doctor) is a Doctor card without "Doctor" in its name; Doctor Spectrum (Human
+    // Hero) has it in its name but isn't a Doctor.
+    let (_, o) = offered(
+        &["The Tenth Doctor", "Cult Healer", "Doctor Spectrum"],
+        |t| {
+            t.battlefield(P0, "Elite Vanguard");
+            t.battlefield(P0, "Mind Stone");
+            let saga = t.battlefield(P0, "Fugitive of the Judoon");
+            t.g.objects[saga.0 as usize]
+                .counters
+                .insert(counters::LORE.into(), 2);
+            t.answer_yes(P0, true);
+            t.answer_choose(P0, &[]);
+            crate::r_p003_common::put(t, saga, counters::LORE, 1);
+        },
+    );
+    assert_eq!(
+        o.last().unwrap().names,
+        names(&["Cult Healer", "The Tenth Doctor"])
+    );
     // Academy Rector finds an Aura, which enters attached to a creature.
     let mut t = TestGame::new(2);
     let lib = set_library(&mut t, P0, &["Holy Strength"]);
@@ -415,7 +488,7 @@ fn searches_by_subtype_or_name_find_exactly_those_cards() {
 
 #[test]
 fn mask_of_the_mimic_looks_for_the_name_whatever_the_type() {
-    cr!("701.23a", "201.2");
+    cr!("701.23a", "201.2a");
     ruling!(
         "Mask of the Mimic",
         "You look for a card of the same name, the current type of the card does not matter."
@@ -510,7 +583,10 @@ fn x_is_zero_for_cards_in_a_library() {
     });
     assert_eq!(o[0].names, names(&["Chalice of the Void"]));
     // Tribute Mage: mana value 2 exactly, so not Chalice of the Void.
-    let (_, o) = offered(&["Chalice of the Void", "Mind Stone"], enters("Tribute Mage"));
+    let (_, o) = offered(
+        &["Chalice of the Void", "Mind Stone"],
+        enters("Tribute Mage"),
+    );
     assert_eq!(o[0].names, names(&["Mind Stone"]));
     // The Hunger Tide Rises' chapter IV with no creatures sacrificed: mana value 0 or less.
     let (_, o) = offered(&["Marketback Walker", "Grizzly Bears"], |t| {
@@ -528,7 +604,7 @@ fn x_is_zero_for_cards_in_a_library() {
 
 #[test]
 fn wild_pair_compares_total_power_and_toughness_as_the_creature_is_on_the_battlefield() {
-    cr!("701.23a", "608.2h", "603.10");
+    cr!("701.23a", "608.2h");
     ruling!(
         "Wild Pair",
         "If you cast a 2/2 Grizzly Bears, for example, you may then search for any creature with total power and toughness 4. It can be 0/4, 1/3, 2/2, or 3/1."
@@ -567,7 +643,12 @@ fn wild_pair_compares_total_power_and_toughness_as_the_creature_is_on_the_battle
     let (_, o) = offered(lib, cast_creature("Grizzly Bears", "1G"));
     assert_eq!(
         o[0].names,
-        names(&["Yoked Ox", "Maritime Guard", "Grizzly Bears", "Oreskos Swiftclaw"])
+        names(&[
+            "Yoked Ox",
+            "Maritime Guard",
+            "Grizzly Bears",
+            "Oreskos Swiftclaw"
+        ])
     );
     // Triskelion enters with three +1/+1 counters: total 8.
     let (_, o) = offered(lib, cast_creature("Triskelion", "6"));
@@ -594,7 +675,7 @@ fn wild_pair_compares_total_power_and_toughness_as_the_creature_is_on_the_battle
 
 #[test]
 fn boreas_charger_finds_up_to_the_difference() {
-    cr!("701.23a", "701.23d");
+    cr!("701.23a", "701.23b");
     ruling!(
         "Boreas Charger",
         "You can find fewer Plains cards than the difference, perhaps because you don't have that many Plains cards left in your library."
@@ -609,7 +690,10 @@ fn boreas_charger_finds_up_to_the_difference() {
     let charger = t.battlefield(P0, "Boreas Charger");
     destroy(&mut t, charger);
     t.resolve_all();
-    assert!(tapped(&t, lib[0]), "the one Plains is put onto the battlefield");
+    assert!(
+        tapped(&t, lib[0]),
+        "the one Plains is put onto the battlefield"
+    );
     assert_eq!(shuffles(&t, P0), 1);
     // No opponent controls more lands.
     let mut t = TestGame::new(2);
@@ -691,7 +775,11 @@ fn searching_and_shuffling_happen_even_when_nothing_is_found() {
         t.enter(P0, "Screaming Seahawk");
         t.resolve_all();
         let n = usize::from(search);
-        assert_eq!((searches(&t, P0), shuffles(&t, P0)), (n, n), "search: {search}");
+        assert_eq!(
+            (searches(&t, P0), shuffles(&t, P0)),
+            (n, n),
+            "search: {search}"
+        );
     }
 }
 
@@ -720,21 +808,43 @@ fn dark_supplicant_chooses_the_zones_and_shuffles_only_if_it_searched_the_librar
         "Dark Supplicant",
         "You only shuffle your library if you choose to search it."
     );
-    for library in [false, true] {
+    // (where Scion of Darkness is, whether P0 searches the library too)
+    for (zone, library) in [
+        ("hand", false),
+        ("hand", true),
+        ("graveyard", false),
+        ("library", true),
+    ] {
         let mut t = TestGame::new(2);
-        set_library(&mut t, P0, &["Forest"]);
-        let scion = t.hand(P0, "Scion of Darkness");
+        let lib = set_library(&mut t, P0, &["Forest"]);
+        let scion = match zone {
+            "hand" => t.hand(P0, "Scion of Darkness"),
+            "graveyard" => t.graveyard(P0, "Scion of Darkness"),
+            _ => t.library_top(P0, "Scion of Darkness"),
+        };
         let s = t.battlefield(P0, "Dark Supplicant");
         let a = t.battlefield(P0, "Dark Supplicant");
         let b = t.battlefield(P0, "Dark Supplicant");
         t.answer_choose(P0, &[obj(s), obj(a), obj(b)]);
         t.answer_yes(P0, library);
         t.answer_choose(P0, &[obj(scion)]);
+        let from = t.asked().len();
         activate_resolve(&mut t, P0, s, "Search", "", &[]);
+        assert!(
+            crate::r_p152_common::asked_yes_no(&t, P0, from),
+            "the library is a choice"
+        );
         let scion = t.g.current(scion);
-        assert!(t.on_battlefield(scion), "found in the hand (library: {library})");
+        assert!(
+            t.on_battlefield(scion),
+            "found in the {zone} (library: {library})"
+        );
         let n = usize::from(library);
-        assert_eq!((searches(&t, P0), shuffles(&t, P0)), (n, n));
-        assert_eq!(t.zone(t.g.player(P0).library[0]), Zone::Library(P0));
+        assert_eq!(
+            (searches(&t, P0), shuffles(&t, P0)),
+            (n, n),
+            "{zone} {library}"
+        );
+        assert_eq!(t.zone(lib[0]), Zone::Library(P0), "the Forest stays");
     }
 }

@@ -108,7 +108,7 @@ fn bilbo_ignores_a_teammates_life_gain() {
 
 #[test]
 fn zilortha_lets_each_non_human_assign_all_its_damage_as_though_unblocked() {
-    cr!("510.1c", "510.1a", "510.2");
+    cr!("510.1a", "510.1b", "510.1c", "510.1d", "510.2");
     ruling!(
         "Invasion of Ikoria // Zilortha, Apex of Ikoria",
         "Assigning a creature’s damage as though it weren’t blocked is all or nothing."
@@ -133,7 +133,11 @@ fn zilortha_lets_each_non_human_assign_all_its_damage_as_though_unblocked() {
     t.answer_yes(P0, true);
     t.answer_yes(P0, false);
     fight(&mut t, &[giant, bears], &[(wall, giant), (blocker, bears)]);
-    assert_eq!(t.life(P1), 17, "all of the Giant's damage, none of the Bears'");
+    assert_eq!(
+        t.life(P1),
+        17,
+        "all of the Giant's damage, none of the Bears'"
+    );
     assert_eq!(damage(&t, wall), 0);
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
     // The Wall dealt its 0 damage; the Bears blocker dealt 2 to the Bears.
@@ -154,7 +158,7 @@ fn zilortha_lets_each_non_human_assign_all_its_damage_as_though_unblocked() {
 
 #[test]
 fn samut_divides_on_activation_and_a_lone_legal_target_gets_its_share() {
-    cr!("601.2d", "608.2b", "115.7");
+    cr!("601.2d", "602.2b", "608.2b");
     ruling!(
         "Samut, the Tested",
         "You divide the damage as you activate Samut's second ability, not as it resolves. Each target must be assigned at least 1 damage."
@@ -178,7 +182,11 @@ fn samut_divides_on_activation_and_a_lone_legal_target_gets_its_share() {
             _ => None,
         })
         .collect();
-    assert_eq!(divided, vec![1], "divided as it's activated, at least 1 each");
+    assert_eq!(
+        divided,
+        vec![1],
+        "divided as it's activated, at least 1 each"
+    );
     destroy(&mut t, a);
     t.resolve_all();
     assert_eq!(damage(&t, b), 1);
@@ -208,13 +216,25 @@ fn shadowborn_apostle_ignores_only_the_four_of_rule() {
         "Shadowborn Apostle",
         "Shadowborn Apostle's first ability lets you ignore only the \"four-of\" rule. It doesn't let you ignore format legality."
     );
-    use mtg_engine::deck::{check_constructed, check_format_legality};
-    let deck: Vec<_> = std::iter::repeat_n(mtg_engine::card::card("Shadowborn Apostle"), 30)
-        .chain(std::iter::repeat_n(mtg_engine::card::card("Swamp"), 30))
-        .collect();
+    use mtg_engine::deck::{check_constructed, check_format_legality, DeckProblem};
+    let deck_of = |name: &str| -> Vec<_> {
+        std::iter::repeat_n(mtg_engine::card::card(name), 30)
+            .chain(std::iter::repeat_n(mtg_engine::card::card("Swamp"), 30))
+            .collect()
+    };
+    // Thirty of another card break the four-of rule; thirty Apostles don't.
+    assert!(matches!(
+        check_constructed(&deck_of("Grizzly Bears"))[..],
+        [DeckProblem::TooManyCopies { .. }]
+    ));
+    let deck = deck_of("Shadowborn Apostle");
     assert!(check_constructed(&deck).is_empty());
     assert!(check_format_legality(&deck, &[], "modern").is_empty());
-    assert!(!check_format_legality(&deck, &[], "standard").is_empty());
+    // Not legal in Standard, however many copies.
+    assert!(matches!(
+        check_format_legality(&deck, &[], "standard")[..],
+        [DeckProblem::NotLegalInFormat { .. }]
+    ));
 }
 
 #[test]
@@ -230,7 +250,9 @@ fn shadowborn_apostle_sacrifices_six_as_a_cost_not_necessarily_itself() {
     );
     let mut t = TestGame::new(2);
     set_library(&mut t, P0, &["Lord of the Pit"]);
-    let ids: Vec<_> = (0..7).map(|_| t.battlefield(P0, "Shadowborn Apostle")).collect();
+    let ids: Vec<_> = (0..7)
+        .map(|_| t.battlefield(P0, "Shadowborn Apostle"))
+        .collect();
     let others: Vec<Entity> = ids[1..].iter().map(|o| obj(*o)).collect();
     t.answer_choose(P0, &others);
     activate(&mut t, P0, ids[0], "Demon", "B", &[]);
@@ -314,7 +336,11 @@ fn alpine_guide_attacks_if_able_but_not_when_unable_or_at_a_cost() {
         attack_with(&mut t, &[]);
         assert_eq!(attacking(&t, g), attacks, "{tap} {sick} {prison}");
         if prison {
-            assert_eq!(crate::r_s04_common::untapped_lands(&t, P0), 2, "nothing paid");
+            assert_eq!(
+                crate::r_s04_common::untapped_lands(&t, P0),
+                2,
+                "nothing paid"
+            );
         }
     }
 }
@@ -362,7 +388,7 @@ fn yavimaya_dryad_can_target_you_and_its_forest_follows_multiplayer_rules() {
 
 #[test]
 fn sanctum_of_all_shrine_found_in_upkeep_misses_that_upkeep_and_only_triggers_double() {
-    cr!("603.2", "603.2g", "603.6a");
+    cr!("603.2b", "603.2d", "614.1a");
     ruling!(
         "Sanctum of All",
         "If the Shrine you put onto the battlefield with Sanctum of All's first ability during your upkeep has an ability that triggers at the beginning of your upkeep, it won't trigger during that upkeep."
@@ -381,11 +407,12 @@ fn sanctum_of_all_shrine_found_in_upkeep_misses_that_upkeep_and_only_triggers_do
     t.resolve_all();
     assert!(t.on_battlefield(t.g.current(lib[0])));
     assert_eq!(t.life(P0), 20, "the Honden didn't trigger");
-    // Six Shrines: the Honden's upkeep trigger triggers twice; an activated ability once.
+    // Six Shrines: the Honden's upkeep trigger triggers twice (Sanctum of All's own, once);
+    // an activated ability once.
     let mut t = TestGame::new(2);
     let honden = t.battlefield(P0, "Honden of Cleansing Fire");
+    let all = t.battlefield(P0, "Sanctum of All");
     for s in [
-        "Sanctum of All",
         "Sanctum of Tranquil Light",
         "Sanctum of Shattered Heights",
         "Sanctum of Calm Waters",
@@ -396,6 +423,7 @@ fn sanctum_of_all_shrine_found_in_upkeep_misses_that_upkeep_and_only_triggers_do
     t.answer_yes(P0, false);
     crate::r_s04_common::next_upkeep(&mut t, P0);
     assert_eq!(triggered_from(&t, honden), 2);
+    assert_eq!(triggered_from(&t, all), 1);
     t.resolve_all();
     assert_eq!(t.life(P0), 44);
     t.advance_to(P0, Step::PrecombatMain);
@@ -405,6 +433,28 @@ fn sanctum_of_all_shrine_found_in_upkeep_misses_that_upkeep_and_only_triggers_do
     let n = t.stack_len();
     activate(&mut t, P0, light, "Tap target", "5W", &[obj(bears)]);
     assert_eq!(t.stack_len(), n + 1);
+    // A Shrine's replacement effect (a Shrine made for the test, no real Shrine has one)
+    // applies once with six Shrines.
+    let mut t = TestGame::new(2);
+    let shrine = crate::r_s01_common::custom_card(
+        "Test Shrine",
+        "Enchantment — Shrine",
+        "{1}",
+        None,
+        "If you would gain life, you gain that much life plus 1 instead.",
+    );
+    t.custom(P0, shrine, Zone::Battlefield);
+    for s in [
+        "Sanctum of All",
+        "Sanctum of Tranquil Light",
+        "Sanctum of Shattered Heights",
+        "Sanctum of Calm Waters",
+        "Honden of Cleansing Fire",
+    ] {
+        t.battlefield(P0, s);
+    }
+    crate::r_p152_common::gain(&mut t, P0, 3);
+    assert_eq!(t.life(P0), 24);
 }
 
 #[test]
