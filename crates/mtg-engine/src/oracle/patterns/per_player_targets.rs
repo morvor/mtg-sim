@@ -36,18 +36,25 @@ fn for_each_player_targets(l: &str, b: &mut Builder) -> Option<Effect> {
     // "For any number of opponents, destroy target nonland permanent that player
     // controls." (Windgrace's Judgment): up to one target for each opponent.
     let mut up_to_one = false;
+    let mut graveyard_with = false;
     let rewritten;
     let (players, rest) = if let Some(r) = l.strip_prefix("for any number of opponents, ") {
         up_to_one = true;
         (PlayerFilter::Opponent, r)
     } else if let Some(r) = l.strip_prefix("for each graveyard with ") {
         // "for each graveyard with an instant or sorcery card in it, exile target instant
-        // or sorcery card from that graveyard" (Mysterious Stranger): a target for each
-        // player whose graveyard has one (a player with no legal choice gets none).
-        let (_, r) = r.split_once(" in it, ")?;
-        if !r.contains("from that graveyard") {
+        // or sorcery card from that graveyard" (Mysterious Stranger): a required target
+        // for each player whose graveyard has such a card, and only for them (see below).
+        let (what, r) = r.split_once(" in it, ")?;
+        let what = what
+            .strip_prefix("an ")
+            .or_else(|| what.strip_prefix("a "))
+            .unwrap_or(what);
+        // The graveyards are described in the target's own words.
+        if !r.contains(&format!("target {what} from that graveyard")) {
             return None;
         }
+        graveyard_with = true;
         rewritten = r.replace("from that graveyard", "from that player's graveyard");
         (PlayerFilter::Any, rewritten.as_str())
     } else if let Some((who, r)) = l
@@ -115,6 +122,14 @@ fn for_each_player_targets(l: &str, b: &mut Builder) -> Option<Effect> {
     if !mentions_iterated(f) || spec.together.is_some() || spec.related_to.is_some() {
         return None;
     }
+    // "For each graveyard with an instant or sorcery card in it": the players with a card
+    // in their graveyard that the target's object phrase describes, whether or not it can
+    // be targeted (the condition read with the player as "that player").
+    let players = if graveyard_with {
+        PlayerFilter::History(Box::new(Condition::Exists(f.clone())))
+    } else {
+        players
+    };
     spec.per_player = Some(players);
     if up_to_one {
         spec.min = Value::Const(0);
