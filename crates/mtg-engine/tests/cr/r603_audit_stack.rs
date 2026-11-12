@@ -462,6 +462,24 @@ fn strict_proctor_doesnt_count_an_ability_that_matched_a_card_leaving_any_zone()
         t.resolve_all();
         assert_eq!(t.life(P0), 21, "{from:?}");
     }
+    // A trigger event qualified by a condition: Kishla Skimmer's "Whenever a card leaves
+    // your graveyard during your turn, draw a card. This ability triggers only once each
+    // turn." on a reanimation.
+    supported("Kishla Skimmer");
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Strict Proctor");
+    t.battlefield(P0, "Kishla Skimmer");
+    t.library_top(P0, "Island");
+    let bears = t.graveyard(P0, "Grizzly Bears");
+    t.lands(P0, "Swamp", 4);
+    let zombify = t.hand(P0, "Zombify");
+    let hand = t.hand_size(P0) - 1;
+    t.cast(P0, zombify).target(bears).go();
+    t.resolve();
+    assert_eq!(triggers_of(&t, "Kishla Skimmer"), 1);
+    assert_eq!(triggers_of(&t, "Strict Proctor"), 0);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1, "not countered");
 }
 
 #[test]
