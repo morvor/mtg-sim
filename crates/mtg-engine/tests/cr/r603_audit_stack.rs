@@ -508,7 +508,7 @@ fn reanimate_with_tomb(setup: &[(PlayerId, &str)]) -> (usize, usize) {
 
 #[test]
 fn torpor_orb_and_its_family_dont_stop_a_leaves_your_graveyard_ability_on_a_reanimation() {
-    cr!("603.2", "603.6a", "603.10a");
+    cr!("603.2", "603.6a");
     interp!("ability-triggered-cause-is-the-event");
     ruling!(
         "Torpor Orb",
@@ -594,6 +594,86 @@ fn a_single_leaves_your_graveyard_ability_is_judged_like_a_one_or_more_one() {
         assert_eq!(triggers_of(&t, "Syr Konrad, the Grim"), 1, "{statik}");
         t.resolve_all();
         assert_eq!(t.life(P1), 19, "{statik}");
+    }
+}
+
+#[test]
+fn an_enters_from_a_graveyard_ability_is_still_doubled_or_stopped_on_a_reanimation() {
+    cr!("603.2d", "603.6a");
+    interp!("ability-triggered-cause-is-the-event");
+    supported("Torpor Orb");
+    supported("Panharmonicon");
+    supported("Triarch Praetorian");
+    // Triarch Praetorian's "When this creature enters from a graveyard, you draw two cards
+    // and you lose 2 life" names the zone the card came from, but its trigger event is the
+    // permanent entering: Panharmonicon makes it trigger twice and Torpor Orb stops it.
+    for (statik, n) in [("Panharmonicon", 2), ("Torpor Orb", 0)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, statik);
+        let praetorian = t.graveyard(P0, "Triarch Praetorian");
+        t.lands(P0, "Swamp", 4);
+        let zombify = t.hand(P0, "Zombify");
+        t.cast(P0, zombify).target(praetorian).go();
+        t.resolve();
+        assert!(t.on_battlefield(t.g.current(praetorian)), "{statik}");
+        assert_eq!(triggers_of(&t, "Triarch Praetorian"), n, "{statik}");
+    }
+}
+
+#[test]
+fn torpor_orb_judges_delayed_abilities_by_the_trigger_event_that_matched() {
+    cr!("603.2", "603.7");
+    interp!("ability-triggered-cause-is-the-event");
+    use crate::r600_common::{gain, CB};
+    use mtg_engine::ability::{BatchPer, Body, Effect, Filter, PlayerRel, TriggerCond, ZoneKind};
+    supported("Torpor Orb");
+    // "This turn, whenever a creature enters" (or "a creature card leaves your graveyard"),
+    // per event or "one or more", "you gain 1 life", and Grizzly Bears reanimated: under
+    // Torpor Orb, only the abilities whose trigger event is the card leaving the graveyard.
+    let enters = TriggerCond::EntersBattlefield(Filter::creature());
+    let leaves = TriggerCond::ZoneChange {
+        filter: Filter::and(vec![Filter::creature(), Filter::OwnedBy(PlayerRel::You)]),
+        from: Some(ZoneKind::Graveyard),
+        to: None,
+    };
+    for (cond, entering) in [(enters, true), (leaves, false)] {
+        for batched in [false, true] {
+            for orb in [false, true] {
+                let mut t = TestGame::new(2);
+                if orb {
+                    t.battlefield(P0, "Torpor Orb");
+                }
+                let trigger = if batched {
+                    TriggerCond::Batched {
+                        trigger: Box::new(cond.clone()),
+                        per: BatchPer::Batch,
+                    }
+                } else {
+                    cond.clone()
+                };
+                let rite = CB::new("Watchful Rite")
+                    .sorcery()
+                    .cost("{0}")
+                    .spell(Body::effect(Effect::DelayedTrigger {
+                        trigger: TriggerCond::ThisTurn(Box::new(trigger)),
+                        body: Box::new(Body::effect(gain(1))),
+                        once: false,
+                    }))
+                    .build();
+                let rite = t.custom(P0, rite, Zone::Hand(P0));
+                t.cast(P0, rite).go();
+                t.resolve();
+                let bears = t.graveyard(P0, "Grizzly Bears");
+                t.lands(P0, "Swamp", 4);
+                let zombify = t.hand(P0, "Zombify");
+                t.cast(P0, zombify).target(bears).go();
+                t.resolve_all();
+                let case = format!("entering: {entering}, batched: {batched}, orb: {orb}");
+                assert!(t.on_battlefield(t.g.current(bears)), "{case}");
+                let gained = if orb && entering { 0 } else { 1 };
+                assert_eq!(t.life(P0), 20 + gained, "{case}");
+            }
+        }
     }
 }
 

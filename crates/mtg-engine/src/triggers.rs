@@ -616,7 +616,11 @@ impl Game {
         }
         // Delayed triggered abilities about the batch ("whenever either of those creatures
         // deals combat damage this turn").
-        found.extend(crate::delayed_batches::triggered_by_batch(self, batch));
+        found.extend(crate::delayed_batches::triggered_by_batch(
+            self,
+            batch,
+            &entering_off,
+        ));
         // CR 801.7: only events entirely within the controller's range of influence.
         found.retain(|t| crate::multiplayer::range::trigger_in_range(self, t));
         for t in found {
@@ -2835,6 +2839,8 @@ impl Game {
     /// ability triggering, whichever comes first in its text.
     fn matched_zone_left(&self, t: &TriggerCond, base: &Ctx, ev: &Event) -> bool {
         match t {
+            // (Most abilities name no leaving: their conditions aren't matched again.)
+            TriggerCond::AnyOf(v) if !v.iter().any(names_zone_left) => false,
             TriggerCond::AnyOf(v) => {
                 let mut matched = v
                     .iter()
@@ -2857,6 +2863,28 @@ impl Game {
             } => true,
             _ => false,
         }
+    }
+}
+
+/// Whether some trigger condition of `t` is about an object leaving a zone (an origin and no
+/// destination), the only kind [`Game::matched_zone_left`] can find to have matched.
+fn names_zone_left(t: &TriggerCond) -> bool {
+    match t {
+        TriggerCond::AnyOf(v) => v.iter().any(names_zone_left),
+        TriggerCond::Where { trigger: c, .. }
+        | TriggerCond::Batched { trigger: c, .. }
+        | TriggerCond::FirstTimeEachTurn(c)
+        | TriggerCond::ThisTurn(c)
+        | TriggerCond::UntilYourNextTurn(c)
+        | TriggerCond::ThisCombat(c)
+        | TriggerCond::ForAsLongAs(c, _)
+        | TriggerCond::Noncombat(c) => names_zone_left(c),
+        TriggerCond::ZoneChange {
+            from: Some(_),
+            to: None,
+            ..
+        } => true,
+        _ => false,
     }
 }
 
