@@ -137,7 +137,7 @@ fn gornog_cowardice(t: &mut TestGame, g: ObjectId, target: ObjectId) {
 
 #[test]
 fn gornog_coward_overwrites_creature_types_only_and_lasts() {
-    cr!("611.2a", "613.1d", "205.1b", "205.3d");
+    cr!("611.2a", "613.1d", "205.1a");
     ruling!(
         "Gornog, the Red Reaper",
         "Gornog's third ability overwrites the target's existing creature types. Once the ability resolves, that creature will be a Coward and won't have its previous creature types. It retains any other types and supertypes it has as well as any subtypes that aren't creature types."
@@ -261,7 +261,10 @@ fn hexproof_until_it_deals_damage_targets_chosen_after_the_damage() {
         t.answer_targets(P1, &[obj(big)]);
         crate::r_s06_common::damage(&mut t, big, 1, nem);
         let cands = crate::r_s02_common::target_candidates(&t, P1, from);
-        assert!(cands.iter().any(|c| c.contains(&obj(big))), "{name}: {cands:?}");
+        assert!(
+            cands.iter().any(|c| c.contains(&obj(big))),
+            "{name}: {cands:?}"
+        );
         t.resolve_all();
         assert!(!has(&t, big, KeywordKind::Hexproof), "{name}");
         assert_eq!(t.obj_now(big).damage, 1, "{name}");
@@ -290,7 +293,7 @@ fn karakyk_guardian_has_hexproof_again_as_a_new_object() {
 
 #[test]
 fn moonlace_on_a_permanent_spell_keeps_the_permanent_colorless() {
-    cr!("611.2a", "105.2c", "400.7");
+    cr!("611.2a", "105.2c", "400.7a");
     ruling!(
         "Moonlace",
         "If Moonlace is cast on a spell that becomes a permanent (a creature spell, an artifact spell, or an enchantment spell), the permanent will enter colorless and will remain colorless until it leaves the battlefield (or until another effect changes its color)."
@@ -332,7 +335,7 @@ fn ride_the_shoopuf_needs_continuous_control_to_attack() {
 
 #[test]
 fn screaming_nemesis_triggers_once_for_simultaneous_lethal_damage() {
-    cr!("603.2c", "510.2", "119.7", "119.8");
+    cr!("603.2c", "510.2", "119.5", "119.7");
     ruling!(
         "Screaming Nemesis",
         "If Screaming Nemesis is dealt damage by multiple sources at once, such as by two creatures blocking it, its last ability triggers once and one target is dealt that much damage."
@@ -372,7 +375,7 @@ fn screaming_nemesis_triggers_once_for_simultaneous_lethal_damage() {
 
 #[test]
 fn stigma_lasher_player_cant_gain_life_in_any_way() {
-    cr!("119.7", "119.8", "118.3", "614.1a");
+    cr!("119.5", "119.7", "118.3", "614.1a");
     ruling!(
         "Stigma Lasher",
         "If a player has been dealt damage by Stigma Lasher, the following things are true: — Spells and abilities that would normally cause that player to gain life still resolve, but the life-gain part simply has no effect."
@@ -447,7 +450,7 @@ fn stigma_lasher_player_cant_gain_life_in_any_way() {
 
 #[test]
 fn tezzerets_minus_two_on_a_vehicle_isnt_crewing() {
-    cr!("702.122b", "702.122d");
+    cr!("702.122b", "702.122e");
     ruling!(
         "Tezzeret, Betrayer of Flesh",
         "If Tezzeret's second loyalty ability causes a Vehicle to become an artifact creature, it doesn't count as \"crewing\" that Vehicle for any ability that would trigger off of a Vehicle becoming crewed."
@@ -473,7 +476,7 @@ fn tezzerets_minus_two_on_a_vehicle_isnt_crewing() {
 
 #[test]
 fn uncharted_haven_without_a_chosen_color_makes_no_mana() {
-    cr!("106.6", "607.2d");
+    cr!("106.5", "607.2d");
     ruling!(
         "Uncharted Haven",
         "If Uncharted Haven is somehow on the battlefield without a chosen color, its mana ability won't make any mana."
@@ -493,23 +496,25 @@ fn uncharted_haven_without_a_chosen_color_makes_no_mana() {
 
 #[test]
 fn avatar_kyoshis_mana_ability_needs_positive_power() {
-    cr!("605.1a", "605.3a", "106.4");
+    cr!("605.1a", "605.3b", "106.4", "107.1b");
     ruling!(
         "The Legend of Kyoshi // Avatar Kyoshi",
         "Avatar Kyoshi's last ability is a mana ability. It doesn't use the stack and can't be responded to. If the greatest power among creatures you control is 0 or less, no mana is added."
     );
     supported("The Legend of Kyoshi // Avatar Kyoshi");
     let mut t = TestGame::new(2);
-    let k = crate::r_s17_common::enter_transformed(&mut t, P0, "The Legend of Kyoshi // Avatar Kyoshi");
+    let k =
+        crate::r_s17_common::enter_transformed(&mut t, P0, "The Legend of Kyoshi // Avatar Kyoshi");
     t.g.objects[k.0 as usize].summoning_sick = false;
     let (p, _) = t.pt(k);
     assert!(tap_for_mana(&mut t, P0, k, "Add X mana"));
     assert_eq!(t.stack_len(), 0);
     assert_eq!(t.g.player(P0).mana_pool.total() as i32, p);
-    // Power 0: nothing.
+    // Power 0 or less: nothing.
     t.g.players[0].mana_pool.empty();
     t.g.untap(k);
-    pump(&mut t, k, -p, 0);
+    pump(&mut t, k, -p - 2, 0);
+    assert_eq!(t.pt(k).0, -2);
     assert!(!tap_for_mana(&mut t, P0, k, "Add X mana"));
     assert_eq!(t.g.player(P0).mana_pool.total(), 0);
 }
@@ -524,10 +529,15 @@ fn urzas_saga_is_sacrificed_after_its_last_chapter() {
     supported("Urza's Saga");
     let mut t = TestGame::new(2);
     let saga = t.battlefield(P0, "Urza's Saga");
-    t.g.objects[saga.0 as usize].counters.insert("lore".into(), 2);
+    t.g.objects[saga.0 as usize]
+        .counters
+        .insert("lore".into(), 2);
     crate::r_s19_common::add_lore(&mut t, saga, 1);
     assert_eq!(t.stack_len(), 1);
-    assert!(t.on_battlefield(saga), "not while the chapter is on the stack");
+    assert!(
+        t.on_battlefield(saga),
+        "not while the chapter is on the stack"
+    );
     t.resolve_all();
     assert!(!t.on_battlefield(saga));
     assert!(t.in_graveyard(P0, "Urza's Saga"));
@@ -564,7 +574,10 @@ fn druid_class_land_creature_tracks_the_number_of_lands() {
 #[test]
 fn opal_creatures_change_even_if_the_spell_is_countered_and_stay_changed() {
     cr!("603.2", "611.2a");
-    ruling!("Opal Acrolith", "Changes into a creature even if the spell is countered.");
+    ruling!(
+        "Opal Acrolith",
+        "Changes into a creature even if the spell is countered."
+    );
     ruling!("Opal Guardian", "Guardian's effect doesn't wear off.");
     supported("Opal Acrolith");
     supported("Opal Guardian");
@@ -710,11 +723,7 @@ fn arcums_weathervane_snow_rules() {
     assert!(!snowable.contains(&obj(tundra)));
     // The nonbasic snow land loses snow.
     act(&mut t, P0, vane, 0, &[obj(mouth)]);
-    assert!(!t
-        .obj_now(mouth)
-        .chars
-        .supertypes
-        .contains(Supertype::Snow));
+    assert!(!t.obj_now(mouth).chars.supertypes.contains(Supertype::Snow));
 }
 
 #[test]

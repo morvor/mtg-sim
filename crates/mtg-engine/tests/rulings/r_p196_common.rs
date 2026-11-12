@@ -19,6 +19,25 @@ pub fn ability_resolved_from(t: &TestGame, source: ObjectId) -> bool {
         .any(|e| matches!(e, Event::AbilityResolved { source: s, .. } if *s == source))
 }
 
+/// Gives `p` control of `id` until end of turn (as a resolving "gain control of ... until
+/// end of turn" effect would), and settles state-based actions.
+pub fn give_control_until_eot(t: &mut TestGame, id: ObjectId, p: PlayerId) {
+    use mtg_engine::ability::{Duration, Effect, PlayerRef, Sel};
+    let mut ctx = mtg_engine::eval::Ctx::new(None, p);
+    ctx.targets = vec![vec![Entity::Object(t.g.current(id))]];
+    t.g.exec(
+        &Effect::GainControl {
+            what: Sel::Target(0),
+            who: PlayerRef::You,
+            duration: Duration::EndOfTurn,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
+    t.g.flush_events();
+    t.settle();
+}
+
 /// Gives the permanent +`p`/+`q` until end of turn.
 pub fn pump(t: &mut TestGame, id: ObjectId, p: i32, q: i32) {
     crate::r_s26_common::modify_until_eot(

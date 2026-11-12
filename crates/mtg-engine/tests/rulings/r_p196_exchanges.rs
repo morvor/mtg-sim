@@ -144,8 +144,16 @@ fn oko_and_spawnbroker_dont_exchange_with_an_illegal_target() {
             pump(&mut t, giant, 1, 0);
         }
         t.resolve_all();
-        assert_eq!(ctl(&t, bears), if grow { P0 } else { P1 }, "Oko, grow {grow}");
-        assert_eq!(ctl(&t, giant), if grow { P1 } else { P0 }, "Oko, grow {grow}");
+        assert_eq!(
+            ctl(&t, bears),
+            if grow { P0 } else { P1 },
+            "Oko, grow {grow}"
+        );
+        assert_eq!(
+            ctl(&t, giant),
+            if grow { P1 } else { P0 },
+            "Oko, grow {grow}"
+        );
     }
     // Spawnbroker: P0's Hill Giant (3) for P1's Grizzly Bears (2); the Bears get +2/+0.
     for grow in [false, true] {
@@ -163,8 +171,16 @@ fn oko_and_spawnbroker_dont_exchange_with_an_illegal_target() {
         }
         t.answer_yes(P0, true);
         t.resolve_all();
-        assert_eq!(ctl(&t, giant), if grow { P0 } else { P1 }, "Spawnbroker {grow}");
-        assert_eq!(ctl(&t, bears), if grow { P1 } else { P0 }, "Spawnbroker {grow}");
+        assert_eq!(
+            ctl(&t, giant),
+            if grow { P0 } else { P1 },
+            "Spawnbroker {grow}"
+        );
+        assert_eq!(
+            ctl(&t, bears),
+            if grow { P1 } else { P0 },
+            "Spawnbroker {grow}"
+        );
     }
 }
 
@@ -213,13 +229,17 @@ fn djinn_of_infinite_deceits_exchange_fails_or_does_nothing() {
     kill(&mut t, giant);
     t.resolve_all();
     assert!(!ability_resolved_from(&t, djinn));
-    // The same player controls both: nothing happens.
+    // The same player controls both: nothing happens (CR 701.12b). P0 controls the Giant
+    // only until end of turn, so it goes back to P1 then: no exchange gave it to P0.
     let mut t = TestGame::new(2);
     let (_, bears, giant) = setup(&mut t);
-    give_control(&mut t, giant, P0);
+    give_control_until_eot(&mut t, giant, P0);
     t.resolve_all();
     assert_eq!(ctl(&t, bears), P0);
     assert_eq!(ctl(&t, giant), P0);
+    pass_turn(&mut t);
+    assert_eq!(ctl(&t, giant), P1);
+    assert_eq!(ctl(&t, bears), P0);
 }
 
 #[test]
@@ -282,14 +302,20 @@ fn role_reversal_between_one_players_permanents_does_nothing() {
         "Role Reversal",
         "If the same player controls both permanents when Role Reversal resolves, nothing happens."
     );
+    // P0 controls the Giant only until end of turn: after the turn it's P1's again.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let giant = t.battlefield(P1, "Hill Giant");
-    cast_multi(&mut t, P0, "Role Reversal", &[obj(bears), obj(giant)]);
-    give_control(&mut t, giant, P0);
+    let s = cast_multi(&mut t, P0, "Role Reversal", &[obj(bears), obj(giant)]);
+    assert_eq!(targets_of(&t, s), vec![obj(bears), obj(giant)]);
+    give_control_until_eot(&mut t, giant, P0);
     t.resolve_all();
+    assert!(t.in_graveyard(P0, "Role Reversal"));
     assert_eq!(ctl(&t, bears), P0);
     assert_eq!(ctl(&t, giant), P0);
+    pass_turn(&mut t);
+    assert_eq!(ctl(&t, giant), P1);
+    assert_eq!(ctl(&t, bears), P0);
 }
 
 #[test]
@@ -305,7 +331,7 @@ fn shifting_grifts_exchanges_happen_independently() {
     );
     supported("Shifting Grift");
     supported("Millstone");
-    // 0: the Hill Giant leaves; 1: P0 gains control of it first.
+    // 0: the Hill Giant leaves; 1: P0 gains control of it first, until end of turn.
     for case in 0..2 {
         let mut t = TestGame::new(2);
         let bears = t.battlefield(P0, "Grizzly Bears");
@@ -325,7 +351,7 @@ fn shifting_grifts_exchanges_happen_independently() {
         if case == 0 {
             crate::r_p189_common::bounce(&mut t, giant);
         } else {
-            give_control(&mut t, giant, P0);
+            give_control_until_eot(&mut t, giant, P0);
             assert_eq!(ctl(&t, giant), P0);
         }
         t.resolve_all();
@@ -336,6 +362,12 @@ fn shifting_grifts_exchanges_happen_independently() {
         // The artifacts are still exchanged.
         assert_eq!(ctl(&t, ring), P1, "case {case}");
         assert_eq!(ctl(&t, mill), P0, "case {case}");
+        if case == 1 {
+            // Nothing happened to the creatures: the Giant goes back to P1 after the turn.
+            pass_turn(&mut t);
+            assert_eq!(ctl(&t, giant), P1);
+            assert_eq!(ctl(&t, bears), P0);
+        }
     }
 }
 

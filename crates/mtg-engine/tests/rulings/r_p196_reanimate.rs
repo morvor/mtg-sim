@@ -29,7 +29,7 @@ fn whip_giant(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn whip_of_erebos_delayed_trigger_countered_leaves_the_replacement() {
-    cr!("603.7", "614.1a", "701.6b");
+    cr!("603.7", "603.7b", "614.1a", "701.6a");
     ruling!(
         "Whip of Erebos",
         "At the beginning of the next end step, the creature returned to the battlefield with Whip of Erebos is exiled. This is a delayed triggered ability. If the ability is countered, the creature will stay on the battlefield and the delayed trigger won't trigger again. However, the replacement effect will still exile the creature when it eventually leaves the battlefield."
@@ -194,12 +194,11 @@ fn grave_betrayal_returns_each_creature_with_its_own_delayed_trigger() {
         t.settle();
         assert_eq!(t.stack_len(), 2);
         t.resolve();
-        let back: Vec<String> = t
-            .g
-            .permanents()
-            .filter(|o| o.controller == P0 && o.is(CardType::Creature))
-            .map(|o| o.chars.name.to_string())
-            .collect();
+        let back: Vec<String> =
+            t.g.permanents()
+                .filter(|o| o.controller == P0 && o.is(CardType::Creature))
+                .map(|o| o.chars.name.to_string())
+                .collect();
         assert_eq!(back.len(), 1, "one at a time");
         firsts.push(back[0].clone());
         t.resolve_all();
@@ -211,7 +210,7 @@ fn grave_betrayal_returns_each_creature_with_its_own_delayed_trigger() {
 
 #[test]
 fn grave_betrayal_adds_black_and_zombie_and_a_colorless_one_is_just_black() {
-    cr!("105.2c", "205.1b", "611.2a");
+    cr!("105.2c", "105.3", "205.1b");
     ruling!(
         "Grave Betrayal",
         "Grave Betrayal doesn't overwrite any previous colors or types. Rather, it adds another color and another creature type."
@@ -230,7 +229,10 @@ fn grave_betrayal_adds_black_and_zombie_and_a_colorless_one_is_just_black() {
     t.resolve_all();
     let giant = t.named_on_battlefield("Hill Giant")[0];
     let c = &t.obj_now(giant).chars;
-    assert_eq!(c.colors, [Color::Red, Color::Black].into_iter().collect::<ColorSet>());
+    assert_eq!(
+        c.colors,
+        [Color::Red, Color::Black].into_iter().collect::<ColorSet>()
+    );
     assert!(c.has_subtype("Giant") && c.has_subtype("Zombie"));
     let thopter = t.named_on_battlefield("Ornithopter")[0];
     let c = &t.obj_now(thopter).chars;
@@ -241,7 +243,7 @@ fn grave_betrayal_adds_black_and_zombie_and_a_colorless_one_is_just_black() {
 
 #[test]
 fn grave_betrayal_creature_dying_in_the_end_step_waits_for_the_next() {
-    cr!("603.7c", "513.1a");
+    cr!("513.2");
     ruling!(
         "Grave Betrayal",
         "If a creature you don't control dies during the end step, that creature won't return to the battlefield until the beginning of the next end step."
@@ -265,7 +267,7 @@ fn grave_betrayal_creature_dying_in_the_end_step_waits_for_the_next() {
 
 #[test]
 fn grave_betrayal_card_that_left_the_graveyard_doesnt_return() {
-    cr!("400.7", "603.7", "608.2b");
+    cr!("400.7", "603.7", "603.7c");
     ruling!(
         "Grave Betrayal",
         "If the creature card leaves the graveyard before the delayed triggered ability resolves, it won't return to the battlefield. This is also true if the card leaves the graveyard and returns to the graveyard before that ability resolves."
@@ -283,13 +285,16 @@ fn grave_betrayal_card_that_left_the_graveyard_doesnt_return() {
         }
         t.advance_to(P0, Step::End);
         t.resolve_all();
-        assert!(t.named_on_battlefield("Hill Giant").is_empty(), "{back_to_graveyard}");
+        assert!(
+            t.named_on_battlefield("Hill Giant").is_empty(),
+            "{back_to_graveyard}"
+        );
     }
 }
 
 #[test]
 fn black_zombie_reanimators_make_a_colorless_creature_just_black() {
-    cr!("105.2c", "611.2a");
+    cr!("105.2c", "105.3");
     ruling!(
         "Necromantic Selection",
         "If the creature is normally colorless, it will simply become black. It can't be both black and colorless."
@@ -327,7 +332,7 @@ fn black_zombie_reanimators_make_a_colorless_creature_just_black() {
 
 #[test]
 fn postmortem_lunge_x_cards_and_the_end_step_exile() {
-    cr!("107.3b", "202.3e", "603.7c");
+    cr!("107.3g", "202.3e", "603.7c");
     ruling!(
         "Postmortem Lunge",
         "If the creature card has {X} in its mana cost, that X is 0. Remember that the value of X chosen for Postmortem Lunge is independent of the value of X on other cards."
@@ -350,6 +355,20 @@ fn postmortem_lunge_x_cards_and_the_end_step_exile() {
     t.cast(P0, c).x(0).target(one).go();
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Endless One"));
+    assert_ne!(t.g.find_in_zone(Zone::Graveyard(P0), "Endless One")[0], one);
+    // Primordial Hydra ({X}{G}{G}, "enters with X +1/+1 counters") has mana value 2 there:
+    // Lunge's X is 2, the Hydra's X is 0, so it enters with no counters and dies.
+    supported("Primordial Hydra");
+    let mut t = TestGame::new(2);
+    let hydra = t.graveyard(P0, "Primordial Hydra");
+    lots(&mut t, P0);
+    let c = t.hand(P0, "Postmortem Lunge");
+    t.cast(P0, c).x(2).target(hydra).go();
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Primordial Hydra").is_empty());
+    let now = t.g.find_in_zone(Zone::Graveyard(P0), "Primordial Hydra");
+    assert_eq!(now.len(), 1);
+    assert_ne!(now[0], hydra, "it was on the battlefield");
     // The Hill Giant dies before the end step: it stays in the graveyard.
     let mut t = TestGame::new(2);
     let card = t.graveyard(P0, "Hill Giant");
@@ -368,7 +387,7 @@ fn postmortem_lunge_x_cards_and_the_end_step_exile() {
 
 #[test]
 fn archangel_elspeth_ultimate_treats_x_as_zero() {
-    cr!("202.3e", "107.3b");
+    cr!("202.3e", "107.3g");
     ruling!(
         "Archangel Elspeth",
         "For the last ability, if a card in your graveyard has {X} in its mana cost, X is 0."
@@ -386,7 +405,7 @@ fn archangel_elspeth_ultimate_treats_x_as_zero() {
 
 #[test]
 fn ashiok_minus_x_finds_cards_from_either_exile_ability_of_this_ashiok() {
-    cr!("607.2a", "607.2b", "400.7");
+    cr!("607.2a", "400.7");
     ruling!(
         "Ashiok, Nightmare Weaver",
         "Ashiok's second ability refers to any creature card exiled because of Ashiok's first or third ability."
@@ -427,25 +446,49 @@ fn ashiok_minus_x_finds_cards_from_either_exile_ability_of_this_ashiok() {
     assert_eq!(names.len(), 2, "{names:?}");
     assert!(names.contains(&"Grizzly Bears".to_string()));
     assert!(names.contains(&"Runeclaw Bear".to_string()));
-    // A new Ashiok can't find what the old one exiled.
+    // The card the −10 exiled can be put onto the battlefield.
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Ashiok, Nightmare Weaver");
+    t.hand(P1, "Runeclaw Bear");
+    t.g.add_counters(obj(a), "loyalty", 10, None);
+    act(&mut t, P0, a, 2, &[]);
+    let runeclaw = t.g.find_in_zone(Zone::Exile, "Runeclaw Bear")[0];
+    pass_turn(&mut t);
+    pass_turn(&mut t);
+    t.answer_choose(P0, &[obj(runeclaw)]);
+    t.answer(P0, DecisionKind::X, Answer::Number(2));
+    act(&mut t, P0, a, 1, &[]);
+    let back = t.named_on_battlefield("Runeclaw Bear");
+    assert_eq!(back.len(), 1);
+    assert_eq!(ctl(&t, back[0]), P0);
+    assert!(t.obj_now(back[0]).chars.has_subtype("Nightmare"));
+    // A new Ashiok can't find what the old one exiled: the card isn't offered, so the
+    // answer naming it isn't used.
     let mut t = TestGame::new(2);
     let a = t.battlefield(P0, "Ashiok, Nightmare Weaver");
     crate::r_s01_common::stack_library(&mut t, P1, &["Grizzly Bears", "Island", "Island"]);
     act(&mut t, P0, a, 0, &[pl(P1)]);
+    let exiled = t.g.find_in_zone(Zone::Exile, "Grizzly Bears")[0];
     crate::r_p189_common::bounce(&mut t, a);
     let card = t.g.find_in_zone(Zone::Hand(P0), "Ashiok, Nightmare Weaver")[0];
     t.g.move_object(card, Zone::Battlefield, events::MoveCause::Effect, Some(P0));
     t.g.recompute();
     let a2 = t.named_on_battlefield("Ashiok, Nightmare Weaver")[0];
+    let from = t.asked().len();
+    t.answer_choose(P0, &[obj(exiled)]);
     t.answer(P0, DecisionKind::X, Answer::Number(2));
     act(&mut t, P0, a2, 1, &[]);
+    let offered = t.asked()[from..].iter().any(|(_, d)| {
+        matches!(d, Decision::ChooseEntities { candidates, .. } if candidates.contains(&obj(exiled)))
+    });
+    assert!(!offered);
     assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
     assert!(t.in_exile("Grizzly Bears"));
 }
 
 #[test]
 fn liliana_emblem_haste_lasts() {
-    cr!("611.2a", "114.4", "702.10b");
+    cr!("611.2a", "114.4");
     ruling!(
         "Liliana, Waker of the Dead",
         "Creatures put onto the battlefield with Liliana's emblem gain haste indefinitely."
@@ -467,7 +510,7 @@ fn liliana_emblem_haste_lasts() {
 
 #[test]
 fn dranas_returned_creature_cant_join_the_attack() {
-    cr!("508.1", "508.4");
+    cr!("508.1");
     ruling!(
         "Drana, the Last Bloodchief",
         "Because all attackers are declared at the same time, the returned creature can't attack during the same combat it returns, even if it has haste."
@@ -575,13 +618,8 @@ fn dread_slaver_triggers_when_it_and_its_blocker_die_together() {
     );
     let mut t = TestGame::new(2);
     let slaver = t.battlefield(P0, "Dread Slaver");
-    let brute = crate::r_s01_common::custom_card(
-        "Test Brute",
-        "Creature — Ogre",
-        "{4}",
-        Some((5, 3)),
-        "",
-    );
+    let brute =
+        crate::r_s01_common::custom_card("Test Brute", "Creature — Ogre", "{4}", Some((5, 3)), "");
     let brute = t.custom(P1, brute, Zone::Battlefield);
     t.set_step(P1, Step::BeginningOfCombat);
     t.attack(&[(brute, pl(P0))], &[(slaver, brute)]);
@@ -594,7 +632,7 @@ fn dread_slaver_triggers_when_it_and_its_blocker_die_together() {
 
 #[test]
 fn ghouls_night_out_noncreature_permanent_isnt_a_zombie_but_has_decayed() {
-    cr!("205.1b", "205.3d", "611.2c");
+    cr!("205.1b", "205.3d");
     ruling!(
         "Ghouls' Night Out",
         "If any creature cards put onto the battlefield this way become permanents that aren't creatures because of another effect, those permanents won't be Zombies, but they will gain decayed."
@@ -664,7 +702,7 @@ fn excava_returned_permanent_is_one_one_unless_another_effect_sets_it() {
 
 #[test]
 fn xu_ifit_returned_permanent_keeps_abilities_gained_later() {
-    cr!("613.1f", "613.7", "611.2a");
+    cr!("613.1f", "613.7");
     ruling!(
         "Xu-Ifit, Osteoharmonist",
         "If a permanent returned to the battlefield with Xu-Ifit’s ability gains an ability after being returned to the battlefield this way, it will keep that ability."
@@ -684,7 +722,7 @@ fn xu_ifit_returned_permanent_keeps_abilities_gained_later() {
 
 #[test]
 fn trench_gorger_searches_even_if_it_left() {
-    cr!("603.4", "608.2c");
+    cr!("113.7a", "608.2c");
     ruling!(
         "Trench Gorger",
         "If Trench Gorger leaves the battlefield before its triggered ability resolves, you may still search your library."
@@ -704,7 +742,7 @@ fn trench_gorger_searches_even_if_it_left() {
 
 #[test]
 fn olivia_discard_still_possible_after_the_creature_left() {
-    cr!("608.2b", "608.2c");
+    cr!("608.2c", "400.7");
     ruling!(
         "Olivia, Mobilized for War",
         "If the entering creature leaves the battlefield before the triggered ability of Olivia, Mobilized for War resolves, you may still discard a card. The rest of the ability has no effect."
@@ -726,7 +764,7 @@ fn olivia_discard_still_possible_after_the_creature_left() {
 
 #[test]
 fn cyclopean_giant_exiles_the_card_that_was_copying_it() {
-    cr!("707.2", "400.7", "603.10a");
+    cr!("707.2", "400.7e", "603.10a");
     ruling!(
         "Cyclopean Giant",
         "If a Vesuvan Shapeshifter that’s copying Cyclopean Giant is put into a graveyard, the Shapeshifter will be exiled when the ability resolves even though it’s not a Cyclopean Giant anymore."
@@ -759,7 +797,7 @@ fn ascent(t: &mut TestGame, chosen: ObjectId) {
 
 #[test]
 fn ascent_of_the_worthy_redirect_follows_the_creature_not_its_controller() {
-    cr!("614.1a", "611.2c");
+    cr!("614.1a", "614.9");
     ruling!(
         "Ascent of the Worthy",
         "If another player gains control of the chosen creature after the chapter I/II ability resolves but before your next turn, damage that would be dealt to creatures you control will still be dealt to that creature instead."

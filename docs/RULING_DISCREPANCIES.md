@@ -642,6 +642,15 @@ decides whether they become a conflict case.
   (`tests/rulings/r_p154_free_casts.rs`, `kellan_uses_the_mana_value_of_the_split_half_cast`:
   Cooperate cast by aftermath has mana value 3, not the combined 7, and Cease cast from
   hand has mana value 2, not 3 or the combined 8).
+- **Palladia-Mors, the Ruiner** (rulings-P196 review): "If a triggered ability triggers at
+  the same time that Paladia-Mors deals damage for the first time, targets are chosen for
+  that ability after Palladia-Mors no longer has hexproof." (2018-07-13) spells the card's
+  name "Paladia-Mors" once and "Palladia-Mors" once. Nothing in the ruling depends on the
+  spelling: it stays cited, tested with Karakyk Guardian's ruling of the same words
+  (`tests/rulings/r_p196_characteristics.rs`,
+  `hexproof_until_it_deals_damage_targets_chosen_after_the_damage`). Whether the Core Set
+  2019 release notes (2018; ormos mirror) have the same spelling wasn't checked: the mirror
+  wasn't reachable from that session. No kind fits a misspelled name.
 - Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (copying errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the

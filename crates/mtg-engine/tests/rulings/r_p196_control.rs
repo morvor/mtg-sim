@@ -7,8 +7,8 @@ use crate::r_p196_common::*;
 use crate::r_s01_common::{attack_with, custom_card};
 use crate::r_s06_common::{activate_containing, give_control};
 use mtg_engine::decision::Decision;
-use mtg_engine::object::CastMethod;
 use mtg_engine::mana::ManaType;
+use mtg_engine::object::CastMethod;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -108,7 +108,7 @@ fn gaining_control_of_a_creature_leaves_its_auras_and_equipment() {
 
 #[test]
 fn gaining_control_of_an_equipment_doesnt_move_it() {
-    cr!("301.5c", "301.5d", "702.6a", "701.12a");
+    cr!("301.5d", "303.4e", "702.6a", "701.12a");
     ruling!(
         "Agent of Treachery",
         "Gaining control of an Aura or Equipment doesn't change what it's currently attached to."
@@ -194,6 +194,31 @@ fn gaining_control_of_an_equipment_doesnt_move_it() {
     activate_containing(&mut t, P1, scimitar, "Equip").expect("P1 can equip it");
     t.resolve_all();
     assert_eq!(attached_to(&t, scimitar), Some(obj(giant)));
+    // Exchanging Auras (Shifting Loyalties, Daring Thief: enchantments): each stays on the
+    // creature it enchants.
+    for card in ["Shifting Loyalties", "Daring Thief"] {
+        let mut t = TestGame::new(2);
+        let theirs = t.battlefield(P1, "Grizzly Bears");
+        let link = attach_new(&mut t, P1, "Spirit Link", theirs);
+        let mine = t.battlefield(P0, "Hill Giant");
+        let strength = attach_new(&mut t, P0, "Holy Strength", mine);
+        if card == "Shifting Loyalties" {
+            cast_multi(&mut t, P0, card, &[obj(strength), obj(link)]);
+        } else {
+            let thief = t.battlefield(P0, card);
+            t.g.tap(thief);
+            t.answer_targets(P0, &[obj(strength)]);
+            t.answer_targets(P0, &[obj(link)]);
+            t.answer_yes(P0, true);
+            t.g.untap(thief);
+            t.g.flush_events();
+        }
+        t.resolve_all();
+        assert_eq!((ctl(&t, strength), ctl(&t, link)), (P1, P0), "{card}");
+        assert_eq!(attached_to(&t, strength), Some(obj(mine)), "{card}");
+        assert_eq!(attached_to(&t, link), Some(obj(theirs)), "{card}");
+        assert_eq!(t.pt(mine), (4, 5), "{card}");
+    }
 }
 
 #[test]
@@ -219,16 +244,32 @@ fn aura_graft_control_lasts_until_something_changes_it() {
     // Another effect gives it back.
     give_control(&mut t, link, P1);
     assert_eq!(ctl(&t, link), P1);
-    // Leaving the battlefield ends it: P0 takes it again, then it's bounced and recast
-    // by its owner.
-    give_control(&mut t, link, P0);
+    // Leaving the battlefield ends it: the Aura P0 took is bounced and recast by its
+    // owner, who controls the new object (CR 400.7).
+    let mut t = TestGame::new(2);
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    let link = attach_new(&mut t, P1, "Spirit Link", theirs);
+    let mine = t.battlefield(P0, "Hill Giant");
+    t.answer_choose(P0, &[obj(mine)]);
+    cast_at(&mut t, P0, "Aura Graft", &[obj(link)]);
+    t.resolve_all();
+    assert_eq!(ctl(&t, link), P0);
     crate::r_p189_common::bounce(&mut t, link);
-    assert!(t.in_hand(P1, "Spirit Link"));
+    let card = t.g.find_in_zone(Zone::Hand(P1), "Spirit Link")[0];
+    t.set_step(P1, Step::PrecombatMain);
+    lots(&mut t, P1);
+    t.cast(P1, card).target(theirs).go();
+    t.resolve_all();
+    let again = t.named_on_battlefield("Spirit Link");
+    assert_eq!(again.len(), 1);
+    assert_ne!(again[0], link);
+    assert_eq!(ctl(&t, again[0]), P1);
+    assert_eq!(attached_to(&t, again[0]), Some(obj(theirs)));
 }
 
 #[test]
 fn connive_control_lasts_and_ignores_later_power() {
-    cr!("611.2a", "611.2b", "608.2b");
+    cr!("611.2a", "613.1b");
     ruling!(
         "Connive // Concoct",
         "Connive's effect lasts indefinitely. It doesn't wear off during the cleanup step, and it doesn't expire if the creature's power becomes greater after Connive has resolved."
@@ -238,10 +279,7 @@ fn connive_control_lasts_and_ignores_later_power() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     lots(&mut t, P0);
     let c = t.hand(P0, "Connive // Concoct");
-    t.cast(P0, c)
-        .method(CastMethod::Half(0))
-        .target(bears)
-        .go();
+    t.cast(P0, c).method(CastMethod::Half(0)).target(bears).go();
     t.resolve_all();
     assert_eq!(ctl(&t, bears), P0);
     t.g.add_counters(obj(bears), "+1/+1", 3, None);
@@ -254,7 +292,7 @@ fn connive_control_lasts_and_ignores_later_power() {
 
 #[test]
 fn exert_influence_checks_power_as_it_resolves() {
-    cr!("702.119a", "608.2c", "601.2h");
+    cr!("608.2c", "601.2h");
     ruling!(
         "Exert Influence",
         "Check the creature’s power as Exert Influence resolves to see if it’s less than or equal to the number of colors spent to cast Exert Influence. If it’s greater, Exert Influence will finish resolving with no effect."
@@ -328,16 +366,19 @@ fn aura_thief_only_matters_for_you_and_activated_abilities() {
     let words = t.battlefield(P1, "Words of Worship");
     let theirs = t.battlefield(P1, "Grizzly Bears");
     let link = attach_new(&mut t, P1, "Spirit Link", theirs);
+    let strength = attach_new(&mut t, P1, "Holy Strength", theirs);
     let mine = t.battlefield(P0, "Hill Giant");
-    assert_eq!(t.pt(theirs), (3, 3));
+    assert_eq!(t.pt(theirs), (4, 5));
     kill(&mut t, thief);
     t.resolve_all();
-    for e in [anthem, words, link] {
+    for e in [anthem, words, link, strength] {
         assert_eq!(ctl(&t, e), P0);
     }
-    // "Creatures you control" now means P0's.
+    // "Creatures you control" now means P0's; Holy Strength ("Enchanted creature gets
+    // +1/+2") does what it did.
     assert_eq!(t.pt(mine), (4, 4));
-    assert_eq!(t.pt(theirs), (2, 2));
+    assert_eq!(t.pt(theirs), (3, 4));
+    assert_eq!(attached_to(&t, strength), Some(obj(theirs)));
     // Spirit Link stays on P1's Bears, but P0 gains the life.
     assert_eq!(attached_to(&t, link), Some(obj(theirs)));
     crate::r_s06_common::damage(&mut t, theirs, 2, mine);
@@ -353,13 +394,19 @@ fn aura_thief_only_matters_for_you_and_activated_abilities() {
 
 /// A 1/1 Pirate with the given rules text, for P0.
 fn pirate(t: &mut TestGame, text: &str) -> ObjectId {
-    let def = custom_card("Test Pirate", "Creature — Human Pirate", "{1}", Some((1, 1)), text);
+    let def = custom_card(
+        "Test Pirate",
+        "Creature — Human Pirate",
+        "{1}",
+        Some((1, 1)),
+        text,
+    );
     t.custom(P0, def, Zone::Battlefield)
 }
 
 #[test]
 fn admiral_beckett_brass_targets_one_permanent_of_either_player() {
-    cr!("603.10", "115.1", "608.2b");
+    cr!("115.1", "603.3d");
     ruling!(
         "Admiral Beckett Brass",
         "If more than one player was dealt combat damage by three Pirates, you target only one permanent. It may be controlled by either of those players."
@@ -383,9 +430,9 @@ fn admiral_beckett_brass_targets_one_permanent_of_either_player() {
     let asks: Vec<(Vec<Entity>, u32)> = t.asked()[from..]
         .iter()
         .filter_map(|(p, d)| match d {
-            Decision::ChooseTargets { candidates, max, .. } if *p == P0 => {
-                Some((candidates.clone(), *max))
-            }
+            Decision::ChooseTargets {
+                candidates, max, ..
+            } if *p == P0 => Some((candidates.clone(), *max)),
             _ => None,
         })
         .collect();
@@ -398,7 +445,7 @@ fn admiral_beckett_brass_targets_one_permanent_of_either_player() {
 
 #[test]
 fn admiral_beckett_brass_counts_a_double_striker_once() {
-    cr!("603.10", "702.4b", "510.4");
+    cr!("702.4b", "510.4");
     ruling!(
         "Admiral Beckett Brass",
         "If one Pirate deals combat damage multiple times, most likely because it has double strike, it counts as only one of the three Pirates for Admiral Beckett Brass's triggered ability."
@@ -426,7 +473,7 @@ fn admiral_beckett_brass_counts_a_double_striker_once() {
 
 #[test]
 fn gollum_counts_any_gollum_and_only_the_life_gained() {
-    cr!("603.10", "119.9", "201.2");
+    cr!("119.3", "510.2");
     ruling!(
         "Gollum, Obsessed Stalker",
         "Gollum, Obsessed Stalker's last ability counts players who were dealt combat damage by any creature named Gollum, Obsessed Stalker. It doesn't matter who controlled those creatures."
@@ -457,7 +504,7 @@ fn gollum_counts_any_gollum_and_only_the_life_gained() {
 
 #[test]
 fn olivia_voldarens_ping_makes_it_a_vampire_before_it_dies() {
-    cr!("608.2c", "704.5g", "603.10a");
+    cr!("608.2c", "704.5g", "611.2a");
     ruling!(
         "Olivia Voldaren",
         "If Olivia Voldaren deals lethal damage to a creature with its first activated ability, that creature will become a Vampire before dying."
