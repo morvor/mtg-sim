@@ -68,7 +68,7 @@ fn a_ground_creature_blocking_a_band_blocks_its_flier_too() {
 
 #[test]
 fn the_flier_in_a_band_cant_itself_be_blocked_by_a_ground_creature() {
-    cr!("509.1b", "702.9b", "702.22h");
+    cr!("509.1b", "702.9b");
     let mut t = TestGame::new(2);
     // P1 declares the Giant blocking the Angel: illegal, undone (no block).
     let (hero, angel, giant) = band_attack(&mut t, "Serra Angel", true);
@@ -80,6 +80,11 @@ fn the_flier_in_a_band_cant_itself_be_blocked_by_a_ground_creature() {
 #[test]
 fn a_red_blocker_of_a_band_blocks_its_protected_member_and_its_damage_can_be_put_there() {
     cr!("702.22h", "702.22k", "702.16e", "702.16f");
+    // Blocking the Knight itself with the red Giant is illegal (protection), and undone.
+    let mut t = TestGame::new(2);
+    let (hero, knight, giant) = band_attack(&mut t, "Galina's Knight", true);
+    assert!(blocking(&t, giant).is_empty());
+    assert!(!blocked(&t, hero) && !blocked(&t, knight));
     let mut t = TestGame::new(2);
     // Galina's Knight: 2/2 protection from red. The red Hill Giant can't block it, but
     // blocking the Hero blocks the band.
@@ -101,14 +106,14 @@ fn a_red_blocker_of_a_band_blocks_its_protected_member_and_its_damage_can_be_put
 }
 
 #[test]
-fn a_band_member_removed_from_combat_stays_blocked_and_its_blocker_still_divides_by_the_active_player(
-) {
-    cr!("702.22f", "702.22k", "509.1h");
+fn a_band_member_removed_from_combat_leaves_the_band_and_its_band_mate_stays_blocked() {
+    cr!("702.22f", "509.1h", "510.1d");
     let mut t = TestGame::new(2);
     let (hero, angel, giant) = band_attack(&mut t, "Serra Angel", false);
-    // The Hero (with banding) leaves combat: the Angel is still blocked, by a creature
-    // that now blocks only it, so the Giant's controller assigns all of its damage there.
+    // The Hero (with banding) leaves combat and its band: the Angel is still blocked, by a
+    // creature that now blocks only it, which assigns all of its damage there.
     remove_from_combat(&mut t, hero);
+    assert!(mtg_engine::kw::banding::band_mates(&t.g, angel).is_empty());
     assert!(blocked(&t, angel));
     assert_eq!(blocking(&t, giant), vec![angel]);
     t.script.lock().unwrap().asked.clear();

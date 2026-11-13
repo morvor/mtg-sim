@@ -42,32 +42,41 @@ fn double_strike_and_trample_tramples_over_a_blocker_dealt_lethal_damage_in_the_
         "Domri Rade",
         "the combat damage it assigned during the first combat damage step will be considered when determining how much damage can trample through in the second combat damage step"
     );
-    supported("Crimson Caravaneer");
+    supported("Domri Rade");
     supported("Darksteel Myr");
     let mut t = TestGame::new(2);
-    // Crimson Caravaneer: 1/2 double strike, trample; +3/+0: a 4/2.
-    let cc = t.battlefield(P0, "Crimson Caravaneer");
-    pump(&mut t, cc, 3);
+    // Domri Rade's emblem: "Creatures you control have double strike, trample, hexproof,
+    // and haste." Hill Giant: a 3/3 with double strike and trample.
+    let domri = t.battlefield(P0, "Domri Rade");
+    t.g.objects[domri.0 as usize]
+        .counters
+        .insert(counters::LOYALTY.into(), 7);
+    t.activate(P0, domri, 2, &[]).unwrap();
+    t.resolve();
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.g.recompute();
+    assert!(t.obj_now(giant).has_keyword(KeywordKind::DoubleStrike));
+    assert!(t.obj_now(giant).has_keyword(KeywordKind::Trample));
     // Darksteel Myr: 0/1 indestructible. It survives lethal damage.
     let myr = t.battlefield(P1, "Darksteel Myr");
-    attack(&mut t, &[(cc, Entity::Player(P1))], &[(myr, cc)]);
+    attack(&mut t, &[(giant, Entity::Player(P1))], &[(myr, giant)]);
     t.script.lock().unwrap().asked.clear();
     // First step: 1 is lethal for the Myr, the rest tramples over.
-    assign(&mut t, P0, &[1, 3]);
+    assign(&mut t, P0, &[1, 2]);
     go_to(&mut t, Step::FirstStrikeDamage);
     t.settle();
-    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P1), 18);
     assert!(t.on_battlefield(myr));
     assert_eq!(damage(&t, myr), 1);
     // Second step: the Myr already has lethal damage marked; nothing more is needed for
-    // it, so all 4 may go to the player.
-    assign(&mut t, P0, &[0, 4]);
+    // it, so all 3 may go to the player.
+    assign(&mut t, P0, &[0, 3]);
     go_to(&mut t, Step::CombatDamage);
     let d = damage_decisions(&t);
     assert_eq!(d.len(), 2);
     assert_eq!(d[0].3, vec![1]);
     assert_eq!(d[1].3, vec![0]);
-    assert_eq!(t.life(P1), 13);
+    assert_eq!(t.life(P1), 15);
 }
 
 #[test]
@@ -77,22 +86,32 @@ fn double_strike_and_trample_assigns_all_to_the_player_once_its_blocker_died() {
         "Temur Battle Rage",
         "If an attacking creature with double strike and trample destroys all of its blocking creatures with first-strike combat damage, all of its normal combat damage is assigned to the player, planeswalker, or battle that creature's attacking."
     );
+    supported("Temur Battle Rage");
+    supported("Craw Wurm");
     let mut t = TestGame::new(2);
-    let cc = t.battlefield(P0, "Crimson Caravaneer");
-    pump(&mut t, cc, 3);
+    // Craw Wurm: a 6/4. Temur Battle Rage gives it double strike and, with ferocious (it's
+    // a creature with power 4 or greater), trample.
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    t.lands(P0, "Mountain", 2);
+    let rage = t.hand(P0, "Temur Battle Rage");
     let bears = t.battlefield(P1, "Grizzly Bears");
-    attack(&mut t, &[(cc, Entity::Player(P1))], &[(bears, cc)]);
+    attack(&mut t, &[(wurm, Entity::Player(P1))], &[(bears, wurm)]);
+    t.cast(P0, rage).target(wurm).go();
+    t.resolve();
+    assert!(t.obj_now(wurm).has_keyword(KeywordKind::DoubleStrike));
+    assert!(t.obj_now(wurm).has_keyword(KeywordKind::Trample));
+    // First step: 2 to the Bears (lethal), 4 to P1.
+    assign(&mut t, P0, &[2, 4]);
     go_to(&mut t, Step::FirstStrikeDamage);
     t.settle();
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
-    assert_eq!(t.life(P1), 18);
-    // Still blocked (509.1h), but no creature is blocking it.
-    assert!(blocked(&t, cc));
+    assert_eq!(t.life(P1), 16);
+    // Still blocked (509.1h), but no creature is blocking it: all 6 to the player.
+    assert!(blocked(&t, wurm));
     go_to(&mut t, Step::CombatDamage);
-    assert_eq!(t.life(P1), 14);
-    // The Caravaneer took no damage from the Bears (they were dead before the regular
-    // step).
-    assert_eq!(damage(&t, cc), 0);
+    assert_eq!(t.life(P1), 10);
+    // The Wurm took no damage from the Bears (they were dead before the regular step).
+    assert_eq!(damage(&t, wurm), 0);
 }
 
 #[test]
@@ -378,7 +397,7 @@ fn a_trampler_attacking_a_battle_assigns_its_excess_to_the_battle_not_its_protec
 
 #[test]
 fn double_strike_and_trample_attacking_a_battle_it_defeated_deals_nothing_more() {
-    cr!("510.1b", "506.4", "702.19f", "510.4");
+    cr!("510.1b", "506.4", "510.4");
     let mut t = TestGame::new(2);
     let b = segovia(&mut t);
     let cc = t.battlefield(P0, "Crimson Caravaneer");
@@ -387,7 +406,11 @@ fn double_strike_and_trample_attacking_a_battle_it_defeated_deals_nothing_more()
     go_to(&mut t, Step::FirstStrikeDamage);
     t.resolve_all();
     // Defeated: exiled (and cast transformed, a new object).
-    assert_eq!(t.named_on_battlefield("Caetus, Sea Tyrant of Segovia").len(), 1);
+    assert_eq!(
+        t.named_on_battlefield("Caetus, Sea Tyrant of Segovia")
+            .len(),
+        1
+    );
     go_to(&mut t, Step::CombatDamage);
     assert_eq!(attacks(&t, cc), None);
     assert_eq!(t.life(P1), 20);

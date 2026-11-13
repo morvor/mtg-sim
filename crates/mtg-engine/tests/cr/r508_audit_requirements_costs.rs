@@ -272,27 +272,54 @@ fn lure_on_a_creature_with_menace_needs_two_able_blockers() {
 }
 
 #[test]
-fn mogg_flunkies_blocks_a_lured_attacker_only_with_another_blocker() {
+fn mogg_flunkies_that_must_block_blocks_only_with_another_creature() {
     cr!("509.1b", "509.1c");
     ruling!(
         "Mogg Flunkies",
         "If an effect says that Mogg Flunkies attacks or blocks if able and you control another creature able to attack or block, you must attack or block with Mogg Flunkies and that creature."
     );
-    let mut t = TestGame::new(2);
-    let flunkies = t.battlefield(P1, "Mogg Flunkies");
-    let bears = lured_attack(&mut t, "Grizzly Bears");
+    supported("Culling Mark");
+    // P0's Culling Mark: "Target creature blocks this turn if able", on P1's Flunkies. P0
+    // then attacks with Grizzly Bears.
+    let marked = |with_giant: bool| {
+        let mut t = TestGame::new(2);
+        let flunkies = t.battlefield(P1, "Mogg Flunkies");
+        let giant = with_giant.then(|| t.battlefield(P1, "Hill Giant"));
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        t.lands(P0, "Forest", 3);
+        let mark = t.hand(P0, "Culling Mark");
+        t.cast(P0, mark).target(flunkies).go();
+        t.resolve();
+        combat_of_p0(&mut t);
+        declare(&mut t, &[(bears, Entity::Player(P1))]);
+        go_to(&mut t, Step::DeclareAttackers);
+        (t, flunkies, giant, bears)
+    };
+    // Alone, it can't block (a restriction): the requirement can't be obeyed.
+    let (mut t, flunkies, _, bears) = marked(false);
+    block(&mut t, P1, &[(flunkies, bears)]);
     go_to(&mut t, Step::DeclareBlockers);
-    // It can't block alone, so Lure's requirement can't be obeyed.
     assert!(blocking(&t, flunkies).is_empty());
     assert!(!blocked(&t, bears));
-    let mut t = TestGame::new(2);
-    let flunkies = t.battlefield(P1, "Mogg Flunkies");
-    let other = t.battlefield(P1, "Hill Giant");
-    let bears = lured_attack(&mut t, "Grizzly Bears");
-    go_to(&mut t, Step::DeclareBlockers);
-    let mut bs = blockers_of(&t, bears);
-    bs.sort();
-    assert_eq!(bs, vec![flunkies, other]);
+    // With the Giant, which has no requirement of its own: not blocking, or the Giant
+    // blocking alone, obeys no requirement while both blocking obeys one, so each is
+    // illegal and both block.
+    for decl in [0usize, 1] {
+        let (mut t, flunkies, giant, bears) = marked(true);
+        let giant = giant.unwrap();
+        let d: Vec<(ObjectId, ObjectId)> = if decl == 0 {
+            vec![]
+        } else {
+            vec![(giant, bears)]
+        };
+        block(&mut t, P1, &d);
+        go_to(&mut t, Step::DeclareBlockers);
+        let mut bs = blockers_of(&t, bears);
+        bs.sort();
+        let mut want = vec![flunkies, giant];
+        want.sort();
+        assert_eq!(bs, want, "declaration {decl}");
+    }
 }
 
 #[test]
@@ -308,7 +335,7 @@ fn lure_doesnt_force_a_block_that_costs_archangel_of_tithes() {
     let mut t = TestGame::new(2);
     let spider = t.battlefield(P1, "Giant Spider");
     t.lands(P1, "Forest", 1);
-    let angel = lured_attack(&mut t, "Archangel of Tithes");
+    lured_attack(&mut t, "Archangel of Tithes");
     go_to(&mut t, Step::DeclareBlockers);
     assert!(blocking(&t, spider).is_empty());
     // Paying {1}: the block is legal.
@@ -320,7 +347,6 @@ fn lure_doesnt_force_a_block_that_costs_archangel_of_tithes() {
     go_to(&mut t, Step::DeclareBlockers);
     assert_eq!(blocking(&t, spider), vec![angel2]);
     assert!(t.obj_now(forest).tapped);
-    let _ = angel;
 }
 
 #[test]
@@ -343,12 +369,15 @@ fn the_total_cost_to_block_is_one_per_blocker_and_must_be_paid_in_full() {
 
 #[test]
 fn norns_annex_costs_are_paid_one_way_each_and_two_life_needs_more_than_one_life() {
-    cr!("508.1h", "508.1j", "107.4f");
+    cr!("508.1h", "508.1j", "107.4f", "119.4");
     ruling!(
         "Norn's Annex",
         "if you attack with two creatures, you may pay {W} for one cost and 2 life for the other"
     );
-    ruling!("Norn's Annex", "If you're at 1 life or less, you can't pay 2 life.");
+    ruling!(
+        "Norn's Annex",
+        "If you're at 1 life or less, you can't pay 2 life."
+    );
     supported("Norn's Annex");
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Norn's Annex");
@@ -437,6 +466,7 @@ fn a_creature_goaded_by_each_opponent_attacks_an_opponent_rather_than_a_planeswa
         "Disrupt Decorum",
         "If a creature you control has been goaded by each of your opponents, the creature must attack an opponent (rather than a planeswalker"
     );
+    supported("Disrupt Decorum");
     let mut t = TestGame::with_config(
         3,
         GameConfig {
@@ -446,8 +476,19 @@ fn a_creature_goaded_by_each_opponent_attacks_an_opponent_rather_than_a_planeswa
     );
     let bears = t.battlefield(P0, "Grizzly Bears");
     let jace = t.battlefield(P1, "Jace Beleren");
-    t.g.objects[bears.0 as usize].goaded_by = vec![P1, P2];
-    combat_of_p0(&mut t);
+    // P1, then P2 on their own turns, cast Disrupt Decorum: P0's Bears are goaded by both.
+    t.set_step(P1, Step::PrecombatMain);
+    for p in [P1, P2] {
+        if p == P2 {
+            t.advance_to(P2, Step::PrecombatMain);
+        }
+        t.lands(p, "Mountain", 4);
+        let decorum = t.hand(p, "Disrupt Decorum");
+        t.cast(p, decorum).go();
+        t.resolve();
+    }
+    assert_eq!(t.g.goaders(bears), vec![P1, P2]);
+    t.advance_to(P0, Step::BeginningOfCombat);
     declare(&mut t, &[(bears, Entity::Object(jace))]);
     go_to(&mut t, Step::DeclareAttackers);
     assert!(matches!(attacks(&t, bears), Some(Entity::Player(p)) if p == P1 || p == P2));
