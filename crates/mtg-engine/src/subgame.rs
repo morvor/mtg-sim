@@ -6,8 +6,8 @@
 //!
 //! * As it starts, each player's main-game library becomes their subgame deck, with their
 //!   supplementary decks (planar, scheme, attraction decks), vanguard, and a commander in
-//!   the main-game command zone (CR 729.2, 729.2a–c); the starting player is determined at
-//!   random. The main-game objects and cards outside the main game are outside the
+//!   the main-game command zone (CR 729.2, 729.2a–c); a randomly selected player chooses
+//!   who takes the first turn (CR 729.2, 103.1). The main-game objects and cards outside the main game are outside the
 //!   subgame (CR 729.4): each player's cards there can be brought in (e.g. by a wish).
 //! * As it ends, each player's traditional cards in the subgame (other than in its command
 //!   zone) are shuffled into their main-game library (CR 729.5), supplementary decks,
@@ -127,13 +127,15 @@ pub fn begin(g: &mut Game) -> Subgame {
     for id in moved {
         g.objects[id.0 as usize].zone = Zone::Nowhere;
     }
-    // CR 729.2: randomly determine which player goes first (no player chooses). The
-    // players are taken in APNAP order (CR 101.4), so the chance doesn't depend on seats.
+    // CR 729.2: randomly determine which player goes first: a randomly selected player
+    // chooses who does (the Shahrazad ruling, CR 103.1; register
+    // `subgame-random-player-chooses-first`). The players are taken in APNAP order
+    // (CR 101.4), so the chance doesn't depend on seats.
     let players: Vec<PlayerId> = g.apnap();
-    let first = players[g.random_range(0, players.len() as u32 - 1) as usize];
+    let chooser = players[g.random_range(0, players.len() as u32 - 1) as usize];
     let seed: u64 = g.rng.gen();
     let config = GameConfig {
-        starting_player: Some(first),
+        starting_player: None,
         first_turn_chooser: None,
         seed,
         top_of_library: vec![],
@@ -155,6 +157,10 @@ pub fn begin(g: &mut Game) -> Subgame {
     for (p, name) in commanders {
         sub.designate_commander(p, &name);
     }
+    // The chooser chooses as the subgame starts. The choice replaces the rest of
+    // CR 103.1's methods (an archenemy or a variant's seat doesn't go first instead).
+    let first = choose_first(&mut sub, chooser);
+    sub.config.starting_player = Some(first);
     // CR 729.4: every main-game card a player owns, and their cards outside the main
     // game, are outside the subgame.
     let mut outside = Vec::new();
@@ -183,6 +189,27 @@ pub fn begin(g: &mut Game) -> Subgame {
     g.subgames.played += 1;
     g.log(|_| "--- A subgame begins ---".to_string());
     Subgame { game: sub, outside }
+}
+
+/// The subgame's randomly selected player `chooser` chooses who takes its first turn
+/// (CR 729.2, 103.1), as in the main game ([`crate::start::ask_who_takes_the_first_turn`]).
+/// The options are the players in the subgame (with shared team turns, a representative of
+/// each team, CR 103.1a) in turn order from the chooser, so that the question doesn't
+/// depend on the seats.
+fn choose_first(sub: &mut Game, chooser: PlayerId) -> PlayerId {
+    let shared = sub.uses_shared_team_turns();
+    let mut options: Vec<PlayerId> = Vec::new();
+    for k in 0..sub.players.len() {
+        let p = sub.seat_in_turn_order(chooser, k);
+        if !sub.player(p).in_game() {
+            continue;
+        }
+        let p = if shared { sub.primary_player(p) } else { p };
+        if !options.contains(&p) {
+            options.push(p);
+        }
+    }
+    crate::start::ask_who_takes_the_first_turn(sub, chooser, options)
 }
 
 /// A game restarted (hook in `restart::restart_game`): a restarted subgame is still the

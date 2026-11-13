@@ -1,6 +1,7 @@
 //! CR 729: subgames (and restarting a subgame, CR 727.6).
 
 use crate::r107_planechase::{add_planar_deck, planechase_game};
+use mtg_engine::decision::Decision;
 use mtg_engine::designations::become_monarch;
 use mtg_engine::game::{GameConfig, Variant};
 use mtg_engine::object::Zone;
@@ -188,30 +189,154 @@ fn a_subgame_has_its_own_zones_made_from_the_main_game_libraries() {
     assert_eq!(s.g.turn.number, 1);
     end_subgame(&mut t, s, outside);
     assert_eq!(names(&t.g, &t.g.player(P0).library.clone()), main_lib);
-    // Which player goes first is determined at random: no player chooses.
-    let mut first = std::collections::BTreeSet::new();
+}
+
+/// Starts and ends a subgame of `t`. Returns the players asked who takes its first turn
+/// (with the players offered to each), the player the subgame records as choosing, and
+/// its starting player.
+fn who_goes_first(t: &mut TestGame) -> (Vec<(PlayerId, Vec<Entity>)>, Option<PlayerId>, PlayerId) {
+    let asked = t.asked().len();
+    let (s, outside) = start_subgame(t);
+    let questions = t.asked()[asked..]
+        .iter()
+        .filter_map(|(p, d)| match d {
+            Decision::ChooseEntities {
+                prompt, candidates, ..
+            } if prompt.contains("first turn") => Some((*p, candidates.clone())),
+            _ => None,
+        })
+        .collect();
+    let result = (questions, s.g.start.chooser, s.g.turn.starting_player);
+    end_subgame(t, s, outside);
+    result
+}
+
+fn seeded(players: usize, seed: u64) -> TestGame {
+    let mut t = TestGame::with_config(
+        players,
+        GameConfig {
+            skip_mulligans: true,
+            ..Default::default()
+        },
+    );
+    t.g.rng = ChaCha8Rng::seed_from_u64(seed);
+    t
+}
+
+#[test]
+fn a_randomly_selected_player_chooses_who_goes_first_in_the_subgame() {
+    cr!("729.2", "103.1");
+    ruling!(
+        "Shahrazad",
+        "You randomly chose which player chooses to go first or draw first."
+    );
+    interp!("subgame-random-player-chooses-first");
+    let mut choosers = std::collections::BTreeSet::new();
     for seed in 0..12u64 {
-        let mut t = TestGame::with_config(
-            2,
-            GameConfig {
-                skip_mulligans: true,
-                ..Default::default()
-            },
-        );
-        t.g.rng = ChaCha8Rng::seed_from_u64(seed);
-        // Whoever would be asked would choose to go second.
-        t.answer(P0, DecisionKind::Entities, Answer::Entities(vec![Entity::Player(P1)]));
-        t.answer(P1, DecisionKind::Entities, Answer::Entities(vec![Entity::Player(P0)]));
-        let asked = t.asked().len();
-        let (s, outside) = start_subgame(&mut t);
-        assert!(!t.asked()[asked..].iter().any(|(_, d)| matches!(
-            d,
-            mtg_engine::decision::Decision::ChooseEntities { prompt, .. } if prompt.contains("first turn")
-        )));
-        first.insert(s.g.turn.starting_player);
-        end_subgame(&mut t, s, outside);
+        // Whoever is asked lets the other player go first.
+        let mut t = seeded(2, seed);
+        t.answer_choose(P0, &[Entity::Player(P1)]);
+        t.answer_choose(P1, &[Entity::Player(P0)]);
+        let (questions, chooser, first) = who_goes_first(&mut t);
+        // Exactly one player is asked, and the subgame records them as the chooser.
+        assert_eq!(questions.len(), 1, "seed {seed}");
+        let (asked, offered) = &questions[0];
+        assert_eq!(chooser, Some(*asked));
+        // Both players are offered, the chooser first (the default).
+        let other = if *asked == P0 { P1 } else { P0 };
+        assert_eq!(offered, &vec![Entity::Player(*asked), Entity::Player(other)]);
+        // Their answer is honored.
+        assert_eq!(first, other, "seed {seed}");
+        choosers.insert(*asked);
+
+        // And a chooser who goes first themselves does.
+        let mut t = seeded(2, seed);
+        t.answer_choose(P0, &[Entity::Player(P0)]);
+        t.answer_choose(P1, &[Entity::Player(P1)]);
+        let (questions, _, first) = who_goes_first(&mut t);
+        assert_eq!(first, questions[0].0, "seed {seed}");
     }
-    assert_eq!(first.len(), 2);
+    // The chooser is selected at random.
+    assert_eq!(choosers.len(), 2);
+}
+
+#[test]
+fn an_invalid_or_default_answer_lets_the_subgame_chooser_go_first() {
+    cr!("729.2", "103.1");
+    interp!("subgame-random-player-chooses-first");
+    let invalid = [
+        Answer::Default,
+        Answer::Entities(vec![]),
+        Answer::Entities(vec![Entity::Player(P0), Entity::Player(P1)]),
+        Answer::Entities(vec![Entity::Player(PlayerId(5))]),
+        Answer::Bool(false),
+    ];
+    for seed in 0..4u64 {
+        for a in &invalid {
+            let mut t = seeded(2, seed);
+            t.answer(P0, DecisionKind::Entities, a.clone());
+            t.answer(P1, DecisionKind::Entities, a.clone());
+            let (questions, chooser, first) = who_goes_first(&mut t);
+            assert_eq!(questions.len(), 1);
+            assert_eq!(chooser, Some(questions[0].0));
+            assert_eq!(first, questions[0].0, "seed {seed}, answer {a:?}");
+        }
+    }
+}
+
+#[test]
+fn only_players_in_the_subgame_choose_or_are_offered_the_first_turn() {
+    cr!("729.2", "729.4", "103.1");
+    interp!("subgame-random-player-chooses-first");
+    for seed in 0..8u64 {
+        let mut t = seeded(3, seed);
+        // P1 left the main game: they aren't in the subgame.
+        t.g.players[1].left_game = true;
+        t.g.players[1].has_lost = true;
+        let (questions, _, first) = who_goes_first(&mut t);
+        assert_eq!(questions.len(), 1);
+        let (asked, offered) = &questions[0];
+        assert_ne!(*asked, P1);
+        // The chooser is offered first, then the others in turn order.
+        let other = if *asked == P0 { P2 } else { P0 };
+        assert_eq!(offered, &vec![Entity::Player(*asked), Entity::Player(other)]);
+        // Nobody answered: the chooser goes first.
+        assert_eq!(first, *asked);
+    }
+}
+
+#[test]
+fn shahrazads_subgame_starts_with_the_chosen_player() {
+    cr!("729.2", "103.1");
+    ruling!(
+        "Shahrazad",
+        "You randomly chose which player chooses to go first or draw first."
+    );
+    interp!("subgame-random-player-chooses-first");
+    for seed in 0..4u64 {
+        let mut t = seeded(2, seed);
+        shrink_library(&mut t, P1, 5);
+        let asked = t.asked().len();
+        t.lands(P0, "Plains", 2);
+        let s = t.hand(P0, "Shahrazad");
+        t.cast(P0, s).go();
+        // Whoever is asked in the subgame lets the other player go first.
+        t.answer_choose(P0, &[Entity::Player(P1)]);
+        t.answer_choose(P1, &[Entity::Player(P0)]);
+        t.resolve_all();
+        let chooser: Vec<PlayerId> = t.asked()[asked..]
+            .iter()
+            .filter(|(_, d)| {
+                matches!(d, Decision::ChooseEntities { prompt, .. } if prompt.contains("first turn"))
+            })
+            .map(|(p, _)| *p)
+            .collect();
+        assert_eq!(chooser.len(), 1, "seed {seed}");
+        let sub = t.g.subgames.last.as_ref().expect("a subgame was played");
+        assert_eq!(sub.start.chooser, Some(chooser[0]));
+        let other = if chooser[0] == P0 { P1 } else { P0 };
+        assert_eq!(sub.turn.starting_player, other, "seed {seed}");
+    }
 }
 
 #[test]

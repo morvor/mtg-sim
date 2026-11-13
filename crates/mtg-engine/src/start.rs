@@ -186,13 +186,26 @@ fn choose_starting_player_inner(g: &mut Game) -> PlayerId {
         Some(c) => c,
         None => PlayerId(g.random_range(0, n - 1) as u8),
     };
-    g.start.chooser = Some(chooser);
-    let shared = g.uses_shared_team_turns();
-    let options: Vec<PlayerId> = if shared {
+    let options: Vec<PlayerId> = if g.uses_shared_team_turns() {
         g.team_representatives()
     } else {
         g.player_ids()
     };
+    ask_who_takes_the_first_turn(g, chooser, options)
+}
+
+/// CR 103.1: `chooser` chooses who takes the first turn among `options` (with shared team
+/// turns, a representative of each team, CR 103.1a), and is recorded as the player who
+/// chose. Their own seat (or team) is listed first and is the default for an invalid or
+/// default answer; the other options follow in the order given. A subgame's randomly
+/// selected player chooses the same way (CR 729.2, see [`crate::subgame::begin`]).
+pub fn ask_who_takes_the_first_turn(
+    g: &mut Game,
+    chooser: PlayerId,
+    options: Vec<PlayerId>,
+) -> PlayerId {
+    g.start.chooser = Some(chooser);
+    let shared = g.uses_shared_team_turns();
     // The chooser's own seat (or team) is the default answer.
     let own = options
         .iter()
