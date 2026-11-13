@@ -2303,6 +2303,17 @@ impl Game {
             Effect::NoteLinked { what, replace } => {
                 crate::linked_notes::exec(self, what, *replace, ctx);
             }
+            // "When you do, if you control a red permanent other than Ajani, ..." (Ajani,
+            // Nacatl Avenger's ruling): an intervening "if" (CR 603.4) — the reflexive
+            // ability triggers only if the condition holds, and its body checks it again
+            // as it resolves (`reflexive_intervening_if`). Its count is used up all the same.
+            Effect::Reflexive { body }
+                if crate::oracle::patterns::reflexive_intervening_if::fails_to_trigger(
+                    self, body, ctx,
+                ) =>
+            {
+                ctx.reflexive_times = None;
+            }
             Effect::Reflexive { body } => {
                 // CR 603.12: a reflexive triggered ability is checked immediately after it's
                 // created; it triggers now and waits to be put on the stack (with its own
