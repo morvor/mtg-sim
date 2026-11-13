@@ -44,7 +44,7 @@ fn first_choice(t: &TestGame, p: PlayerId, from: usize) -> Option<Vec<Entity>> {
 
 #[test]
 fn strategic_betrayal_opponent_chooses_on_resolution_or_just_exiles_graveyard() {
-    cr!("608.2c", "701.21a");
+    cr!("608.2c", "608.2d");
     ruling!(
         "Strategic Betrayal",
         "The opponent chooses which creature to exile as Strategic Betrayal resolves. If they don’t control any creatures at that time, they simply exile their graveyard."
@@ -57,7 +57,10 @@ fn strategic_betrayal_opponent_chooses_on_resolution_or_just_exiles_graveyard() 
     t.answer_choose(P1, &[obj(b)]);
     let from = t.asked().len();
     cast_new(&mut t, P0, "Strategic Betrayal", &[Entity::Player(P1)]);
-    assert!(first_choice(&t, P1, from).is_none(), "nothing chosen on casting");
+    assert!(
+        first_choice(&t, P1, from).is_none(),
+        "nothing chosen on casting"
+    );
     t.resolve_all();
     assert_eq!(first_choice(&t, P1, from).map(|c| c.len()), Some(2));
     assert!(t.on_battlefield(a) && !t.on_battlefield(b));
@@ -74,7 +77,7 @@ fn strategic_betrayal_opponent_chooses_on_resolution_or_just_exiles_graveyard() 
 
 #[test]
 fn archfiend_of_depravity_spares_up_to_two_chosen_without_targeting() {
-    cr!("608.2c", "115.1", "702.18a");
+    cr!("608.2d", "115.1", "702.11b");
     ruling!(
         "Archfiend of Depravity",
         "The opponent chooses which creatures to spare, if any, as the ability resolves. This choice doesn't target the creatures."
@@ -84,18 +87,18 @@ fn archfiend_of_depravity_spares_up_to_two_chosen_without_targeting() {
         "The opponent may choose to spare one or no creatures. If the player doesn't choose any creatures, they will sacrifice all creatures they control."
     );
     supported("Archfiend of Depravity");
-    // Two spared, one with shroud.
+    // Two spared, one with hexproof (P0's ability couldn't target it).
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Archfiend of Depravity");
-    let shroud = t.battlefield(P1, "Gladecover Scout");
+    let hexproof = t.battlefield(P1, "Gladecover Scout");
     let a = t.battlefield(P1, "Grizzly Bears");
     let b = t.battlefield(P1, "Hill Giant");
     // One creature at a time.
-    t.answer_choose(P1, &[obj(shroud)]);
+    t.answer_choose(P1, &[obj(hexproof)]);
     t.answer_choose(P1, &[obj(a)]);
     t.advance_to(P1, Step::End);
     t.resolve_all();
-    assert!(t.on_battlefield(shroud) && t.on_battlefield(a));
+    assert!(t.on_battlefield(hexproof) && t.on_battlefield(a));
     assert!(!t.on_battlefield(b));
     // One spared.
     let mut t = TestGame::new(2);
@@ -123,7 +126,7 @@ fn archfiend_of_depravity_spares_up_to_two_chosen_without_targeting() {
 
 #[test]
 fn upkeep_edicts_choose_as_the_trigger_resolves() {
-    cr!("608.2c", "603.3");
+    cr!("608.2d", "603.3");
     ruling!(
         "Sheoldred, Whispering One",
         "The opponent whose upkeep it is chooses a creature to sacrifice when Sheoldred's second triggered ability resolves."
@@ -162,7 +165,7 @@ fn upkeep_edicts_choose_as_the_trigger_resolves() {
 
 #[test]
 fn cataclysm_and_limited_resources_choose_on_resolution() {
-    cr!("608.2c", "101.4");
+    cr!("608.2d", "101.4");
     ruling!(
         "Cataclysm",
         "The permanents to save are chosen on resolution. You do not choose them when casting the spell."
@@ -202,7 +205,7 @@ fn cataclysm_and_limited_resources_choose_on_resolution() {
 
 #[test]
 fn tectonic_hellion_decides_who_controls_the_most_lands_on_resolution() {
-    cr!("608.2c", "508.1m");
+    cr!("608.2h", "508.1m");
     ruling!(
         "Tectonic Hellion",
         "The player or players who will sacrifice lands is determined only as Tectonic Hellion’s triggered ability begins to resolve."
@@ -323,7 +326,10 @@ fn ashling_sacrifices_the_target_if_its_player_still_controls_it() {
     t.attack(&[(ashling, Entity::Player(P1))], &[]);
     t.resolve_all();
     assert_eq!(t.life(P1), 16);
-    assert!(!t.on_battlefield(wall), "indestructible doesn't stop a sacrifice");
+    assert!(
+        !t.on_battlefield(wall),
+        "indestructible doesn't stop a sacrifice"
+    );
     // Control changed before it resolves: nothing is sacrificed.
     let mut t = TestGame::new(2);
     let ashling = t.battlefield(P0, "Ashling, the Extinguisher");
@@ -384,7 +390,7 @@ fn spite(t: &mut TestGame, n: i32) -> (ObjectId, ObjectId) {
 
 #[test]
 fn archfiend_of_spite_all_permanents_or_all_life() {
-    cr!("603.2", "701.21a");
+    cr!("118.12a", "701.21a");
     ruling!(
         "Archfiend of Spite",
         "The source's controller must either sacrifice permanents or lose life. They can't choose to sacrifice some permanents and lose some life."
@@ -424,7 +430,7 @@ fn archfiend_of_spite_all_permanents_or_all_life() {
 
 #[test]
 fn archfiend_of_spite_may_decline_even_when_life_cant_be_lost() {
-    cr!("119.10", "701.21a");
+    cr!("118.12a", "704.5a");
     ruling!(
         "Archfiend of Spite",
         "The player may always choose not to sacrifice permanents, even if they will end up losing more life than they have or if an effect (such as that of Platinum Emperion) says that they can't lose life."
@@ -511,7 +517,7 @@ fn killing_wave_cant_pay_more_life_than_you_have() {
 
 #[test]
 fn fade_away_pays_with_mana_abilities_during_resolution_and_can_mix() {
-    cr!("608.2c", "605.3a", "118.3");
+    cr!("608.2g", "605.3a", "118.12a");
     ruling!(
         "Fade Away",
         "You can activate mana abilities during the resolution if you decide to pay mana."
@@ -537,14 +543,17 @@ fn fade_away_pays_with_mana_abilities_during_resolution_and_can_mix() {
     let spell = t.hand(P0, "Fade Away");
     t.cast(P0, spell).go();
     t.resolve_all();
-    assert!(t.obj_now(island).tapped, "tapped for mana while Fade Away resolved");
+    assert!(
+        t.obj_now(island).tapped,
+        "tapped for mana while Fade Away resolved"
+    );
     assert!(!t.on_battlefield(ring));
     assert!(t.on_battlefield(a) && t.on_battlefield(b));
 }
 
 #[test]
 fn mana_vortex_cast_trigger_resolves_first_sacrifice_a_land_or_countered() {
-    cr!("603.2", "118.12");
+    cr!("601.2i", "603.3", "118.12a");
     ruling!(
         "Mana Vortex",
         "When you cast Mana Vortex, its first ability triggers and goes on the stack on top of the Mana Vortex spell. The triggered ability resolves first. When it resolves, you either sacrifice a land or you counter Mana Vortex."
@@ -715,12 +724,15 @@ fn the_rest_happens_when_nothing_can_be_sacrificed() {
     t.advance_to(P0, Step::Upkeep);
     t.advance_to(P1, Step::Upkeep);
     t.resolve_all();
-    assert!(!t.on_battlefield(bears), "the emblem works when there is a creature");
+    assert!(
+        !t.on_battlefield(bears),
+        "the emblem works when there is a creature"
+    );
 }
 
 #[test]
 fn priest_of_forgotten_gods_may_have_no_targets() {
-    cr!("115.1d", "601.2c");
+    cr!("115.1c", "602.2b");
     ruling!(
         "Priest of Forgotten Gods",
         "You can activate the ability of Priest of Forgotten Gods without choosing any targets if you wish. You'll still add {B}{B} and draw a card."
@@ -743,7 +755,7 @@ fn priest_of_forgotten_gods_may_have_no_targets() {
 
 #[test]
 fn hellish_rebuke_does_each_part_it_can() {
-    cr!("608.2c", "119.10");
+    cr!("608.2c", "701.21a");
     ruling!(
         "Hellish Rebuke",
         "When the triggered ability that Hellish Rebuke grants permanents resolves, if that permanent's controller can't sacrifice it, they will still lose 2 life. Similarly, if they can't lose life, they will still sacrifice the permanent."
@@ -831,7 +843,11 @@ fn edicts_the_player_chooses_which_but_not_whether() {
     assert_eq!(permanents_of(&t, P1), 0);
     assert_eq!(permanents_of(&t, P2), 2);
     assert_eq!(t.life(P1), 20);
-    assert_eq!(t.hand_size(P0), hand, "P1 sacrificed all three: no cards drawn");
+    assert_eq!(
+        t.hand_size(P0),
+        hand,
+        "P1 sacrificed all three: no cards drawn"
+    );
 
     ruling!(
         "Dead Drop",
@@ -873,7 +889,7 @@ fn edicts_the_player_chooses_which_but_not_whether() {
 
 #[test]
 fn natural_balance_needn_t_find_every_basic_land() {
-    cr!("701.23d");
+    cr!("701.23b");
     ruling!(
         "Natural Balance",
         "You are not required to find all the basic lands you are entitled to."

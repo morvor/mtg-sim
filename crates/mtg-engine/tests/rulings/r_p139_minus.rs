@@ -38,9 +38,19 @@ fn global_shrinks_affect_only_creatures_there_as_they_resolve() {
     let cases: [(&str, Start, i32, bool); 5] = [
         ("Havoc Demon", |t| dies(t, "Havoc Demon"), 5, true),
         ("Nausea", |t| cast(t, "Nausea"), 1, true),
-        ("Feast of Succession", |t| cast(t, "Feast of Succession"), 4, false),
+        (
+            "Feast of Succession",
+            |t| cast(t, "Feast of Succession"),
+            4,
+            false,
+        ),
         ("Shrivel", |t| cast(t, "Shrivel"), 1, false),
-        ("Death's-Head Buzzard", |t| dies(t, "Death's-Head Buzzard"), 1, false),
+        (
+            "Death's-Head Buzzard",
+            |t| dies(t, "Death's-Head Buzzard"),
+            1,
+            false,
+        ),
     ];
     ruling!(
         "Havoc Demon",
@@ -81,7 +91,7 @@ fn global_shrinks_affect_only_creatures_there_as_they_resolve() {
 
 #[test]
 fn feast_of_succession_with_no_creatures_still_makes_you_the_monarch() {
-    cr!("724.1");
+    cr!("725.1");
     ruling!(
         "Feast of Succession",
         "You can cast Feast of Succession to become the monarch while no creatures are on the battlefield."
@@ -203,12 +213,16 @@ fn illegal_targets_stop_the_whole_spell() {
     cast_new(&mut t, P0, "Rat Out", &[obj(bears)]);
     destroy(&mut t, bears);
     t.resolve_all();
-    assert_eq!(crate::r_s01_common::tokens(&t, P0).len(), 1, "no second Rat");
+    assert_eq!(
+        crate::r_s01_common::tokens(&t, P0).len(),
+        1,
+        "no second Rat"
+    );
 }
 
 #[test]
 fn moment_of_craving_lifegain_triggers_see_the_creature_before_it_dies() {
-    cr!("608.3", "704.5f", "603.3");
+    cr!("704.3", "704.5f", "603.3");
     ruling!(
         "Moment of Craving",
         "The target creature will still be on the battlefield when you gain life, even if its toughness has been reduced to 0 or less. Any abilities it has that interact with gaining life do so as appropriate. If any abilities trigger on you gaining life, the creature will be put into its owner's graveyard after that ability triggers but before it resolves."
@@ -283,7 +297,9 @@ fn shrink_triggers_with_forced_targets() {
 
 #[test]
 fn skulking_killer_triggers_anyway_and_checks_on_resolution() {
-    cr!("603.4", "608.2c");
+    // (Its "if" isn't an intervening "if", CR 603.4: it ends the effect, so the ability
+    // triggers either way and the effect checks it as it resolves.)
+    cr!("603.2", "608.2c");
     ruling!(
         "Skulking Killer",
         "Skulking Killer's ability triggers even if all your opponents control more than one creature. If the targeted creature's controller controls any other creatures as the ability resolves, the ability won't do anything. Notably, that player could cast a creature spell with flash or create a creature token in response to avoid the -2/-2 effect."

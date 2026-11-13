@@ -128,12 +128,14 @@ pub fn compile(text: &str, ctx: &CompileContext) -> Compiled {
             continue;
         }
         // A pronoun left without an antecedent, or an instruction to repeat a process
-        // outside any process, means the text wasn't understood.
+        // outside any process, means the text wasn't understood (so does a reflexive
+        // ability read as having an intervening "if" its text doesn't have).
         let understood = |v: &Vec<Ability>| {
             !v.iter().any(|a| {
                 patterns::oracle_hardening_referents::has_no_referent(a)
                     || crate::repeat_process::has_stray_repeat(a)
                     || patterns::filters_relational::unresolved(a)
+                    || patterns::reflexive_intervening_if::misread(a)
             })
         };
         let parsed = parse_ability(&block, ctx).filter(understood).or_else(|| {

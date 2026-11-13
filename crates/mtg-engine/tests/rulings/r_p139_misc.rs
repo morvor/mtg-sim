@@ -46,7 +46,7 @@ fn spell_effect(name: &str) -> Effect {
 
 #[test]
 fn living_end_exiles_then_sacrifices_then_returns() {
-    cr!("608.2c", "701.21a");
+    cr!("608.2c", "608.2e", "701.21a");
     ruling!(
         "Living End",
         "While Living End is resolving, first each player exiles their graveyard at the same time, then each player sacrifices all creatures they control at the same time, and finally each player puts their exiled cards onto the battlefield at the same time."
@@ -100,9 +100,20 @@ fn hallowed_burial_puts_every_creature_on_the_bottom_at_once() {
     create_token(&mut t, P1, "Soldier");
     cast_new(&mut t, P0, "Hallowed Burial", &[]);
     t.resolve_all();
-    assert_eq!(t.g.permanents().filter(|o| o.is(CardType::Creature)).count(), 0);
-    assert_eq!(t.g.players[0].library.first().copied(), Some(t.g.current(bears)));
-    assert_eq!(t.g.players[1].library.first().copied(), Some(t.g.current(myr)));
+    assert_eq!(
+        t.g.permanents()
+            .filter(|o| o.is(CardType::Creature))
+            .count(),
+        0
+    );
+    assert_eq!(
+        t.g.players[0].library.first().copied(),
+        Some(t.g.current(bears))
+    );
+    assert_eq!(
+        t.g.players[1].library.first().copied(),
+        Some(t.g.current(myr))
+    );
     assert!(tokens(&t, P1).is_empty());
     assert_eq!(t.library_size(P1), 31, "the token ceased to exist");
 }
@@ -127,7 +138,11 @@ fn terminus_each_owner_orders_their_creatures() {
         .filter(|(_, d)| matches!(d, Decision::Order { .. } | Decision::PutOnBottom { .. }))
         .map(|(p, _)| *p)
         .collect();
-    assert_eq!(orderers, vec![P1], "P1 orders its two creatures; P0 has only one");
+    assert_eq!(
+        orderers,
+        vec![P1],
+        "P1 orders its two creatures; P0 has only one"
+    );
     let bottom: Vec<ObjectId> = t.g.players[1].library[..2].to_vec();
     assert!(bottom.contains(&t.g.current(a)) && bottom.contains(&t.g.current(b)));
 }
@@ -222,9 +237,10 @@ fn dark_intimations_returns_the_card_chosen_as_it_resolves() {
     t.answer_choose(P0, &[obj(giant)]);
     let from = t.asked().len();
     cast_new(&mut t, P0, "Dark Intimations", &[]);
-    assert!(!t.asked()[from..]
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::ChooseEntities { .. } | Decision::ChooseTargets { .. })));
+    assert!(!t.asked()[from..].iter().any(|(_, d)| matches!(
+        d,
+        Decision::ChooseEntities { .. } | Decision::ChooseTargets { .. }
+    )));
     // The returned card is chosen with the spell resolving; no priority in between.
     let seen = crate::r_s01_common::watch(
         &mut t,
@@ -234,7 +250,11 @@ fn dark_intimations_returns_the_card_chosen_as_it_resolves() {
     );
     t.resolve();
     assert!(t.in_hand(P0, "Hill Giant") && t.in_graveyard(P0, "Grizzly Bears"));
-    assert_eq!(*seen.lock().unwrap(), vec![1], "chosen while the spell is resolving");
+    assert_eq!(
+        *seen.lock().unwrap(),
+        vec![1],
+        "chosen while the spell is resolving"
+    );
 }
 
 #[test]
@@ -271,7 +291,7 @@ fn infernal_offering_you_choose_first_then_the_opponent_without_targets() {
 
 #[test]
 fn liliana_of_the_veil_piles_can_split_an_aura_from_its_creature() {
-    cr!("700.3", "303.4c");
+    cr!("700.3", "701.21a");
     ruling!(
         "Liliana of the Veil",
         "When Liliana’s third ability resolves, you put each permanent the player controls into one of the two piles. For example, you could put a creature into one pile and an Aura enchanting that creature into the other pile."
@@ -297,7 +317,7 @@ fn liliana_of_the_veil_piles_can_split_an_aura_from_its_creature() {
 
 #[test]
 fn spawnsire_casts_eldrazi_during_resolution_then_they_resolve_in_turn() {
-    cr!("608.2g", "601.2", "307.1");
+    cr!("608.2g", "601.2", "302.1");
     interp!("outside-the-game-is-the-sideboard");
     ruling!(
         "Spawnsire of Ulamog",
@@ -321,7 +341,11 @@ fn spawnsire_casts_eldrazi_during_resolution_then_they_resolve_in_turn() {
     t.resolve();
     assert_eq!(t.stack_len(), 2, "both cast, neither resolved");
     t.resolve();
-    assert_eq!(t.named_on_battlefield("Eldrazi Devastator").len() + t.named_on_battlefield("Ulamog's Crusher").len(), 1);
+    assert_eq!(
+        t.named_on_battlefield("Eldrazi Devastator").len()
+            + t.named_on_battlefield("Ulamog's Crusher").len(),
+        1
+    );
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Eldrazi Devastator").len(), 1);
     assert_eq!(t.named_on_battlefield("Ulamog's Crusher").len(), 1);
@@ -353,7 +377,7 @@ fn spawnsire_casts_eldrazi_during_resolution_then_they_resolve_in_turn() {
 
 #[test]
 fn activation_conditions() {
-    cr!("606.3", "602.5b");
+    cr!("606.3", "602.5");
     ruling!(
         "Liliana of the Veil",
         "You can activate Liliana’s first ability even if some or all players will be unable to discard a card."
@@ -384,7 +408,7 @@ fn activation_conditions() {
 
 #[test]
 fn ajani_avenger_loyalty_abilities_the_turn_he_enters_only_at_sorcery_speed() {
-    cr!("606.3", "307.1");
+    cr!("606.3");
     ruling!(
         "Ajani, Nacatl Pariah // Ajani, Nacatl Avenger",
         "You can activate one of Ajani, Nacatl Avenger's loyalty abilities the turn he enters the battlefield. However, you may do so only during one of your main phases when the stack is empty. For example, if Ajani, Nacatl Avenger enters the battlefield during combat, there will be an opportunity for your opponent to remove him before you can activate one of his abilities."
@@ -401,14 +425,20 @@ fn ajani_avenger_loyalty_abilities_the_turn_he_enters_only_at_sorcery_speed() {
     let bolt = t.hand(P1, "Lightning Bolt");
     t.lands(P1, "Mountain", 1);
     t.cast_with(P1, bolt, &[Entity::Player(P0)]).unwrap();
-    assert!(t.activate(P0, ajani, 0, &[]).is_err(), "the stack isn't empty");
+    assert!(
+        t.activate(P0, ajani, 0, &[]).is_err(),
+        "the stack isn't empty"
+    );
     t.resolve_all();
-    assert!(t.activate(P0, ajani, 0, &[]).is_ok(), "main phase, empty stack");
+    assert!(
+        t.activate(P0, ajani, 0, &[]).is_ok(),
+        "main phase, empty stack"
+    );
 }
 
 #[test]
 fn ajani_avenger_zero_ability_targets_with_a_reflexive_trigger() {
-    cr!("603.12", "115.1");
+    cr!("603.12", "603.4", "115.1");
     ruling!(
         "Ajani, Nacatl Pariah // Ajani, Nacatl Avenger",
         "You don't choose a target for Ajani, Nacatl Avenger's second ability when you activate it. Rather, if you control a red permanent other than Ajani, Nacatl Avenger, a second \"reflexive\" ability triggers when you create a Cat Warrior creature token this way. You choose a target for that ability as it goes on the stack. Each player may respond to this triggered ability as normal."
@@ -431,7 +461,11 @@ fn ajani_avenger_zero_ability_targets_with_a_reflexive_trigger() {
         t.resolve();
         assert_eq!(tokens(&t, P0).len(), 1);
         if red {
-            assert_eq!(t.stack_len(), 1, "the reflexive trigger, which can be responded to");
+            assert_eq!(
+                t.stack_len(),
+                1,
+                "the reflexive trigger, which can be responded to"
+            );
             t.resolve_all();
             // Raging Goblin and the token.
             assert_eq!(t.life(P1), 18);
@@ -440,6 +474,72 @@ fn ajani_avenger_zero_ability_targets_with_a_reflexive_trigger() {
             assert_eq!(t.life(P1), 20);
         }
     }
+}
+
+#[test]
+fn sigil_of_myrkul_reflexive_intervening_if_checked_as_it_triggers_and_as_it_resolves() {
+    cr!("603.4", "603.12");
+    ruling!(
+        "Sigil of Myrkul",
+        "After you mill a card, if there are four or more creature cards in your graveyard, the reflexive triggered ability will trigger."
+    );
+    supported("Sigil of Myrkul");
+    // (the milled card, a creature card leaving the graveyard in response)
+    for (milled, gone) in [("Forest", false), ("Gray Ogre", false), ("Gray Ogre", true)] {
+        let mut t = TestGame::new(2);
+        let bears: Vec<ObjectId> = (0..3).map(|_| t.graveyard(P0, "Grizzly Bears")).collect();
+        let giant = t.battlefield(P0, "Hill Giant");
+        t.battlefield(P0, "Sigil of Myrkul");
+        t.library_top(P0, milled);
+        t.answer_targets(P0, &[obj(giant)]);
+        t.advance_to(P0, Step::BeginningOfCombat);
+        t.settle();
+        assert_eq!(t.stack_len(), 1, "the Sigil's own trigger");
+        let from = t.asked().len();
+        t.resolve();
+        // Three creature cards after milling a Forest: it doesn't trigger at all (no
+        // target is chosen); four after milling the Ogre: it does.
+        let triggered = milled == "Gray Ogre";
+        assert_eq!(t.stack_len(), usize::from(triggered), "{milled}");
+        assert_eq!(
+            t.asked()[from..]
+                .iter()
+                .any(|(_, d)| matches!(d, Decision::ChooseTargets { .. })),
+            triggered,
+            "{milled}"
+        );
+        if gone {
+            crate::r_s05_common::move_to(&mut t, bears[0], Zone::Exile);
+        }
+        t.resolve_all();
+        // Checked again as it resolves: three creature cards then, nothing happens.
+        let expected = if triggered && !gone { 1 } else { 0 };
+        assert_eq!(t.counters(giant, "+1/+1"), expected, "{milled} {gone}");
+    }
+}
+
+#[test]
+fn a_trailing_if_after_when_you_do_isnt_read_as_an_intervening_if() {
+    cr!("603.4", "603.12");
+    use mtg_engine::oracle::{compile, CompileContext};
+    let tl = mtg_engine::types::TypeLine::parse("Enchantment");
+    let ctx = CompileContext {
+        card_name: "Probe",
+        full_name: "Probe",
+        type_line: &tl,
+        layout: mtg_engine::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: None,
+        toughness: None,
+    };
+    // An intervening "if" right after "When you do," (CR 603.4).
+    let intervening = "At the beginning of combat on your turn, mill a card. When you do, if there are four or more creature cards in your graveyard, draw a card.";
+    assert!(compile(intervening, &ctx).unsupported.is_empty());
+    // The same compiled body, but this "if" is checked only as the ability resolves: it
+    // isn't read as an intervening "if" (the text isn't accepted).
+    let trailing = "At the beginning of combat on your turn, mill a card. When you do, draw a card if there are four or more creature cards in your graveyard.";
+    assert_eq!(compile(trailing, &ctx).unsupported.len(), 1);
 }
 
 #[test]
@@ -502,7 +602,7 @@ fn rootcast_apprenticeship_modes_need_legal_targets_and_may_repeat() {
 
 #[test]
 fn reweave_reveals_only_after_a_sacrifice_and_finds_a_permanent_card() {
-    cr!("701.21a", "110.4b", "308.1");
+    cr!("701.21a", "110.4a", "308.1");
     ruling!(
         "Reweave",
         "The player reveals cards only if the targeted permanent gets sacrificed."
@@ -540,7 +640,10 @@ fn reweave_reveals_only_after_a_sacrifice_and_finds_a_permanent_card() {
 #[test]
 fn ulamogs_dreadsire_face_down_permanents_cant_pay_its_ward() {
     cr!("708.2a", "702.21a", "202.3");
-    ruling!("Ulamog's Dreadsire", "The mana value of a face-down permanent is 0.");
+    ruling!(
+        "Ulamog's Dreadsire",
+        "The mana value of a face-down permanent is 0."
+    );
     supported("Ulamog's Dreadsire");
     let mut t = TestGame::new(2);
     let dreadsire = t.battlefield(P0, "Ulamog's Dreadsire");
@@ -576,7 +679,7 @@ fn shuttle_steals(t: &mut TestGame, stolen: ObjectId) -> ObjectId {
 
 #[test]
 fn midnight_crusader_shuttle_stolen_creature_attacks_without_being_declared() {
-    cr!("508.4", "508.3a", "702.3b");
+    cr!("508.4", "508.4c", "508.3a", "702.3b");
     ruling!(
         "Midnight Crusader Shuttle",
         "When a creature becomes attacking this way, it wasn't declared as an attacker, so triggered abilities that trigger when a creature attacks won't trigger. Similar, all restrictions or costs to attack are ignored. For example, if the chosen creature has defender, it could still end up being an attacking creature this way."
@@ -640,8 +743,61 @@ fn teferi_phasing_out_removes_an_attacker_and_phasing_in_isnt_summoning_sickness
 }
 
 #[test]
+fn teferi_timeless_voyager_phasing_removes_attackers_and_phased_in_creatures_can_attack() {
+    cr!("702.26b", "506.4", "302.6");
+    // Teferi, Timeless Voyager's wording: "Each creature target opponent controls phases
+    // out. Until the end of your next turn, they can't phase in."
+    ruling!(
+        "Teferi, Timeless Voyager",
+        "An attacking creature that phases out is removed from combat."
+    );
+    ruling!(
+        "Teferi, Timeless Voyager",
+        "Any creatures that phase in during their controller's untap step will be able to attack and pay a cost of {T} during that turn."
+    );
+    const TEFERI: &str = "Teferi, Timeless Voyager";
+    supported(TEFERI);
+    // Its last ability's effect during combat (as if it could be activated then): the
+    // attacking Hill Giant phases out and is removed from combat.
+    let minus_eight = match &mtg_engine::card::card(TEFERI).front().chars.abilities[2].kind {
+        AbilityKind::Activated(a) => a.body.effect.clone(),
+        k => panic!("{k:?}"),
+    };
+    let mut t = TestGame::new(2);
+    let teferi = t.battlefield(P0, TEFERI);
+    t.set_step(P1, Step::BeginningOfCombat);
+    let giant = t.battlefield(P1, "Hill Giant");
+    attack_with(&mut t, &[(giant, Entity::Player(P0))]);
+    assert!(attacking(&t, giant));
+    crate::r_s03_common::run_effect(&mut t, Some(teferi), P0, minus_eight, &[Entity::Player(P1)]);
+    assert!(t.obj_now(giant).phased_out);
+    assert!(!attacking(&t, giant));
+    t.advance_to(P1, Step::PostcombatMain);
+    assert_eq!(t.life(P0), 20);
+    // Phased out by the ability; in again during P1's untap step after P0's next turn:
+    // the Prodigal Pyromancer can tap for its ability and attack that turn.
+    let mut t = TestGame::new(2);
+    let teferi = t.battlefield(P0, TEFERI);
+    t.g.objects[teferi.0 as usize]
+        .counters
+        .insert("loyalty".into(), 8);
+    let pyro = t.battlefield(P1, "Prodigal Pyromancer");
+    t.activate(P0, teferi, 2, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert!(t.obj_now(pyro).phased_out);
+    t.advance_to(P1, Step::Upkeep);
+    assert!(t.obj_now(pyro).phased_out);
+    t.advance_to(P0, Step::Upkeep);
+    t.advance_to(P1, Step::PrecombatMain);
+    assert!(!t.obj_now(pyro).phased_out);
+    assert!(crate::r_s02_common::can_activate(&mut t, P1, pyro));
+    t.set_step(P1, Step::BeginningOfCombat);
+    assert!(can_attack(&mut t, pyro));
+}
+
+#[test]
 fn weeping_angel_stops_being_a_creature_and_its_prevented_damage_triggers_nothing() {
-    cr!("205.1b", "615.1", "510.2");
+    cr!("205.1a", "615.1", "510.2");
     ruling!(
         "Weeping Angel",
         "As the first triggered ability of Weeping Angel resolves, it continues to be an artifact but will stop being both an Alien and an Angel until it becomes a creature again. It's just a statue, how dangerous could it be?"
@@ -655,7 +811,11 @@ fn weeping_angel_stops_being_a_creature_and_its_prevented_damage_triggers_nothin
     let o = t.obj_now(angel);
     assert!(!o.is(CardType::Creature));
     assert!(o.is(CardType::Artifact));
-    assert!(!o.chars.subtypes.iter().any(|s| s == "Angel" || s == "Alien"));
+    assert!(!o
+        .chars
+        .subtypes
+        .iter()
+        .any(|s| s == "Angel" || s == "Alien"));
 
     ruling!(
         "Weeping Angel",
@@ -694,15 +854,14 @@ fn the_grim_captain_chooses_what_the_creature_attacks() {
     t.lands(P0, "Wastes", 4);
     let es: Vec<Entity> = mats.iter().map(|o| obj(*o)).collect();
     t.answer_choose(P0, &es);
-    let uid = t
-        .g
-        .obj(throne)
-        .chars
-        .abilities
-        .iter()
-        .find(|a| matches!(a.kind, AbilityKind::Activated(_)) && a.text.starts_with("Craft"))
-        .map(|a| a.uid)
-        .unwrap();
+    let uid =
+        t.g.obj(throne)
+            .chars
+            .abilities
+            .iter()
+            .find(|a| matches!(a.kind, AbilityKind::Activated(_)) && a.text.starts_with("Craft"))
+            .map(|a| a.uid)
+            .unwrap();
     t.g.turn.priority = Some(P0);
     t.g.activate_ability(P0, throne, uid).expect("craft");
     t.clear_answers();

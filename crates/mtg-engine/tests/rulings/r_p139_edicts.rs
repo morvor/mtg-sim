@@ -5,14 +5,14 @@
 //! discarded, returned, put onto the battlefield) at the same time (CR 101.4, 701.21a).
 
 use crate::r_p137_common::*;
+use crate::r_s04_common::add_mana;
 use crate::r_s06_common::damage;
 use crate::r_s19_common::add_lore;
 use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::mana::ManaType;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
-use mtg_engine::mana::ManaType;
 use mtg_engine::types::CardType;
-use crate::r_s04_common::add_mana;
 use mtg_engine::*;
 
 /// The number of permanents now, then everything on the stack resolved.
@@ -55,7 +55,7 @@ fn hands(g: &mtg_engine::game::Game) -> [usize; 3] {
 
 #[test]
 fn edicts_on_your_turn_start_with_the_next_opponent() {
-    cr!("101.4", "701.21a");
+    cr!("101.4", "101.4b", "701.21a", "608.2e");
     ruling!(
         "Sheoldred // The True Scriptures",
         "To resolve Sheoldred’s enters-the-battlefield ability in a multiplayer game, the next opponent in turn order (or, if it’s an opponent’s turn, the opponent whose turn it is) chooses a creature they control to sacrifice. Then each other opponent in turn order does the same. Then those creatures are sacrificed at the same time."
@@ -107,13 +107,16 @@ fn edicts_on_your_turn_start_with_the_next_opponent() {
     });
     let seen = seen.unwrap();
     // When P2 chose its discard (after P1 chose), P1 hadn't discarded yet.
-    assert_eq!(seen.lock().unwrap().first().map(|h| (h[1], h[2])), Some((2, 2)));
+    assert_eq!(
+        seen.lock().unwrap().first().map(|h| (h[1], h[2])),
+        Some((2, 2))
+    );
     assert_eq!((t.hand_size(P1), t.hand_size(P2)), (1, 1));
 }
 
 #[test]
 fn edicts_on_an_opponents_turn_start_with_that_opponent() {
-    cr!("101.4", "701.21a", "603.3b");
+    cr!("101.4", "101.4b", "701.21a");
     ruling!(
         "Grave Pact",
         "When the triggered ability resolves, first the player whose turn it is (if it isn't your turn) chooses which creature they will sacrifice, then each other player in turn order does the same, then all chosen creatures are sacrificed at the same time."
@@ -148,10 +151,6 @@ fn edicts_on_an_opponents_turn_start_with_that_opponent() {
         damage(t, src, 1, dino);
         go(t)
     });
-    ruling!(
-        "Perilous Predicament",
-        "When Perilous Predicament resolves, first the player whose turn it is (if that player is an opponent) chooses which creatures they will sacrifice, then each other opponent in turn order does the same, then all chosen creatures are sacrificed at the same time."
-    );
 }
 
 #[test]
@@ -186,10 +185,65 @@ fn perilous_predicament_each_opponent_chooses_both_creatures_in_turn() {
     t.resolve_all();
     assert_eq!(choosers_since(&t, from), vec![P2, P2, P1, P1]);
     for s in &seen {
-        assert_eq!(*s.lock().unwrap(), vec![before; 2], "nothing sacrificed yet {:?}", seen);
+        assert_eq!(
+            *s.lock().unwrap(),
+            vec![before; 2],
+            "nothing sacrificed yet {:?}",
+            seen
+        );
     }
     assert!(kept.iter().all(|k| t.on_battlefield(*k)));
     assert!(lost.iter().all(|l| !t.on_battlefield(*l)));
+}
+
+#[test]
+fn release_each_player_chooses_in_turn_then_all_sacrifice_together() {
+    cr!("101.4", "701.21a");
+    // "Each player sacrifices an artifact, a creature, an enchantment, a land, and a
+    // planeswalker of their choice." compiles like Perilous Predicament: every player's
+    // choices come before anyone's sacrifices.
+    ruling!(
+        "Catch // Release",
+        "To resolve Release, the active player chooses a permanent they control for each of the listed types, then each other player in turn order does the same, then all the chosen permanents are sacrificed simultaneously."
+    );
+    supported("Catch // Release");
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Mountain", 5);
+    t.lands(P0, "Plains", 1);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Hill Giant");
+    for p in [P1, P2] {
+        t.battlefield(p, "Grizzly Bears");
+        t.battlefield(p, "Hill Giant");
+        t.battlefield(p, "Forest");
+        t.battlefield(p, "Island");
+    }
+    let seen = [P1, P2].map(|p| watch(&mut t, p, is_choose, |g| g.permanents().count()));
+    let spell = t.hand(P0, "Catch // Release");
+    let from = t.asked().len();
+    t.cast(P0, spell)
+        .method(mtg_engine::object::CastMethod::Half(1))
+        .go();
+    let before = t.g.permanents().count();
+    t.resolve_all();
+    let mut order = choosers_since(&t, from);
+    order.dedup();
+    assert_eq!(order, vec![P0, P1, P2]);
+    for s in &seen {
+        let s = s.lock().unwrap();
+        assert_eq!(s.len(), 2, "a creature and a land");
+        assert!(
+            s.iter().all(|n| *n == before),
+            "nothing sacrificed yet: {before} {s:?}"
+        );
+    }
+    // Each player sacrificed a creature and a land.
+    for p in [P0, P1, P2] {
+        assert_eq!(count_of(&t, p, CardType::Creature), 1, "{p:?}");
+    }
+    assert_eq!(count_of(&t, P0, CardType::Land), 5);
+    assert_eq!(count_of(&t, P1, CardType::Land), 1);
+    assert_eq!(count_of(&t, P2, CardType::Land), 1);
 }
 
 #[test]
@@ -245,7 +299,7 @@ fn eldest_reborn_chapter_two_discards_in_turn_order_at_the_same_time() {
 
 #[test]
 fn vile_mutilator_enchantments_then_creatures_each_in_turn_order() {
-    cr!("101.4", "701.21a");
+    cr!("101.4", "608.2e", "701.21a");
     ruling!(
         "Vile Mutilator",
         "While resolving Vile Mutilator's last ability, the next opponent in turn order chooses a nontoken enchantment they control, then each other opponent in turn order does the same. Then each of the chosen nontoken enchantments are sacrificed simultaneously. Finally, repeat this process for nontoken creatures."
@@ -267,7 +321,9 @@ fn vile_mutilator_enchantments_then_creatures_each_in_turn_order() {
     // When P2 chooses its creature, both enchantments are gone and no creature is.
     let seen = watch(&mut t, P2, is_choose, |g| {
         (
-            g.permanents().filter(|o| o.is(CardType::Enchantment)).count(),
+            g.permanents()
+                .filter(|o| o.is(CardType::Enchantment))
+                .count(),
             g.permanents().filter(|o| o.is(CardType::Creature)).count(),
         )
     });
@@ -319,7 +375,11 @@ fn ajani_avenger_opponents_choose_in_turn_order_then_sacrifice_the_rest() {
     assert_eq!(order[0], P1);
     assert_eq!(*order.last().unwrap(), P2);
     for s in &seen {
-        assert!(s.lock().unwrap().iter().all(|n| *n == before), "nothing sacrificed yet: {before} {:?}", s.lock().unwrap());
+        assert!(
+            s.lock().unwrap().iter().all(|n| *n == before),
+            "nothing sacrificed yet: {before} {:?}",
+            s.lock().unwrap()
+        );
     }
     assert!(kept.iter().all(|k| t.on_battlefield(*k)));
     assert!(lost.iter().all(|l| !t.on_battlefield(*l)));
@@ -339,7 +399,7 @@ fn friend_or_foe(t: &mut TestGame, card: &str, friends: &[PlayerId]) {
 
 #[test]
 fn pirs_whim_and_virtuss_maneuver_foes_choose_in_turn_order() {
-    cr!("101.4", "701.21a");
+    cr!("101.4", "101.4b", "701.21a");
     ruling!(
         "Pir's Whim",
         "When Pir’s Whim resolves and your foes perform their actions, first the next foe in turn order (or, if it’s a foe’s turn, that foe) chooses an artifact or enchantment they control, then each other foe in turn order does the same, then all chosen permanents are sacrificed at the same time. Foes will know choices made by earlier players when making their choices."
@@ -393,7 +453,7 @@ fn virtuss_maneuver_friends_choose_in_turn_order_then_return_together() {
 
 #[test]
 fn pirs_whim_friends_search_in_turn_order_then_lands_enter_together() {
-    cr!("101.4", "701.23a");
+    cr!("101.4", "701.23a", "701.23i");
     ruling!(
         "Pir's Whim",
         "When Pir’s Whim resolves and your friends perform their actions, first the next friend in turn order (or, if it’s a friend’s turn, that friend) searches their library for a land without revealing the card they choose, then each other friend in turn order does the same. Then all the lands are put onto the battlefield at the same time."
@@ -415,7 +475,11 @@ fn pirs_whim_friends_search_in_turn_order_then_lands_enter_together() {
     t.resolve_all();
     assert_eq!(choosers_since(&t, from), vec![P0, P1, P2]);
     for s in &seen {
-        assert_eq!(*s.lock().unwrap(), vec![0], "no land entered while searching");
+        assert_eq!(
+            *s.lock().unwrap(),
+            vec![0],
+            "no land entered while searching"
+        );
     }
     assert_eq!(lands(&t.g), 3);
 }
@@ -455,4 +519,3 @@ fn fandaniel_opponents_choose_up_to_one_then_those_who_didnt_lose_life() {
     assert_eq!(t.life(P1), 20);
     assert_eq!(t.life(P2), 16);
 }
-

@@ -11,7 +11,7 @@ use crate::r_s04_common::{add_mana, top_of_stack};
 use crate::r_s06_common::give_control;
 use crate::r_s17_common::become_copy;
 use crate::r_s25_common::cast_new;
-use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::decision::Answer;
 use mtg_engine::mana::ManaType;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -200,7 +200,9 @@ fn ulamogs_cast_trigger_resolves_even_if_the_spell_is_countered() {
     assert!(t.on_battlefield(ring), "the trigger hasn't resolved yet");
     t.resolve_all();
     assert!(!t.on_battlefield(ring));
-    assert!(t.named_on_battlefield("Ulamog, the Infinite Gyre").is_empty());
+    assert!(t
+        .named_on_battlefield("Ulamog, the Infinite Gyre")
+        .is_empty());
 }
 
 // ---------------------------------------------------------------------------------------
@@ -287,7 +289,13 @@ fn azlask_x_is_fixed_as_the_ability_resolves() {
     let azlask = t.battlefield(P0, "Azlask, the Swelling Scourge");
     let bears = t.battlefield(P0, "Grizzly Bears");
     crate::r_s13_common::add(&mut t, Entity::Player(P0), "experience", 2);
-    for ty in [ManaType::W, ManaType::U, ManaType::B, ManaType::R, ManaType::G] {
+    for ty in [
+        ManaType::W,
+        ManaType::U,
+        ManaType::B,
+        ManaType::R,
+        ManaType::G,
+    ] {
         add_mana(&mut t, P0, ty, 1);
     }
     t.activate(P0, azlask, 0, &[]).unwrap();
@@ -319,7 +327,7 @@ fn angrath_minus_three(t: &mut TestGame, target: ObjectId) {
 
 #[test]
 fn angrath_checks_mana_value_only_at_the_end_step() {
-    cr!("603.7", "608.2h", "707.2");
+    cr!("603.7", "603.7c", "608.2h", "707.2");
     ruling!(
         "Angrath, the Flame-Chained",
         "Whether the target creature has mana value 3 or less is checked only as the delayed triggered ability from Angrath’s second ability resolves during the end step."
@@ -362,9 +370,16 @@ fn angrath_and_slave_of_bolas_can_target_your_own_or_untapped_creatures() {
     t.g.objects[mine.0 as usize].tapped = true;
     angrath_minus_three(&mut t, mine);
     assert!(!t.obj_now(mine).tapped);
-    assert!(crate::r_s06_common::has_kw(&t, mine, mtg_engine::keywords::KeywordKind::Haste));
+    assert!(crate::r_s06_common::has_kw(
+        &t,
+        mine,
+        mtg_engine::keywords::KeywordKind::Haste
+    ));
 
-    ruling!("Slave of Bolas", "You may target a creature you already control.");
+    ruling!(
+        "Slave of Bolas",
+        "You may target a creature you already control."
+    );
     supported("Slave of Bolas");
     let mut t = TestGame::new(2);
     let mine = t.battlefield_sick(P0, "Grizzly Bears");
@@ -372,7 +387,11 @@ fn angrath_and_slave_of_bolas_can_target_your_own_or_untapped_creatures() {
     cast_new(&mut t, P0, "Slave of Bolas", &[obj(mine)]);
     t.resolve_all();
     assert!(!t.obj_now(mine).tapped);
-    assert!(crate::r_s06_common::has_kw(&t, mine, mtg_engine::keywords::KeywordKind::Haste));
+    assert!(crate::r_s06_common::has_kw(
+        &t,
+        mine,
+        mtg_engine::keywords::KeywordKind::Haste
+    ));
     t.advance_to(P0, Step::End);
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
@@ -403,13 +422,4 @@ fn spinal_embrace_sacrifices_only_if_you_still_control_it() {
         assert_eq!(t.on_battlefield(giant), !keep);
         assert_eq!(t.life(P0), if keep { 23 } else { 20 });
     }
-}
-
-#[allow(dead_code)]
-fn asked_kinds(t: &TestGame, from: usize) -> Vec<String> {
-    t.asked()[from..]
-        .iter()
-        .filter(|(_, d)| !matches!(d, Decision::Priority { .. }))
-        .map(|(p, d)| format!("{p:?} {d:?}"))
-        .collect()
 }
