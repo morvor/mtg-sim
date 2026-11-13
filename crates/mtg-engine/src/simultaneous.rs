@@ -70,6 +70,21 @@ pub fn for_each_player(g: &mut Game, players: Vec<PlayerId>, body: &Effect, ctx:
         Effect::AsPlayer { who, effect } => (Some(who), &**effect),
         e => (None, e),
     };
+    // "Each opponent sacrifices an artifact creature and a nonartifact creature" (Perilous
+    // Predicament): the instruction for one player, "for each of you, ...", performed as
+    // the iterated player is that player's own instructions, which all the players
+    // perform together (each choosing in turn, then the sacrifices at once: CR 101.4,
+    // 608.2e), not one player's whole instruction after another's.
+    let inner = match (as_player, inner) {
+        (
+            Some(PlayerRef::Iterated),
+            Effect::ForEachPlayer {
+                who: PlayerRef::You,
+                effect,
+            },
+        ) => &**effect,
+        (_, e) => e,
+    };
     let items = players.into_iter().map(Item::Player).collect();
     let frames = Frames::new(g, items, as_player, ctx);
     run(g, frames, inner, ctx);
