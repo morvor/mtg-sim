@@ -72,8 +72,9 @@ fn the_comparison_notices_different_games() {
 
 #[test]
 fn a_subgame_is_seat_symmetric() {
-    // CR 729.2: who goes first in a subgame is determined at random; found by this
-    // property, the engine drew among the players in seat order.
+    // CR 729.2: who goes first in a subgame is determined at random (a randomly selected
+    // player chooses); found by this property, the engine drew among the players in seat
+    // order.
     cr!("729.2", "101.4");
     let shahrazad = || deck("16 Plains, 4 Shahrazad, 10 Savannah Lions, 10 Serra Angel");
     let mut s = setup(vec![shahrazad(), shahrazad(), shahrazad()], 21);

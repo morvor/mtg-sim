@@ -159,7 +159,9 @@ pub fn begin(g: &mut Game) -> Subgame {
         sub.designate_commander(p, &name);
     }
     // The chooser chooses as the subgame starts. The choice replaces the rest of
-    // CR 103.1's methods (an archenemy or a variant's seat doesn't go first instead).
+    // CR 103.1's methods: in a subgame of an Archenemy, Team vs. Team or Emperor game,
+    // the archenemy or the variant's pick doesn't go first instead (CR 103.1b, 808.4,
+    // 809.4; provisional register entry `subgame-variants-dont-decide-who-goes-first`).
     let first = choose_first(&mut sub, chooser);
     sub.config.starting_player = Some(first);
     // CR 729.4: every main-game card a player owns, and their cards outside the main
