@@ -1725,6 +1725,16 @@ impl Renderer<'_> {
                     let p = self.is_predicate(inner, !negated);
                     return p;
                 }
+                // "is attacking or blocking alone" (Thijarian Witness): alone either way
+                // (CR 506.5).
+                Filter::Or(v)
+                    if matches!(
+                        v.as_slice(),
+                        [Filter::AttackingAlone, Filter::BlockingAlone]
+                    ) =>
+                {
+                    "attacking or blocking alone".into()
+                }
                 // "is attacking or blocking": a creature in combat (CR 506.4).
                 Filter::Or(v) if v.iter().all(|x| combat_status(x).is_some()) => {
                     let w: Vec<String> = v

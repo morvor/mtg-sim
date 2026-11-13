@@ -147,6 +147,11 @@ pub(crate) fn state_filter(s: &str) -> Option<Filter> {
         // CR 506.5.
         "attacking alone" => Some(Filter::AttackingAlone),
         "blocking alone" => Some(Filter::BlockingAlone),
+        // "alone" applies to both (Thijarian Witness), not only to "blocking".
+        "attacking or blocking alone" => Some(Filter::Or(vec![
+            Filter::AttackingAlone,
+            Filter::BlockingAlone,
+        ])),
         // "As long as ~ is attached to a creature" (Conqueror's Flail).
         "attached to a creature" => Some(Filter::Custom(
             crate::kw::attached_to_creature::ATTACHED_TO_A_CREATURE.into(),

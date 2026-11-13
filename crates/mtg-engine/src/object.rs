@@ -646,6 +646,10 @@ pub struct LeftBattlefield {
     /// action is a new object, CR 400.7).
     #[serde(default)]
     pub attachments: Vec<ObjectId>,
+    /// "attacking alone", "blocking alone", "attacking a player alone" as it left (CR
+    /// 506.5, 506.6): judged before any of the creatures leaving with it had left.
+    #[serde(default)]
+    pub alone: crate::combat::AloneStatus,
 }
 
 /// The value of X an object uses (CR 107.3e): the value announced for a spell or ability
