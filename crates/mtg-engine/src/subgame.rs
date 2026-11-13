@@ -7,8 +7,9 @@
 //! * As it starts, each player's main-game library becomes their subgame deck, with their
 //!   supplementary decks (planar, scheme, attraction decks), vanguard, and a commander in
 //!   the main-game command zone (CR 729.2, 729.2a–c); a randomly selected player chooses
-//!   who takes the first turn (CR 729.2, 103.1). The main-game objects and cards outside the main game are outside the
-//!   subgame (CR 729.4): each player's cards there can be brought in (e.g. by a wish).
+//!   who takes the first turn (CR 729.2, 103.1). The main-game objects and cards outside
+//!   the main game are outside the subgame (CR 729.4): each player's cards there can be
+//!   brought in (e.g. by a wish).
 //! * As it ends, each player's traditional cards in the subgame (other than in its command
 //!   zone) are shuffled into their main-game library (CR 729.5), supplementary decks,
 //!   vanguards and commanders return to the main-game command zone (CR 729.5a–c), and
