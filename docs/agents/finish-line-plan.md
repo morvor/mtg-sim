@@ -519,7 +519,7 @@ Readings the user accepted for now, but wants to look at again before calling th
   - a card that never arrives (Containment Priest with Reanimate);
   - Deicide's searched name for a copied God.
 - **A phased-out source's characteristics.** Entry `phased-out-source-still-acts` (decided Nov 12) uses the source's characteristics while it is phased out, not its last known information. Example: Spikeshot Elder under Glorious Anthem deals 1, not 2.
-- **Loops:** a robust system later (D4, Nov 10).
+- **Loops:** a robust system later (D4, Nov 10). Includes the limited range of influence case: CR 104.4f makes a mandatory loop a draw only for the players involved and those within their range, while `settle-loop-is-a-draw` (decided Nov 12) draws the whole game.
 - **Counter modifiers on an entering permanent.** Entry `entering-counter-modifiers-after-enters-with` (a deviation, to be fixed later; the user, Nov 12): the effects that modify how many counters are put apply after all of a permanent's "enters with" effects, so an opponent's Vorinclex, Monstrous Raider can't be interleaved with Master Biomancer (Spike Feeder enters with 2 counters, not the 3 the controller could choose).
 
 ### Already decided, not re-asked

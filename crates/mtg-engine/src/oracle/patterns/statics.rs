@@ -2414,9 +2414,11 @@ fn parse_predicate(
             return None;
         }
         if mentions_x(&pv) || mentions_x(&tv) {
-            let x = x?;
-            pv = subst_x(pv, x);
-            tv = subst_x(tv, x);
+            // CR 107.1b: a calculation yielding a negative X uses 0 instead ("gets
+            // -X/-X, where X is your life total" with a negative life total).
+            let x = super::r107_numbers::nonnegative(x?.clone());
+            pv = subst_x(pv, &x);
+            tv = subst_x(tv, &x);
             used_x.set(true);
         }
         return Some(vec![Out::Mod(Modification::ModifyPT(pv, tv))]);
