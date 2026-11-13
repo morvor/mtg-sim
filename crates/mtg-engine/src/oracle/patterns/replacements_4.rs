@@ -1,0 +1,138 @@
+//! Replacement grammar IV (cards3-costs-mana-replacements).
+//!
+//! - "The next time you would lose the game this turn, instead [effect]." (Stunning
+//!   Reversal): a one-use replacement effect on the game-loss event (CR 104.3, 614.1a),
+//!   for the rest of the turn.
+//! - "Creatures dealt damage by ~ this turn can't be regenerated this turn." (the ability
+//!   Bone Shaman gains): a static restriction on the creatures the source has dealt damage
+//!   to this turn (CR 701.19c), which stops their regeneration shields from replacing
+//!   their destruction.
+//! - "The first time you would draw a card each turn except the first card you draw during
+//!   each of your draw steps, you draw four cards instead." (Reed Richards, Smartest Man;
+//!   CR 121.6, 614.1a; `kw/first_draw_except_draw_step.rs`).
+//! - "the creature an opponent controls" after "target creature an opponent controls" in
+//!   the same ability ("Target creature you control fights target creature an opponent
+//!   controls. If the creature an opponent controls would die this turn, exile it
+//!   instead."): that target, named again by its own words ("the opponent" for "an
+//!   opponent", as The Last Agni Kai words it).
+
+use super::{EffectPattern, StaticPattern};
+use crate::oracle::CompileContext;
+use crate::ability::*;
+use crate::oracle::effects::{parse_effect_text, Builder};
+use crate::oracle::phrases::end;
+
+/// "the [words of a target]" naming a target chosen earlier in the ability: the words
+/// after "target" in its text, ending in who controls it (so "the creature" alone, which
+/// usually means something else, isn't read this way). The target must be the only one
+/// with those words.
+pub(crate) fn target_named_again(s: &str, b: &mut Builder) -> Option<(Sel, String)> {
+    let r = s.strip_prefix("the ")?;
+    let mut found: Option<(usize, usize)> = None;
+    for (i, t) in b.targets.iter().enumerate() {
+        let Some(words) = t.text.strip_prefix("target ") else {
+            continue;
+        };
+        // A controller qualifier tells the targets apart ("creature you control",
+        // "creature an opponent controls").
+        if words.contains("target") || !(words.ends_with(" control") || words.ends_with(" controls")) {
+            continue;
+        }
+        let alt = words.replace(" an opponent ", " the opponent ");
+        for w in [words, alt.as_str()] {
+            let Some(rest) = r.strip_prefix(w) else {
+                continue;
+            };
+            if !(rest.is_empty() || rest.starts_with([' ', ',', '.', '\''])) {
+                continue;
+            }
+            if found.is_some_and(|(j, _)| j != i) {
+                return None;
+            }
+            found = Some((i, w.len()));
+        }
+    }
+    let (i, len) = found?;
+    let sel = Sel::Target(i as u8);
+    b.it = sel.clone();
+    Some((sel, r[len..].to_string()))
+}
+
+/// "the next time you would lose the game this turn, instead [effect]".
+fn next_loss_instead(l: &str, b: &mut Builder) -> Option<Effect> {
+    let r = end(l).strip_prefix("the next time you would lose the game this turn, instead ")?;
+    let saved = b.targets.len();
+    let e = parse_effect_text(r, b);
+    if b.targets.len() != saved {
+        b.targets.truncate(saved);
+        return None;
+    }
+    Some(Effect::AddReplacement {
+        def: ReplacementDef {
+            event: ReplacementEvent::LoseGame(PlayerFilter::You),
+            action: ReplacementAction::Instead(Box::new(e?)),
+            self_replacement: false,
+            optional: false,
+        },
+        duration: Duration::EndOfTurn,
+        uses: Some(1),
+    })
+}
+
+inventory::submit! { EffectPattern { name: "replacements 4: the next time you would lose the game this turn, instead [effect]", priority: 70, parse: next_loss_instead } }
+
+/// "creatures dealt damage by ~ this turn can't be regenerated[ this turn]".
+fn dealt_damage_cant_regenerate(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let l = end(l);
+    let l = l.strip_suffix(" this turn").unwrap_or(l);
+    if l != "creatures dealt damage by ~ this turn can't be regenerated" {
+        return None;
+    }
+    let f = Filter::and(vec![
+        Filter::creature(),
+        Filter::DealtDamageThisTurnBy(Box::new(Sel::This)),
+    ]);
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Restriction(
+            Restriction::CantBeRegenerated(f),
+        ))),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "replacements 4: creatures dealt damage by ~ this turn can't be regenerated", priority: 100, parse: dealt_damage_cant_regenerate } }
+
+/// "the first time you would draw a card each turn except the first card you draw during
+/// each of your draw steps, you draw N cards instead".
+fn first_draw_except_draw_step(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
+    let r = end(l).strip_prefix(
+        "the first time you would draw a card each turn except the first card you draw during each of your draw steps, you draw ",
+    )?;
+    let (n, tail) = crate::oracle::phrases::parse_number(r)?;
+    if tail.trim() != "cards instead" || !matches!(n, Value::Const(_)) {
+        return None;
+    }
+    let def = ReplacementDef {
+        event: ReplacementEvent::Where {
+            event: Box::new(ReplacementEvent::Draw(PlayerFilter::And(vec![
+                PlayerFilter::You,
+                PlayerFilter::Not(Box::new(PlayerFilter::FirstDrawInDrawStep)),
+            ]))),
+            cond: Condition::Custom(
+                crate::kw::first_draw_except_draw_step::FIRST_DRAW_EXCEPT_DRAW_STEP.into(),
+            ),
+        },
+        action: ReplacementAction::Instead(Box::new(Effect::Draw {
+            who: PlayerRef::You,
+            n,
+        })),
+        self_replacement: false,
+        optional: false,
+    };
+    Some(vec![AbilityDef::new(
+        AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(def))),
+        text,
+    )])
+}
+
+inventory::submit! { StaticPattern { name: "replacements 4: the first time you would draw a card each turn except the first in each draw step", priority: 100, parse: first_draw_except_draw_step } }

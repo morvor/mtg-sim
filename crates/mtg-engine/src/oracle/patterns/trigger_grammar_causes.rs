@@ -1,0 +1,312 @@
+//! Trigger events qualified by their cause, as grammar:
+//!
+//! * "Whenever you tap an untapped creature an opponent controls" (Solitary Sanctuary,
+//!   Icewrought Sentry, Hylda of the Icy Crown), "Whenever you tap one or more untapped
+//!   creatures your opponents control" (Sharae of Numbing Depths): the permanent becomes
+//!   tapped (CR 603.2e: an actual change) and you tapped it — the effect of a spell or
+//!   ability you control tapped it, or you tapped it to pay a cost or by declaring it as
+//!   an attacker (CR 701.26a, 508.1f). The event records who tapped it
+//!   (`Event::Tapped::by`).
+//! * "if it isn't being declared as an attacker" (Rhoda, Geist Avenger, Verity Circle):
+//!   it didn't become tapped by being declared as an attacker (CR 508.1f; Verity Circle's
+//!   rulings).
+
+use super::{ConditionPattern, TriggerPattern};
+use crate::ability::*;
+use crate::oracle::phrases::{end, parse_object_phrase};
+
+/// `Filter::Custom` on the trigger event's permanent: it didn't become tapped by being
+/// declared as an attacker (`kw/tap_causes.rs`).
+pub const NOT_TAPPED_ATTACKING: &str = "tap cause: not declared as an attacker";
+
+fn you_tap(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let t = end(t);
+    let (batch, r) = match t.strip_prefix("you tap one or more untapped ") {
+        Some(r) => (true, r),
+        None => (false, t.strip_prefix("you tap an untapped ")?),
+    };
+    let (f, plural, rest) = parse_object_phrase(r)?;
+    if !rest.trim().is_empty() || plural != batch || f.zone().is_some() {
+        return None;
+    }
+    let tapped_by_you = TriggerCond::Where {
+        trigger: Box::new(TriggerCond::BecomesTapped(f)),
+        cond: Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::You),
+    };
+    let trigger = if batch {
+        TriggerCond::Batched {
+            trigger: Box::new(tapped_by_you),
+            per: BatchPer::Batch,
+        }
+    } else {
+        tapped_by_you
+    };
+    Some((trigger, Sel::TriggerObject, PlayerRef::You))
+}
+
+inventory::submit! { TriggerPattern { name: "trigger causes: you tap an untapped creature an opponent controls", priority: 100, parse: you_tap } }
+
+fn not_declared_attacking(c: &str) -> Option<Condition> {
+    matches!(
+        end(c),
+        "it isn't being declared as an attacker" | "that creature isn't being declared as an attacker"
+    )
+    .then(|| {
+        Condition::SelMatches(
+            Sel::TriggerObject,
+            Filter::Custom(NOT_TAPPED_ATTACKING.into()),
+        )
+    })
+}
+
+inventory::submit! { ConditionPattern { name: "trigger causes: it isn't being declared as an attacker", priority: 100, parse: not_declared_attacking } }
+
+/// `Condition::Custom`: the trigger event was caused by a spell or ability an opponent of
+/// the ability's controller controls (`EventInfo::caused_by`, `kw/tap_causes.rs`).
+pub const CAUSED_BY_OPPONENT: &str = "event cause: a spell or ability an opponent controls";
+
+/// Adds `cond` to the trigger event `t` (inside a batch, to each event of it).
+fn qualified(t: TriggerCond, cond: Condition) -> TriggerCond {
+    match t {
+        TriggerCond::Batched { trigger, per } => TriggerCond::Batched {
+            trigger: Box::new(qualified(*trigger, cond)),
+            per,
+        },
+        other => TriggerCond::Where {
+            trigger: Box::new(other),
+            cond,
+        },
+    }
+}
+
+/// "a spell or ability an opponent controls causes you to discard a card / cards"
+/// (Spiritual Focus, Pure Intentions): the discard events record the controller of the
+/// spell or ability whose effect made the player discard (`Event::Discarded::by`); a card
+/// discarded to pay a cost or by a game rule wasn't (Pure Intentions's rulings: "only the
+/// controller of the spell or ability matters").
+fn caused_by_opponent(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let r = end(t).strip_prefix("a spell or ability an opponent controls causes you to discard ")?;
+    if !matches!(r, "a card" | "cards" | "one or more cards") {
+        return None;
+    }
+    let what = if r == "cards" { "one or more cards" } else { r };
+    let (base, it, p) =
+        crate::oracle::triggers::parse_trigger_condition(&format!("whenever you discard {what}"))?;
+    if !matches!(
+        &base,
+        TriggerCond::Discards { .. } | TriggerCond::Batched { .. }
+    ) {
+        return None;
+    }
+    Some((
+        qualified(base, Condition::Custom(CAUSED_BY_OPPONENT.into())),
+        it,
+        p,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "trigger causes: a spell or ability an opponent controls causes you to discard", priority: 100, parse: caused_by_opponent } }
+
+/// "At the beginning of each of your main phases" (Frontier Siege, Carpet of Flowers):
+/// each main phase of your turns, the first one and any later ones (CR 505.1).
+fn each_of_your_main_phases(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    if end(t) != "at the beginning of each of your main phases" {
+        return None;
+    }
+    let at = |step| TriggerCond::BeginningOf {
+        step,
+        whose: PlayerRel::You,
+    };
+    Some((
+        TriggerCond::AnyOf(vec![
+            at(TriggerStep::PrecombatMain),
+            at(TriggerStep::PostcombatMain),
+        ]),
+        Sel::This,
+        PlayerRef::You,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "at the beginning of each of your main phases", priority: 100, parse: each_of_your_main_phases } }
+
+/// "Whenever one or more of your opponents are attacked" (Party Dude): a player attacks one
+/// or more of your opponents — once for each attack, however many of them it attacks
+/// (CR 508.3e).
+fn your_opponents_are_attacked(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    if end(t) != "one or more of your opponents are attacked" {
+        return None;
+    }
+    crate::oracle::triggers::parse_trigger_condition("whenever a player attacks one or more of your opponents")
+}
+
+inventory::submit! { TriggerPattern { name: "one or more of your opponents are attacked", priority: 100, parse: your_opponents_are_attacked } }
+
+/// "Whenever you pay life" (Font of Agonies): paying life is a kind of losing life the
+/// word "pay" names (CR 119.4; Font of Agonies's rulings); "that many" is the amount paid.
+fn you_pay_life(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let who = match end(t) {
+        "you pay life" => PlayerRel::You,
+        "a player pays life" => PlayerRel::Any,
+        "an opponent pays life" => PlayerRel::Opponent,
+        _ => return None,
+    };
+    Some((
+        TriggerCond::PlayerAction {
+            name: crate::life_totals::PAID_LIFE.into(),
+            who,
+        },
+        Sel::None,
+        PlayerRef::TriggerPlayer,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "whenever you pay life", priority: 100, parse: you_pay_life } }
+
+/// "Whenever a creature you control fights" (Foe-Razer Regent), "Whenever one or more
+/// creatures you control fight" (Neyith of the Dire Hunt): a creature fights when an
+/// effect instructs it to (CR 701.14a; dealing combat damage isn't fighting).
+fn creature_fights(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let t = end(t);
+    let (batch, subject) = if let Some(s) = t.strip_suffix(" fight").and_then(|s| s.strip_prefix("one or more ")) {
+        (true, s)
+    } else {
+        (false, t.strip_suffix(" fights")?)
+    };
+    let (f, plural, rest) = parse_object_phrase(subject.strip_prefix("a ").unwrap_or(subject))?;
+    if !rest.trim().is_empty() || plural != batch || f.zone().is_some() {
+        return None;
+    }
+    let fights = TriggerCond::Where {
+        trigger: Box::new(TriggerCond::PlayerAction {
+            name: crate::keyword_actions::FOUGHT.into(),
+            who: PlayerRel::Any,
+        }),
+        cond: Condition::SelMatches(Sel::TriggerObject, f),
+    };
+    let trigger = if batch {
+        TriggerCond::Batched {
+            trigger: Box::new(fights),
+            per: BatchPer::Batch,
+        }
+    } else {
+        fights
+    };
+    Some((trigger, Sel::TriggerObject, PlayerRef::TriggerPlayer))
+}
+
+inventory::submit! { TriggerPattern { name: "whenever a creature you control fights", priority: 100, parse: creature_fights } }
+
+/// "Whenever damage that would be dealt to you is prevented" (Selfless Squire,
+/// `kw/damage_prevented_trigger.rs`).
+fn damage_to_you_prevented(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    (end(t) == crate::kw::damage_prevented_trigger::DAMAGE_TO_YOU_PREVENTED).then(|| {
+        (
+            TriggerCond::Custom(crate::kw::damage_prevented_trigger::DAMAGE_TO_YOU_PREVENTED.into()),
+            Sel::None,
+            PlayerRef::You,
+        )
+    })
+}
+
+inventory::submit! { TriggerPattern { name: "whenever damage that would be dealt to you is prevented", priority: 100, parse: damage_to_you_prevented } }
+
+/// "When ~'s echo cost is paid" (Shah of Naar Isle), "Whenever you pay ~'s cumulative
+/// upkeep" / "Whenever ~'s cumulative upkeep is paid" (Hibernation's End, Balduvian
+/// Fallen), "When a player doesn't pay ~'s cumulative upkeep" (Heart of Bogardan): the
+/// keyword's upkeep trigger resolving with (or without) the payment (CR 702.30a,
+/// 702.24a; `kw/echo.rs`, `kw/cumulative_upkeep.rs`).
+fn upkeep_cost_paid(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    use crate::kw::{cumulative_upkeep as cu, echo};
+    let name = match end(t) {
+        "~'s echo cost is paid" => echo::ECHO_PAID,
+        "you pay ~'s cumulative upkeep" | "~'s cumulative upkeep is paid" => {
+            cu::CUMULATIVE_UPKEEP_PAID
+        }
+        "a player doesn't pay ~'s cumulative upkeep" => cu::CUMULATIVE_UPKEEP_NOT_PAID,
+        _ => return None,
+    };
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::PlayerAction {
+                name: name.into(),
+                who: PlayerRel::Any,
+            }),
+            cond: Condition::SelMatches(Sel::TriggerObject, Filter::Source),
+        },
+        Sel::This,
+        PlayerRef::TriggerPlayer,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "~'s echo cost is paid / cumulative upkeep is paid", priority: 100, parse: upkeep_cost_paid } }
+
+/// "Whenever ~ is dealt damage by an attacking creature" (and, through the referent
+/// grammar, "Whenever that creature is dealt damage by an attacking creature this turn",
+/// Glyph of Life): the passive of "Whenever an attacking creature deals damage to ~" —
+/// one event for each source dealing damage to it (CR 120.3, 603.2).
+fn dealt_damage_by(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let t = end(t);
+    let (combat, src) = if let Some(r) = t.strip_prefix("~ is dealt combat damage by ") {
+        (true, r)
+    } else {
+        (false, t.strip_prefix("~ is dealt damage by ")?)
+    };
+    let kind = if combat { "combat damage" } else { "damage" };
+    let (cond, _, player) = crate::oracle::triggers::parse_trigger_condition(&format!(
+        "whenever {src} deals {kind} to ~"
+    ))?;
+    let ok = match &cond {
+        TriggerCond::DealsDamage { to, .. } => {
+            matches!(to, DamageRecipient::Object(Filter::Source))
+        }
+        _ => false,
+    };
+    ok.then_some((cond, Sel::This, player))
+}
+
+inventory::submit! { TriggerPattern { name: "~ is dealt damage by [source]", priority: 905, parse: dealt_damage_by } }
+
+/// "Whenever you turn a permanent face up" (Growing Dread): it's turned face up by you —
+/// the special action, or an effect you control (`Event::TurnedFaceUp::by`).
+fn you_turn_face_up(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    let r = end(t)
+        .strip_prefix("you turn a ")?
+        .strip_suffix(" face up")?;
+    let (f, plural, rest) = parse_object_phrase(r)?;
+    if plural
+        || !rest.trim().is_empty()
+        || f.zone().is_some_and(|z| z != ZoneKind::Battlefield)
+    {
+        return None;
+    }
+    Some((
+        TriggerCond::Where {
+            trigger: Box::new(TriggerCond::TurnedFaceUp(f)),
+            cond: Condition::PlayerMatches(PlayerRef::TriggerPlayer, PlayerFilter::You),
+        },
+        Sel::TriggerObject,
+        PlayerRef::You,
+    ))
+}
+
+inventory::submit! { TriggerPattern { name: "whenever you turn a permanent face up", priority: 100, parse: you_turn_face_up } }
+
+/// "Whenever you solve a Case" (Case File Auditor): a Case you control becomes solved
+/// (CR 719.3a-b; `cases.rs` reports it).
+fn you_solve_a_case(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
+    (end(t) == "you solve a case").then(|| {
+        (
+            TriggerCond::Where {
+                trigger: Box::new(TriggerCond::PlayerAction {
+                    name: crate::cases::BECAME_SOLVED.into(),
+                    who: PlayerRel::You,
+                }),
+                cond: Condition::SelMatches(Sel::TriggerObject, Filter::Subtype("Case".into())),
+            },
+            Sel::TriggerObject,
+            PlayerRef::You,
+        )
+    })
+}
+
+inventory::submit! { TriggerPattern { name: "whenever you solve a case", priority: 100, parse: you_solve_a_case } }

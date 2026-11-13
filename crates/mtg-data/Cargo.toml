@@ -1,0 +1,10 @@
+[package]
+name = "mtg-data"
+version.workspace = true
+edition.workspace = true
+description = "Loaders for Scryfall bulk data (oracle cards, rulings, tags) and the Magic Comprehensive Rules"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+flate2.workspace = true

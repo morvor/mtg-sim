@@ -1,0 +1,350 @@
+//! Numbers that are the greatest or least of several: "the greatest power among creatures
+//! you control" ([`Value::Extreme`]), "the highest life total among all players", "the
+//! greatest number of creatures a player controls" ([`Value::OverPlayers`]).
+
+use super::players::Case;
+use super::*;
+
+/// The characteristic a measure of [`vars::TESTED`] names: "power", "mana value".
+fn tested_stat(v: &Value) -> Option<&'static str> {
+    let tested = |s: &Sel| matches!(s, Sel::Var(vars::TESTED));
+    Some(match v {
+        Value::PowerOf(s) if tested(s) => "power",
+        Value::ToughnessOf(s) if tested(s) => "toughness",
+        Value::ManaValueOf(s) if tested(s) => "mana value",
+        _ => return None,
+    })
+}
+
+/// A noun phrase for one object of several ("a commander you own"): with an article,
+/// unless it already names one object ("target creature", "another creature").
+fn one_of(noun: &str) -> String {
+    let determined = ["a ", "an ", "the ", "target ", "another ", "{"]
+        .iter()
+        .any(|p| noun.starts_with(p));
+    if determined {
+        noun.to_string()
+    } else {
+        with_article(noun)
+    }
+}
+
+/// The qualities of a filter, as a sorted list (the battlefield, where permanents are,
+/// left out).
+fn atoms(f: &Filter, out: &mut Vec<String>) {
+    match f {
+        Filter::And(v) => v.iter().for_each(|x| atoms(x, out)),
+        Filter::Any | Filter::InZone(ZoneKind::Battlefield) => {}
+        other => {
+            let k = format!("{other:?}");
+            if !out.contains(&k) {
+                out.push(k);
+            }
+        }
+    }
+}
+
+impl Renderer<'_> {
+    /// A quality "with the greatest power among [objects]": the object's power is at least
+    /// the greatest among them (`siblings`: the other qualities of the object; when the
+    /// objects compared are the ones the object is one of, cards may leave them out:
+    /// "target creature you control with the greatest power").
+    pub(crate) fn extreme_quality(
+        &mut self,
+        a: &Value,
+        c: Cmp,
+        b: &Value,
+        siblings: &[Filter],
+    ) -> Option<String> {
+        let Value::Extreme(m, sel, greatest) = b else {
+            return None;
+        };
+        let x = tested_stat(a)?;
+        if tested_stat(m)? != x || !matches!((c, greatest), (Cmp::Ge, true) | (Cmp::Le, false)) {
+            return None;
+        }
+        let Sel::All(g) = sel.as_ref() else {
+            return None;
+        };
+        let rest: Vec<Filter> = siblings
+            .iter()
+            .filter(|s| !matches!(s, Filter::ValueCmp(..)))
+            .cloned()
+            .collect();
+        let (mut r, mut o) = (Vec::new(), Vec::new());
+        atoms(&Filter::And(rest), &mut r);
+        atoms(g, &mut o);
+        r.sort();
+        o.sort();
+        let word = match (greatest, x) {
+            (true, "mana value") => "{alt:greatest|highest}",
+            (false, "mana value") => "{alt:least|lowest}",
+            (true, _) => "greatest",
+            (false, _) => "least",
+        };
+        let n = self.noun(g, Num::Many);
+        let field = if Self::counts_all_permanents(g, &n) {
+            " {opt:on the battlefield}"
+        } else {
+            ""
+        };
+        // The objects compared are the ones the object is one of: cards may leave them
+        // out ("target nonland permanent with the lowest mana value").
+        if r == o && !n.contains(['{', '|', '}']) {
+            let words: &[&str] = match (greatest, x) {
+                (true, "mana value") => &["greatest", "highest"],
+                (false, "mana value") => &["least", "lowest"],
+                (true, _) => &["greatest"],
+                (false, _) => &["least"],
+            };
+            let mut forms = Vec::new();
+            for w in words {
+                forms.push(format!("with the {w} {x}"));
+                forms.push(format!("with the {w} {x} among {n}"));
+                if !field.is_empty() {
+                    forms.push(format!("with the {w} {x} among {n} on the battlefield"));
+                }
+            }
+            return Some(format!("{{alt:{}}}", forms.join("|")));
+        }
+        Some(format!("with the {word} {x} among {n}{field}"))
+    }
+
+    /// An object "with the greatest power" among the objects of its own kind: cards say
+    /// "target creature you control with the greatest power" or "a creature with the
+    /// greatest power among creatures you control" (the same objects compared, whether
+    /// or not they're named again).
+    pub(crate) fn extreme_noun(&mut self, f: &Filter, det: &super::nouns::Det) -> Option<String> {
+        let Filter::And(v) = f else {
+            return None;
+        };
+        let (a, c, b) = v.iter().find_map(|x| match x {
+            Filter::ValueCmp(a, c, b) => Some((a, *c, b)),
+            _ => None,
+        })?;
+        let Value::Extreme(m, sel, greatest) = b.as_ref() else {
+            return None;
+        };
+        let x = tested_stat(a)?;
+        if tested_stat(m)? != x || !matches!((c, greatest), (Cmp::Ge, true) | (Cmp::Le, false)) {
+            return None;
+        }
+        let Sel::All(g) = sel.as_ref() else {
+            return None;
+        };
+        let rest: Vec<Filter> = v
+            .iter()
+            .filter(|s| !matches!(s, Filter::ValueCmp(..)))
+            .cloned()
+            .collect();
+        let (mut r, mut o) = (Vec::new(), Vec::new());
+        atoms(&Filter::And(rest.clone()), &mut r);
+        atoms(g, &mut o);
+        r.sort();
+        o.sort();
+        if r != o {
+            return None;
+        }
+        let bare: Vec<Filter> = rest
+            .iter()
+            .filter(|s| {
+                !matches!(
+                    s,
+                    Filter::ControlledBy(_) | Filter::InZone(ZoneKind::Battlefield)
+                )
+            })
+            .cloned()
+            .collect();
+        let plain = self.noun_det(&Filter::and(rest), det.clone());
+        let bare = self.noun_det(&Filter::and(bare), det.clone());
+        // "among creatures and planeswalkers they control": the objects of every kind
+        // listed are compared together.
+        let n = self.noun(g, Num::Many).replace("{alt:and|or}", "and");
+        let words: &[&str] = match (greatest, x) {
+            (true, "mana value") => &["greatest", "highest"],
+            (false, "mana value") => &["least", "lowest"],
+            (true, _) => &["greatest"],
+            (false, _) => &["least"],
+        };
+        let all_permanents = Self::counts_all_permanents(g, &n);
+        let mut forms = Vec::new();
+        for w in words {
+            forms.push(format!("{plain} with the {w} {x}"));
+            forms.push(format!("{bare} with the {w} {x} among {n}"));
+            if plain != bare {
+                forms.push(format!("{plain} with the {w} {x} among {n}"));
+            }
+            if all_permanents {
+                forms.push(format!(
+                    "{bare} with the {w} {x} among {n} on the battlefield"
+                ));
+            }
+        }
+        if forms.iter().any(|f| f.contains(['{', '|', '}'])) {
+            let w = if words.len() > 1 {
+                format!("{{alt:{}}}", words.join("|"))
+            } else {
+                words[0].to_string()
+            };
+            let field = if all_permanents {
+                " {opt:on the battlefield}"
+            } else {
+                ""
+            };
+            // "a creature or planeswalker they control with the greatest mana value
+            // among creatures and planeswalkers they control": the object's own
+            // qualities may be said in full too.
+            if plain == bare {
+                return Some(format!("{bare} with the {w} {x} among {n}{field}"));
+            }
+            // Or the comparison among the object's own kind left unsaid ("a creature
+            // they control with the greatest power").
+            return Some(format!(
+                "{{alt:{bare} with the {w} {x} among {n}{field}|{plain} with the {w} {x} among {n}{field}|{plain} with the {w} {x}}}"
+            ));
+        }
+        Some(format!("{{alt:{}}}", forms.join("|")))
+    }
+
+    /// [`Value::Extreme`]: "the greatest power among creatures you control".
+    pub(crate) fn extreme_value(&mut self, v: &Value, sel: &Sel, greatest: bool) -> String {
+        let Some(stat) = tested_stat(v) else {
+            return self.gap("Value::Extreme");
+        };
+        let s = match sel {
+            Sel::All(f) => self.noun(f, Num::Many).replace("{alt:and|or}", "and"),
+            other => self.sel(other, Case::Obj),
+        };
+        let word = match (greatest, stat) {
+            (true, "mana value") => "{alt:greatest|highest}",
+            (false, "mana value") => "{alt:least|lowest}",
+            (true, _) => "greatest",
+            (false, _) => "least",
+        };
+        format!("the {word} {stat} among {s}")
+    }
+
+    /// [`Value::OfChosen`]: "the mana value of a commander you own on the battlefield or
+    /// in the command zone", one object the controller picks from several.
+    pub(crate) fn of_chosen_value(&mut self, f: &Filter, of: &Value) -> String {
+        let Some(stat) = tested_stat(of) else {
+            return self.gap("Value::OfChosen");
+        };
+        // Objects in either of two zones ("a commander you own on the battlefield or in the
+        // command zone"): the noun, then the zones.
+        let zones = |f: &Filter| -> Option<Vec<ZoneKind>> {
+            let Filter::Or(v) = f else { return None };
+            v.iter()
+                .map(|z| match z {
+                    Filter::InZone(z) => Some(*z),
+                    _ => None,
+                })
+                .collect()
+        };
+        if let Filter::And(parts) = f {
+            if let Some(zs) = parts.iter().find_map(zones) {
+                let head: Vec<Filter> = parts
+                    .iter()
+                    .filter(|p| zones(p).is_none())
+                    .cloned()
+                    .collect();
+                let n = one_of(&self.noun(&Filter::and(head), Num::One));
+                let zs: Vec<String> = zs
+                    .iter()
+                    .map(|z| match z {
+                        ZoneKind::Battlefield => "on the battlefield".to_string(),
+                        ZoneKind::Command => "in the command zone".to_string(),
+                        ZoneKind::Exile => "in exile".to_string(),
+                        other => format!("in {}", with_article(zone_word(*other))),
+                    })
+                    .collect();
+                return format!("the {stat} of {n} {}", zs.join(" or "));
+            }
+        }
+        let n = one_of(&self.noun(f, Num::One));
+        format!("the {stat} of {n}")
+    }
+
+    /// [`Value::OverPlayers`]: each matching player's value, combined.
+    pub(crate) fn over_players_value(&mut self, op: AggOp, pf: &PlayerFilter, v: &Value) -> String {
+        let iterated = |p: &PlayerRef| matches!(p, PlayerRef::Iterated);
+        let opponents = matches!(pf, PlayerFilter::Opponent);
+        if !opponents && !matches!(pf, PlayerFilter::Any) {
+            return self.gap("Value::OverPlayers");
+        }
+        let among = if opponents {
+            "your opponents"
+        } else {
+            "all players"
+        };
+        let a_player = if opponents { "an opponent" } else { "a player" };
+        match (op, v) {
+            // "the highest life total among all players".
+            (AggOp::Max | AggOp::Min, Value::LifeTotal(p)) if iterated(p) => {
+                let w = if op == AggOp::Max {
+                    "highest"
+                } else {
+                    "lowest"
+                };
+                format!("the {w} life total among {among}")
+            }
+            // "the number of cards in the hand of the opponent with the most cards in hand".
+            (AggOp::Max, Value::HandSize(p)) if iterated(p) => {
+                let who = if opponents { "opponent" } else { "player" };
+                format!(
+                    "{{alt:the number of cards in the hand of the {who} with the most cards in hand|the greatest number of cards in {a_player}'s hand}}"
+                )
+            }
+            // "the greatest number of artifacts an opponent controls".
+            (AggOp::Max | AggOp::Min, Value::Count(f)) if matches!(f, Filter::And(v) if v.iter().any(|x| matches!(x, Filter::ControlledBy(PlayerRel::Iterated)))) =>
+            {
+                let n = self.noun(&effects::strip_controller(f), Num::Many);
+                let w = if op == AggOp::Max {
+                    "greatest"
+                } else {
+                    "least"
+                };
+                format!("the {w} number of {n} {a_player} controls")
+            }
+            // "the total number of rad counters among players".
+            (AggOp::Sum, Value::CountersOn(s, k)) if matches!(s.as_ref(), Sel::Players(p) if iterated(p)) =>
+            {
+                let c = match k {
+                    Some(k) => format!("{k} counters"),
+                    None => "counters".into(),
+                };
+                let among = if opponents {
+                    "your opponents"
+                } else {
+                    "players"
+                };
+                format!("the total number of {c} among {among}")
+            }
+            _ => match self.over_players_extra(op, pf, v) {
+                Some(s) => s,
+                None => self.gap("Value::OverPlayers"),
+            },
+        }
+    }
+
+    /// "a graveyard has twenty or more cards in it": some player's value is at least `n`.
+    pub(crate) fn over_players_at_least(
+        &mut self,
+        pf: &PlayerFilter,
+        v: &Value,
+        n: &Value,
+    ) -> Option<String> {
+        let Value::Const(n) = n else {
+            return None;
+        };
+        match (pf, v) {
+            (PlayerFilter::Any, Value::CardsInGraveyard(PlayerRef::Iterated, Filter::Card)) => {
+                Some(format!(
+                    "a graveyard has {} or more cards in it",
+                    number_word(*n)
+                ))
+            }
+            _ => None,
+        }
+    }
+}
