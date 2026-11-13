@@ -1167,57 +1167,61 @@ fn best_attack_paying(
         })
         .collect();
     let mut best = (obeyed_attack_requirements(g, reqs, &[]), Vec::new());
-    let space: f64 = free.iter().map(|(_, t)| (t.len() + 1) as f64).product();
-    // Too many combinations to try them all: start from a greedy declaration (every
-    // creature with requirements attacks what obeys most of them), then search within a
-    // budget. The greedy one alone isn't enough: when it breaks a restriction ("No more
-    // than one creature can attack each combat"), the maximum must still be found, or a
-    // declaration obeying fewer requirements (even none) would be accepted (CR 508.1d).
+    // On a large board, interchangeable creatures side by side: the search tries each way
+    // of splitting them among what they can attack once (see `attacker_keys`).
+    let (free, same) = if free
+        .iter()
+        .map(|(_, ts)| (ts.len() + 1) as f64)
+        .product::<f64>()
+        > GROUPING_THRESHOLD
+    {
+        let keys = attacker_keys(g, &rules, options, &free, reqs, paid);
+        group_by_key(free, &keys)
+    } else {
+        let n = free.len();
+        (free, vec![false; n])
+    };
+    let space = split_count(&same, free.iter().map(|(_, ts)| ts.len()));
+    // Too many declarations to try them all: start from greedy declarations, then search
+    // within a budget. A start is kept only if it breaks no restriction: when the first
+    // one (every creature with requirements attacks what obeys most of them) breaks one
+    // ("No more than one creature can attack each combat"), the maximum must still be
+    // found, or a declaration obeying fewer requirements (even none) would be accepted
+    // (CR 508.1d).
     let limited = space > 100_000.0;
     if limited {
-        let mut decl = Vec::new();
-        for (c, ts) in &free {
-            let mine: Vec<&AttackRequirement> =
-                reqs.iter().filter(|r| r.creature() == Some(*c)).collect();
-            if mine.is_empty() {
-                continue;
+        for decl in [
+            greedy_attack(&free, reqs),
+            greedy_legal_attack(g, &rules, options, &free, reqs),
+        ] {
+            let n = obeyed_attack_requirements(g, reqs, &decl);
+            if n > best.0 && attack_restrictions_ok(g, &rules, options, &decl) {
+                best = (n, decl);
             }
-            let t = ts
-                .iter()
-                .copied()
-                .max_by_key(|t| mine.iter().filter(|r| r.obeyed(&[(*c, *t)])).count());
-            if let Some(t) = t {
-                decl.push((*c, t));
-            }
-        }
-        let n = obeyed_attack_requirements(g, reqs, &decl);
-        if n > best.0 && attack_restrictions_ok(g, &rules, options, &decl) {
-            best = (n, decl);
         }
     }
-    // Requirements still obeyable by creatures from index i on (for pruning).
-    // Requirements on a player's declaration as a whole may still be obeyed by any
-    // creature left.
+    // Requirements still obeyable by creatures from index i on (for pruning): what each
+    // creature's own requirements its best choice obeys, plus requirements on a player's
+    // declaration as a whole, which any creature left may still obey.
     let whole = reqs.iter().filter(|r| r.creature().is_none()).count() as u32;
     let mut suffix = vec![whole; free.len() + 1];
     for i in (0..free.len()).rev() {
-        let n = reqs
-            .iter()
-            .filter(|r| r.creature() == Some(free[i].0))
-            .count() as u32;
-        suffix[i] = suffix[i + 1] + n;
+        suffix[i] = suffix[i + 1] + attack_bound(reqs, free[i].0, &free[i].1);
     }
-    let mut cur = Vec::new();
-    let mut budget = if limited { SEARCH_BUDGET } else { u64::MAX };
-    attack_dfs(
+    let search = AttackSearch {
         g,
-        &rules,
+        rules: &rules,
         options,
-        &free,
+        free: &free,
+        same: &same,
         reqs,
-        &suffix,
+        suffix: &suffix,
+    };
+    let mut budget = if limited { SEARCH_BUDGET } else { u64::MAX };
+    search.dfs(
         0,
-        &mut cur,
+        &mut Vec::new(),
+        &mut vec![0; free.len()],
         &mut best,
         &mut budget,
     );
@@ -1228,67 +1232,297 @@ fn best_attack_paying(
 /// there are too many declarations to try them all (CR 508.1d, 509.1c).
 const SEARCH_BUDGET: u64 = 200_000;
 
-#[allow(clippy::too_many_arguments)]
-fn attack_dfs(
+/// Above this many declarations (counting each creature separately), the search groups
+/// interchangeable creatures.
+const GROUPING_THRESHOLD: f64 = 4096.0;
+
+/// What the creature's own requirements its best choice obeys: attacking one of
+/// `targets`, or not attacking ("if one of [others] attacks, [it] attacks if able" is
+/// obeyed then if none of them does).
+fn attack_bound(reqs: &[AttackRequirement], c: ObjectId, targets: &[Entity]) -> u32 {
+    let mine: Vec<&AttackRequirement> = reqs.iter().filter(|r| r.creature() == Some(c)).collect();
+    let obeyed = |d: &[(ObjectId, Entity)]| mine.iter().filter(|r| r.obeyed(d)).count() as u32;
+    targets
+        .iter()
+        .map(|t| obeyed(&[(c, *t)]))
+        .chain(std::iter::once(obeyed(&[])))
+        .max()
+        .unwrap_or(0)
+}
+
+/// A greedy declaration: every creature with requirements attacks what obeys the most of
+/// them.
+fn greedy_attack(
+    free: &[(ObjectId, Vec<Entity>)],
+    reqs: &[AttackRequirement],
+) -> Vec<(ObjectId, Entity)> {
+    let mut decl = Vec::new();
+    for (c, ts) in free {
+        let mine: Vec<&AttackRequirement> =
+            reqs.iter().filter(|r| r.creature() == Some(*c)).collect();
+        if mine.is_empty() {
+            continue;
+        }
+        let t = ts
+            .iter()
+            .copied()
+            .max_by_key(|t| mine.iter().filter(|r| r.obeyed(&[(*c, *t)])).count());
+        if let Some(t) = t {
+            decl.push((*c, t));
+        }
+    }
+    decl
+}
+
+/// A greedy declaration that breaks no restriction: each creature with requirements in
+/// turn attacks, of what it can attack, what obeys the most of them while the declaration
+/// so far breaks no restriction ("No more than two creatures can attack you each combat":
+/// the third attacks another player), or doesn't attack; those left out are tried once
+/// more after the others ("can't attack alone").
+fn greedy_legal_attack(
     g: &Game,
     rules: &AttackRules,
     options: &[(ObjectId, Vec<Entity>)],
     free: &[(ObjectId, Vec<Entity>)],
     reqs: &[AttackRequirement],
-    suffix: &[u32],
-    i: usize,
-    cur: &mut Vec<(ObjectId, Entity)>,
-    best: &mut (u32, Vec<(ObjectId, Entity)>),
-    budget: &mut u64,
-) {
-    if *budget == 0 {
-        return;
-    }
-    *budget -= 1;
-    // More attackers than a "no more than N creatures can attack" restriction allows:
-    // adding attackers can't make it legal again.
-    if rules.max.is_some_and(|m| cur.len() > m) {
-        return;
-    }
-    let now = obeyed_attack_requirements(g, reqs, cur);
-    if i == free.len() {
-        if now > best.0 && attack_restrictions_ok(g, rules, options, cur) {
-            *best = (now, cur.clone());
+) -> Vec<(ObjectId, Entity)> {
+    let mut decl = Vec::new();
+    let mut left: Vec<usize> = (0..free.len())
+        .filter(|i| reqs.iter().any(|r| r.creature() == Some(free[*i].0)))
+        .collect();
+    for _ in 0..2 {
+        let mut skipped = Vec::new();
+        for i in left {
+            let (c, ts) = &free[i];
+            let mine: Vec<&AttackRequirement> =
+                reqs.iter().filter(|r| r.creature() == Some(*c)).collect();
+            let mut ts = ts.clone();
+            ts.sort_by_key(|t| {
+                std::cmp::Reverse(mine.iter().filter(|r| r.obeyed(&[(*c, *t)])).count())
+            });
+            let placed = ts.into_iter().any(|t| {
+                decl.push((*c, t));
+                attack_restrictions_ok(g, rules, options, &decl) || {
+                    decl.pop();
+                    false
+                }
+            });
+            if !placed {
+                skipped.push(i);
+            }
         }
-        return;
+        left = skipped;
     }
-    // Prune branches that can't beat the best found (the empty declaration is always a
-    // candidate, so `best` is always a legal declaration).
-    if now + suffix[i] <= best.0 {
-        return;
+    decl
+}
+
+/// Reorders `items` so that those with equal keys are side by side (in the order their
+/// keys first appear), and says for each whether it has the key of the one before it.
+fn group_by_key<T: Clone>(items: Vec<T>, keys: &[String]) -> (Vec<T>, Vec<bool>) {
+    let first = |k: &String| keys.iter().position(|x| x == k).unwrap_or(0);
+    let mut order: Vec<usize> = (0..items.len()).collect();
+    order.sort_by_key(|i| first(&keys[*i]));
+    let same = order
+        .iter()
+        .enumerate()
+        .map(|(j, i)| j > 0 && keys[order[j - 1]] == keys[*i])
+        .collect();
+    (order.iter().map(|i| items[*i].clone()).collect(), same)
+}
+
+/// The number of declarations a search tries: each run of interchangeable items (`same`)
+/// of k items with m choices besides none splits among them in C(k + m, m) ways.
+fn split_count(same: &[bool], choices: impl Iterator<Item = usize>) -> f64 {
+    let choices: Vec<usize> = choices.collect();
+    let mut total = 1.0;
+    let mut i = 0;
+    while i < choices.len() {
+        let mut k = 1;
+        while i + k < choices.len() && same[i + k] {
+            k += 1;
+        }
+        let m = choices[i];
+        // C(k + m, m)
+        total *= (1..=m).fold(1.0, |acc, j| acc * (k + j) as f64 / j as f64);
+        i += k;
     }
-    attack_dfs(
-        g,
-        rules,
-        options,
-        free,
-        reqs,
-        suffix,
-        i + 1,
-        cur,
-        best,
-        budget,
-    );
-    for t in free[i].1.clone() {
-        cur.push((free[i].0, t));
-        attack_dfs(
-            g,
-            rules,
-            options,
-            free,
-            reqs,
-            suffix,
-            i + 1,
-            cur,
-            best,
-            budget,
-        );
-        cur.pop();
+    total
+}
+
+/// An object's characteristics as a string, to compare objects by (each ability's unique
+/// id left out: two Grizzly Bears tokens created by different effects are alike).
+fn chars_key(g: &Game, id: ObjectId) -> String {
+    fn strip(v: &mut serde_json::Value) {
+        match v {
+            serde_json::Value::Object(m) => {
+                m.remove("uid");
+                m.values_mut().for_each(strip);
+            }
+            serde_json::Value::Array(a) => a.iter_mut().for_each(strip),
+            _ => {}
+        }
+    }
+    match serde_json::to_value(&g.obj(id).chars) {
+        Ok(mut v) => {
+            strip(&mut v);
+            v.to_string()
+        }
+        Err(_) => format!("#{}", id.0),
+    }
+}
+
+/// A key for each creature of `free`: creatures with equal keys are interchangeable in a
+/// declaration of attackers (exchanging two of them changes neither the requirements
+/// obeyed nor whether a restriction is disobeyed), so the search tries each way of
+/// splitting them among what they can attack once (CR 508.1d). Equal keys need the same
+/// controller, characteristics, counters, choices, requirements and restrictions. A
+/// creature with something attached to it, one making a paid attack, and one in an "if
+/// one of [others] attacks, [it] attacks if able" requirement each get a key of their own.
+fn attacker_keys(
+    g: &Game,
+    rules: &AttackRules,
+    options: &[(ObjectId, Vec<Entity>)],
+    free: &[(ObjectId, Vec<Entity>)],
+    reqs: &[AttackRequirement],
+    paid: &[PaidAttack],
+) -> Vec<String> {
+    // The restrictions on the declaration as a whole that apply to particular creatures.
+    let rs: Vec<_> = g
+        .all_restrictions()
+        .into_iter()
+        .filter(|(_, _, r, _)| {
+            matches!(
+                r,
+                Restriction::AttackOnlyAlone(_) | Restriction::AttackOnlyWith { .. }
+            )
+        })
+        .collect();
+    free.iter()
+        .map(|(c, ts)| {
+            let unique = paid.iter().any(|(p, _, _)| p == c)
+                || !g.attachments_of(Entity::Object(*c)).is_empty()
+                || reqs.iter().any(|r| {
+                    matches!(r, AttackRequirement::AttacksIfAnyAttacks(x, others)
+                        if x == c || others.contains(c))
+                });
+            if unique {
+                return format!("#{}", c.0);
+            }
+            let mut mine: Vec<String> = reqs
+                .iter()
+                .filter(|r| r.creature() == Some(*c))
+                .map(|r| match r {
+                    AttackRequirement::Attacks(_) => "attacks".to_string(),
+                    AttackRequirement::AttacksPlayerOtherThan(_, ps) => {
+                        format!("other than {ps:?}")
+                    }
+                    AttackRequirement::AttacksPlayer(_, p) => format!("player {p:?}"),
+                    AttackRequirement::AttacksObject(_, o) => format!("object {o:?}"),
+                    other => format!("{other:?}"),
+                })
+                .collect();
+            mine.sort();
+            let applies: Vec<bool> = rs
+                .iter()
+                .flat_map(|(s, ctl, r, locked)| {
+                    let ctx = Ctx::new(*s, *ctl);
+                    match r {
+                        Restriction::AttackOnlyAlone(f) => {
+                            vec![g.restriction_applies(*c, f, &ctx, locked)]
+                        }
+                        Restriction::AttackOnlyWith {
+                            attackers,
+                            companion,
+                        } => vec![
+                            g.restriction_applies(*c, attackers, &ctx, locked),
+                            g.matches(*c, companion, &ctx),
+                        ],
+                        _ => vec![],
+                    }
+                })
+                .collect();
+            let all = options
+                .iter()
+                .find(|(x, _)| x == c)
+                .map(|(_, t)| t.clone())
+                .unwrap_or_default();
+            format!(
+                "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{}|{:?}|{:?}",
+                g.obj(*c).controller,
+                chars_key(g, *c),
+                g.obj(*c).counters,
+                ts,
+                all,
+                mine,
+                rules.cant_alone.contains(c),
+                rules.min_others.get(c),
+                applies
+            )
+        })
+        .collect()
+}
+
+/// A search for the declaration of attackers obeying the most requirements (CR 508.1d).
+struct AttackSearch<'a> {
+    g: &'a Game,
+    rules: &'a AttackRules,
+    options: &'a [(ObjectId, Vec<Entity>)],
+    /// Each creature with what it can attack without a cost, interchangeable creatures
+    /// side by side.
+    free: &'a [(ObjectId, Vec<Entity>)],
+    /// Whether each creature is interchangeable with the one before it.
+    same: &'a [bool],
+    reqs: &'a [AttackRequirement],
+    /// Requirements still obeyable by creatures from index i on.
+    suffix: &'a [u32],
+}
+
+impl AttackSearch<'_> {
+    /// Tries the choices of the creatures from `i` on (`chosen[j]`: 0 for not attacking,
+    /// k for its k-th target), keeping the best legal declaration found in `best`.
+    fn dfs(
+        &self,
+        i: usize,
+        cur: &mut Vec<(ObjectId, Entity)>,
+        chosen: &mut Vec<usize>,
+        best: &mut (u32, Vec<(ObjectId, Entity)>),
+        budget: &mut u64,
+    ) {
+        if *budget == 0 {
+            return;
+        }
+        *budget -= 1;
+        // More attackers than a "no more than N creatures can attack" restriction allows:
+        // adding attackers can't make it legal again.
+        if self.rules.max.is_some_and(|m| cur.len() > m) {
+            return;
+        }
+        let now = obeyed_attack_requirements(self.g, self.reqs, cur);
+        if i == self.free.len() {
+            if now > best.0 && attack_restrictions_ok(self.g, self.rules, self.options, cur) {
+                *best = (now, cur.clone());
+            }
+            return;
+        }
+        // Prune branches that can't beat the best found (the empty declaration is always a
+        // candidate, so `best` is always a legal declaration).
+        if now + self.suffix[i] <= best.0 {
+            return;
+        }
+        let (c, ts) = &self.free[i];
+        // The interchangeable creature before it made choice `lo`: it makes that one or a
+        // later one, so each split of the group is tried once.
+        let lo = if self.same[i] { chosen[i - 1] } else { 0 };
+        for k in lo..=ts.len() {
+            chosen[i] = k;
+            if k > 0 {
+                cur.push((*c, ts[k - 1]));
+            }
+            self.dfs(i + 1, cur, chosen, best, budget);
+            if k > 0 {
+                cur.pop();
+            }
+        }
     }
 }
 
@@ -2014,148 +2248,316 @@ pub fn best_blocks(
         // Nothing to maximize: not blocking is always legal.
         return best;
     }
-    let space: f64 = choices.iter().map(|(_, s)| (s.len() + 1) as f64).product();
-    // Too many combinations to try them all: start from a greedy declaration (each
-    // creature with a requirement blocks a single attacker), then search within a budget,
-    // so that a greedy declaration breaking a restriction ("No more than one creature can
-    // block each combat") doesn't leave the maximum unfound (CR 509.1c).
+    // On a large board, interchangeable creatures side by side: the search tries each way
+    // of splitting them among their blocks once (see `blocker_keys`).
+    let (choices, same) = if choices
+        .iter()
+        .map(|(_, s)| (s.len() + 1) as f64)
+        .product::<f64>()
+        > GROUPING_THRESHOLD
+    {
+        let keys = blocker_keys(g, &rules, options, &choices, reqs);
+        group_by_key(choices, &keys)
+    } else {
+        let n = choices.len();
+        (choices, vec![false; n])
+    };
+    let space = split_count(&same, choices.iter().map(|(_, s)| s.len()));
+    // Too many combinations to try them all: start from greedy declarations made of blocks
+    // needing no cost (CR 509.1c), then search within a budget, so that a greedy
+    // declaration breaking a restriction ("No more than one creature can block each
+    // combat") doesn't leave the maximum unfound.
     let limited = space > 100_000.0;
     if limited {
-        let mut decl = Vec::new();
-        for r in reqs {
-            match r {
-                BlockRequirement::Blocks(b) | BlockRequirement::BlocksAttacker(b, _) => {
-                    if decl.iter().any(|(x, _)| x == b) {
-                        continue;
-                    }
-                    let a = match r {
-                        BlockRequirement::BlocksAttacker(_, a) => Some(*a),
-                        _ => options
-                            .iter()
-                            .find(|(x, _)| x == b)
-                            .and_then(|(_, atts)| atts.first().copied()),
-                    };
-                    if let Some(a) = a {
-                        decl.push((*b, a));
-                    }
-                }
-                BlockRequirement::AttackerBlocked(_)
-                | BlockRequirement::AttackerBlockedByAny(..)
-                | BlockRequirement::AttackerBlockerCount(..) => {}
+        for decl in [
+            greedy_block(&choices, reqs),
+            greedy_legal_block(g, &rules, options, &choices, reqs),
+        ] {
+            let n = obeyed_block_requirements(reqs, &decl);
+            if n > best.0 && block_restrictions_ok(g, &rules, options, &decl) {
+                best = (n, decl);
             }
         }
-        let n = obeyed_block_requirements(reqs, &decl);
-        if n > best.0 && block_restrictions_ok(g, &rules, options, &decl) {
-            best = (n, decl);
-        }
     }
-    // Requirements specific to blockers from index i on (for pruning).
+    // Requirements specific to blockers from index i on (for pruning): what each one's
+    // best choice obeys.
     let mut suffix = vec![0u32; choices.len() + 1];
     for i in (0..choices.len()).rev() {
-        let b = choices[i].0;
-        let n = reqs
-            .iter()
-            .filter(|r| {
-                matches!(r, BlockRequirement::Blocks(x) | BlockRequirement::BlocksAttacker(x, _) if *x == b)
-            })
-            .count() as u32;
-        suffix[i] = suffix[i + 1] + n;
+        suffix[i] = suffix[i + 1] + block_bound(reqs, choices[i].0, &choices[i].1);
     }
-    let mut cur = Vec::new();
-    let mut budget = if limited { SEARCH_BUDGET } else { u64::MAX };
-    block_dfs(
+    let search = BlockSearch {
         g,
-        &rules,
+        rules: &rules,
         options,
-        &choices,
+        choices: &choices,
+        same: &same,
         reqs,
-        &suffix,
+        suffix: &suffix,
+    };
+    let mut budget = if limited { SEARCH_BUDGET } else { u64::MAX };
+    search.dfs(
         0,
-        &mut cur,
+        &mut Vec::new(),
+        &mut vec![0; choices.len()],
         &mut best,
         &mut budget,
     );
     best
 }
 
-#[allow(clippy::too_many_arguments)]
-fn block_dfs(
+/// A blocker's own requirements ("blocks each combat if able", "blocks [that creature] if
+/// able").
+fn own_block_requirements(reqs: &[BlockRequirement], b: ObjectId) -> Vec<&BlockRequirement> {
+    reqs.iter()
+        .filter(|r| {
+            matches!(r, BlockRequirement::Blocks(x) | BlockRequirement::BlocksAttacker(x, _)
+                if *x == b)
+        })
+        .collect()
+}
+
+/// The blocks of `b` (its creatures blocked, each set as the attackers it blocks) in the
+/// order a greedy declaration tries them: those obeying the most of its own requirements
+/// first, then the fewest attackers.
+fn block_sets_by_value(
+    reqs: &[BlockRequirement],
+    b: ObjectId,
+    sets: &[Vec<ObjectId>],
+) -> Vec<(u32, Vec<ObjectId>)> {
+    let mine = own_block_requirements(reqs, b);
+    let mut out: Vec<(u32, Vec<ObjectId>)> = sets
+        .iter()
+        .map(|s| {
+            let d: Vec<(ObjectId, ObjectId)> = s.iter().map(|a| (b, *a)).collect();
+            (
+                mine.iter().filter(|r| r.obeyed(&d)).count() as u32,
+                s.clone(),
+            )
+        })
+        .collect();
+    out.sort_by_key(|(n, s)| (std::cmp::Reverse(*n), s.len()));
+    out
+}
+
+/// What the blocker's own requirements its best choice obeys.
+fn block_bound(reqs: &[BlockRequirement], b: ObjectId, sets: &[Vec<ObjectId>]) -> u32 {
+    block_sets_by_value(reqs, b, sets)
+        .first()
+        .map_or(0, |(n, _)| *n)
+}
+
+/// A greedy declaration: each creature with requirements of its own makes the block (among
+/// those needing no cost) that obeys the most of them.
+fn greedy_block(
+    choices: &[(ObjectId, Vec<Vec<ObjectId>>)],
+    reqs: &[BlockRequirement],
+) -> Vec<(ObjectId, ObjectId)> {
+    let mut decl = Vec::new();
+    for (b, sets) in choices {
+        if own_block_requirements(reqs, *b).is_empty() {
+            continue;
+        }
+        if let Some((_, s)) = block_sets_by_value(reqs, *b, sets).into_iter().next() {
+            decl.extend(s.into_iter().map(|a| (*b, a)));
+        }
+    }
+    decl
+}
+
+/// A greedy declaration that breaks no restriction: each creature with requirements of
+/// its own in turn makes, of the blocks needing no cost, the one obeying the most of them
+/// while the declaration so far breaks no restriction ("can't be blocked by more than one
+/// creature": the second blocks another attacker), or doesn't block; those left out are
+/// tried once more after the others ("can't block alone").
+fn greedy_legal_block(
     g: &Game,
     rules: &BlockRules,
     options: &[(ObjectId, Vec<ObjectId>)],
     choices: &[(ObjectId, Vec<Vec<ObjectId>>)],
     reqs: &[BlockRequirement],
-    suffix: &[u32],
-    i: usize,
-    cur: &mut Vec<(ObjectId, ObjectId)>,
-    best: &mut (u32, Vec<(ObjectId, ObjectId)>),
-    budget: &mut u64,
-) {
-    if *budget == 0 {
-        return;
+) -> Vec<(ObjectId, ObjectId)> {
+    let mut decl: Vec<(ObjectId, ObjectId)> = Vec::new();
+    let mut left: Vec<usize> = (0..choices.len())
+        .filter(|i| !own_block_requirements(reqs, choices[*i].0).is_empty())
+        .collect();
+    for _ in 0..2 {
+        let mut skipped = Vec::new();
+        for i in left {
+            let (b, sets) = &choices[i];
+            let placed = block_sets_by_value(reqs, *b, sets)
+                .into_iter()
+                .any(|(_, s)| {
+                    let len = decl.len();
+                    decl.extend(s.iter().map(|a| (*b, *a)));
+                    block_restrictions_ok(g, rules, options, &decl) || {
+                        decl.truncate(len);
+                        false
+                    }
+                });
+            if !placed {
+                skipped.push(i);
+            }
+        }
+        left = skipped;
     }
-    *budget -= 1;
-    // More blockers than a "no more than N creatures can block" restriction allows:
-    // adding blockers can't make it legal again.
-    if let Some(m) = rules.max {
-        let mut bs: Vec<ObjectId> = cur.iter().map(|(b, _)| *b).collect();
-        bs.dedup();
-        if bs.len() > m {
+    decl
+}
+
+/// A key for each blocker of `choices`: blockers with equal keys are interchangeable in a
+/// declaration of blockers, so the search tries each way of splitting them among their
+/// blocks once (CR 509.1c). Equal keys need the same controller, characteristics,
+/// counters, choices, requirements and restrictions; a creature with something attached
+/// to it gets a key of its own.
+fn blocker_keys(
+    g: &Game,
+    rules: &BlockRules,
+    options: &[(ObjectId, Vec<ObjectId>)],
+    choices: &[(ObjectId, Vec<Vec<ObjectId>>)],
+    reqs: &[BlockRequirement],
+) -> Vec<String> {
+    // The restrictions on the declaration as a whole that apply to particular creatures.
+    let rs: Vec<_> = g
+        .all_restrictions()
+        .into_iter()
+        .filter(|(_, _, r, _)| matches!(r, Restriction::BlockOnlyWith { .. }))
+        .collect();
+    choices
+        .iter()
+        .map(|(b, sets)| {
+            if !g.attachments_of(Entity::Object(*b)).is_empty() {
+                return format!("#{}", b.0);
+            }
+            let mut mine: Vec<String> = own_block_requirements(reqs, *b)
+                .into_iter()
+                .map(|r| match r {
+                    BlockRequirement::BlocksAttacker(_, a) => format!("blocks {a:?}"),
+                    _ => "blocks".to_string(),
+                })
+                .collect();
+            mine.sort();
+            // "[attacker] must be blocked by [a Dalek] if able": whether it's one of them.
+            let named: Vec<bool> = reqs
+                .iter()
+                .filter_map(|r| match r {
+                    BlockRequirement::AttackerBlockedByAny(_, bs) => Some(bs.contains(b)),
+                    _ => None,
+                })
+                .collect();
+            let applies: Vec<bool> = rs
+                .iter()
+                .flat_map(|(s, ctl, r, locked)| {
+                    let ctx = Ctx::new(*s, *ctl);
+                    match r {
+                        Restriction::BlockOnlyWith {
+                            blockers,
+                            companion,
+                        } => vec![
+                            g.restriction_applies(*b, blockers, &ctx, locked),
+                            g.matches(*b, companion, &ctx),
+                        ],
+                        _ => vec![],
+                    }
+                })
+                .collect();
+            let all = options
+                .iter()
+                .find(|(x, _)| x == b)
+                .map(|(_, a)| a.clone())
+                .unwrap_or_default();
+            format!(
+                "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{:?}|{:?}|{:?}",
+                g.obj(*b).controller,
+                chars_key(g, *b),
+                g.obj(*b).counters,
+                sets,
+                all,
+                mine,
+                named,
+                rules.cant_alone.contains(b),
+                rules.min_others.get(b),
+                rules.max_blocks.get(b),
+                applies
+            )
+        })
+        .collect()
+}
+
+/// A search for the declaration of blockers obeying the most requirements (CR 509.1c).
+struct BlockSearch<'a> {
+    g: &'a Game,
+    rules: &'a BlockRules,
+    options: &'a [(ObjectId, Vec<ObjectId>)],
+    /// Each blocker with the sets of attackers it can block without a cost,
+    /// interchangeable blockers side by side.
+    choices: &'a [(ObjectId, Vec<Vec<ObjectId>>)],
+    /// Whether each blocker is interchangeable with the one before it.
+    same: &'a [bool],
+    reqs: &'a [BlockRequirement],
+    /// Requirements specific to blockers from index i on.
+    suffix: &'a [u32],
+}
+
+impl BlockSearch<'_> {
+    /// Tries the choices of the blockers from `i` on (`chosen[j]`: 0 for not blocking, k
+    /// for its k-th set of attackers), keeping the best legal declaration found in `best`.
+    fn dfs(
+        &self,
+        i: usize,
+        cur: &mut Vec<(ObjectId, ObjectId)>,
+        chosen: &mut Vec<usize>,
+        best: &mut (u32, Vec<(ObjectId, ObjectId)>),
+        budget: &mut u64,
+    ) {
+        if *budget == 0 {
             return;
         }
-    }
-    let now = obeyed_block_requirements(reqs, cur);
-    if i == choices.len() {
-        if now > best.0 && block_restrictions_ok(g, rules, options, cur) {
-            *best = (now, cur.clone());
+        *budget -= 1;
+        // More blockers than a "no more than N creatures can block" restriction allows:
+        // adding blockers can't make it legal again.
+        if let Some(m) = self.rules.max {
+            let mut bs: Vec<ObjectId> = cur.iter().map(|(b, _)| *b).collect();
+            bs.dedup();
+            if bs.len() > m {
+                return;
+            }
         }
-        return;
-    }
-    // Upper bound: blocker-specific requirements of the remaining blockers, plus
-    // "must be blocked" requirements not yet obeyed.
-    let open_attacker_reqs = reqs
-        .iter()
-        .filter(|r| {
-            matches!(
-                r,
-                BlockRequirement::AttackerBlocked(_)
-                    | BlockRequirement::AttackerBlockedByAny(..)
-                    | BlockRequirement::AttackerBlockerCount(..)
-            ) && !r.obeyed(cur)
-        })
-        .count() as u32;
-    if now + suffix[i] + open_attacker_reqs <= best.0 {
-        return;
-    }
-    block_dfs(
-        g,
-        rules,
-        options,
-        choices,
-        reqs,
-        suffix,
-        i + 1,
-        cur,
-        best,
-        budget,
-    );
-    let b = choices[i].0;
-    for set in &choices[i].1 {
-        let len = cur.len();
-        cur.extend(set.iter().map(|a| (b, *a)));
-        block_dfs(
-            g,
-            rules,
-            options,
-            choices,
-            reqs,
-            suffix,
-            i + 1,
-            cur,
-            best,
-            budget,
-        );
-        cur.truncate(len);
+        let now = obeyed_block_requirements(self.reqs, cur);
+        if i == self.choices.len() {
+            if now > best.0 && block_restrictions_ok(self.g, self.rules, self.options, cur) {
+                *best = (now, cur.clone());
+            }
+            return;
+        }
+        // Upper bound: blocker-specific requirements of the remaining blockers, plus
+        // "must be blocked" requirements not yet obeyed.
+        let open_attacker_reqs = self
+            .reqs
+            .iter()
+            .filter(|r| {
+                matches!(
+                    r,
+                    BlockRequirement::AttackerBlocked(_)
+                        | BlockRequirement::AttackerBlockedByAny(..)
+                        | BlockRequirement::AttackerBlockerCount(..)
+                ) && !r.obeyed(cur)
+            })
+            .count() as u32;
+        if now + self.suffix[i] + open_attacker_reqs <= best.0 {
+            return;
+        }
+        let (b, sets) = &self.choices[i];
+        // The interchangeable blocker before it made choice `lo`: it makes that one or a
+        // later one, so each split of the group is tried once.
+        let lo = if self.same[i] { chosen[i - 1] } else { 0 };
+        for k in lo..=sets.len() {
+            chosen[i] = k;
+            let len = cur.len();
+            if k > 0 {
+                cur.extend(sets[k - 1].iter().map(|a| (*b, *a)));
+            }
+            self.dfs(i + 1, cur, chosen, best, budget);
+            cur.truncate(len);
+        }
     }
 }
 
