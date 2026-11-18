@@ -388,6 +388,10 @@ fn barroom_brawl_copy_with_unchanged_targets_fizzles_and_isnt_copied_again() {
     t.resolve_all();
     assert!(t.g.stack.is_empty());
     assert!(
+        t.asked()[from..].iter().any(|(p, _)| *p == P1),
+        "P1 was offered a copy"
+    );
+    assert!(
         t.asked()[from..].iter().all(|(p, _)| *p != P2),
         "P2 is never offered a copy"
     );
