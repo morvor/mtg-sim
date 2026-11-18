@@ -319,7 +319,7 @@ fn kediss_doesnt_trigger_for_damage_to_a_planeswalker() {
 
 #[test]
 fn rasaad_changes_only_the_combat_damage_assigned() {
-    cr!("510.1a", "208.3");
+    cr!("510.1a", "208.3", "701.14a");
     ruling!(
         "Rasaad yn Bashir",
         "Rasaad yn Bashir's first ability doesn't actually change any creature's power. It changes only the amount of combat damage it assigns. All other rules and effects that check power or toughness use the real values."
@@ -332,6 +332,13 @@ fn rasaad_changes_only_the_combat_damage_assigned() {
     t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(t.life(P1), 17);
     assert_eq!(t.pt(rasaad), (0, 3));
+    // A fight uses its real power (0): Prey Upon, Rasaad against Grizzly Bears.
+    t.advance_to(P0, Step::PostcombatMain);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    crate::r_s25_common::cast_new(&mut t, P0, "Prey Upon", &[ent(rasaad), ent(bears)]);
+    t.resolve_all();
+    assert_eq!(t.obj(bears).damage, 0);
+    assert_eq!(t.obj(rasaad).damage, 2);
 }
 
 #[test]

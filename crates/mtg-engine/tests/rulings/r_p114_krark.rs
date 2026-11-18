@@ -212,7 +212,7 @@ fn krark_copy_keeps_the_division_but_may_change_targets() {
 
 #[test]
 fn krark_returning_a_cast_copy_of_a_card_makes_it_cease_to_exist() {
-    cr!("707.12", "704.5d", "705.1");
+    cr!("707.12", "704.5e", "705.1");
     ruling!(
         "Krark, the Thumbless",
         "If you cast a copy of an instant or sorcery card (for example, one created by Mnemonic Deluge), and the spell is returned to its owner's hand, it will cease to exist. You won't be able to cast it again."

@@ -200,7 +200,7 @@ fn the_fourth_doctor_new_top_card_hidden_while_casting() {
 
 #[test]
 fn tevesh_szat_chooses_the_sacrifice_as_the_ability_resolves() {
-    cr!("608.2c", "606.3");
+    cr!("608.2c", "115.10");
     ruling!(
         "Tevesh Szat, Doom of Fools",
         "For the second ability of Tevesh Szat, Doom of Fools, you choose whether to sacrifice anything and what to sacrifice as the ability resolves."
@@ -229,7 +229,7 @@ fn tevesh_szat_chooses_the_sacrifice_as_the_ability_resolves() {
 
 #[test]
 fn tevesh_szat_commanders_leave_with_the_player() {
-    cr!("800.4a", "903.9b");
+    cr!("800.4a", "903.9a");
     ruling!(
         "Tevesh Szat, Doom of Fools",
         "If you leave the game, each commander you gained control of is returned to its previous controller's control. Each commander that entered the battlefield under your control is exiled (from there, its owner may return it to the command zone)."
@@ -388,7 +388,7 @@ fn pir_doesnt_apply_to_permanents_entering_with_it() {
 
 #[test]
 fn ardenn_can_attach_to_an_opponents_creature_but_not_illegally() {
-    cr!("301.5c", "303.4", "701.3b");
+    cr!("301.5", "303.4", "701.3b");
     ruling!(
         "Ardenn, Intrepid Archaeologist",
         "Other players and permanents controlled by other players can be targeted by Ardenn's ability. This can cause Equipment under your control to be attached to a creature an opponent controls. Auras and Equipment that say \"you\" still refer to you, as you still control them. Ardenn's ability can't cause an Aura or Equipment to be attached to something it couldn't be attached to."

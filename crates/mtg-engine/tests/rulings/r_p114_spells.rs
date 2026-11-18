@@ -41,7 +41,7 @@ fn kraum_counts_spells_cast_before_it_was_on_the_battlefield() {
 
 #[test]
 fn kraum_triggers_once_per_opponent_each_turn() {
-    cr!("603.2", "102.2");
+    cr!("603.2");
     ruling!(
         "Kraum, Ludevic's Opus",
         "Kraum's triggered ability can trigger only once each turn for each opponent."
