@@ -6,6 +6,7 @@
 #                                                # mutants, into <stem>-rerun
 #   RERUN=1 ONLY='mana.rs:1019' scripts/mutants.sh mana   # only the survivors matching
 #   SAMPLE=1 scripts/mutants.sh trigger_timing   # every mutant instead of a 1-in-N sample
+#   FULL=1 scripts/mutants.sh simultaneous       # the same: a full run (every mutant, no shard)
 #   TIMEOUT=900 scripts/mutants.sh layers        # a longer test timeout per mutant (default 600 s;
 #                                                # the unmutated mtg-engine suite takes ~290 s)
 #
@@ -22,6 +23,8 @@ WT=$(git rev-parse --show-toplevel)
 MS=$WT/target/mutsrc
 OUT=$WT/target/mutants
 SAMPLE=${SAMPLE:-10}
+# FULL=1: every mutant of each file (no shard), as for the mutation-2 full runs.
+[[ -n "${FULL:-}" ]] && SAMPLE=1
 TIMEOUT=${TIMEOUT:-600}
 LOCK=${LOCK:-/tmp/cargo-heavy.lock}
 mkdir -p "$MS" "$OUT"
