@@ -80,7 +80,7 @@ const DECIDER: Var = vars::USER + 43303;
 /// "reveal exactly two cards you own with different names from outside the game"
 /// (Extrapolate the Impossible): that many cards from outside the game (the sideboard in
 /// a match, CR 400.11, 100.4a), chosen with different names (if the player can't, they
-/// reveal none); "them" afterward.
+/// reveal none: register `exactly-n-cards-are-n-or-none`); "them" afterward.
 fn reveal_exactly_from_outside(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("reveal exactly ")?;
     let (n, r) = crate::oracle::phrases::parse_number(r)?;

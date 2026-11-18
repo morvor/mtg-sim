@@ -896,21 +896,25 @@ fn mana_value_qualifier(s: &str, b: &mut Builder) -> Option<(Filter, String)> {
 }
 
 /// A part's count: "a", "an", "two", "X", "up to N", "any number of", "all", "exactly
-/// N". Returns (count, up to, all, rest).
-fn count(s: &str) -> Option<(Value, bool, bool, &str)> {
+/// N". Returns (count, up to, all, exactly, rest).
+fn count(s: &str) -> Option<(Value, bool, bool, bool, &str)> {
     if let Some(r) = s.strip_prefix("any number of ") {
-        return Some((Value::c(999), true, false, r));
+        return Some((Value::c(999), true, false, false, r));
     }
     if let Some(r) = s.strip_prefix("all ") {
-        return Some((Value::c(999), true, true, r));
+        return Some((Value::c(999), true, true, false, r));
     }
     if let Some(r) = s.strip_prefix("up to ") {
         let (n, r) = parse_number(r)?;
-        return Some((n, true, false, r.trim_start()));
+        return Some((n, true, false, false, r.trim_start()));
     }
-    let s = s.strip_prefix("exactly ").unwrap_or(s);
+    // "exactly two cards": two or none (`SearchPart::exactly`).
+    let (exactly, s) = match s.strip_prefix("exactly ") {
+        Some(r) => (true, r),
+        None => (false, s),
+    };
     let (n, r) = parse_number(s)?;
-    Some((n, false, false, r.trim_start()))
+    Some((n, false, false, exactly, r.trim_start()))
 }
 
 /// The separators between parts that have their own articles.
@@ -939,11 +943,11 @@ fn specs(s: &str, b: &mut Builder) -> Option<(Vec<SearchPart>, bool, String)> {
     let s = s
         .strip_prefix("any card")
         .map_or(s.to_string(), |r| format!("a card{r}"));
-    let mut items: Vec<(Value, bool, bool, Filter)> = Vec::new();
+    let mut items: Vec<(Value, bool, bool, bool, Filter)> = Vec::new();
     let mut seps: Vec<Sep> = Vec::new();
     let mut rest: String = s;
     loop {
-        let (n, up_to, all, r) = count(&rest)?;
+        let (n, up_to, all, exactly, r) = count(&rest)?;
         let (mut f, mut r) = description(r, b)?;
         // "basic land cards and/or Gate cards": alternatives without their own counts.
         loop {
@@ -965,7 +969,7 @@ fn specs(s: &str, b: &mut Builder) -> Option<(Vec<SearchPart>, bool, String)> {
             f = Filter::Or(vec![f, f2]);
             r = r2;
         }
-        items.push((n, up_to, all, f));
+        items.push((n, up_to, all, exactly, f));
         let next = PART_SEPS.iter().find_map(|(p, sep)| {
             let r2 = r.strip_prefix(p)?;
             // The next part has its own article or count.
@@ -1000,17 +1004,17 @@ fn specs(s: &str, b: &mut Builder) -> Option<(Vec<SearchPart>, bool, String)> {
     if let Some((0, j, grp)) = find_group_phrase(&rest) {
         if j == rest.len() {
             for item in items.iter_mut() {
-                item.3 = Filter::and(vec![item.3.clone(), Filter::Together(grp.clone())]);
+                item.4 = Filter::and(vec![item.4.clone(), Filter::Together(grp.clone())]);
             }
             rest = String::new();
         }
     }
     // "a land card of each basic land type" (CR 205.3i): one part per type.
     if let Some(r) = rest.strip_prefix(" of each basic land type") {
-        if items.len() != 1 || !matches!(items[0].0, Value::Const(1)) {
+        if items.len() != 1 || !matches!(items[0].0, Value::Const(1)) || items[0].3 {
             return None;
         }
-        let f = items.pop()?.3;
+        let f = items.pop()?.4;
         let parts = ["Plains", "Island", "Swamp", "Mountain", "Forest"]
             .iter()
             .map(|t| SearchPart {
@@ -1018,6 +1022,7 @@ fn specs(s: &str, b: &mut Builder) -> Option<(Vec<SearchPart>, bool, String)> {
                 count: Value::c(1),
                 up_to: false,
                 all: false,
+                exactly: false,
             })
             .collect();
         return Some((parts, distinct, r.to_string()));
@@ -1032,28 +1037,30 @@ fn specs(s: &str, b: &mut Builder) -> Option<(Vec<SearchPart>, bool, String)> {
         // Alternatives for one card: every part is "a"/"an" and every separator "or"
         // (the last may follow a comma list).
         if seps.iter().any(|s| *s == Sep::And)
-            || items
-                .iter()
-                .any(|(n, up, all, _)| !matches!(n, Value::Const(1)) || *up || *all)
+            || items.iter().any(|(n, up, all, exactly, _)| {
+                !matches!(n, Value::Const(1)) || *up || *all || *exactly
+            })
         {
             return None;
         }
-        let filter = Filter::Or(items.into_iter().map(|i| i.3).collect());
+        let filter = Filter::Or(items.into_iter().map(|i| i.4).collect());
         let part = SearchPart {
             filter,
             count: Value::c(1),
             up_to: false,
             all: false,
+            exactly: false,
         };
         return Some((vec![part], distinct, rest));
     }
     let parts = items
         .into_iter()
-        .map(|(count, up_to, all, filter)| SearchPart {
+        .map(|(count, up_to, all, exactly, filter)| SearchPart {
             filter,
             count,
             up_to,
             all,
+            exactly,
         })
         .collect();
     Some((parts, distinct, rest))

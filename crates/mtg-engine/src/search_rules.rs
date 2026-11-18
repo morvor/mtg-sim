@@ -3,6 +3,8 @@
 //! * Searching a hidden zone for cards with a stated quality, a player needn't find them
 //!   (CR 701.23b); searching for a quantity of cards ("a card"), they must find that many
 //!   if they can (CR 701.23d). A quality that's undefined matches no card (CR 701.23c).
+//!   "Exactly N" cards are N or none, and none if N can't be found together (register
+//!   `exactly-n-cards-are-n-or-none`).
 //! * Found cards aren't revealed unless the effect says so (CR 701.23e).
 //! * "If an opponent would search a library, that player searches the top four cards of
 //!   that library instead." (Aven Mindcensor): the search is of that portion, and the
@@ -355,7 +357,7 @@ fn choose(
 ) -> Vec<ObjectId> {
     let mut chosen: Vec<ObjectId> = Vec::new();
     for part in &spec.parts {
-        let n = g.eval_value(&part.count, ctx).max(0) as usize;
+        let asked = g.eval_value(&part.count, ctx).max(0) as usize;
         let named_ok = |g: &Game, o: ObjectId, chosen: &[ObjectId]| {
             !spec.distinct_names
                 || chosen
@@ -368,7 +370,7 @@ fn choose(
             .filter(|o| !chosen.contains(o) && g.matches(*o, &part.filter, ctx))
             .filter(|o| named_ok(g, *o, &chosen))
             .collect();
-        if pc.is_empty() || n == 0 {
+        if pc.is_empty() || asked == 0 {
             continue;
         }
         // "All cards with that name": every one in a public zone is found (CR 701.23b
@@ -381,7 +383,11 @@ fn choose(
         } else {
             vec![]
         };
-        let n = if part.all { pc.len() } else { n.min(pc.len()) };
+        let n = if part.all {
+            pc.len()
+        } else {
+            asked.min(pc.len())
+        };
         // As many as can be found together (with different names, if required).
         let possible = if spec.distinct_names {
             let mut picked: Vec<ObjectId> = Vec::new();
@@ -394,6 +400,23 @@ fn choose(
         } else {
             n
         };
+        // "Exactly N" (`SearchPart::exactly`): N cards or none. If N can't be found together
+        // (with different names, or the relationship the cards must have), none are; the
+        // zones are still searched (register `exactly-n-cards-are-n-or-none`).
+        let grouped = !crate::relational::groups_of(&part.filter).is_empty();
+        if part.exactly
+            && (possible < asked
+                || (grouped
+                    && !crate::target_groups::can_choose_together(
+                        g,
+                        &part.filter,
+                        &pc,
+                        asked,
+                        ctx,
+                    )))
+        {
+            continue;
+        }
         // CR 701.23b, 701.23d: cards with a stated quality needn't be found; a quantity of
         // cards must be.
         let min = if !part.up_to && quantity_only(&part.filter) {
@@ -408,6 +431,7 @@ fn choose(
             let mut seen: Vec<ObjectId> = Vec::new();
             v.len() >= min
                 && v.len() <= n
+                && (!part.exactly || v.is_empty() || v.len() == n)
                 && forced.iter().all(|f| v.contains(f))
                 && v.iter().all(|o| {
                     let ok = pc.contains(o) && !seen.contains(o) && named_ok(g, *o, &seen);
@@ -418,9 +442,14 @@ fn choose(
         let picked: Option<Vec<ObjectId>> = if optional.is_empty() || n <= forced.len() {
             Some(forced.clone())
         } else {
+            let prompt = match (part.exactly, min) {
+                (false, _) => "Search: choose cards".to_string(),
+                (true, 0) => format!("Search: choose exactly {n} cards, or none"),
+                (true, _) => format!("Search: choose exactly {n} cards"),
+            };
             let decision = crate::decision::Decision::ChooseEntities {
                 source: ctx.source,
-                prompt: "Search: choose cards".into(),
+                prompt,
                 candidates: optional.iter().map(|c| Entity::Object(*c)).collect(),
                 min: min.saturating_sub(forced.len()) as u32,
                 max: (n - forced.len()) as u32,
@@ -452,10 +481,22 @@ fn choose(
         // "up to two basic land cards that share a land type", "up to four creature cards
         // with different powers": the cards found together must have the relationship
         // (`target_groups::fit_together`).
-        let picked = if crate::relational::groups_of(&part.filter).is_empty() {
+        let picked = if !grouped {
             picked
         } else {
-            crate::target_groups::fit_together(g, &part.filter, picked, &pc, min, ctx)
+            // "Exactly N": cards found are completed to N.
+            let need = if part.exactly && !picked.is_empty() {
+                n
+            } else {
+                min
+            };
+            crate::target_groups::fit_together(g, &part.filter, picked, &pc, need, ctx)
+        };
+        // "Exactly N": N or none.
+        let picked = if part.exactly && picked.len() != n {
+            Vec::new()
+        } else {
+            picked
         };
         chosen.extend(picked);
     }

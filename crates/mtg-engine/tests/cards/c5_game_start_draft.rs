@@ -199,6 +199,7 @@ fn extrapolate_the_impossible_an_opponent_chooses_one_of_two_cards() {
 #[test]
 fn extrapolate_the_impossible_needs_two_different_names() {
     cr!("400.11");
+    interp!("exactly-n-cards-are-n-or-none");
     for (names, yes) in [(&["Opt", "Opt"][..], true), (&["Opt", "Shock"][..], false)] {
         let mut t = TestGame::new(2);
         for n in names {

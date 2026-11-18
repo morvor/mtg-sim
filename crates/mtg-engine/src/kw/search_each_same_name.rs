@@ -70,6 +70,7 @@ impl KeywordRules for SearchEachSameName {
                 count: Value::c(1),
                 up_to: false,
                 all: false,
+                exactly: false,
             });
         }
         let search = SearchSpec {

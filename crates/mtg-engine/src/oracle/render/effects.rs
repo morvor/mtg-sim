@@ -7684,6 +7684,9 @@ impl Renderer<'_> {
                     _ if p.all => Det::Count("all".into()),
                     (Value::Const(1), false) => Det::A,
                     (Value::Const(n), _) if *n >= 99 => Det::Count("any number of".into()),
+                    (Value::Const(n), false) if p.exactly => {
+                        Det::Count(format!("exactly {}", number_word(*n)))
+                    }
                     (Value::Const(n), false) => Det::Count(number_word(*n)),
                     (Value::Const(n), true) => Det::UpTo(number_word(*n)),
                     (other, up_to) => {
