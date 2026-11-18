@@ -229,8 +229,8 @@ A separate adversarial skeptic tried to refute conclusion D, re-checked every so
 - **Survey: confirmed.**
   - Oracle texts with "for each ..., its controller/owner ..." were searched again. The further ones found raise no ordering question, and their rulings say nothing on it:
     - searches, one search of each library by 701.23h: From the Ashes, Wave of Vitriol, Krenko's Buzzcrusher, Winds of Abandon, Clarion Ultimatum;
-    - the same process for each object: Unexplained Absence (a cloak);
-    - processed simultaneously: Terastodon, Hour of Need and Martyr's Cry (tokens, draws), Parallel Evolution.
+    - the same process for each object, so the order can't matter: Unexplained Absence (a cloak), Martyr's Cry (a draw);
+    - processed simultaneously: Terastodon and Hour of Need (tokens), Parallel Evolution (token copies).
   - Chaotic Transformation is still the only card where (1) and (2) play differently.
   - Rulings were searched again for "relative order", "first chooses", "which target", "considering", "repeat this process", "controller's choice" and "chooses the order". The connive rulings above are the only addition.
 
