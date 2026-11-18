@@ -19,7 +19,7 @@ Run at effort max, with an independent investigator subagent and a separate adve
 
 ## STATUS
 
-Investigated (Nov 18) by an independent investigator; an adversarial skeptic reviews it next. **Conclusion D (unresolved): the user decides.**
+Investigated (Nov 18) by an independent investigator, then reviewed by an adversarial skeptic, who upheld the conclusion and added evidence ("Skeptic's review", at the end). **Conclusion D (unresolved): the user decides.**
 
 **The sources don't settle it.**
 - **Where they agree:** when the caster controlled the exiled permanents, and for processes the caster performs (Soulfire Eruption, Kaboom!).
@@ -185,3 +185,73 @@ Either way, the follow-up change is the same in outline:
 - **Kaboom!** gets the caster's choice under both readings, and its template-error sentence is logged.
 - **The register:** `per-object-actions-in-given-order` is rewritten as decided, and its two tests updated.
 - **Merging:** another session is mutation-testing `simultaneous.rs`, so the change should merge with it.
+
+### Skeptic's review (Nov 18)
+
+A separate adversarial skeptic tried to refute conclusion D, re-checked every source, then reviewed the tests and the docs. **Result: D stands, leaning to the reconciling reading. The recommendation (2) stands, and the CR supports it more than the investigation found.** No engine change.
+
+**Re-checked, verbatim and dated.**
+- **CR**, against `data/` (effective 2026-09-25): 608.2c, 608.2e, 608.2f with both examples, 608.2h, 101.4, 101.4c, 108.4, 108.4a, 401.4, 405.3, 616.1 and 701.23h, as quoted above.
+- **Rulings and Oracle texts**, against `data/` (snapshot 2026-09-24), each with the date given above: Chaotic Transformation (both), Soulfire Eruption, Kaboom!, Divergent Transformations, Indomitable Creativity, Chaos Mutation, Mystic Confluence, Eldrazi Confluence, Rootcast Apprenticeship, Aetherspouts, Killing Wave, Fade Away, Synthetic Destiny and Mass Polymorph.
+- **Archived CRs** (https://github.com/pit142857/mtg-cr, commit 8351b94f): every file from the one effective 2019-01-25 to the one effective 2026-04-17. Each was decoded in its own encoding (UTF-8; Windows-1252 for the CR effective 2022-10-07; UTF-16 for the one effective 2022-11-18), with trailing spaces removed.
+  - 608.2f with its two examples: absent through the CR effective 2020-09-25, where 608.2f was today's 608.2g. Added whole in the CR effective 2020-11-20. "mana value" replaced "converted mana cost" in the CR effective 2021-04-22. Unchanged from then through the one effective 2026-04-17, and identical to `data/`.
+  - The whole diff from the CR effective 2020-09-25 to the one effective 2020-11-20 has no other rule on the order of actions. Its other changes: 121.8 (a card drawn while casting), 201.2a, 201.2c, 201.5, 603.12 (a reflexive trigger for each time), 607.2n (new), 608.2's step letters, 611.2d's cross-reference, 702.16n, 702.16p (new), 702.84b (new), encore (702.140, new), 711.8 (new) and the numbers after it, 718.4 (no monarch), 903.4b and 903.4e (new), Commander Draft (903.13, new), the glossary and the credits.
+- **ormos** (https://github.com/maxmakesmagic/ormos, commit bd11dee2):
+  - Dominaria United Release Notes (Jess Dunks, 2022-08-26; Wayback capture 2022-08-26 15:02:32): both Chaotic Transformation bullets, word for word.
+  - Commander Legends Release Notes (Eli Shiffrin, 2020-11-06; Wayback capture 2020-11-07 11:01:36): Soulfire Eruption's bullets, word for word.
+  - Commander 2016 Release Notes (Eli Shiffrin, 2016-10-28): Divergent Transformations' bullets.
+  - No Kaboom! in the Dominaria United Release Notes or the Dominaria United Commander decklists.
+  - No rules-change article for Commander Legends (news/2020/11 has none). The rules-change articles of 2020-09-22 and 2021-02-02 (Matt Tabak) and of 2022-09-02 (Jess Dunks) say nothing on 608.2f.
+- **Web:** no judge discussion or Wizards statement on this question was found. magic.wizards.com and mtg.fandom.com are outside this session's allowed hosts.
+
+**Missed by the investigation: the CR's own rules for per-permanent processes.**
+- **Connive, 701.50c:** "If multiple permanents are instructed to connive at the same time, the first player in APNAP order who controls (or, in the case of a permanent no longer on the battlefield, last controlled; see rule 701.50b) one or more of those permanents chooses one of them and it connives. Then this process is repeated for each remaining instruction to connive."
+  - It was first in the CR effective 2022-04-29 (Streets of New Capenna), as 701.47d: "If multiple permanents are instructed to connive at the same time, the first player in APNAP order who controls one or more of those permanents chooses one of them and it connives. Then if any permanents remain on the battlefield which have been instructed to connive and have not done so, this process is repeated." So the CR had it when the ruling was written (CR effective 2022-07-08) and published (CR effective 2022-09-08). Today's words are from the CR effective 2025-04-04.
+  - Jess Dunks's Comprehensive Rules Changes (2022-04-20; ormos) introduced it without a reason: "The rest of this section covers fewer common cases, like what happens when a permanent that changed zones is instructed to connive or what happens when multiple permanents are instructed to connive at the same time."
+  - The same release's rulings (2022-04-29; Streets of New Capenna Release Notes, 2022-04-20): Change of Plans, "If multiple creatures are instructed to connive simultaneously, they connive one at a time in the order of their controller's choice."; Lethal Scheme, "When multiple creatures are instructed to connive simultaneously, they connive one at a time in the order of their controller's choice."
+- **Explore, 701.44d:** "If multiple permanents are instructed to explore at the same time, the first player in APNAP order who controls (or, in the case of a permanent no longer on the battlefield, last controlled; see rule 701.44c) one or more of those permanents chooses one of them and it explores. Then this process is repeated for each remaining instruction to explore." First in the CR effective 2025-04-04, as 701.40d. Search-result snippets tie it to Hakbal of the Surging Soul ("At the beginning of combat on your turn, each Merfolk creature you control explores."); the update bulletin itself is on magic.wizards.com and wasn't read.
+- **What they show.** Where the CR defines a process that each permanent's controller performs, one player's permanents are ordered by that player: the ruling's allocation, not "the player who controls the resolving spell or ability". Neither rule calls itself an exception to 608.2f, though the CR marks such an exception nearby: 701.55d, "This is an exception to rule 608.2e." (since the CR effective 2023-11-17).
+- **Their limit.** They have never differed from 608.2f in play. Every card that has several permanents connive or explore at once has its controller's own do so: Change of Plans ("Each of X target creatures you control connive."), Lethal Scheme ("Each creature that convoked this spell connives."; convoke taps creatures "you control", 702.51a) and Hakbal. So they also fit R1, read as specific rules for two keyword actions.
+
+**Readings re-assessed.**
+- **R2 ("taken on") is a stretch on its own.**
+  - 608.2f's Soulfire Eruption example counts exiling the top card of the caster's library, which isn't done to the target, among "those actions".
+  - The ruling uses 608.2f's frame: "which target they’re considering", "the remaining targets".
+  - Connive's and explore's actions are taken on the permanents (the +1/+1 counter), and still their controllers choose. So "taken on" isn't what decides who chooses.
+- **A form of it that fits better (now Alternative (2) of the register entry):** the order of a player's per-object processes belongs to the player who performs them.
+  - In both of 608.2f's examples, that player is the controller of the resolving spell. In 701.50c, 701.44d and Chaotic Transformation's ruling, it's each permanent's controller. Soulfire Eruption's and Kaboom!'s rulings name the caster, who performs those processes.
+  - It fits every source found without an exception.
+  - Against it: 608.2f's words name the resolving spell's controller, whoever performs the action.
+- **Why it stays D.**
+  - Not B: no CR change since 2020-11-20 bears on 608.2f, and connive's (2022-04-29) and explore's (2025-04-04) rules agree with the ruling.
+  - Not C outright, and not A: 608.2f's words reach the case on R1, a reading a reasonable judge would take, and nothing forces either reading.
+- **R3, R4 and R5:** agreed, none reconciles.
+- **Survey: confirmed.**
+  - Oracle texts with "for each ..., its controller/owner ..." were searched again. The further ones found raise no ordering question, and their rulings say nothing on it:
+    - searches, one search of each library by 701.23h: From the Ashes, Wave of Vitriol, Krenko's Buzzcrusher, Winds of Abandon, Clarion Ultimatum;
+    - the same process for each object: Unexplained Absence (a cloak);
+    - processed simultaneously: Terastodon, Hour of Need and Martyr's Cry (tokens, draws), Parallel Evolution.
+  - Chaotic Transformation is still the only card where (1) and (2) play differently.
+  - Rulings were searched again for "relative order", "first chooses", "which target", "considering", "repeat this process", "controller's choice" and "chooses the order". The connive rulings above are the only addition.
+
+**Tests and docs.**
+- **`per_object_order.rs`:**
+  - Both tests pass. Both fail with the order within each player's group reversed (a temporary `items.reverse()` in `Frames::new`, reverted): Hill Giant isn't found, and Jace dies.
+  - Their "nothing asked" checks fail once either chooser is asked (`Decision::Order`, or `Decision::ChooseEntities`, which `ask_objects` uses). So whoever implements the decision has to update them and the register entry, as intended.
+  - `cr!("608.2f")` fits: the one-at-a-time processing in APNAP groups is exercised, and the deviation is in the chooser alone, as in other tests that pin a deviation and cite the rule. `interp!` names the entry. No ruling is cited, rightly.
+- **Pinning a provisional deviation is right.** Asking no one deviates from 608.2f even where both readings agree (Kaboom!; the caster's own permanents). So the register needs the entry, and the tests keep the deviation visible.
+- **`r_p135_mass.rs`:** the rustfmt changes are kept.
+  - The file on the PR branch isn't rustfmt-clean: `rustfmt --check` reports exactly those lines.
+  - CLAUDE.md asks for `cargo fmt` on touched files, and the investigator touched this one for the comment.
+  - Anyone's later `cargo fmt` produces the same lines, which merge cleanly.
+- **Docs changed by the skeptic:**
+  - register entry `per-object-actions-in-given-order`: 701.50c and 701.44d in Rules; Alternative (2) restated as above; the plan names `kwa::next_in_apnap_order`, which already chooses that way for connive and explore;
+  - the log entry: the same evidence;
+  - a "Not yet investigated" bullet in docs/RULING_DISCREPANCIES.md for Divergent Transformations' "sequentially" (the "Noticed" question above).
+  - Nothing in the investigator's quotes needed correcting.
+- **Checks run** (Nov 18, on the review's changes): `cargo test -p mtg-data` passed (the log's and the register's checks); `interpretations --check`: 151 entries, 1 provisional, 0 problems (docs/INTERPRETATIONS.md unchanged, since the entry's title, question and decision didn't change); `rulings-coverage --check` passed, unchanged at 28,158 of 33,955 texts cited, 193 exempt and 3,740 open, Chaotic Transformation's ruling among the open ones. `scripts/land.sh` then built and tested the workspace.
+
+**For the user (skeptic).** The same question, and the same recommendation: **(2)**.
+- When Chaotic Transformation exiles two or more permanents of a player other than its caster, that player orders their own reveal-until processes. That's what the ruling says, and how the CR has each permanent's controller order connive and explore (701.50c, 701.44d).
+- The engine change for (2) would reuse the allocation that `kwa::next_in_apnap_order` already makes for connive and explore.
+- Choosing (1) instead means reading 701.50c and 701.44d as exceptions for those keyword actions alone, and setting the ruling's "that player first chooses" aside.
