@@ -258,11 +258,11 @@ fn fang_triggers_once_for_cards_leaving_together() {
 #[test]
 fn vanilles_meld_trigger_checks_on_trigger_and_on_resolution() {
     cr!("603.4", "701.42a");
-    // Misattached within the meld pair: this ruling is about Vanille, Cheerful l'Cie's
-    // second ability ("At the beginning of your first main phase, if you both own and
-    // control Vanille and a creature named Fang, Fearless l'Cie, you may pay {3}{B}{G}.
-    // If you do, exile them, then meld them into Ragnarok, Divine Deliverance."); the data
-    // files it under Fang, its meld partner.
+    // Misattached (logged in docs/RULING_DISCREPANCIES.md): this ruling describes Vanille,
+    // Cheerful l'Cie's second ability ("At the beginning of your first main phase, if you
+    // both own and control Vanille and a creature named Fang, Fearless l'Cie, you may pay
+    // {3}{B}{G}. If you do, exile them, then meld them into Ragnarok, Divine
+    // Deliverance."); the data files it under Fang, its meld partner, which takes part.
     ruling!(
         "Fang, Fearless l'Cie",
         "Vanille's second ability checks the battlefield at the moment it would trigger to see if you own and control Vanille and a creature named Fang, Fearless l'Cie. If you don't, the ability won't trigger at all. If it does trigger, the ability will check again as it tries to resolve. If you don't control both Fang and Vanille at that time, the ability won't resolve, you won't have the opportunity to pay {3}{B}{G}, and none of the ability's other effects will happen."
