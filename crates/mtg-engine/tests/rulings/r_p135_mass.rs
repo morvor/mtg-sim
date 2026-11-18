@@ -449,6 +449,19 @@ fn chaotic_transformation_handles_each_exiled_permanent_of_a_player_in_turn() {
     assert!(t.in_exile("Sol Ring") && t.in_exile("Grizzly Bears"));
     assert_eq!(count_named(&t, "Hill Giant"), 1);
     assert_eq!(count_named(&t, "Mind Stone"), 1);
+    // "As it last existed": an animated Mutavault (a land creature) finds a creature card.
+    let mut t = TestGame::new(2);
+    let mv = t.battlefield(P1, "Mutavault");
+    animate(&mut t, mv);
+    stack_library(&mut t, P1, &["Hill Giant"]);
+    lands_for_cost(&mut t, P0, "Chaotic Transformation");
+    let card = t.hand(P0, "Chaotic Transformation");
+    t.answer_targets(P0, &[]);
+    t.answer_targets(P0, &[ob(mv)]);
+    t.cast(P0, card).go();
+    t.resolve_all();
+    assert!(t.in_exile("Mutavault"));
+    assert_eq!(count_named(&t, "Hill Giant"), 1);
 }
 
 #[test]
