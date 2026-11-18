@@ -14,7 +14,7 @@ use mtg_engine::*;
 
 #[test]
 fn kudzu_and_steam_vines_move_to_a_land_that_cant_be_targeted() {
-    cr!("115.1", "303.4", "701.3a");
+    cr!("115.1", "115.10a", "303.4", "701.3a");
     ruling!("Kudzu", "Because the ability isn't targeted, the controller of the destroyed land may attach it to a land that can't be the target of abilities.");
     ruling!(
         "Steam Vines",
@@ -38,7 +38,7 @@ fn kudzu_and_steam_vines_move_to_a_land_that_cant_be_targeted() {
 
 #[test]
 fn kudzu_goes_to_the_graveyard_when_destroyed_or_its_land_is_destroyed_otherwise() {
-    cr!("303.4d", "704.5m");
+    cr!("701.8a", "303.4c", "704.5m");
     ruling!("Kudzu", "If Kudzu is destroyed directly, or the land is destroyed by a spell or ability, then Kudzu goes to the graveyard like any Aura would.");
     let mut t = TestGame::new(2);
     let land = t.battlefield(P1, "Forest");
@@ -57,7 +57,7 @@ fn kudzu_goes_to_the_graveyard_when_destroyed_or_its_land_is_destroyed_otherwise
 
 #[test]
 fn steam_vines_trigger_after_it_left_still_destroys_and_damages() {
-    cr!("608.2h", "113.7a", "603.10");
+    cr!("608.2h", "113.7a");
     ruling!("Steam Vines", "If this card leaves the battlefield after it triggers but before it resolves, then the trigger will deal damage and destroy the land, but it will not bring this card back to the battlefield.");
     supported("Steam Vines");
     let mut t = TestGame::new(2);
@@ -96,7 +96,7 @@ fn uncontrolled_infestation_needs_the_land_to_become_tapped_later() {
 
 #[test]
 fn pooling_venom_ability_is_its_controllers_only() {
-    cr!("602.2");
+    cr!("602.2", "303.4e");
     ruling!(
         "Pooling Venom",
         "Only Pooling Venom’s controller can activate the activated ability."
@@ -116,7 +116,7 @@ fn pooling_venom_ability_is_its_controllers_only() {
 
 #[test]
 fn imprisoned_in_the_moon_makes_other_attachments_illegal_and_keeps_counters() {
-    cr!("303.4d", "704.5m", "704.5n", "122.1");
+    cr!("303.4c", "704.5m", "704.5n", "122.1");
     ruling!("Imprisoned in the Moon", "Becoming a land may cause other Auras to become illegally attached. These are put into their owner's graveyard, and any Equipment attached to the land become unattached and remain on the battlefield. Counters on the land remain on it even if they don't do anything.");
     supported("Imprisoned in the Moon");
     let mut t = TestGame::new(2);
@@ -136,13 +136,15 @@ fn imprisoned_in_the_moon_makes_other_attachments_illegal_and_keeps_counters() {
 
 #[test]
 fn imprisoned_planeswalker_tapped_for_mana_can_still_activate_loyalty_abilities() {
-    cr!("606.3", "302.6");
+    cr!("606.3");
     ruling!("Imprisoned in the Moon", "If you remove Imprisoned in the Moon from a planeswalker after tapping it for mana, you can still activate a loyalty ability of that planeswalker even though it's tapped.");
     let mut t = TestGame::new(2);
     let gid = t.battlefield(P0, "Gideon, Ally of Zendikar");
     let aura = attach_new(&mut t, P1, "Imprisoned in the Moon", gid);
     assert!(t.obj_now(gid).is(CardType::Land));
-    tap(&mut t, gid);
+    // Tapped for mana with the "{T}: Add {C}" the Aura gave it.
+    t.activate(P0, gid, 0, &[]).expect("{T}: Add {C}");
+    assert!(t.obj_now(gid).tapped);
     destroy(&mut t, aura);
     assert!(t.obj_now(gid).tapped);
     assert!(t.obj_now(gid).is(CardType::Planeswalker));

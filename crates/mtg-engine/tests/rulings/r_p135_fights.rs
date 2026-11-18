@@ -7,6 +7,7 @@
 use crate::r_p135_common::*;
 use crate::r_s07_common::chosen_modes;
 use mtg_engine::decision::Decision;
+use mtg_engine::events::Event;
 use mtg_engine::object::StackKind;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -142,7 +143,7 @@ fn fight_abilities_do_nothing_if_the_target_is_illegal_or_the_source_left() {
 
 #[test]
 fn kraul_harpooner_without_a_target_just_gets_the_bonus() {
-    cr!("601.2c", "603.3d", "115.4");
+    cr!("601.2c", "603.3d", "115.6");
     ruling!(
         "Kraul Harpooner",
         "If you don't choose a target creature, Kraul Harpooner simply gets +X/+0 until end of turn."
@@ -237,7 +238,7 @@ fn two_target_fight_spells_need_both_targets_to_be_cast() {
 
 #[test]
 fn up_to_one_fight_spells_can_target_just_your_creature() {
-    cr!("601.2c", "115.4", "608.2b");
+    cr!("601.2c", "115.6");
     ruling!(
         "Bridgeworks Battle // Tanglespan Bridgeworks",
         "You can cast Bridgeworks Battle targeting only the creature you control."
@@ -387,10 +388,25 @@ fn barroom_brawl_copy_with_unchanged_targets_fizzles_and_isnt_copied_again() {
     let from = t.asked().len();
     t.resolve_all();
     assert!(t.g.stack.is_empty());
-    assert!(
-        t.asked()[from..].iter().any(|(p, _)| *p == P1),
-        "P1 was offered a copy"
-    );
+    // P1's copy was put on the stack, and only the original resolved: the copy's targets
+    // (P0's creature, and P1's own rather than one of P2's) were both illegal for it.
+    let copies: Vec<PlayerId> = t
+        .g
+        .turn_events
+        .iter()
+        .filter_map(|e| match e {
+            Event::SpellCopied { player, .. } => Some(*player),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(copies, vec![P1], "P1 copied it");
+    let resolved = t
+        .g
+        .turn_events
+        .iter()
+        .filter(|e| matches!(e, Event::SpellResolved { .. }))
+        .count();
+    assert_eq!(resolved, 1, "the copy didn't resolve");
     assert!(
         t.asked()[from..].iter().all(|(p, _)| *p != P2),
         "P2 is never offered a copy"
@@ -539,7 +555,7 @@ fn fissure_vent_modes_need_legal_targets() {
     let f = t.battlefield(P1, "Forest");
     lands_for_cost(&mut t, P0, "Fissure Vent");
     let card = t.hand(P0, "Fissure Vent");
-    t.answer_targets(P0, &[ob(f)]);
+    t.answer_targets(P0, &[ob(ring)]);
     let from = t.asked().len();
     let s = t.cast(P0, card).modes(&[0, 1]).go();
     assert_eq!(modes_offered(&t, from).0, vec![0]);
@@ -592,25 +608,46 @@ fn brash_taunter_controller_loses_before_its_trigger_goes_on_the_stack() {
     ruling!("Brash Taunter", "If your life total is brought to 0 or less at the same time that Brash Taunter is dealt damage, you lose the game before its middle ability goes on the stack.");
     supported("Brash Taunter");
     supported("Earthquake");
-    // Three players: the game goes on after P0 loses.
-    let mut t = TestGame::new(3);
-    t.set_step(P2, Step::PrecombatMain);
-    t.battlefield(P0, "Brash Taunter");
-    t.g.players[0].life = 2;
-    t.answer_targets(P0, &[Entity::Player(P1)]);
-    lands_for_cost(&mut t, P2, "Earthquake");
-    t.lands(P2, "Wastes", 2);
-    let eq = t.hand(P2, "Earthquake");
-    t.cast(P2, eq).x(2).go();
-    t.resolve_all();
-    assert!(t.has_lost(P0));
-    // Earthquake dealt 2 to P1; Brash Taunter's ability never dealt its 2.
-    assert_eq!(t.life(P1), 18);
+    // P2's Earthquake deals 2 to P0 and to Brash Taunter at the same time: with 2 life P0
+    // loses; with 5 (the control) P0 doesn't.
+    for life in [2, 5] {
+        // Three players: the game goes on after P0 loses.
+        let mut t = TestGame::new(3);
+        t.set_step(P2, Step::PrecombatMain);
+        let bt = t.battlefield(P0, "Brash Taunter");
+        t.g.players[0].life = life;
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        lands_for_cost(&mut t, P2, "Earthquake");
+        t.lands(P2, "Wastes", 2);
+        let eq = t.hand(P2, "Earthquake");
+        t.cast(P2, eq).x(2).go();
+        let from = t.asked().len();
+        t.resolve_all();
+        // The ability goes on the stack, its target chosen then (CR 603.3d), only if P0
+        // is still in the game when it would be put there.
+        let put_on_stack = t.g.turn_events.iter().any(
+            |e| matches!(e, Event::AbilityTriggeredOnStack { source, .. } if *source == bt),
+        );
+        let target_asked = t.asked()[from..]
+            .iter()
+            .any(|(p, d)| *p == P0 && matches!(d, Decision::ChooseTargets { .. }));
+        if life == 2 {
+            assert!(t.has_lost(P0));
+            assert!(!t.on_battlefield(bt), "it left the game with its owner");
+            assert!(!put_on_stack && !target_asked, "it never went on the stack");
+            // Earthquake dealt 2 to P1; Brash Taunter's ability never dealt its 2.
+            assert_eq!(t.life(P1), 18);
+        } else {
+            assert!(!t.has_lost(P0));
+            assert!(put_on_stack && target_asked, "control: it went on the stack");
+            assert_eq!(t.life(P1), 16, "control: it dealt 2 to P1");
+        }
+    }
 }
 
 #[test]
 fn scab_clan_giant_chooses_a_random_target_among_all_opponents_creatures() {
-    cr!("115.1", "603.3d", "705.1");
+    cr!("115.1", "603.3d");
     ruling!("Scab-Clan Giant", "In a multiplayer game, you don't choose a single opponent at random. Any creature controlled by any of your opponents may be chosen at random.");
     ruling!("Scab-Clan Giant", "The target is chosen at random as part of putting the ability on the stack. Players can respond to the ability knowing what the target of the ability is.");
     ruling!("Scab-Clan Giant", "To choose a target at random, all legal targets must have an equal chance of being chosen. There are many ways to do this, including assigning each possible legal target a number and rolling a die.");
@@ -690,7 +727,7 @@ fn wayta_adds_one_trigger_per_copy() {
 }
 
 #[test]
-fn wayta_extra_triggers_choose_targets_separately() {
+fn wayta_extra_triggers_make_their_choices_separately() {
     cr!("603.2d", "603.3d");
     ruling!("Wayta, Trainer Prodigy", "Wayta, Trainer Prodigy's last ability doesn't copy the triggered ability; it just causes the ability to trigger twice. Any choices made as you put the ability onto the stack, such as modes and targets, are made separately for each instance of the ability. Any choices made on resolution, such as whether to put counters on a permanent, are also made individually.");
     supported("Frilled Deathspitter");
@@ -702,9 +739,35 @@ fn wayta_extra_triggers_choose_targets_separately() {
     crate::r_s06_common::damage(&mut t, fd, 1, fd);
     t.settle();
     assert_eq!(t.stack_len(), 2, "two instances, not a copy");
-    assert!(crate::r_s25_common::spell_copies(&t).is_empty());
+    // Each instance triggered and was put on the stack with its own target.
+    let triggered = t
+        .g
+        .turn_events
+        .iter()
+        .filter(|e| matches!(e, Event::AbilityTriggeredOnStack { source, .. } if *source == fd))
+        .count();
+    assert_eq!(triggered, 2);
     t.resolve_all();
     assert_eq!((t.life(P1), t.life(P2)), (18, 18));
+    // Choices made on resolution are made for each instance: Saber Ants' "you may create
+    // that many 1/1 tokens", accepted by the first instance and declined by the second.
+    supported("Saber Ants");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Wayta, Trainer Prodigy");
+    let ants = t.battlefield(P0, "Saber Ants");
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, false);
+    let from = t.asked().len();
+    crate::r_s06_common::damage(&mut t, ants, 1, ants);
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
+    t.resolve_all();
+    let asked = t.asked()[from..]
+        .iter()
+        .filter(|(p, d)| *p == P0 && matches!(d, Decision::YesNo { .. }))
+        .count();
+    assert_eq!(asked, 2, "asked once for each instance");
+    assert_eq!(crate::r_s25_common::creature_tokens(&t, P0), 1);
 }
 
 #[test]

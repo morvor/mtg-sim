@@ -66,7 +66,7 @@ fn land_destruction_with_an_illegal_target_does_nothing() {
 
 #[test]
 fn land_destruction_that_doesnt_destroy_still_does_the_rest() {
-    cr!("608.2c", "702.12b", "701.19c");
+    cr!("608.2c", "702.12b", "701.19a");
     ruling!("Peak Eruption", "However, if Peak Eruption resolves and the Mountain isn't destroyed (perhaps because it has indestructible), damage will be dealt.");
     ruling!("Molten Rain", "If the target is legal but not destroyed (most likely because it has indestructible), its controller is dealt 2 damage.");
     ruling!("Tectonic Rift", "If the target is legal but not destroyed (most likely because it has indestructible), creatures without flying will be unable to block.");
@@ -174,7 +174,8 @@ fn two_target_destruction_with_one_target_left_affects_it() {
     ruling!("Into the Maw of Hell", "If one of Into the Maw of Hell’s targets is illegal by the time it resolves, Into the Maw of Hell will still affect the remaining legal target. If both targets are illegal at this time, Into the Maw of Hell won’t resolve.");
     ruling!("Into the Maw of Hell", "Into the Maw of Hell targets both the land and the creature. You can only cast it if you can choose a legal target for both.");
     ruling!("Spiteful Blow", "You can't cast Spiteful Blow without a legal creature and land to target. If one of those targets is illegal when Spiteful Below tries to resolve, the other one will still be destroyed.");
-    // Boom: either land gone, the other is destroyed.
+    // Boom: either land changes control, so it's an illegal target and stays; the other is
+    // destroyed.
     supported("Boom // Bust");
     for gone in 0..2 {
         let mut t = TestGame::new(2);
@@ -192,7 +193,6 @@ fn two_target_destruction_with_one_target_left_affects_it() {
         } else {
             (theirs, mine)
         };
-        indestructible(&mut t, a);
         spoil(&mut t, a, Spoil::Stolen);
         t.resolve_all();
         assert!(t.on_battlefield(a));
@@ -237,7 +237,7 @@ fn two_target_destruction_with_one_target_left_affects_it() {
 
 #[test]
 fn burning_of_xinye_targets_an_opponent_destroys_two_players_lands_and_damages_all() {
-    cr!("608.2b", "701.19c", "701.8a");
+    cr!("608.2b", "701.19a", "701.8a");
     ruling!("Burning of Xinye", "A land with a regeneration shield on it will regenerate from Burning of Xinye’s destruction effect. However, the spell or ability that creates that shield must be cast or activated before Burning of Xinye starts to resolve.");
     ruling!("Burning of Xinye", "Burning of Xinye targets only an opponent. If that player is an illegal target by the time Burning of Xinye resolves, the entire spell doesn’t resolve.");
     ruling!("Burning of Xinye", "In a multiplayer game, only lands controlled by two players (you and the targeted opponent) are destroyed. However, Burning of Xinye will deal 4 damage to each creature, even those controlled by other players.");
@@ -331,7 +331,7 @@ fn peak_eruption_and_nissas_defeat_check_land_subtypes() {
 
 #[test]
 fn wake_of_destruction_looks_only_at_the_name() {
-    cr!("201.2", "608.2c");
+    cr!("201.2a", "608.2c");
     ruling!(
         "Wake of Destruction",
         "Only looks at the card name, so it will not destroy lands that just share the destroyed land’s type."
@@ -466,7 +466,7 @@ fn mandatory_land_destruction_triggers_target_your_own_land() {
 
 #[test]
 fn land_destruction_with_x_zero_destroys_nothing() {
-    cr!("107.3", "601.2b", "115.1");
+    cr!("107.3", "601.2b", "115.6");
     ruling!(
         "Volcanic Eruption",
         "Can be used with X equal to zero. This is useful if no Mountains are on the battlefield."
@@ -564,38 +564,68 @@ fn obsidian_charmaw_counts_tapped_colorless_lands() {
 }
 
 #[test]
-fn volcanic_offering_opponent_chooses_targets_as_it_is_cast() {
-    cr!("601.2c", "115.1");
+fn volcanic_offering_opponents_are_chosen_as_it_is_cast() {
+    cr!("601.2c", "601.7", "601.7a", "601.7b");
     ruling!("Volcanic Offering", "Unlike the other Offerings, you choose the opponents for Volcanic Offering as you cast the spell because those players are involved in choosing the spell’s targets.");
+    ruling!(
+        "Volcanic Offering",
+        "You may choose the same opponent for each of the effects, or you may choose different opponents."
+    );
     supported("Volcanic Offering");
-    let mut t = TestGame::new(3);
-    let l1 = t.battlefield(P1, "Mutavault");
-    let l2 = t.battlefield(P2, "Mutavault");
-    let c1 = t.battlefield(P1, "Grizzly Bears");
-    let c2 = t.battlefield(P2, "Grizzly Bears");
-    lands_for_cost(&mut t, P0, "Volcanic Offering");
-    let card = t.hand(P0, "Volcanic Offering");
-    t.answer_targets(P0, &[ob(l1)]);
-    t.answer_targets(P0, &[ob(c1)]);
-    for p in [P1, P2] {
-        t.answer_targets(p, &[ob(l2)]);
-        t.answer_targets(p, &[ob(c2)]);
+    // Three players: P0 picks the opponent who chooses the second land, then the one who
+    // chooses the second creature: different opponents, then the same one twice.
+    for (land_chooser, creature_chooser) in [(P1, P2), (P2, P2)] {
+        let mut t = TestGame::new(3);
+        let l1 = t.battlefield(P1, "Mutavault");
+        let l2 = t.battlefield(P2, "Mutavault");
+        let c1 = t.battlefield(P1, "Grizzly Bears");
+        let c2 = t.battlefield(P2, "Grizzly Bears");
+        lands_for_cost(&mut t, P0, "Volcanic Offering");
+        let card = t.hand(P0, "Volcanic Offering");
+        t.answer_targets(P0, &[ob(l1)]);
+        t.answer_targets(P0, &[ob(c1)]);
+        t.answer_choose(P0, &[Entity::Player(land_chooser)]);
+        t.answer_choose(P0, &[Entity::Player(creature_chooser)]);
+        t.answer_targets(land_chooser, &[ob(l2)]);
+        t.answer_targets(creature_chooser, &[ob(c2)]);
+        let from = t.asked().len();
+        let s = t.cast(P0, card).go();
+        // All during casting, before the spell is on the stack: P0's targets, then for each
+        // effect P0 picks an opponent, who chooses its target (CR 601.7a, 601.7b).
+        let steps: Vec<(PlayerId, &str)> = t.asked()[from..]
+            .iter()
+            .filter_map(|(p, d)| match d {
+                Decision::ChooseTargets { .. } => Some((*p, "target")),
+                Decision::ChooseEntities { candidates, .. }
+                    if candidates.iter().all(|c| c.player().is_some()) =>
+                {
+                    Some((*p, "opponent"))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            steps,
+            vec![
+                (P0, "target"),
+                (P0, "target"),
+                (P0, "opponent"),
+                (land_chooser, "target"),
+                (P0, "opponent"),
+                (creature_chooser, "target"),
+            ],
+            "{land_chooser:?} {creature_chooser:?}"
+        );
+        assert_eq!(targets_of(&t, s), vec![ob(l1), ob(l2), ob(c1), ob(c2)]);
+        t.resolve_all();
+        assert!(!t.on_battlefield(l1) && !t.on_battlefield(l2));
+        assert!(!t.on_battlefield(c1) && !t.on_battlefield(c2));
     }
-    let from = t.asked().len();
-    let s = t.cast(P0, card).go();
-    // An opponent chose targets during casting, before the spell was on the stack.
-    assert!(t.asked()[from..]
-        .iter()
-        .any(|(p, d)| *p != P0 && matches!(d, Decision::ChooseTargets { .. })));
-    assert_eq!(targets_of(&t, s).len(), 4);
-    t.resolve_all();
-    assert!(!t.on_battlefield(l1) && !t.on_battlefield(l2));
-    assert!(!t.on_battlefield(c1) && !t.on_battlefield(c2));
 }
 
 #[test]
 fn world_breaker_returns_only_from_the_graveyard() {
-    cr!("602.5", "113.6k");
+    cr!("602.5", "113.6m");
     ruling!(
         "World Breaker",
         "You can activate the last ability only if World Breaker is in your graveyard."
@@ -652,7 +682,7 @@ fn goblin_grenadiers_needs_a_creature_and_a_land_to_target() {
 
 #[test]
 fn numot_targets_on_trigger_and_pays_on_resolution() {
-    cr!("603.3d", "608.2c", "115.4");
+    cr!("603.3d", "608.2c", "115.6");
     ruling!("Numot, the Devastator", "You choose the targets when the ability is put on the stack, and you choose whether to pay when it resolves. You may choose zero targets. You can pay the mana even if you chose zero targets.");
     supported("Numot, the Devastator");
     for targets in [0usize, 2] {

@@ -22,14 +22,59 @@ use mtg_engine::*;
 /// A land that gains its controller 1 life whenever another land is put into a graveyard
 /// from the battlefield (a leaves-the-battlefield ability: it looks back, CR 603.10a).
 fn witness_land(t: &mut TestGame, p: PlayerId) -> ObjectId {
+    witness_land_typed(t, p, "Land")
+}
+
+/// A Witness Land with the given type line ("Land — Swamp").
+fn witness_land_typed(t: &mut TestGame, p: PlayerId, type_line: &str) -> ObjectId {
     let def = custom_card(
         "Witness Land",
-        "Land",
+        type_line,
         "",
         None,
         "Whenever another land is put into a graveyard from the battlefield, you gain 1 life.",
     );
     t.custom(p, def, Zone::Battlefield)
+}
+
+/// The lands `p` controls.
+fn lands_of(t: &TestGame, p: PlayerId) -> Vec<ObjectId> {
+    t.g.permanents()
+        .filter(|o| o.controller == p && o.is(CardType::Land))
+        .map(|o| o.id)
+        .collect()
+}
+
+/// The (player, prompt) of each choice of objects asked since decision `from`.
+fn choices_since(t: &TestGame, from: usize) -> Vec<(PlayerId, String)> {
+    t.asked()[from..]
+        .iter()
+        .filter_map(|(p, d)| match d {
+            Decision::ChooseEntities { prompt, .. } => Some((*p, prompt.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The positions of the events of this turn that `f` matches.
+fn event_positions(t: &TestGame, f: impl Fn(&Event) -> bool) -> Vec<usize> {
+    t.g.turn_events
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| f(e))
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// Every ability put on the stack this turn was put there after `spell` finished
+/// resolving (CR 603.3: triggered abilities wait for the next time a player would receive
+/// priority).
+fn triggers_waited_for(t: &TestGame, spell: ObjectId) {
+    let done = event_positions(t, |e| matches!(e, Event::SpellResolved { spell: s } if *s == spell));
+    let put = event_positions(t, |e| matches!(e, Event::AbilityTriggeredOnStack { .. }));
+    assert_eq!(done.len(), 1, "the spell resolved");
+    assert!(!put.is_empty(), "abilities triggered");
+    assert!(put.iter().all(|i| *i > done[0]), "{done:?} {put:?}");
 }
 
 /// The players asked to choose objects since decision `from`, in order (repeats
@@ -54,18 +99,38 @@ fn destructive_force_lands_are_chosen_in_turn_order_and_sacrificed_together() {
     ruling!("Destructive Force", "First the player whose turn it is chooses five lands to sacrifice, then each other player in turn order does the same, then all chosen lands are sacrificed at the same time. After that, Destructive Force deals 5 damage to each creature.");
     supported("Destructive Force");
     let mut t = TestGame::new(2);
-    let wl = witness_land(&mut t, P1);
+    // Each player sacrifices its Witness Land with the others: sacrificed all at once, each
+    // sees the nine other lands leave (had one player's gone first, that player's Witness
+    // Land would have missed the other player's five).
+    let w0 = witness_land(&mut t, P0);
+    let w1 = witness_land(&mut t, P1);
     t.lands(P1, "Forest", 4);
     let wurm = t.battlefield(P1, "Colossal Dreadmaw");
+    lands_for_cost(&mut t, P0, "Destructive Force");
+    let others: Vec<Entity> = lands_of(&t, P0)
+        .into_iter()
+        .filter(|l| *l != w0)
+        .take(4)
+        .map(ob)
+        .collect();
+    t.answer_choose(P0, &[vec![ob(w0)], others].concat());
+    let card = t.hand(P0, "Destructive Force");
     let from = t.asked().len();
-    cast_modes(&mut t, P0, "Destructive Force", &[], &[]);
+    let s = t.cast(P0, card).go();
     t.resolve_all();
     assert_eq!(choosers_since(&t, from), vec![P0, P1]);
-    // The Witness Land saw the other nine lands (five of P0's seven, four Forests).
-    assert!(!t.on_battlefield(wl));
-    assert_eq!(t.life(P1), 29);
-    assert_eq!(controlled(&t, P0, CardType::Land), 2);
+    assert!(!t.on_battlefield(w0) && !t.on_battlefield(w1));
+    assert_eq!((t.life(P0), t.life(P1)), (29, 29));
+    assert_eq!(controlled(&t, P0, CardType::Land), 3);
+    assert_eq!(controlled(&t, P1, CardType::Land), 0);
+    // After that, the damage.
     assert_eq!(damage_on(&t, wurm), 5);
+    let sacrificed = event_positions(&t, |e| {
+        matches!(e, Event::ZoneChange { from: Zone::Battlefield, .. })
+    });
+    let damage = event_positions(&t, |e| matches!(e, Event::Damage { .. }));
+    assert!(sacrificed.iter().max() < damage.iter().min());
+    assert!(resolved(&t, s));
 }
 
 #[test]
@@ -75,36 +140,38 @@ fn ember_swallower_lands_are_chosen_in_turn_order_and_sacrificed_together() {
     supported("Ember Swallower");
     let mut t = TestGame::new(2);
     let es = t.battlefield(P0, "Ember Swallower");
-    t.lands(P0, "Mountain", 7);
-    let wl = witness_land(&mut t, P1);
+    let mountains = t.lands(P0, "Mountain", 7);
+    // Each player's Witness Land is among the lands it sacrifices; each sees the five
+    // other lands leave with it.
+    let w0 = witness_land(&mut t, P0);
+    let w1 = witness_land(&mut t, P1);
     t.lands(P1, "Forest", 2);
+    t.answer_choose(P0, &[ob(w0), ob(mountains[0]), ob(mountains[1])]);
     t.activate(P0, es, 0, &[]).expect("monstrosity");
     let from = t.asked().len();
     t.resolve_all();
     assert_eq!(t.counters(es, counters::PLUS1), 3);
     assert_eq!(choosers_since(&t, from), vec![P0, P1]);
-    assert!(!t.on_battlefield(wl));
-    // Three of P0's and two Forests.
-    assert_eq!(t.life(P1), 25);
-    assert_eq!(controlled(&t, P0, CardType::Land), 4);
+    assert!(!t.on_battlefield(w0) && !t.on_battlefield(w1));
+    assert_eq!((t.life(P0), t.life(P1)), (25, 25));
+    assert_eq!(controlled(&t, P0, CardType::Land), 5);
 }
 
 #[test]
 fn sundering_titan_chooses_lands_untargeted_and_destroys_them_together() {
-    cr!("608.2c", "603.10a", "115.1");
+    cr!("608.2c", "603.10a", "115.1", "117.1", "117.1d");
     ruling!("Sundering Titan", "Sundering Titan's ability isn't targeted. When it resolves, Sundering Titan's controller must choose one land for each basic land type (Plains, Island, Swamp, Mountain, and Forest), and then they are destroyed simultaneously.");
     ruling!("Sundering Titan", "Players can't take actions in between the time you choose the lands and the time you destroy them. Notably, they can't activate mana abilities of those lands.");
     supported("Sundering Titan");
     let mut t = TestGame::new(2);
-    // A hexproof Tundra (Plains and Island), a Swamp, a Witness Land Mountain? (P1's
-    // Witness Land isn't a basic type: it survives and sees the others.)
+    // A hexproof Tundra (Plains and Island), P1's Witness Land that is a Swamp, a Mountain;
+    // P0's two Forests.
     let tundra = t.battlefield(P1, "Tundra");
     spoil(&mut t, tundra, Spoil::Hexproof);
-    let swamp = t.battlefield(P1, "Swamp");
+    let swamp = witness_land_typed(&mut t, P1, "Land — Swamp");
     let mountain = t.battlefield(P1, "Mountain");
     let forest = t.battlefield(P0, "Forest");
     let other_forest = t.battlefield(P0, "Forest");
-    witness_land(&mut t, P1);
     t.answer_choose(P0, &[ob(tundra)]);
     t.answer_choose(P0, &[ob(tundra)]);
     t.answer_choose(P0, &[ob(swamp)]);
@@ -116,23 +183,33 @@ fn sundering_titan_chooses_lands_untargeted_and_destroys_them_together() {
     assert!(targets_of(&t, top).is_empty(), "not targeted");
     let from = t.asked().len();
     t.resolve();
+    // As it resolves, P0 makes the five choices, then the lands are destroyed: no player
+    // gets priority, or is asked for a mana payment (the only times mana abilities can be
+    // activated, CR 117.1d), in between; the only other decision is the order the
+    // destroyed cards go into their owners' graveyards.
+    let asked: Vec<(PlayerId, bool)> = t.asked()[from..]
+        .iter()
+        .map(|(p, d)| (*p, matches!(d, Decision::ChooseEntities { .. })))
+        .collect();
+    assert_eq!(asked[..5], [(P0, true); 5], "{asked:?}");
     assert!(
-        !t.asked()[from..]
+        t.asked()[from..][5..]
             .iter()
-            .any(|(_, d)| matches!(d, Decision::Priority { .. })),
-        "no one gets priority between choosing and destroying"
+            .all(|(_, d)| matches!(d, Decision::Order { .. })),
+        "{asked:?}"
     );
     for l in [tundra, swamp, mountain, forest] {
         assert!(!t.on_battlefield(l));
     }
     assert!(t.on_battlefield(other_forest));
     t.resolve_all();
-    // The Witness Land saw all four at once.
-    assert_eq!(t.life(P1), 24);
+    // Destroyed with the others, the Swamp saw the other three leave (one at a time, it
+    // would have seen only the lands destroyed before it).
+    assert_eq!(t.life(P1), 23);
 }
 
 #[test]
-fn burning_and_mass_sacrifice_of_a_creature_land_happens_once() {
+fn mass_sacrifice_of_a_creature_land_happens_once() {
     cr!("701.21a", "608.2c");
     ruling!("Death Cloud", "If you control a permanent that’s a creature and a land, and you choose to sacrifice it as you sacrifice creatures, it won’t be on the battlefield when you sacrifice lands. You can’t sacrifice it again.");
     ruling!(
@@ -141,33 +218,58 @@ fn burning_and_mass_sacrifice_of_a_creature_land_happens_once() {
     );
     supported("Death Cloud");
     supported("Rite of Ruin");
-    // Death Cloud, X = 1: P1's Dryad Arbor is its only creature; then one more land.
+    // P1's choices since decision `from` among candidates that include `any`.
+    fn offered(t: &TestGame, from: usize, any: Entity) -> Vec<Vec<Entity>> {
+        t.asked()[from..]
+            .iter()
+            .filter_map(|(p, d)| match d {
+                Decision::ChooseEntities { candidates, .. }
+                    if *p == P1 && candidates.contains(&any) =>
+                {
+                    Some(candidates.clone())
+                }
+                _ => None,
+            })
+            .collect()
+    }
+    // Death Cloud, X = 1: P1's Dryad Arbor is its only creature; then one of its two
+    // Forests, chosen among the Forests alone.
     let mut t = TestGame::new(2);
     let arbor = t.battlefield(P1, "Dryad Arbor");
     let forests = t.lands(P1, "Forest", 2);
     lands_for_cost(&mut t, P0, "Death Cloud");
     t.lands(P0, "Wastes", 1);
     let card = t.hand(P0, "Death Cloud");
+    let from = t.asked().len();
     t.cast(P0, card).x(1).go();
     t.resolve_all();
     assert!(!t.on_battlefield(arbor));
     assert_eq!(forests.iter().filter(|f| t.on_battlefield(**f)).count(), 1);
     assert_eq!(t.life(P1), 19);
-    // Rite of Ruin (artifacts, creatures, lands): Ornithopter is P1's artifact; then
-    // two creatures: only the Bears is left; Sol Ring isn't.
+    let lands = offered(&t, from, ob(forests[0]));
+    assert!(!lands.is_empty());
+    assert!(lands.iter().all(|c| !c.contains(&ob(arbor))), "{lands:?}");
+    // Rite of Ruin (artifacts, creatures, lands): P1 sacrifices Ornithopter as its
+    // artifact; then two creatures, chosen among the three others.
     let mut t = TestGame::new(2);
     let orni = t.battlefield(P1, "Ornithopter");
-    let bears = t.battlefield(P1, "Grizzly Bears");
     let ring = t.battlefield(P1, "Sol Ring");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let creatures = [bears, t.battlefield(P1, "Hill Giant"), t.battlefield(P1, "Wall of Wood")];
     t.answer_choose(P1, &[ob(orni)]);
     lands_for_cost(&mut t, P0, "Rite of Ruin");
     t.answer(P0, DecisionKind::Option, Answer::Index(0));
     t.answer(P0, DecisionKind::Option, Answer::Index(0));
     let card = t.hand(P0, "Rite of Ruin");
+    let from = t.asked().len();
     t.cast(P0, card).go();
     t.resolve_all();
-    assert!(!t.on_battlefield(orni) && !t.on_battlefield(bears));
+    assert!(!t.on_battlefield(orni));
     assert!(t.on_battlefield(ring));
+    assert_eq!(creatures.iter().filter(|c| t.on_battlefield(**c)).count(), 1);
+    let chosen = offered(&t, from, ob(bears));
+    assert!(!chosen.is_empty());
+    assert!(chosen.iter().all(|c| !c.contains(&ob(orni))), "{chosen:?}");
 }
 
 // ---------------------------------------------------------------------------------------
@@ -197,7 +299,7 @@ fn smallpox_watchers(t: &mut TestGame) {
 
 #[test]
 fn smallpox_happens_in_order_and_triggers_wait() {
-    cr!("608.2c", "603.3", "101.4", "603.10a");
+    cr!("608.2c", "608.2e", "603.3", "101.4", "603.10a");
     ruling!("Smallpox", "As Smallpox resolves, first each player loses 1 life at the same time. Next, each player chooses a card in hand without revealing it, then all of the cards are discarded at the same time. Then starting with the player whose turn it is and proceeding in turn order, each player chooses a creature, knowing the choices made before them. All of the creatures are sacrificed at the same time, then finally repeat this process for lands.");
     ruling!("Smallpox", "Any abilities that trigger while Smallpox is resolving will wait to be put onto the stack until Smallpox is done resolving.");
     ruling!("Smallpox", "Any abilities of the lands sacrificed may modify or trigger on the creatures being sacrificed and on the cards being discarded. Abilities of the creatures won't modify or trigger on the lands being sacrificed, but may modify or trigger on the cards being discarded.");
@@ -208,27 +310,29 @@ fn smallpox_happens_in_order_and_triggers_wait() {
     t.hand(P1, "Grizzly Bears");
     t.battlefield(P1, "Hill Giant");
     t.battlefield(P1, "Forest");
-    lands_for_cost(&mut t, P0, "Smallpox");
     let from = t.asked().len();
-    cast_modes(&mut t, P0, "Smallpox", &[], &[]);
+    let s = cast_modes(&mut t, P0, "Smallpox", &[], &[]);
     t.resolve();
     // Everything happened; the triggered abilities are only now on the stack.
     assert_eq!(t.graveyard_size(P1), 3, "card, creature, land");
     assert!(t.stack_len() > 0);
+    triggers_waited_for(&t, s);
     assert_eq!(t.life(P0), 19);
-    // Each choice (where there is one): P0 first, then P1.
-    let order = choosers_since(&t, from);
-    assert!(order.len() >= 2 && order[0] == P0, "{order:?}");
-    assert!(order.windows(2).all(|w| w[0] != w[1]), "{order:?}");
+    // Each part's choices: P0 first, then P1.
+    let discard = "Choose cards to discard".to_string();
+    let sacrifice = "Choose permanents to sacrifice".to_string();
+    assert_eq!(
+        choices_since(&t, from),
+        vec![
+            (P0, discard.clone()),
+            (P1, discard),
+            (P0, sacrifice.clone()),
+            (P1, sacrifice.clone()),
+            (P0, sacrifice.clone()),
+            (P1, sacrifice),
+        ]
+    );
     // Life loss, then the discards, then the creatures, then the lands.
-    let ev = &t.g.turn_events;
-    let at = |f: &dyn Fn(&Event) -> bool| -> Vec<usize> {
-        ev.iter()
-            .enumerate()
-            .filter(|(_, e)| f(e))
-            .map(|(i, _)| i)
-            .collect()
-    };
     let g = &t.g;
     let left = |ty: CardType| {
         move |e: &Event| {
@@ -236,10 +340,10 @@ fn smallpox_happens_in_order_and_triggers_wait() {
                 if g.obj(*old).is(ty))
         }
     };
-    let lost = at(&|e| matches!(e, Event::LifeLost { .. }));
-    let discarded = at(&|e| matches!(e, Event::Discarded { .. }));
-    let creatures = at(&left(CardType::Creature));
-    let lands = at(&left(CardType::Land));
+    let lost = event_positions(&t, |e| matches!(e, Event::LifeLost { .. }));
+    let discarded = event_positions(&t, |e| matches!(e, Event::Discarded { .. }));
+    let creatures = event_positions(&t, left(CardType::Creature));
+    let lands = event_positions(&t, left(CardType::Land));
     for (a, b) in [
         (&lost, &discarded),
         (&discarded, &creatures),
@@ -259,36 +363,48 @@ fn smallpox_happens_in_order_and_triggers_wait() {
 
 #[test]
 fn pox_parts_are_processed_and_counted_one_at_a_time() {
-    cr!("608.2c", "101.4", "107.1a");
+    cr!("608.2c", "608.2e", "101.4", "107.1a");
     ruling!("Pox", "Each part of Pox's effect is processed separately. For each part, first the player whose turn it is makes all necessary choices (such as which cards to discard), then each other player in turn order chooses, then the actions happen at the same time. Then Pox's effect moves to the next stage.");
     ruling!("Pox", "The number you need to lose, discard, or sacrifice isn't calculated until it's time to perform that part of the effect. For example, if your opponent casts Pox and you discard Dodecapod as part of Pox's discard effect, Dodecapod will be put onto the battlefield instead of into your graveyard. Then, when determining how many creatures you need to sacrifice, the Dodecapod is taken into account.");
     supported("Pox");
     supported("Dodecapod");
     let mut t = TestGame::new(2);
+    // P0 (three Swamps to cast it): three Islands in hand, three Bears.
+    for _ in 0..3 {
+        t.hand(P0, "Island");
+        t.battlefield(P0, "Grizzly Bears");
+    }
+    // P1: Dodecapod and two Islands in hand, three Bears, three Forests.
     let dodecapod = t.hand(P1, "Dodecapod");
     t.hand(P1, "Island");
     t.hand(P1, "Island");
     for _ in 0..3 {
         t.battlefield(P1, "Grizzly Bears");
     }
-    t.hand(P0, "Island");
+    t.lands(P1, "Forest", 3);
     t.answer_choose(P1, &[ob(dodecapod)]);
-    lands_for_cost(&mut t, P0, "Pox");
     let from = t.asked().len();
     cast_modes(&mut t, P0, "Pox", &[], &[]);
     t.resolve_all();
-    assert_eq!(t.life(P1), 13, "a third of 20, rounded up");
-    // Four creatures with the Dodecapod: two are sacrificed.
+    assert_eq!((t.life(P0), t.life(P1)), (13, 13), "a third of 20, rounded up");
+    // P1 discarded the Dodecapod, which entered: four creatures, so two are sacrificed.
     assert_eq!(controlled(&t, P1, CardType::Creature), 2);
-    // Each part: P0 chooses, then P1.
-    let order = choosers_since(&t, from);
-    assert_eq!(order.first(), Some(&P0));
-    assert!(order.windows(2).all(|w| w[0] != w[1]));
+    assert_eq!(controlled(&t, P0, CardType::Creature), 2);
+    assert_eq!(
+        (
+            controlled(&t, P0, CardType::Land),
+            controlled(&t, P1, CardType::Land)
+        ),
+        (2, 2)
+    );
+    // Each part: P0 chooses, then P1, before the next part.
+    let players: Vec<PlayerId> = choices_since(&t, from).into_iter().map(|c| c.0).collect();
+    assert_eq!(players, vec![P0, P1, P0, P1, P0, P1]);
 }
 
 #[test]
 fn rite_of_ruin_and_casualties_of_war_triggers_wait_until_they_finish() {
-    cr!("603.3", "603.3b", "101.4");
+    cr!("603.3", "603.3b", "101.4", "608.2c", "603.10a");
     ruling!("Rite of Ruin", "If any abilities trigger while Rite of Ruin is resolving, those abilities will wait until Rite of Ruin finishes resolving before going on the stack. Starting with the active player, each player puts their abilities on the stack in any order.");
     ruling!("Casualties of War", "Each target permanent is destroyed in the order specified. Abilities that trigger when one is destroyed won't be put onto the stack until Casualties of War has finished resolving.");
     supported("Doomed Dissenter");
@@ -298,19 +414,30 @@ fn rite_of_ruin_and_casualties_of_war_triggers_wait_until_they_finish() {
     let mine = t.battlefield(P0, "Doomed Dissenter");
     let theirs = t.battlefield(P1, "Doomed Dissenter");
     lands_for_cost(&mut t, P0, "Rite of Ruin");
-    cast_modes(&mut t, P0, "Rite of Ruin", &[], &[]);
+    let s = cast_modes(&mut t, P0, "Rite of Ruin", &[], &[]);
     t.resolve();
     assert!(!t.on_battlefield(mine) && !t.on_battlefield(theirs));
+    triggers_waited_for(&t, s);
     assert_eq!(t.stack_len(), 2);
     let bottom = t.g.stack[0];
     assert_eq!(t.g.obj(bottom).controller, P0);
     t.resolve_all();
-    // Casualties of War: the creature's dies trigger waits for the land and artifact.
+    // Casualties of War: the artifact, then the creature, then the land are destroyed,
+    // one after another. The artifact gains its controller 1 life whenever a land is put
+    // into a graveyard from the battlefield: destroyed before the land, it doesn't see it
+    // (destroyed together with it, it would, CR 603.10a).
     let mut t = TestGame::new(2);
+    let relic = custom_card(
+        "Relic Watcher",
+        "Artifact",
+        "{1}",
+        None,
+        "Whenever a land is put into a graveyard from the battlefield, you gain 1 life.",
+    );
+    let a = t.custom(P1, relic, Zone::Battlefield);
     let d = t.battlefield(P1, "Doomed Dissenter");
-    let a = t.battlefield(P1, "Sol Ring");
     let l = t.battlefield(P1, "Mutavault");
-    cast_modes(
+    let s = cast_modes(
         &mut t,
         P0,
         "Casualties of War",
@@ -319,8 +446,16 @@ fn rite_of_ruin_and_casualties_of_war_triggers_wait_until_they_finish() {
     );
     t.resolve();
     assert!(!t.on_battlefield(a) && !t.on_battlefield(d) && !t.on_battlefield(l));
-    assert_eq!(t.stack_len(), 1, "the Dissenter's trigger, after the spell");
+    triggers_waited_for(&t, s);
+    let moved = |id: ObjectId| {
+        event_positions(&t, |e| matches!(e, Event::ZoneChange { old, .. } if *old == id))
+    };
+    let (ma, md, ml) = (moved(a), moved(d), moved(l));
+    assert_eq!((ma.len(), md.len(), ml.len()), (1, 1, 1));
+    assert!(ma[0] < md[0] && md[0] < ml[0], "in the order specified");
+    assert_eq!(t.stack_len(), 1, "only the Dissenter's trigger, after the spell");
     t.resolve_all();
+    assert_eq!(t.life(P1), 20, "the artifact was gone when the land was destroyed");
     assert_eq!(crate::r_s25_common::creature_tokens(&t, P1), 1);
 }
 
@@ -354,7 +489,7 @@ fn braids_resolves_before_your_own_upkeep_triggers() {
 
 #[test]
 fn teferis_realm_doesnt_phase_out_tokens() {
-    cr!("702.26a", "111.1");
+    cr!("702.26b", "111.1");
     ruling!(
         "Teferi's Realm",
         "Does not affect token permanents, only cards."
@@ -372,7 +507,7 @@ fn teferis_realm_doesnt_phase_out_tokens() {
 
 #[test]
 fn equipoise_can_target_any_player_including_you() {
-    cr!("115.1", "702.26a");
+    cr!("115.1", "702.26b");
     ruling!("Equipoise", "In multiplayer games, you can choose a different target player each turn. You can even choose yourself.");
     supported("Equipoise");
     let mut t = TestGame::new(3);
@@ -407,7 +542,7 @@ fn equipoise_can_target_any_player_including_you() {
 
 #[test]
 fn realm_razer_leaving_first_exiles_the_lands_forever() {
-    cr!("603.6", "610.3c", "603.2");
+    cr!("603.6c", "607.2a", "603.2");
     ruling!("Realm Razer", "If Realm Razer leaves the battlefield before its first ability has resolved, its second ability will trigger and do nothing. Then its first ability will resolve and exile all lands forever.");
     supported("Realm Razer");
     let mut t = TestGame::new(2);
@@ -432,8 +567,14 @@ fn realm_razer_leaving_first_exiles_the_lands_forever() {
 
 #[test]
 fn chaotic_transformation_handles_each_exiled_permanent_of_a_player_in_turn() {
-    cr!("608.2c", "608.2h", "701.20a");
-    ruling!("Chaotic Transformation", "If a player controls multiple permanents that were exiled this way, that player first chooses which target they’re considering, then they reveal cards until they reveal a card that shares a type with that permanent as it last existed on the battlefield, then they put that card onto the battlefield and shuffle. They then repeat this process for the remaining targets they controlled.");
+    cr!("608.2c", "608.2f", "608.2h", "701.20a");
+    // Chaotic Transformation's ruling on this (2022-09-09: "If a player controls multiple
+    // permanents that were exiled this way, that player first chooses which target
+    // they're considering, ...") is left uncited: it has that player choose the order,
+    // where CR 608.2f has "the player who controls the resolving spell or ability", and
+    // the engine asks neither (docs/RULING_DISCREPANCIES.md, "Not yet investigated").
+    // What both agree on is pinned here: each permanent's process in turn, by its types
+    // as it last existed on the battlefield.
     supported("Chaotic Transformation");
     let mut t = TestGame::new(2);
     let ring = t.battlefield(P1, "Sol Ring");

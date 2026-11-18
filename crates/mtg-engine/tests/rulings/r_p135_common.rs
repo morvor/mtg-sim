@@ -5,7 +5,6 @@
 
 #![allow(dead_code)]
 
-use mtg_engine::decision::Decision;
 use mtg_engine::events::Event;
 use mtg_engine::testing::*;
 use mtg_engine::*;
@@ -55,27 +54,6 @@ pub fn try_cast(
     let r = b.try_go();
     t.clear_answers();
     r
-}
-
-/// The players asked any decision since decision `from`, in order (repeats collapsed).
-pub fn deciders_since(t: &TestGame, from: usize) -> Vec<PlayerId> {
-    let mut v: Vec<PlayerId> = vec![];
-    for (p, d) in &t.asked()[from..] {
-        if matches!(d, Decision::Priority { .. }) {
-            continue;
-        }
-        if v.last() != Some(p) {
-            v.push(*p);
-        }
-    }
-    v
-}
-
-/// Whether a priority decision was asked of anyone since decision `from`.
-pub fn priority_since(t: &TestGame, from: usize) -> bool {
-    t.asked()[from..]
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::Priority { .. }))
 }
 
 /// The number of permanents named `name` on the battlefield.
