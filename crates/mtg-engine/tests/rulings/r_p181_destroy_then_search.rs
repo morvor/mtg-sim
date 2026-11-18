@@ -378,7 +378,7 @@ fn sword_hits(t: &mut TestGame, target: ObjectId, before: impl FnOnce(&mut TestG
 
 #[test]
 fn sword_of_hearth_and_home_illegal_target_and_token_target() {
-    cr!("608.2b", "111.7", "701.23a");
+    cr!("608.2b", "111.7", "111.8", "701.23a");
     ruling!(
         "Sword of Hearth and Home",
         "If you choose a target creature you own and that creature isn't a legal target as the triggered ability tries to resolve, that ability won't resolve and none of its effects will happen. You won't search for a basic land card."
@@ -420,24 +420,28 @@ fn emergency_eject_illegal_target_creates_no_lander() {
         "Emergency Eject",
         "If the target permanent is an illegal target as Emergency Eject tries to resolve, it won’t resolve and none of its effects will happen. The permanent’s controller won’t create a Lander token."
     );
-    // The same, said of spells and abilities that create Lander tokens in general.
+    // The same, said of Lander-making spells and abilities with targets in general, on
+    // Beamsaw Prospector (whose own Lander needs no target): Emergency Eject targets one.
     ruling!(
         "Beamsaw Prospector",
         "Some spells and abilities that create Lander tokens require targets. If each target chosen is an illegal target as that spell or ability tries to resolve, it won’t resolve. The Lander token won’t be created."
     );
     supported("Emergency Eject");
+    supported("Beamsaw Prospector");
     for illegal in [true, false] {
         let mut t = TestGame::new(2);
         lots(&mut t, P0);
-        let myr = t.battlefield(P1, "Grizzly Bears");
+        let prospector = t.battlefield(P1, "Beamsaw Prospector");
         let eject = t.hand(P0, "Emergency Eject");
-        t.cast(P0, eject).target(myr).go();
+        t.cast(P0, eject).target(prospector).go();
         if illegal {
-            bounce(&mut t, myr);
+            // Returned to its owner's hand: it doesn't die either.
+            bounce(&mut t, prospector);
         }
         t.resolve_all();
         let landers = crate::r_s01_common::with_subtype(&t, P1, "Lander").len();
-        assert_eq!(landers, !illegal as usize);
+        // Destroyed: Emergency Eject's Lander and the dying Prospector's.
+        assert_eq!(landers, if illegal { 0 } else { 2 });
     }
 }
 
@@ -501,7 +505,6 @@ fn escape_tunnel_checks_power_on_resolution_only() {
             pump_first,
             "pump first: {pump_first}"
         );
-        let _ = Step::DeclareBlockers;
     }
     // Blocked first, then the ability: it stays blocked.
     let mut t = TestGame::new(2);

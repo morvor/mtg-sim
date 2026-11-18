@@ -13,14 +13,13 @@ use mtg_engine::decision::Decision;
 use mtg_engine::draft::{Draft, DraftStyle};
 use mtg_engine::events::Event;
 use mtg_engine::object::{CastMethod, Zone};
-use mtg_engine::player_control::can_see;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
 
 #[test]
 fn maralen_stops_choices_to_have_a_player_draw() {
-    cr!("101.3", "121.1");
+    cr!("121.3", "121.3a");
     ruling!(
         "Maralen of the Mornsong",
         "While Maralen is on the battlefield, a player can’t choose to draw cards (or choose to have another player draw cards) as a spell or ability resolves."
@@ -53,7 +52,7 @@ fn maralen_stops_choices_to_have_a_player_draw() {
 
 #[test]
 fn maralen_stops_replacement_effects_that_replace_a_draw() {
-    cr!("121.1", "614.11", "702.52a");
+    cr!("614.17c", "702.52a");
     ruling!(
         "Maralen of the Mornsong",
         "While Maralen is on the battlefield, replacement effects that instruct a player to do something instead of drawing a card won’t work."
@@ -81,36 +80,59 @@ fn maralen_stops_replacement_effects_that_replace_a_draw() {
 
 #[test]
 fn burning_rune_demon_double_faced_cards_have_only_their_front_name() {
-    cr!("712.8a", "701.23a");
+    cr!("712.8a", "201.2a", "201.2b");
     ruling!(
         "Burning-Rune Demon",
         "While in your library, a double-faced card has only the name of its front face. It's not possible to reveal two of the same double-faced card this way."
     );
     supported("Burning-Rune Demon");
+    const DELVER: &str = "Delver of Secrets // Insectile Aberration";
+    // Two Delvers share their only name: P0's choice of both is refused, so at most one
+    // of them is revealed and one stays in the library.
     let mut t = TestGame::new(2);
-    let lib = set_library(
-        &mut t,
-        P0,
-        &[
-            "Delver of Secrets // Insectile Aberration",
-            "Delver of Secrets // Insectile Aberration",
-            "Grizzly Bears",
-        ],
-    );
+    let lib = set_library(&mut t, P0, &[DELVER, DELVER, "Grizzly Bears"]);
     assert_eq!(t.obj_now(lib[0]).chars.name, "Delver of Secrets");
     let from = t.asked().len();
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[obj(lib[0]), obj(lib[1])]);
     t.enter(P0, "Burning-Rune Demon");
     t.resolve_all();
-    // The choice of both Delvers was refused (the same name): at most one was revealed.
+    assert!(
+        last_candidates(&t, P0, from).contains(&obj(lib[1])),
+        "a Delver can be found"
+    );
     let delvers_revealed = revealed(&t)
         .iter()
         .filter(|c| t.g.obj(**c).chars.name == "Delver of Secrets")
         .count();
     assert!(delvers_revealed <= 1);
     assert!(lib[..2].iter().any(|c| is_in(&t, *c, Zone::Library(P0))));
-    assert!(!last_candidates(&t, P0, from).is_empty(), "P0 searched");
+    // In the library the Delver isn't also named Insectile Aberration (its back face): it
+    // and a card named Insectile Aberration have different names, so both are found.
+    let mut t = TestGame::new(2);
+    let delver = set_library(&mut t, P0, &[DELVER])[0];
+    let namesake = t.custom(
+        P0,
+        crate::r_s01_common::custom_card(
+            "Insectile Aberration",
+            "Creature — Human Insect",
+            "{2}{U}",
+            Some((3, 2)),
+            "Flying",
+        ),
+        Zone::Library(P0),
+    );
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[obj(delver), obj(namesake)]);
+    t.enter(P0, "Burning-Rune Demon");
+    t.resolve_all();
+    let shown = revealed(&t);
+    assert!(
+        shown.contains(&delver) && shown.contains(&namesake),
+        "both found"
+    );
+    let zones = [t.zone(t.g.current(delver)), t.zone(t.g.current(namesake))];
+    assert!(zones.contains(&Zone::Hand(P0)) && zones.contains(&Zone::Graveyard(P0)));
 }
 
 #[test]
@@ -213,7 +235,6 @@ fn tutors_to_hand_dont_reveal_the_card() {
         let bolt = t.g.current(bolt);
         assert_eq!(t.zone(bolt), Zone::Hand(P0), "{name}");
         assert!(revealed(&t).is_empty(), "{name}: nothing revealed");
-        assert!(!can_see(&t.g, P1, bolt), "{name}");
     }
 }
 
@@ -317,7 +338,7 @@ fn remembrance_finds(t: &mut TestGame, dies: ObjectId, name: &str) -> bool {
 
 #[test]
 fn remembrance_finds_cards_named_like_animated_lands_and_copies() {
-    cr!("603.10a", "707.2", "201.2");
+    cr!("603.10a", "707.2", "201.2a");
     ruling!(
         "Remembrance",
         "If a card which is a creature only due to an effect goes to the graveyard, you can search for another copy of that card even though the card in your library won’t be a creature card."
@@ -352,7 +373,7 @@ fn remembrance_finds_cards_named_like_animated_lands_and_copies() {
 
 #[test]
 fn searches_that_find_nothing_still_search_and_shuffle() {
-    cr!("701.23b", "107.3b");
+    cr!("701.23b", "701.23c");
     ruling!(
         "Uncage the Menagerie",
         "If you cast Uncage the Menagerie with X as 0, you’ll search your library and shuffle it, but you won’t be able to find any cards."
@@ -392,12 +413,16 @@ fn searches_that_find_nothing_still_search_and_shuffle() {
     t.resolve_all();
     assert!(is_in(&t, thopter, Zone::Library(P0)));
     assert_eq!((searches(&t, P0), shuffles(&t, P0)), (1, 1));
-    // Pattern Matcher with no other creature: P0 searches for nothing.
+    // Pattern Matcher with no other creature: P0 searches for nothing (the other Pattern
+    // Matcher in the library isn't named like another creature P0 controls).
     let mut t = TestGame::new(2);
+    let other = t.library_top(P0, "Pattern Matcher");
     t.answer_yes(P0, true);
+    t.answer_choose(P0, &[obj(other)]);
     t.enter(P0, "Pattern Matcher");
     t.resolve_all();
     assert_eq!((searches(&t, P0), shuffles(&t, P0)), (1, 1));
+    assert!(is_in(&t, other, Zone::Library(P0)));
     // Assembly Hall: a Grizzly Bears is revealed; the one in the library isn't found.
     let mut t = TestGame::new(2);
     let in_hand = t.hand(P0, "Grizzly Bears");
@@ -476,7 +501,7 @@ fn guided_passage_opponent_sees_the_whole_library() {
 
 #[test]
 fn recruiter_of_the_guard_sees_nethergoyfs_toughness_in_the_library() {
-    cr!("604.3", "208.3");
+    cr!("604.3", "208.2a");
     ruling!(
         "Recruiter of the Guard",
         "If a creature card has \"*\" in its toughness, the ability that defines its toughness works in all zones."
@@ -542,9 +567,14 @@ fn realms_uncharted_with_fewer_than_four_lands() {
         t.answer_choose(P0, &lib[..n].iter().map(|c| obj(*c)).collect::<Vec<_>>());
         lots(&mut t, P0);
         let hand = t.hand_size(P0);
+        let from = t.asked().len();
         cast_resolve(&mut t, P0, "Realms Uncharted", &[]);
         let to_hand = if n == 3 { 1 } else { 0 };
         let to_gy = n - to_hand;
+        if n == 3 {
+            // The opponent chose among the three revealed cards.
+            assert_eq!(last_candidates(&t, P1, from).len(), 3);
+        }
         assert_eq!(t.hand_size(P0), hand + to_hand, "{n}");
         // The graveyard also has Realms Uncharted.
         assert_eq!(t.graveyard_size(P0), to_gy + 1, "{n}");

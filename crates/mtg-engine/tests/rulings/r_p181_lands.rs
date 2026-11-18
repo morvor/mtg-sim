@@ -44,7 +44,7 @@ fn first(t: &TestGame, f: impl Fn(&Event) -> bool) -> usize {
 
 #[test]
 fn values_are_counted_as_the_spell_or_ability_resolves() {
-    cr!("608.2h", "107.3a");
+    cr!("608.2h", "107.3c");
     ruling!(
         "Celebrate the Harvest",
         "Celebrate the Harvest looks at the creatures you control as it resolves to determine how many basic lands cards you can search for."
@@ -82,25 +82,35 @@ fn values_are_counted_as_the_spell_or_ability_resolves() {
         t.resolve_all();
         assert_eq!(last_max(&t, P0, from), if pumped { 1 } else { 2 });
     }
-    // Boundless Realms: three lands as it begins resolving; the ones it puts onto the
-    // battlefield don't raise X.
+    // Boundless Realms: three lands when it's cast, a fourth (a Wastes) before it resolves:
+    // four lands as it begins resolving; the ones it puts onto the battlefield don't
+    // raise X.
     let mut t = TestGame::new(2);
-    let forests = basics(&mut t, P0, "Forest", 6);
+    let forests = basics(&mut t, P0, "Forest", 8);
     t.lands(P0, "Forest", 3);
     lots(&mut t, P0);
-    t.answer_choose(P0, &forests);
-    cast_pool(&mut t, P0, "Boundless Realms", &[]);
-    assert_eq!(controlled(&t, P0, "Forest").len(), 6);
-    // Prismatic Undercurrents: green (itself) and red (Goblin Guide): up to two cards.
+    t.answer_choose(P0, &forests[..4]);
+    let realms = t.hand(P0, "Boundless Realms");
+    t.cast(P0, realms).go();
+    t.battlefield(P0, "Wastes");
+    let from = t.asked().len();
+    t.resolve_all();
+    assert_eq!(last_max(&t, P0, from), 4);
+    assert_eq!(controlled(&t, P0, "Forest").len(), 3 + 4);
+    // Prismatic Undercurrents: green (itself) and red (Goblin Guide) as it triggers, and
+    // blue (Delver of Secrets) by the time it resolves: up to three cards.
     let mut t = TestGame::new(2);
     let forests = basics(&mut t, P0, "Forest", 4);
     t.battlefield(P0, "Goblin Guide");
-    t.answer_choose(P0, &forests);
+    t.answer_choose(P0, &forests[..3]);
     let from = t.asked().len();
     t.enter(P0, "Prismatic Undercurrents");
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.battlefield(P0, "Delver of Secrets // Insectile Aberration");
     t.resolve_all();
-    assert_eq!(last_max(&t, P0, from), 2);
-    assert_eq!(t.hand_size(P0), 2);
+    assert_eq!(last_max(&t, P0, from), 3);
+    assert_eq!(t.hand_size(P0), 3);
 }
 
 #[test]
@@ -421,7 +431,7 @@ fn fabled_passage_enters_tapped_then_untaps() {
         "If you control four or more lands, the basic land doesn't enter untapped; it enters tapped and then you untap it."
     );
     supported("Fabled Passage");
-    for others in [2usize, 4] {
+    for others in [2usize, 3, 4] {
         let mut t = TestGame::new(2);
         let forests = basics(&mut t, P0, "Forest", 2);
         t.lands(P0, "Wastes", others);
@@ -430,11 +440,8 @@ fn fabled_passage_enters_tapped_then_untaps() {
         activate_containing(&mut t, P0, passage, "Search").unwrap();
         t.resolve_all();
         let f = controlled(&t, P0, "Forest")[0];
-        // It entered tapped either way; with four lands (the Passage is gone) it's untapped.
-        let entered_tapped = t.g.turn_events.iter().any(
-            |e| matches!(e, Event::ZoneChange { new, to: Zone::Battlefield, .. } if *new == f),
-        );
-        assert!(entered_tapped);
+        // It entered tapped. With four or more lands (counting it, not the sacrificed
+        // Passage) it was then untapped, which only a tapped permanent can be (CR 701.26b).
         let untapped =
             t.g.turn_events
                 .iter()
@@ -596,7 +603,7 @@ fn up_to_searches_can_find_fewer() {
 
 #[test]
 fn snow_covered_basics_are_basic_land_cards() {
-    cr!("205.4a", "205.4g");
+    cr!("205.4a", "205.4c");
     ruling!("Untamed Wilds", "Can fetch a snow land.");
     supported("Untamed Wilds");
     let mut t = TestGame::new(2);
@@ -724,35 +731,30 @@ fn ancient_excavation_counts_the_hand_on_resolution_and_discards_per_card_drawn(
         t.hand(P0, "Hill Giant");
         let necro = t.graveyard(P0, "Necroplasm");
         lots(&mut t, P0);
-        // The first draw is replaced by dredge 2 (or not).
+        // The first draw is replaced by dredge 2 (or not); the others aren't.
         t.answer_yes(P0, dredge);
+        t.answer_yes(P0, false);
         t.answer_yes(P0, false);
         let exc = t.hand(P0, "Ancient Excavation");
         t.cast(P0, exc).go();
+        // A third card joins the hand while Ancient Excavation is on the stack.
+        t.hand(P0, "Forest");
         t.resolve_all();
         let drawn = draws(&t, P0);
-        assert_eq!(drawn, if dredge { 1 } else { 2 });
+        assert_eq!(drawn, if dredge { 2 } else { 3 });
+        let dredged = t.g.turn_events.iter().any(|e| {
+            matches!(e, Event::ZoneChange { old, to: Zone::Hand(_), .. } if *old == necro)
+        });
+        assert_eq!(dredged, dredge);
         let discarded =
             t.g.turn_events
                 .iter()
                 .filter(|e| matches!(e, Event::Discarded { .. }))
                 .count();
         assert_eq!(discarded, drawn, "one discard per card drawn");
-        assert_eq!(
-            is_in(&t, necro, Zone::Graveyard(P0)),
-            !dredge || discarded_necro(&t)
-        );
-        // Two in hand (not counting the Excavation) + two cards gained - discards.
-        assert_eq!(t.hand_size(P0), 2 + 2 - discarded);
+        // Three in hand (not counting the Excavation) + three cards gained - discards.
+        assert_eq!(t.hand_size(P0), 3 + 3 - discarded);
     }
-}
-
-/// Whether a Necroplasm was discarded this turn.
-fn discarded_necro(t: &TestGame) -> bool {
-    t.g.player(P0)
-        .graveyard
-        .iter()
-        .any(|c| t.g.obj(*c).chars.name == "Necroplasm")
 }
 
 #[test]

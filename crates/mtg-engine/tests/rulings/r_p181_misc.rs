@@ -317,12 +317,18 @@ fn borderland_explorer_discards_in_turn_order_then_all_at_once() {
         t.answer_yes(p, true);
         t.answer_choose(p, &[obj(l)]);
     }
-    // At each of P1's decisions, P0's discard hasn't happened yet.
+    // At each of P1's decisions, P0's discard hasn't happened yet, and P0's chosen card
+    // hasn't been revealed: (P0's graveyard, the cards revealed so far).
     let seen = crate::r_s01_common::watch(
         &mut t,
         P1,
         |d| matches!(d, Decision::ChooseEntities { .. } | Decision::YesNo { .. }),
-        |g| g.player(PlayerId(0)).graveyard.len(),
+        |g| {
+            let shown = g.turn_events.iter().filter(|e| {
+                matches!(e, Event::Custom { name, .. } if name == mtg_engine::reveal::REVEALED)
+            });
+            (g.player(PlayerId(0)).graveyard.len(), shown.count())
+        },
     );
     let from = t.asked().len();
     t.enter(P0, "Borderland Explorer");
@@ -337,8 +343,12 @@ fn borderland_explorer_discards_in_turn_order_then_all_at_once() {
         .position(|(p, _)| *p == P0)
         .unwrap();
     assert!(first_p0 < first_p1);
-    let gy = seen.lock().unwrap().clone();
-    assert_eq!(gy[0], 0, "P0's card isn't discarded when P1 decides");
+    let seen = seen.lock().unwrap().clone();
+    assert_eq!(
+        seen[0],
+        (0, 0),
+        "P0's card isn't discarded or shown when P1 decides"
+    );
     assert!(t.in_graveyard(P0, "Grizzly Bears") && t.in_graveyard(P1, "Hill Giant"));
     assert!(is_in(&t, l0[0], Zone::Hand(P0)) && is_in(&t, l1[0], Zone::Hand(P1)));
     // The found cards were revealed.
@@ -389,7 +399,7 @@ fn roar_of_the_fifth_people_chapter_two_has_no_duration() {
 
 #[test]
 fn beanstalk_giants_power_counts_lands_in_every_zone() {
-    cr!("604.3", "208.3");
+    cr!("604.3", "208.2a");
     ruling!(
         "Beanstalk Giant // Fertile Footsteps",
         "The ability that defines Beanstalk Giant's power and toughness works in all zones, not just the battlefield."
@@ -434,7 +444,7 @@ fn alpine_houndmasters_bonus_is_fixed_as_it_resolves() {
 
 #[test]
 fn nyleas_intervention_deals_twice_x_damage_once() {
-    cr!("120.2", "700.1");
+    cr!("120.2b", "700.1");
     ruling!(
         "Nylea's Intervention",
         "The second mode of Nylea’s Intervention has it deal damage to each creature with flying equal to twice X. It doesn’t deal X damage to them then deal X damage again."
