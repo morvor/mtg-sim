@@ -6,14 +6,16 @@
 //! Extrapolate the Impossible). They are N cards or none: a searcher finds N of them or, as
 //! CR 701.23b allows for cards with a stated quality, none, never between one and N - 1;
 //! if N such cards can't be found together, none are, and a library searched for
-//! Burning-Rune Demon is still shuffled (CR 701.23g, 118.12b). No rule or ruling speaks to the shortfall: register
-//! entry `exactly-n-cards-are-n-or-none` (provisional), which reads "exactly" as Spry and
-//! Mighty's ruling does for "Choose exactly two creatures you control". A player who
-//! chooses not to search for Burning-Rune Demon doesn't shuffle (its ruling).
+//! Burning-Rune Demon is still shuffled (CR 701.23g, 118.12b). No rule or ruling speaks to
+//! the shortfall: register entry `exactly-n-cards-are-n-or-none` (provisional), which reads
+//! "exactly" as Spry and Mighty's ruling does for "Choose exactly two creatures you
+//! control". A player who chooses not to search for Burning-Rune Demon doesn't shuffle (its
+//! ruling).
 
 use crate::r_p181_common::*;
 use mtg_engine::card::{card, CardDef};
 use mtg_engine::decision::Decision;
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::*;
@@ -105,7 +107,10 @@ fn burning_rune_demon_finds_nothing_when_it_cant_find_two_names() {
         &["Shock"][..],
     ] {
         let (t, from) = demon_search(lib, true, None);
-        assert!(card_choices(&t, P0, from).is_empty(), "{lib:?}: no card to choose");
+        assert!(
+            card_choices(&t, P0, from).is_empty(),
+            "{lib:?}: no card to choose"
+        );
         assert!(
             card_choices(&t, P1, from).is_empty(),
             "{lib:?}: nothing for the opponent to choose from"
@@ -161,7 +166,7 @@ const LEGENDS: [&str; 4] = [
 
 #[test]
 fn turtles_forever_finds_exactly_four_legendary_creature_cards_or_none() {
-    cr!("701.23a", "701.23b", "201.2b");
+    cr!("701.23a", "701.23b", "201.2b", "701.24d");
     interp!("exactly-n-cards-are-n-or-none");
     supported("Turtles Forever");
     // Four different names. Finding only three isn't finding exactly four: the answer is
@@ -180,9 +185,16 @@ fn turtles_forever_finds_exactly_four_legendary_creature_cards_or_none() {
     assert_eq!(revealed(&t).len(), 4);
     assert!(t.in_hand(P0, LEGENDS[0]) && t.in_hand(P0, LEGENDS[1]));
     assert_eq!(t.hand_size(P0), hand + 2);
-    assert_eq!(t.library_size(P0), 3, "two shuffled back in, and Grizzly Bears");
+    assert_eq!(
+        t.library_size(P0),
+        3,
+        "two shuffled back in, and Grizzly Bears"
+    );
     // Only three names among the legendary creature cards (two Isamarus): none are found.
-    for legends in [&LEGENDS[..3], &[LEGENDS[0], LEGENDS[0], LEGENDS[1], LEGENDS[2]][..]] {
+    for legends in [
+        &LEGENDS[..3],
+        &[LEGENDS[0], LEGENDS[0], LEGENDS[1], LEGENDS[2]][..],
+    ] {
         let mut t = TestGame::new(2);
         let mut names = legends.to_vec();
         names.push("Grizzly Bears");
@@ -195,7 +207,42 @@ fn turtles_forever_finds_exactly_four_legendary_creature_cards_or_none() {
         assert!(revealed(&t).is_empty(), "{legends:?}");
         assert_eq!(t.hand_size(P0), hand, "{legends:?}");
         assert_eq!(t.library_size(P0), names.len(), "{legends:?}");
+        // The library was searched, and "shuffle the rest into your library" shuffles it
+        // though the rest is no cards (CR 701.24d).
+        assert_eq!(searches(&t, P0), 1, "{legends:?}");
+        assert_eq!(shuffles(&t, P0), 1, "{legends:?}");
     }
+}
+
+#[test]
+fn burning_rune_demon_finds_the_two_names_a_split_card_shares() {
+    cr!("201.2b", "709.4", "709.4a");
+    interp!("exactly-n-cards-are-n-or-none");
+    // In the library, Fire // Ice has both its names (CR 709.4, 709.4a), so it shares a
+    // name with a card named Fire and with a card named Ice, which have different names
+    // from each other: exactly two cards with different names can be found, those two,
+    // though the split card is the first of the three.
+    supported("Burning-Rune Demon");
+    let spell = |name: &str| {
+        crate::r_s01_common::custom_card(name, "Instant", "{1}{R}", None, "Draw a card.")
+    };
+    let mut t = TestGame::new(2);
+    set_library(&mut t, P0, &[]);
+    let fire = t.custom(P0, spell("Fire"), Zone::Library(P0));
+    let ice = t.custom(P0, spell("Ice"), Zone::Library(P0));
+    let split = t.library_top(P0, "Fire // Ice");
+    let from = t.asked().len();
+    t.answer_yes(P0, true);
+    t.enter(P0, "Burning-Rune Demon");
+    t.resolve_all();
+    assert_eq!(card_choices(&t, P0, from), [(3, 0, 2)]);
+    let mut shown = revealed(&t);
+    shown.sort();
+    let mut pair = vec![fire, ice];
+    pair.sort();
+    assert_eq!(shown, pair, "Fire and Ice are found and revealed");
+    assert_eq!(t.hand_size(P0) + t.graveyard_size(P0), 2);
+    assert!(is_in(&t, split, Zone::Library(P0)), "Fire // Ice stays");
 }
 
 /// A copy of the real card `name` outside the game for `p` (their sideboard).
@@ -224,7 +271,8 @@ fn exactly_two_is_two_or_none_whether_searched_revealed_or_chosen() {
     cast_resolve(&mut t, P0, "Extrapolate the Impossible", &[]);
     assert_eq!(t.hand_size(P0), 0, "revealed");
     assert!(revealed(&t).is_empty(), "revealed");
-    // Chosen: a single creature for "Choose exactly two creatures you control".
+    // Chosen: a single creature for "Choose exactly two creatures you control". Had it
+    // been chosen, X would be 0 but it would still gain trample.
     supported("Spry and Mighty");
     let mut t = TestGame::new(2);
     let wurm = t.battlefield(P0, "Craw Wurm");
@@ -232,6 +280,10 @@ fn exactly_two_is_two_or_none_whether_searched_revealed_or_chosen() {
     cast_resolve(&mut t, P0, "Spry and Mighty", &[]);
     assert_eq!(t.hand_size(P0), hand, "chosen: no cards drawn");
     assert_eq!(t.pt(wurm), (6, 4), "chosen: no bonus");
+    assert!(
+        !t.obj_now(wurm).has_keyword(KeywordKind::Trample),
+        "chosen: the creature isn't chosen"
+    );
 }
 
 #[test]

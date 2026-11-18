@@ -404,19 +404,17 @@ fn choose(
         // (with different names, or the relationship the cards must have), none are; the
         // zones are still searched (register `exactly-n-cards-are-n-or-none`).
         let grouped = !crate::relational::groups_of(&part.filter).is_empty();
-        if part.exactly
-            && (possible < asked
-                || (grouped
-                    && !crate::target_groups::can_choose_together(
-                        g,
-                        &part.filter,
-                        &pc,
-                        asked,
-                        ctx,
-                    )))
-        {
-            continue;
-        }
+        let together = if part.exactly {
+            match exactly_together(g, spec, part, &pc, asked, ctx) {
+                Some(v) => Some(v),
+                None => continue,
+            }
+        } else {
+            None
+        };
+        // (The count of different names above takes the cards one by one, which can fall
+        // short when a split card shares a name with each of two others.)
+        let possible = if together.is_some() { asked } else { possible };
         // CR 701.23b, 701.23d: cards with a stated quality needn't be found; a quantity of
         // cards must be.
         let min = if !part.up_to && quantity_only(&part.filter) {
@@ -465,8 +463,11 @@ fn choose(
         };
         let picked = picked.unwrap_or_else(|| {
             // Default (or invalid) answers: the forced cards, then (automated agents
-            // prefer finding cards) others in order.
+            // prefer finding cards) others in order; "exactly N": N found together.
             let want = if g.search_finds_by_default { n } else { min };
+            if let Some(v) = together.as_ref().filter(|_| want == n) {
+                return v.clone();
+            }
             let mut v = forced.clone();
             for o in &pc {
                 if v.len() >= want.max(forced.len()) {
@@ -501,6 +502,29 @@ fn choose(
         chosen.extend(picked);
     }
     chosen
+}
+
+/// `n` of the candidates `pc` of an "exactly N" part that can be found together: with
+/// different names if the search requires them (CR 201.2b; looked for as a group, since a
+/// split card has both its names, CR 709.4a) and with the relationship the part's filter
+/// requires. `None` if no `n` of them can be.
+fn exactly_together(
+    g: &Game,
+    spec: &SearchSpec,
+    part: &SearchPart,
+    pc: &[ObjectId],
+    n: usize,
+    ctx: &Ctx,
+) -> Option<Vec<ObjectId>> {
+    let f = if spec.distinct_names {
+        Filter::and(vec![
+            part.filter.clone(),
+            Filter::Together(TargetGroup::DifferentNames),
+        ])
+    } else {
+        part.filter.clone()
+    };
+    crate::target_groups::find_together(g, &f, pc, n, ctx)
 }
 
 /// Splits the found cards among the destinations: each takes its count (as many as
