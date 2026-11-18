@@ -339,7 +339,7 @@ fn ulvenwald_tracker_can_fight_two_of_your_creatures_but_not_one_twice() {
     let mut t = TestGame::new(2);
     let tr = t.battlefield(P0, "Ulvenwald Tracker");
     let bears = t.battlefield(P0, "Grizzly Bears");
-    let giant = t.battlefield(P0, "Hill Giant");
+    t.battlefield(P0, "Hill Giant");
     t.lands(P0, "Forest", 2);
     // Answering the same creature twice isn't accepted: the second target is another
     // one, or the activation is illegal.
