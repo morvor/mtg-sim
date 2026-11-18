@@ -16,7 +16,7 @@ use mtg_engine::*;
 
 #[test]
 fn bill_potts_copies_a_spell_that_could_have_targeted_more() {
-    cr!("707.10", "601.2c", "707.10c");
+    cr!("707.10", "601.2c");
     ruling!(
         "Bill Potts",
         "The first ability of Bill Potts will trigger as long as it is the only target of that spell or ability, even if that spell or ability could target multiple permanents."
@@ -50,8 +50,37 @@ fn bill_potts_copies_a_spell_that_could_have_targeted_more() {
 }
 
 #[test]
+fn bill_potts_copy_of_an_ability_isnt_activated() {
+    cr!("707.10", "602.2");
+    ruling!(
+        "Bill Potts",
+        "The copy made by Bill's triggered ability is created on the stack, so it's not \"cast\" or \"activated.\""
+    );
+    supported("Burning-Tree Shaman");
+    let mut t = TestGame::new(2);
+    let bill = t.battlefield(P0, "Bill Potts");
+    // Burning-Tree Shaman: "Whenever a player activates an ability that isn't a mana
+    // ability, this creature deals 1 damage to that player."
+    t.battlefield(P0, "Burning-Tree Shaman");
+    // Bonesplitter's "Equip {1}" targets only Bill.
+    let splitter = t.battlefield(P0, "Bonesplitter");
+    t.lands(P0, "Wastes", 1);
+    t.activate(P0, splitter, 0, &[ent(bill)]).expect("equip");
+    t.settle();
+    assert_eq!(abilities_from(&t, bill).len(), 1, "Bill's trigger");
+    // Once Bill's trigger has resolved, the equip ability is copied.
+    while !abilities_from(&t, bill).is_empty() {
+        t.resolve();
+    }
+    assert_eq!(abilities_from(&t, splitter).len(), 2, "the original and the copy");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 19, "one activation, one damage");
+    assert_eq!(t.obj(splitter).attached_to, Some(ent(bill)));
+}
+
+#[test]
 fn bill_potts_copy_has_the_same_x() {
-    cr!("707.10", "107.3c");
+    cr!("707.10", "107.3a");
     ruling!(
         "Bill Potts",
         "If the spell or ability that's copied has an X whose value was determined as it was cast, the copy will have the same value of X."
@@ -152,7 +181,7 @@ fn twelfth_doctor_demonstrate_copies_have_the_same_modes() {
 
 #[test]
 fn the_sixth_doctor_copy_keeps_the_targets() {
-    cr!("707.10", "707.10c", "303.4a");
+    cr!("707.10", "303.4a");
     ruling!(
         "The Sixth Doctor",
         "Usually, a historic spell won't have any targets. However, if it does have one or more targets, those targets will remain the same for the copy. You won't get to choose new targets."
@@ -162,17 +191,24 @@ fn the_sixth_doctor_copy_keeps_the_targets() {
     let mut t = TestGame::new(2);
     t.battlefield(P0, "The Sixth Doctor");
     let bears = t.battlefield(P0, "Grizzly Bears");
-    t.battlefield(P0, "Hill Giant");
+    let giant = t.battlefield(P0, "Hill Giant");
     // On Serra's Wings: a legendary Aura.
     lands_for_cost(&mut t, P0, "On Serra's Wings");
     let card = t.hand(P0, "On Serra's Wings");
     t.cast(P0, card).target(bears).go();
+    // Were P0 offered new targets for the copy, it would move it to the Hill Giant.
+    change_copy_targets(&mut t, P0, &[Some(ent(giant))]);
     let from = t.asked().len();
     t.settle();
     t.resolve_all();
-    assert!(!asked_since(&t, from)
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::ChooseTargets { .. })));
+    assert!(!asked_since(&t, from).iter().any(|(_, d)| matches!(
+        d,
+        Decision::ChooseTargets { .. } | Decision::YesNo { .. }
+    )));
+    assert!(
+        t.g.permanents().all(|o| o.attached_to != Some(ent(giant))),
+        "nothing enchants the Giant"
+    );
     let auras: Vec<_> = t
         .named_on_battlefield("On Serra's Wings")
         .into_iter()
@@ -232,7 +268,7 @@ fn rowan_and_will_emblems_copy_any_spell_or_nonmana_ability() {
 
 #[test]
 fn adric_copies_of_a_linked_ability_are_linked_and_have_the_same_source() {
-    cr!("607.2a", "707.10", "113.7a");
+    cr!("607.2a", "707.10", "707.10b");
     ruling!(
         "Adric, Mathematical Genius",
         "If an ability is linked to a second ability, copies of that first ability are also linked to that second ability. If the second ability refers to \"the exiled card,\" it refers to all cards exiled by the first ability and the copy. For example, if Fiend Hunter's enters-the-battlefield ability is copied and two creatures are exiled, they both return when Fiend Hunter leaves the battlefield."

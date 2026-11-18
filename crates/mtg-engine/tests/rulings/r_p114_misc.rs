@@ -22,7 +22,7 @@ use mtg_engine::*;
 
 #[test]
 fn brallin_deals_damage_even_without_its_counter_and_one_counter_per_resolution() {
-    cr!("608.2b", "608.2h", "113.7a");
+    cr!("609.3", "608.2h", "113.7a");
     ruling!(
         "Brallin, Skyshark Rider",
         "Brallin's middle ability deals 1 damage to each opponent even if you can't put a +1/+1 counter on Brallin, most likely because Brallin has left the battlefield."
@@ -92,7 +92,7 @@ fn brallin_resolves_before_the_spell_discarded_for_or_after_the_resolving_one() 
 
 #[test]
 fn shabraz_gains_life_even_without_its_counter() {
-    cr!("608.2b", "113.7a");
+    cr!("609.3", "113.7a");
     ruling!(
         "Shabraz, the Skyshark",
         "Shabraz's middle ability has you gain 1 life even if you can't put a +1/+1 counter on Shabraz, most likely because Shabraz has left the battlefield."
@@ -200,7 +200,7 @@ fn the_fourth_doctor_new_top_card_hidden_while_casting() {
 
 #[test]
 fn tevesh_szat_chooses_the_sacrifice_as_the_ability_resolves() {
-    cr!("608.2c", "115.10");
+    cr!("608.2d", "115.10");
     ruling!(
         "Tevesh Szat, Doom of Fools",
         "For the second ability of Tevesh Szat, Doom of Fools, you choose whether to sacrifice anything and what to sacrifice as the ability resolves."
@@ -293,7 +293,7 @@ fn blue_doesnt_add_counters_to_dinosaurs_entering_with_it() {
 
 #[test]
 fn ich_tekik_golems_get_counters_even_if_it_left() {
-    cr!("608.2b", "603.10a");
+    cr!("113.7a", "609.3");
     ruling!(
         "Ich-Tekik, Salvage Splicer",
         "If Ich-Tekik leaves the battlefield before its middle ability resolves, you'll still put a +1/+1 counter on each Golem you control."
@@ -341,6 +341,12 @@ fn pir_adds_one_to_counters_entering_and_on_teammates_permanents() {
     let theirs = t.battlefield(P2, "Grizzly Bears");
     t.g.add_counters(ent(theirs), counters::PLUS1, 1, None);
     assert_eq!(t.counters(theirs, counters::PLUS1), 1);
+    // Triskelion ("This creature enters with three +1/+1 counters on it") entering under
+    // the teammate's control gets four; under an opponent's, three.
+    let teammates = t.enter(P1, "Triskelion");
+    assert_eq!(t.counters(teammates, counters::PLUS1), 4);
+    let opponents = t.enter(P2, "Triskelion");
+    assert_eq!(t.counters(opponents, counters::PLUS1), 3);
 }
 
 #[test]

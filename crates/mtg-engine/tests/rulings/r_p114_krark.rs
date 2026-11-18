@@ -35,7 +35,7 @@ fn cast(t: &mut TestGame, name: &str, targets: &[Entity]) -> ObjectId {
 
 #[test]
 fn krark_winning_copies_a_spell_without_targets_and_the_copy_resolves_first() {
-    cr!("705.1", "707.10", "707.10c", "405.5");
+    cr!("705.1", "707.10", "405.5");
     ruling!(
         "Krark, the Thumbless",
         "If you win the flip, the spell will be copied even if it doesn't require targets."
@@ -73,7 +73,7 @@ fn krark_winning_copies_a_spell_without_targets_and_the_copy_resolves_first() {
 
 #[test]
 fn krark_losing_returns_even_an_uncounterable_spell_to_hand() {
-    cr!("705.1", "701.6a", "608.2b");
+    cr!("705.1", "701.6a");
     ruling!(
         "Krark, the Thumbless",
         "If you lose the flip and the spell is returned to its owner's hand, it's removed from the stack and won't resolve. This isn't the same as countering the spell, and a spell that can't be countered can be returned to hand."
@@ -97,7 +97,7 @@ fn krark_losing_returns_even_an_uncounterable_spell_to_hand() {
 
 #[test]
 fn krark_after_the_spell_was_countered() {
-    cr!("705.1", "707.10", "608.2b");
+    cr!("705.1", "707.10", "608.2h", "400.7");
     ruling!(
         "Krark, the Thumbless",
         "If you lose the flip, but the spell that caused Krark's triggered ability to trigger isn't on the stack anymore (most likely because it was countered), nothing is returned to your hand. The card stays in its current zone."
@@ -121,6 +121,17 @@ fn krark_after_the_spell_was_countered() {
         assert!(t.in_graveyard(P0, "Lightning Bolt"), "win {win}");
         assert!(!t.in_hand(P0, "Lightning Bolt"), "win {win}");
     }
+    // The spell left the stack because another Krark's flip was lost: the winning flip
+    // still copies it, as it last existed on the stack (aimed at P1).
+    let mut t = krark_game(&[false, true]);
+    t.battlefield(P0, "Krark, the Thumbless");
+    cast(&mut t, "Lightning Bolt", &[Entity::Player(P1)]);
+    assert_eq!(t.stack_len(), 3);
+    t.resolve();
+    assert!(t.in_hand(P0, "Lightning Bolt"), "the first flip was lost");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17, "the copy was created and resolved");
+    assert!(t.in_hand(P0, "Lightning Bolt"));
 }
 
 #[test]
@@ -131,28 +142,60 @@ fn krark_and_cascade_trigger_together_in_either_order() {
         "Krark's ability triggers at the same time as any other abilities that say \"When you cast this spell\" or similar, including cascade. Those abilities may be put on the stack in any order. Those triggered abilities are unaffected by the original spell being returned to hand, countered, or otherwise removed from the stack."
     );
     supported("Violent Outburst");
-    for order in [[0usize, 1], [1, 0]] {
-        let mut t = krark_game(&[false]);
-        t.library_top(P0, "Grizzly Bears");
-        t.answer(P0, DecisionKind::Order, Answer::Indices(order.to_vec()));
-        t.answer_yes(P0, true);
-        let from = t.asked().len();
-        // Violent Outburst ({1}{R}{G} instant): cascade.
-        cast(&mut t, "Violent Outburst", &[]);
-        assert!(
-            asked_since(&t, from)
+    // Each order, with Violent Outburst left on the stack or countered first; records
+    // which trigger resolved first.
+    let mut cascade_first = vec![];
+    for countered in [false, true] {
+        for order in [[0usize, 1], [1, 0]] {
+            let mut t = krark_game(&[false]);
+            t.library_top(P0, "Grizzly Bears");
+            t.answer(P0, DecisionKind::Order, Answer::Indices(order.to_vec()));
+            t.answer_yes(P0, true);
+            let from = t.asked().len();
+            // Violent Outburst ({1}{R}{G} instant): cascade.
+            let outburst = cast(&mut t, "Violent Outburst", &[]);
+            assert!(
+                asked_since(&t, from)
+                    .iter()
+                    .any(|(p, d)| *p == P0 && matches!(d, Decision::Order { .. })),
+                "P0 orders the two triggers"
+            );
+            if countered {
+                counter(&mut t, outburst);
+            }
+            // The top trigger resolves: cascade casts Grizzly Bears, or Krark's lost flip
+            // returns Violent Outburst to hand (if it's still on the stack).
+            t.resolve();
+            let bears_cast = t
+                .g
+                .stack
                 .iter()
-                .any(|(p, d)| *p == P0 && matches!(d, Decision::Order { .. })),
-            "P0 orders the two triggers"
-        );
-        t.resolve_all();
-        assert!(t.in_hand(P0, "Violent Outburst"), "{order:?}");
-        assert_eq!(
-            t.named_on_battlefield("Grizzly Bears").len(),
-            1,
-            "{order:?}"
-        );
+                .any(|s| t.obj(*s).chars.name == "Grizzly Bears");
+            if !bears_cast && !countered {
+                assert!(t.in_hand(P0, "Violent Outburst"), "{order:?}");
+                assert_eq!(t.stack_len(), 1, "cascade still waits");
+            }
+            cascade_first.push((countered, bears_cast));
+            t.resolve_all();
+            if countered {
+                assert!(t.in_graveyard(P0, "Violent Outburst"), "{order:?}");
+            } else {
+                assert!(t.in_hand(P0, "Violent Outburst"), "{order:?}");
+            }
+            assert_eq!(
+                t.named_on_battlefield("Grizzly Bears").len(),
+                1,
+                "{order:?}, countered {countered}"
+            );
+        }
     }
+    // Both orders were played out, so cascade resolved after the spell had been returned
+    // to hand (and after it had been countered).
+    cascade_first.sort();
+    assert_eq!(
+        cascade_first,
+        vec![(false, false), (false, true), (true, false), (true, true)]
+    );
 }
 
 #[test]

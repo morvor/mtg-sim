@@ -40,7 +40,7 @@ fn pump(t: &mut TestGame, id: ObjectId, p: i32, q: i32) {
 
 #[test]
 fn donna_noble_triggers_for_lethal_damage_too() {
-    cr!("702.95b", "603.10a", "120.3");
+    cr!("702.95b", "113.7a", "120.3");
     ruling!(
         "Donna Noble",
         "Donna's ability triggers when either creature is dealt damage even if one or both were dealt lethal damage."
@@ -308,10 +308,13 @@ fn kediss_doesnt_trigger_for_damage_to_a_planeswalker() {
     let mut t = kediss_game();
     let ganax = commander_on_battlefield(&mut t, P0, "Ganax, Astral Hunter");
     let jace = t.battlefield(P1, "Jace Beleren");
+    let have = t.counters(jace, counters::LOYALTY);
+    t.g.add_counters(ent(jace), counters::LOYALTY, 5 - have, None);
     attack_with(&mut t, &[(ganax, ent(jace))]);
     t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![]));
     t.advance_to(P0, Step::CombatDamage);
     t.settle();
+    assert_eq!(t.counters(jace, counters::LOYALTY), 2, "Ganax dealt 3 to Jace");
     assert_eq!(t.stack_len(), 0);
     assert_eq!(t.life(P1), 40);
     assert_eq!(t.life(P2), 40);
@@ -319,7 +322,7 @@ fn kediss_doesnt_trigger_for_damage_to_a_planeswalker() {
 
 #[test]
 fn rasaad_changes_only_the_combat_damage_assigned() {
-    cr!("510.1a", "208.3", "701.14a");
+    cr!("510.1a", "701.14a");
     ruling!(
         "Rasaad yn Bashir",
         "Rasaad yn Bashir's first ability doesn't actually change any creature's power. It changes only the amount of combat damage it assigns. All other rules and effects that check power or toughness use the real values."
@@ -438,7 +441,7 @@ fn silas_hits(renari: bool) -> (TestGame, ObjectId) {
 
 #[test]
 fn silas_renn_doesnt_change_timing_but_renari_does() {
-    cr!("601.3", "307.1", "702.8a");
+    cr!("601.3", "301.1", "702.8a");
     ruling!(
         "Silas Renn, Seeker Adept",
         "Silas Renn doesn't change when you can cast the target artifact card. For example, if you target an artifact card without flash, you can cast it only during your main phase when the stack is empty."
@@ -519,7 +522,7 @@ fn amy_pond_removing_the_last_time_counter_casts_the_card() {
 
 #[test]
 fn rowan_damages_tapped_hexproof_creatures() {
-    cr!("115.10", "702.11b", "608.2b");
+    cr!("115.10", "702.11b");
     ruling!(
         "Rowan Kenrith",
         "Rowan's second ability targets only the player. Tapped creatures with hexproof that player controls will be dealt damage as that ability resolves."

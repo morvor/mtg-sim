@@ -83,6 +83,10 @@ fn a_background_counts_as_a_commander_creature_only_while_its_a_creature() {
     let giants = commander_on_battlefield(&mut t, P0, GIANTS);
     assert_eq!(t.pt(gut), (10, 10));
     assert!(!t.obj(giants).is_creature());
+    assert!(
+        !t.obj(giants).chars.has_subtype("Giant"),
+        "the noncreature Background isn't a commander creature"
+    );
     // Another effect makes the Background a creature: Raised by Giants now applies to it.
     add_types(&mut t, giants, vec![CardType::Creature]);
     assert_eq!(t.pt(giants), (10, 10));
@@ -229,7 +233,7 @@ fn a_commander_and_its_background_are_tracked_separately() {
 
 #[test]
 fn street_urchin_commander_can_sacrifice_itself_if_its_an_artifact() {
-    cr!("602.2", "118.3", "608.2h");
+    cr!("602.2", "701.21a", "113.7a");
     ruling!(
         "Street Urchin",
         "If your commander is an artifact creature, you may sacrifice it to pay the cost of this ability."
@@ -319,7 +323,7 @@ fn criminal_past_counts_the_controllers_graveyard() {
 
 #[test]
 fn cloakwood_hermit_looks_at_the_whole_turn() {
-    cr!("603.4", "903.9a");
+    cr!("603.4");
     ruling!(
         "Cloakwood Hermit",
         "The ability Cloakwood Hermit grants triggers if you control a creature with that ability as the end step begins and a creature card was put into your graveyard from anywhere this turn. This is true even if no creatures had this ability at the time the creature card went to the graveyard or the creature card is no longer in your graveyard as your end step begins."
@@ -652,7 +656,7 @@ fn far_traveler_and_displacer_kitten_return_a_new_object() {
 
 #[test]
 fn jaheira_gives_the_mana_ability_to_noncreature_tokens() {
-    cr!("111.10a", "605.1a");
+    cr!("111.1", "111.10f", "605.1a");
     ruling!(
         "Jaheira, Friend of the Forest",
         "Jaheira's ability gives the mana ability to all tokens you control, not just creature tokens."
@@ -684,15 +688,25 @@ fn gut_can_sacrifice_itself_if_its_an_artifact() {
         "Gut, True Soul Zealot",
         "If Gut somehow becomes an artifact, you may sacrifice it to its own ability."
     );
-    let mut t = TestGame::new(2);
-    let gut = t.battlefield(P0, GUT);
-    add_types(&mut t, gut, vec![CardType::Artifact]);
-    t.answer_yes(P0, true);
-    t.answer_choose(P0, &[ent(gut)]);
-    attack_with(&mut t, &[(gut, Entity::Player(P1))]);
-    t.resolve_all();
-    assert!(t.in_graveyard(P0, GUT));
-    let skeletons = tokens_named(&t, P0, "Skeleton");
-    assert_eq!(skeletons.len(), 1);
-    assert!(t.obj(skeletons[0]).tapped);
+    for artifact in [false, true] {
+        let mut t = TestGame::new(2);
+        let gut = t.battlefield(P0, GUT);
+        if artifact {
+            add_types(&mut t, gut, vec![CardType::Artifact]);
+        }
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[ent(gut)]);
+        attack_with(&mut t, &[(gut, Entity::Player(P1))]);
+        t.resolve_all();
+        let skeletons = tokens_named(&t, P0, "Skeleton");
+        if artifact {
+            assert!(t.in_graveyard(P0, GUT));
+            assert_eq!(skeletons.len(), 1);
+            assert!(t.obj(skeletons[0]).tapped);
+        } else {
+            // Not an artifact, Gut isn't "another creature or an artifact".
+            assert!(t.on_battlefield(gut));
+            assert!(skeletons.is_empty());
+        }
+    }
 }

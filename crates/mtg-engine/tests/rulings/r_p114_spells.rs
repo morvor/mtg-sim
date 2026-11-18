@@ -23,7 +23,7 @@ fn opt(t: &mut TestGame, p: PlayerId) -> ObjectId {
 
 #[test]
 fn kraum_counts_spells_cast_before_it_was_on_the_battlefield() {
-    cr!("603.2", "603.10");
+    cr!("603.2");
     ruling!(
         "Kraum, Ludevic's Opus",
         "Kraum's ability looks at the entire turn to determine which spell is a player's second spell. It doesn't matter whether Kraum was on the battlefield when the first spell was cast."
@@ -159,7 +159,7 @@ fn alisaie_and_alphinaud_count_spells_cast_before_they_entered() {
 
 #[test]
 fn alisaie_reduces_only_generic_mana() {
-    cr!("601.2f", "118.7");
+    cr!("601.2f", "118.7a");
     ruling!(
         "Alisaie Leveilleur",
         "The cost reduction applies only to generic mana in the total cost of the second spell you cast each turn."
@@ -260,7 +260,7 @@ fn ludevic_looks_at_the_whole_turn_and_life_lost_not_net() {
 
 #[test]
 fn regna_checks_the_whole_team_and_the_whole_turn() {
-    cr!("603.4", "810.2", "119.10");
+    cr!("603.4", "810.2", "810.9");
     ruling!(
         "Regna, the Redeemer",
         "Regna's last ability checks if any player on your team gained life at any point during the turn. It doesn't matter if the player also lost life or whether the team's life total is greater than it was at the beginning of the turn. It also doesn't matter whether Regna was on the battlefield when the life gain happened."
@@ -359,16 +359,31 @@ fn esior_increase_applies_before_reductions_and_mana_value_is_unchanged() {
     // Lightning Bolt ({R}) at Esior: {R} + {3} − {1} = {2}{R} (reducing first would leave
     // {3}{R}).
     supported("Goblin Electromancer");
-    for (lands, ok) in [(2, false), (3, true)] {
-        let (mut t, esior, _) = esior_game(lands, &["Goblin Electromancer"]);
-        let card = t.hand(P1, "Lightning Bolt");
-        t.answer_targets(P1, &[ent(esior)]);
-        t.g.turn.priority = Some(P1);
-        let r =
-            t.g.cast_spell(P1, card, mtg_engine::object::CastMethod::Normal);
-        assert_eq!(r.is_ok(), ok, "{lands} lands");
-        if let Ok(spell) = r {
-            assert_eq!(crate::r_s26_common::mv(&mut t, spell), 1);
+    // Whichever of the two effects is older.
+    for electromancer_first in [false, true] {
+        for (lands, ok) in [(2, false), (3, true)] {
+            let mut t = commander_game_n(2);
+            if electromancer_first {
+                t.battlefield(P1, "Goblin Electromancer");
+            }
+            let esior = commander_on_battlefield(&mut t, P0, "Esior, Wardwing Familiar");
+            if !electromancer_first {
+                t.battlefield(P1, "Goblin Electromancer");
+            }
+            t.lands(P1, "Mountain", lands);
+            let card = t.hand(P1, "Lightning Bolt");
+            t.answer_targets(P1, &[ent(esior)]);
+            t.g.turn.priority = Some(P1);
+            let r =
+                t.g.cast_spell(P1, card, mtg_engine::object::CastMethod::Normal);
+            assert_eq!(
+                r.is_ok(),
+                ok,
+                "{lands} lands, Electromancer first {electromancer_first}"
+            );
+            if let Ok(spell) = r {
+                assert_eq!(crate::r_s26_common::mv(&mut t, spell), 1);
+            }
         }
     }
 }
@@ -446,7 +461,7 @@ fn the_seventh_doctor_x_is_zero() {
 
 #[test]
 fn the_seventh_doctor_keeps_the_chosen_card_hidden_unless_cast() {
-    cr!("608.2c", "402.3");
+    cr!("608.2d", "402.3");
     ruling!(
         "The Seventh Doctor",
         "To choose a card in your hand for The Seventh Doctor's ability, take a card in your hand and separate it from the others, face down. Then the defending player guesses whether the mana value of that card is greater than the number of artifacts you control. You do not have to reveal whether they guess right or wrong unless you are casting the card."
