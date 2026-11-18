@@ -27,7 +27,7 @@ fn order_questions(t: &TestGame, from: usize) -> Vec<Decision> {
 
 #[test]
 fn chaotic_transformation_takes_one_players_permanents_in_target_order() {
-    cr!("608.2f", "608.2h", "701.20a");
+    cr!("608.2f");
     interp!("per-object-actions-in-given-order");
     supported("Chaotic Transformation");
     // P1's Sol Ring (the artifact target) and Grizzly Bears (the creature target) are
@@ -66,7 +66,7 @@ fn chaotic_transformation_takes_one_players_permanents_in_target_order() {
 
 #[test]
 fn kaboom_takes_one_players_targets_in_the_order_they_were_chosen() {
-    cr!("608.2f", "101.4");
+    cr!("608.2f");
     interp!("per-object-actions-in-given-order");
     supported("Kaboom!");
     // P1 and P1's Jace Beleren (loyalty 3) are one group. P0 chose Jace first: Jace is dealt

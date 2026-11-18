@@ -70,7 +70,10 @@ fn event_positions(t: &TestGame, f: impl Fn(&Event) -> bool) -> Vec<usize> {
 /// resolving (CR 603.3: triggered abilities wait for the next time a player would receive
 /// priority).
 fn triggers_waited_for(t: &TestGame, spell: ObjectId) {
-    let done = event_positions(t, |e| matches!(e, Event::SpellResolved { spell: s } if *s == spell));
+    let done = event_positions(
+        t,
+        |e| matches!(e, Event::SpellResolved { spell: s } if *s == spell),
+    );
     let put = event_positions(t, |e| matches!(e, Event::AbilityTriggeredOnStack { .. }));
     assert_eq!(done.len(), 1, "the spell resolved");
     assert!(!put.is_empty(), "abilities triggered");
@@ -126,7 +129,13 @@ fn destructive_force_lands_are_chosen_in_turn_order_and_sacrificed_together() {
     // After that, the damage.
     assert_eq!(damage_on(&t, wurm), 5);
     let sacrificed = event_positions(&t, |e| {
-        matches!(e, Event::ZoneChange { from: Zone::Battlefield, .. })
+        matches!(
+            e,
+            Event::ZoneChange {
+                from: Zone::Battlefield,
+                ..
+            }
+        )
     });
     let damage = event_positions(&t, |e| matches!(e, Event::Damage { .. }));
     assert!(sacrificed.iter().max() < damage.iter().min());
@@ -255,7 +264,11 @@ fn mass_sacrifice_of_a_creature_land_happens_once() {
     let orni = t.battlefield(P1, "Ornithopter");
     let ring = t.battlefield(P1, "Sol Ring");
     let bears = t.battlefield(P1, "Grizzly Bears");
-    let creatures = [bears, t.battlefield(P1, "Hill Giant"), t.battlefield(P1, "Wall of Wood")];
+    let creatures = [
+        bears,
+        t.battlefield(P1, "Hill Giant"),
+        t.battlefield(P1, "Wall of Wood"),
+    ];
     t.answer_choose(P1, &[ob(orni)]);
     lands_for_cost(&mut t, P0, "Rite of Ruin");
     t.answer(P0, DecisionKind::Option, Answer::Index(0));
@@ -266,7 +279,10 @@ fn mass_sacrifice_of_a_creature_land_happens_once() {
     t.resolve_all();
     assert!(!t.on_battlefield(orni));
     assert!(t.on_battlefield(ring));
-    assert_eq!(creatures.iter().filter(|c| t.on_battlefield(**c)).count(), 1);
+    assert_eq!(
+        creatures.iter().filter(|c| t.on_battlefield(**c)).count(),
+        1
+    );
     let chosen = offered(&t, from, ob(bears));
     assert!(!chosen.is_empty());
     assert!(chosen.iter().all(|c| !c.contains(&ob(orni))), "{chosen:?}");
@@ -386,7 +402,11 @@ fn pox_parts_are_processed_and_counted_one_at_a_time() {
     let from = t.asked().len();
     cast_modes(&mut t, P0, "Pox", &[], &[]);
     t.resolve_all();
-    assert_eq!((t.life(P0), t.life(P1)), (13, 13), "a third of 20, rounded up");
+    assert_eq!(
+        (t.life(P0), t.life(P1)),
+        (13, 13),
+        "a third of 20, rounded up"
+    );
     // P1 discarded the Dodecapod, which entered: four creatures, so two are sacrificed.
     assert_eq!(controlled(&t, P1, CardType::Creature), 2);
     assert_eq!(controlled(&t, P0, CardType::Creature), 2);
@@ -448,14 +468,25 @@ fn rite_of_ruin_and_casualties_of_war_triggers_wait_until_they_finish() {
     assert!(!t.on_battlefield(a) && !t.on_battlefield(d) && !t.on_battlefield(l));
     triggers_waited_for(&t, s);
     let moved = |id: ObjectId| {
-        event_positions(&t, |e| matches!(e, Event::ZoneChange { old, .. } if *old == id))
+        event_positions(
+            &t,
+            |e| matches!(e, Event::ZoneChange { old, .. } if *old == id),
+        )
     };
     let (ma, md, ml) = (moved(a), moved(d), moved(l));
     assert_eq!((ma.len(), md.len(), ml.len()), (1, 1, 1));
     assert!(ma[0] < md[0] && md[0] < ml[0], "in the order specified");
-    assert_eq!(t.stack_len(), 1, "only the Dissenter's trigger, after the spell");
+    assert_eq!(
+        t.stack_len(),
+        1,
+        "only the Dissenter's trigger, after the spell"
+    );
     t.resolve_all();
-    assert_eq!(t.life(P1), 20, "the artifact was gone when the land was destroyed");
+    assert_eq!(
+        t.life(P1),
+        20,
+        "the artifact was gone when the land was destroyed"
+    );
     assert_eq!(crate::r_s25_common::creature_tokens(&t, P1), 1);
 }
 
@@ -572,7 +603,8 @@ fn chaotic_transformation_handles_each_exiled_permanent_of_a_player_in_turn() {
     // permanents that were exiled this way, that player first chooses which target
     // they're considering, ...") is left uncited: it has that player choose the order,
     // where CR 608.2f has "the player who controls the resolving spell or ability", and
-    // the engine asks neither (docs/RULING_DISCREPANCIES.md, "Not yet investigated").
+    // the engine asks neither (docs/RULING_DISCREPANCIES.md, Inconsistent rulings; register
+    // `per-object-actions-in-given-order`, provisional, for the user: ruling-conflicts-10).
     // What both agree on is pinned here: each permanent's process in turn, by its types
     // as it last existed on the battlefield.
     supported("Chaotic Transformation");

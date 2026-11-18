@@ -24,9 +24,9 @@ Investigated (Nov 18) by an independent investigator; an adversarial skeptic rev
 **The sources don't settle it.**
 - **Where they agree:** when the caster controlled the exiled permanents, and for processes the caster performs (Soulfire Eruption, Kaboom!).
 - **Where they differ:** two or more of another player's permanents. CR 608.2f's words give the caster the order; the ruling gives it to that player.
-- **A reconciling reading (B, below):** 608.2f's "Secondarily" sentence doesn't reach an action that a player takes on their own library once for each of their former permanents. On that reading the CR leaves the order open, the ruling decides it, and every source found agrees. The plain reading (A) is just as defensible, and the ruling's own words lean toward it.
+- **A reconciling reading (R2, below):** 608.2f's "Secondarily" sentence doesn't reach an action that a player takes on their own library once for each of their former permanents. On that reading the CR leaves the order open, the ruling decides it, and every source found agrees. The plain reading (R1) is just as defensible, and the ruling's own words lean toward it.
 - **The ruling:** left OPEN, uncited and not exempted.
-- **Recommendation:** reading B, following the ruling (see "For the user").
+- **Recommendation:** reading R2, following the ruling (see "For the user").
 
 **Ruled out.**
 - **Not outdated:** 608.2f's sentence is 21 months older than the ruling. Its only change since is "mana value" in its example.
@@ -102,7 +102,7 @@ Investigated (Nov 18) by an independent investigator; an adversarial skeptic rev
 | Divergent Transformations | 2016-11-08 (Commander 2016 Release Notes, Eli Shiffrin, 2016-10-28) | each creature's controller | not stated: "If one player's creatures are exiled this way, that player repeats this process twice." Both processes are the same, so the order can't matter. Two players: "start with the player whose turn it is". |
 | Indomitable Creativity | 2017-02-09 (Aether Revolt Release Notes, 2017-01-06) | each permanent's controller | not stated (the same process for each): "All of the exiled cards are put onto the battlefield at the same time." |
 | Chaos Mutation | 2022-10-07 | each creature's controller | can't arise: "The phrase "target creatures controlled by different players" means that no two targets may be controlled by the same player." |
-| Mystic Confluence, Eldrazi Confluence, Rootcast Apprenticeship | 2021-03-19, 2024-06-07, 2024-07-26 | a mode chosen more than once | the caster, as the spell is cast (CR 700.2d's mode order, not 608.2f), even when opponents act: "you choose the relative order in which the target opponents sacrifice nontoken artifacts" |
+| Mystic Confluence, Eldrazi Confluence, Rootcast Apprenticeship | 2021-03-19, 2024-06-07, 2024-07-26 | a mode chosen more than once | the caster: Mystic Confluence's "you choose the relative order to return the target creatures"; the other two "as you cast the spell" (CR 700.2d's mode order, not 608.2f), even when opponents act: "you choose the relative order in which the target opponents sacrifice nontoken artifacts" |
 | Aetherspouts | 2014-07-18 | each attacker's owner | no order: owners choose top or bottom in APNAP order and the cards move together; the owner arranges them (401.4) |
 | Killing Wave, Fade Away | 2012-05-01, 2004-10-04 | each creature's controller | no order: choices in APNAP order, then the actions happen at the same time |
 
@@ -117,8 +117,8 @@ The other cards the brief named say nothing on this.
 - **Different players' processes:** both readings order them the same way (APNAP).
 
 **Readings tried.**
-- **A, the words (they contradict).** "For each permanent exiled this way" iterates over the exiled permanents, and 608.2f processes an action "considering each affected player or object individually". The ruling uses the same frame. Its condition, "a player controls multiple permanents that were exiled this way", is 608.2f's "multiple objects controlled by the same player", with control read from the permanents as they last existed (608.2h). Its choice, "which target they’re considering", is the example's words. So 608.2f's chooser, "the player who controls the resolving spell or ability", is the caster, and the ruling's "that player" contradicts it.
-- **B, "taken on" (they agree).**
+- **R1, the words (they contradict).** "For each permanent exiled this way" iterates over the exiled permanents, and 608.2f processes an action "considering each affected player or object individually". The ruling uses the same frame. Its condition, "a player controls multiple permanents that were exiled this way", is 608.2f's "multiple objects controlled by the same player", with control read from the permanents as they last existed (608.2h). Its choice, "which target they’re considering", is the example's words. So 608.2f's chooser, "the player who controls the resolving spell or ability", is the caster, and the ruling's "that player" contradicts it.
+- **R2, "taken on" (they agree).**
   - **The reading.** 608.2f's words "actions taken on" and "each affected player or object" are about what an action is done to, and both its examples fit that: control of the permanents is gained; damage is dealt to the target. Chaotic Transformation's second sentence acts on each controller's library and on the card put onto the battlefield. The exiled permanent is only the reference ("shares a card type with it"), so the action is taken on the same player once per permanent.
   - **Why the CR is then silent.** The "Secondarily" sentence names two cases: "both a player and an object they control", and "multiple objects controlled by the same player". The same player several times is neither, so the CR leaves the order of one player's repetitions open, and the ruling decides it.
   - **Fit with the rest of the CR.** A player orders their own choices (101.4c), their own objects put on the stack (405.3) and their cards put into their library (401.4), and the affected player orders replacement effects (616.1). The CR also merges a player's repeated per-object searches into one (701.23h).
@@ -131,9 +131,9 @@ The other cards the brief named say nothing on this.
     - The ruling was written knowing 608.2f: it borrows the example's words but names another chooser. Its compiler, Jess Dunks, also wrote that release's Comprehensive Rules changes article (2022-09-02; ormos).
     - Kaboom!'s ruling, published the same day, kept the caster for a process the caster performs.
     - The ruling hasn't been changed in the four years since.
-- **C, delegation (doesn't reconcile).** The caster orders, and lets that player choose. No rule provides for handing the choice over, and the ruling has "that player" make it.
-- **D, the caster's own permanents only (doesn't reconcile).** "If a player controls ..." covers any player; release notes say "you" for the caster. They agree in that case only.
-- **E, no controller in exile (doesn't reconcile).** Once exiled, the cards have no controller (108.4), so "objects controlled by the same player" never holds. But 108.4a substitutes the owner, and the card's "its controller" is read from the permanent as it last existed (608.2h), so the clause would still name the caster. This is part of why the clause's reach is unclear, not a reconciliation.
+- **R3, delegation (doesn't reconcile).** The caster orders, and lets that player choose. No rule provides for handing the choice over, and the ruling has "that player" make it.
+- **R4, the caster's own permanents only (doesn't reconcile).** "If a player controls ..." covers any player; release notes say "you" for the caster. They agree in that case only.
+- **R5, no controller in exile (doesn't reconcile).** Once exiled, the cards have no controller (108.4), so "objects controlled by the same player" never holds. But 108.4a substitutes the owner, and the card's "its controller" is read from the permanent as it last existed (608.2h), so the clause would still name the caster. This is part of why the clause's reach is unclear, not a reconciliation.
 
 **Engine** (checked; no change).
 - **Compilation.** Chaotic Transformation compiles (`mtg-tools unsupported --text ... --ast`) to an exile of the five targets, then `ForEach { sel: Matching(Before(Var(0)), Permanent), effect: AsPlayer { who: ControllerOf(each), effect: Seq[RevealUntil (shares a card type with each), Move to the battlefield, Shuffle] } }`.
@@ -162,7 +162,7 @@ The other cards the brief named say nothing on this.
   - Set aside the ruling's "that player first chooses which target they’re considering" as inconsistent, as Arbiter of Knollridge's and Headliner Scarlett's were set aside.
   - Cite the rest of it: "then they reveal cards until they reveal a card that shares a type with that permanent as it last existed on the battlefield, then they put that card onto the battlefield and shuffle. They then repeat this process ...". The engine already does this.
   - The engine would ask the controller of the resolving spell or ability.
-- **(2) That player, as the ruling says, under reading B.** 608.2f's "Secondarily" sentence covers an action taken on a player and their objects, or on several objects of one player. It doesn't cover an action a player takes on their own library once for each of their former permanents. Cite the ruling. The engine would ask the player the instruction has perform the process ("its controller reveals ...") to order their own repetitions, and the caster otherwise.
+- **(2) That player, as the ruling says, under reading R2.** 608.2f's "Secondarily" sentence covers an action taken on a player and their objects, or on several objects of one player. It doesn't cover an action a player takes on their own library once for each of their former permanents. Cite the ruling. The engine would ask the player the instruction has perform the process ("its controller reveals ...") to order their own repetitions, and the caster otherwise.
 
 Recommendation: **(2).**
 - It is the one reading under which the CR and every ruling found agree, which is the user's standing rule.
