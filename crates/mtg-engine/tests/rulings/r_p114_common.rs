@@ -108,3 +108,41 @@ pub fn deal(t: &mut TestGame, source: ObjectId, n: i32, to: Entity) {
         &[to],
     );
 }
+
+/// `p` loses `n` life (as an effect would), then the game settles.
+pub fn lose(t: &mut TestGame, p: PlayerId, n: u32) {
+    t.g.lose_life(p, n);
+    t.g.flush_events();
+    t.settle();
+}
+
+/// `p` gains `n` life (as an effect would), then the game settles.
+pub fn gain(t: &mut TestGame, p: PlayerId, n: u32) {
+    t.g.gain_life(p, n);
+    t.g.flush_events();
+    t.settle();
+}
+
+/// `p` casts the real instant `name` with lands for it and the given targets; the
+/// triggers are put on the stack. Returns the spell.
+pub fn cast_instant(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) -> ObjectId {
+    crate::r_s25_common::lands_for_cost(t, p, name);
+    let card = t.hand(p, name);
+    let spell = t
+        .cast_with(p, card, targets)
+        .unwrap_or_else(|e| panic!("casting {name}: {e:?}"));
+    t.settle();
+    spell
+}
+
+/// A Two-Headed Giant game: P0 and P1 against P2 and P3.
+pub fn two_headed_giant() -> TestGame {
+    TestGame::with_config(
+        4,
+        GameConfig {
+            variant: Variant::TwoHeadedGiant,
+            teams: Some(vec![0, 0, 1, 1]),
+            ..Default::default()
+        },
+    )
+}
