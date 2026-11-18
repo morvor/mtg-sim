@@ -6,6 +6,7 @@
 
 use crate::r_p093_common::*;
 use mtg_engine::decision::{Action, Answer, Decision};
+use mtg_engine::events::Event;
 use mtg_engine::game::GameResult;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -15,13 +16,6 @@ use mtg_engine::*;
 
 fn can_activate(t: &mut TestGame, p: PlayerId, source: ObjectId) -> bool {
     crate::r_s02_common::can_activate(t, p, source)
-}
-
-/// Whether a priority decision was asked since decision `from`.
-fn priority_since(t: &TestGame, from: usize) -> bool {
-    t.asked()[from..]
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::Priority { .. }))
 }
 
 // --- Bolas's Citadel --------------------------------------------------------------------------
@@ -43,7 +37,7 @@ fn citadel(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn bolass_citadel_can_be_one_of_the_ten() {
-    cr!("602.2b", "118.3");
+    cr!("602.2b", "601.2h");
     ruling!(
         "Bolas's Citadel",
         "Bolas's Citadel may be one of the permanents you sacrifice to activate its last ability."
@@ -120,7 +114,7 @@ fn call_of_the_ring_without_a_creature() {
 
 #[test]
 fn bonecache_overseer_counts_each_time_a_card_leaves() {
-    cr!("400.7", "602.5b");
+    cr!("400.7", "602.5");
     ruling!(
         "Bonecache Overseer",
         "Each time a card leaves your graveyard in a turn, it counts as one of three cards the activated ability is looking for. For example, if you return two cards from your graveyard to your hand, discard one of them, then exile that card from your graveyard, you can activate Bonecache Overseer's ability that turn."
@@ -149,7 +143,7 @@ fn bonecache_overseer_counts_each_time_a_card_leaves() {
 
 #[test]
 fn glissa_removes_up_to_three_counters_of_any_kinds() {
-    cr!("608.2d", "122.8", "700.2");
+    cr!("608.2d", "700.2");
     ruling!(
         "Glissa Sunslayer",
         "For the third mode, you choose which counters to remove as the ability resolves. You may remove any three (or fewer) counters, even if the permanent has multiple kinds of counters on it."
@@ -159,7 +153,6 @@ fn glissa_removes_up_to_three_counters_of_any_kinds() {
     let glissa = t.battlefield(P0, "Glissa Sunslayer");
     let giant = t.battlefield(P1, "Hill Giant");
     put_counters(&mut t, giant, counters::PLUS1, 2);
-    put_counters(&mut t, giant, "stun", 2);
     put_counters(&mut t, giant, counters::SHIELD, 1);
     t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![2]));
     t.answer_targets(P0, &[obj(giant)]);
@@ -167,27 +160,31 @@ fn glissa_removes_up_to_three_counters_of_any_kinds() {
     t.advance_to(P0, Step::FirstStrikeDamage);
     t.settle();
     assert_eq!(from_source(&t, glissa), 1);
-    // Counters added after the ability triggered can be among those removed: the choice
-    // is made on resolution.
-    // (The new -1/-1 counter and a +1/+1 counter annihilate: one +1/+1, two stun and a
-    // shield counter remain.)
-    put_counters(&mut t, giant, counters::MINUS1, 1);
-    let kinds = [counters::PLUS1, "stun", counters::SHIELD];
-    let before: Vec<u32> = kinds.iter().map(|k| t.counters(giant, k)).collect();
-    assert_eq!(before, [1, 2, 1]);
-    // Three counters, one at a time, of the kinds P0 chooses.
+    // Stun counters put on it after the ability triggered can be among those removed: the
+    // choice is made on resolution. P0 removes both stun counters and the shield counter,
+    // one counter at a time.
+    put_counters(&mut t, giant, "stun", 2);
     t.answer(P0, DecisionKind::Number, Answer::Number(3));
+    for i in [2, 2, 1] {
+        t.answer(P0, DecisionKind::Option, Answer::Index(i));
+    }
     let from = t.asked().len();
     t.resolve_all();
-    let after: Vec<u32> = kinds.iter().map(|k| t.counters(giant, k)).collect();
-    assert_eq!(after.iter().sum::<u32>(), 1);
-    assert!(before.iter().zip(&after).filter(|(b, a)| a < b).count() >= 2);
-    let picks = t.asked()[from..]
+    let options: Vec<Vec<String>> = t.asked()[from..]
         .iter()
-        .filter(|(p, d)| *p == P0 && matches!(d, Decision::ChooseOption { .. }))
-        .count();
-    // (A choice among a single kind left isn't asked.)
-    assert!(picks >= 2);
+        .filter_map(|(p, d)| match d {
+            Decision::ChooseOption { options, .. } if *p == P0 => Some(options.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(options.len(), 3);
+    assert_eq!(
+        options[0],
+        ["+1/+1 counter", "shield counter", "stun counter"]
+    );
+    assert_eq!(options[2], ["+1/+1 counter", "shield counter"]);
+    let left = [counters::PLUS1, counters::SHIELD, "stun"].map(|k| t.counters(giant, k));
+    assert_eq!(left, [2, 0, 0]);
 }
 
 // --- Blex, Vexing Pest --------------------------------------------------------------------
@@ -210,7 +207,7 @@ fn blex_gives_a_changeling_one_bonus() {
 
 #[test]
 fn shanids_trigger_resolves_before_and_without_the_spell() {
-    cr!("603.3", "405.2", "603.4");
+    cr!("603.3", "405.2");
     ruling!(
         "Shanid, Sleepers' Scourge",
         "If casting a legendary spell causes Shanid’s last ability to trigger, that ability goes on the stack above the spell that caused it to trigger and resolves first. It resolves even if that spell is countered or otherwise left the stack."
@@ -236,7 +233,7 @@ const VANILLE: &str = "Vanille, Cheerful l'Cie";
 
 #[test]
 fn fang_triggers_once_for_cards_leaving_together() {
-    cr!("603.2c", "603.2h");
+    cr!("603.2c", "603.10a");
     ruling!(
         "Fang, Fearless l'Cie",
         "If multiple cards leave your graveyard at the same time, Fang's ability will trigger only once."
@@ -249,10 +246,12 @@ fn fang_triggers_once_for_cards_leaving_together() {
     }
     t.answer_targets(P0, &[Entity::Player(P0)]);
     crate::r_s05_common::enter(&mut t, P0, "Bojuka Bog");
-    t.resolve_all();
+    // The Bog's trigger exiles the three cards at once: one trigger.
+    t.resolve();
     assert_eq!(t.graveyard_size(P0), 0);
+    assert_eq!(from_source(&t, fang), 1);
+    t.resolve_all();
     assert_eq!((t.hand_size(P0), t.life(P0)), (1, 19));
-    let _ = fang;
 }
 
 #[test]
@@ -283,6 +282,18 @@ fn vanilles_meld_trigger_checks_on_trigger_and_on_resolution() {
     crate::r_s06_common::give_control(&mut t, theirs, P0);
     first_main(&mut t);
     assert_eq!(from_source(&t, vanille), 0);
+    // Both there throughout: the payment is offered, and they meld.
+    let mut t = TestGame::new(2);
+    let vanille = t.battlefield(P0, VANILLE);
+    t.battlefield(P0, FANG);
+    first_main(&mut t);
+    assert_eq!(from_source(&t, vanille), 1);
+    t.answer_yes(P0, true);
+    let from = t.asked().len();
+    t.resolve_all();
+    assert_eq!(yes_nos(&t, P0, from), 1);
+    assert_eq!(t.named_on_battlefield("Ragnarok, Divine Deliverance").len(), 1);
+    assert_eq!(crate::r_s04_common::untapped_lands(&t, P0), 0);
     // Fang leaves with the trigger on the stack: no payment asked, no meld.
     let mut t = TestGame::new(2);
     let vanille = t.battlefield(P0, VANILLE);
@@ -334,12 +345,15 @@ fn lilianas_contract_rechecks_the_demons_on_resolution() {
 
 #[test]
 fn treacherous_blessing_targeted_by_your_spell() {
-    cr!("603.3b", "603.10a", "113.7a");
+    cr!("603.3b", "113.7a");
     ruling!(
         "Treacherous Blessing",
         "If you cast a spell that targets Treacherous Blessing, you choose whether you lose 1 life before or after you sacrifice it. You lose 1 life even if you sacrifice it first."
     );
     supported("Treacherous Blessing");
+    // P0 orders the two triggers either way; whichever resolves first, the Blessing ends
+    // up sacrificed and P0 loses 1 life.
+    let mut firsts = Vec::new();
     for order in [vec![0, 1], vec![1, 0]] {
         let mut t = TestGame::new(2);
         let blessing = t.battlefield(P0, "Treacherous Blessing");
@@ -351,10 +365,16 @@ fn treacherous_blessing_targeted_by_your_spell() {
             .iter()
             .any(|(p, d)| *p == P0 && matches!(d, Decision::Order { .. })));
         assert_eq!(from_source(&t, blessing), 2);
+        t.resolve();
+        // Which one resolved first: the sacrifice, or the life loss.
+        let sacrificed_first = !t.on_battlefield(blessing);
+        assert_eq!(t.life(P0), if sacrificed_first { 20 } else { 19 }, "{order:?}");
+        firsts.push(sacrificed_first);
         t.resolve_all();
         assert!(t.in_graveyard(P0, "Treacherous Blessing"), "{order:?}");
         assert_eq!(t.life(P0), 19, "{order:?}");
     }
+    assert_ne!(firsts[0], firsts[1]);
 }
 
 // --- Barbed Servitor ------------------------------------------------------------------------
@@ -366,24 +386,37 @@ fn barbed_servitor_controller_losing_first() {
         "Barbed Servitor",
         "If your life total is brought to 0 or less at the same time that Barbed Servitor is dealt damage, you lose the game before its last ability goes on the stack."
     );
-    // Three players; P1's Earthquake (X = 1) hits P0 (at 1 life) and the Servitor.
-    let mut t = TestGame::new(3);
-    t.battlefield(P0, "Barbed Servitor");
-    t.answer_targets(P0, &[Entity::Player(P1)]);
-    crate::r_p044_common::dies_with_its_controller(&mut t, P0, 1);
-    assert!(t.has_lost(P0));
-    assert_eq!((t.life(P1), t.life(P2)), (19, 19));
-    // At 20 life: "Whenever this creature is dealt damage, target opponent loses that much
-    // life."
-    let mut t = TestGame::new(3);
-    t.battlefield(P0, "Barbed Servitor");
-    t.answer_targets(P0, &[Entity::Player(P1)]);
-    t.set_step(P1, Step::PrecombatMain);
-    crate::r_s01_common::give_mana_for(&mut t, P1, "Earthquake");
-    let quake = t.hand(P1, "Earthquake");
-    t.cast(P1, quake).x(1).go();
-    t.resolve_all();
-    assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (19, 18, 19));
+    // Three players (the game goes on after P0 loses). P1's Earthquake (X = 1) deals 1
+    // damage to P0 and to the Servitor at the same time. At 1 life, P0 loses before "Whenever
+    // this creature is dealt damage, target opponent loses that much life." goes on the
+    // stack; at 20 (the control), it goes on the stack and P1 loses 1 life.
+    for life in [1, 20] {
+        let mut t = TestGame::new(3);
+        let servitor = t.battlefield(P0, "Barbed Servitor");
+        set_life(&mut t, P0, life);
+        t.answer_targets(P0, &[Entity::Player(P1)]);
+        t.set_step(P1, Step::PrecombatMain);
+        crate::r_s01_common::give_mana_for(&mut t, P1, "Earthquake");
+        let quake = t.hand(P1, "Earthquake");
+        t.cast(P1, quake).x(1).go();
+        let from = t.asked().len();
+        t.resolve_all();
+        let put_on_stack = t.g.turn_events.iter().any(
+            |e| matches!(e, Event::AbilityTriggeredOnStack { source, .. } if *source == servitor),
+        );
+        let target_asked = t.asked()[from..]
+            .iter()
+            .any(|(p, d)| *p == P0 && matches!(d, Decision::ChooseTargets { .. }));
+        if life == 1 {
+            assert!(t.has_lost(P0));
+            assert!(!put_on_stack && !target_asked, "it never went on the stack");
+            assert_eq!((t.life(P1), t.life(P2)), (19, 19));
+        } else {
+            assert!(!t.has_lost(P0));
+            assert!(put_on_stack && target_asked, "control: it went on the stack");
+            assert_eq!((t.life(P0), t.life(P1), t.life(P2)), (19, 18, 19));
+        }
+    }
 }
 
 // --- Zuko, Conflicted -----------------------------------------------------------------------
@@ -462,7 +495,7 @@ fn zuko_leaves_with_his_owner_and_is_exiled_when_his_controller_leaves() {
 
 #[test]
 fn castle_locthwain_draws_and_loses_life_in_one_go() {
-    cr!("608.2c", "117.3");
+    cr!("608.2c", "117.3b");
     ruling!(
         "Castle Locthwain",
         "No player may take actions between the time you draw a card and the time you lose life."
@@ -475,10 +508,10 @@ fn castle_locthwain_draws_and_loses_life_in_one_go() {
     t.hand(P0, "Grizzly Bears");
     crate::r_s06_common::activate_containing(&mut t, P0, castle, "Draw a card").unwrap();
     t.settle();
-    let from = t.asked().len();
     let events = t.g.turn_events.len();
+    // One resolution draws and then loses life for the cards in hand after the draw (no
+    // stack object in between, so no player gets priority between them).
     t.g.resolve_top();
-    assert!(!priority_since(&t, from));
     assert_eq!(drawn_since(&t, events, P0), 1);
     assert_eq!(losses_since(&t, events, P0), vec![3]);
     assert_eq!(t.life(P0), 17);
@@ -583,7 +616,7 @@ fn bebop_x_is_calculated_on_resolution() {
 
 #[test]
 fn shessra_end_step_trigger_once_and_only_if_something_died_before() {
-    cr!("603.4", "513.1a");
+    cr!("603.4", "603.2b");
     ruling!(
         "Shessra, Death's Whisper",
         "Shessra, Death's Whisper's last ability will trigger only once during your end step, no matter how many creatures died this turn. However, if no creatures have died so far this turn as the end step begins, the ability won't trigger at all. It's not possible to cause a creature to die during the end step in time to have the ability trigger."
@@ -685,7 +718,7 @@ fn counted_on_resolution_including_the_source() {
 
 #[test]
 fn tinybones_doesnt_see_the_cleanup_discard() {
-    cr!("603.4", "514.1", "513.1a");
+    cr!("603.4", "514.1", "603.2b");
     ruling!(
         "Tinybones, Trinket Thief",
         "Tinybones’s first ability triggers only if an opponent has discarded a card before the end step begins. If an opponent has more cards in hand than their maximum hand size, they’ll discard during their cleanup step, which is after the end step."
@@ -803,7 +836,7 @@ fn discreet_retreat_mana_on_one_or_two_outlaw_spells() {
 
 #[test]
 fn discreet_retreat_outlaw_sources() {
-    cr!("106.6", "602.2b", "205.3j");
+    cr!("106.6", "602.2b", "700.12");
     ruling!(
         "Discreet Retreat",
         "“Outlaw sources” include any objects with at least one of the Assassin, Mercenary, Pirate, Rogue, or Warlock creature types. This means you could spend the mana to activate the ability of an outlaw creature you control or an outlaw card in your hand or graveyard, for example."

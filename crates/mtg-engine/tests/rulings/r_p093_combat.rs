@@ -20,7 +20,7 @@ const NAZAR: &str = "Nazar, the Velvet Fang";
 
 #[test]
 fn nazar_counts_life_gaining_events() {
-    cr!("119.10", "702.15b", "510.2");
+    cr!("119.9", "702.15b", "510.2");
     ruling!(
         "Nazar, the Velvet Fang",
         "Each creature with lifelink dealing combat damage causes a separate life-gaining event. For example, if two creatures you control with lifelink deal combat damage at the same time, Nazar's second ability will trigger twice. However, if a single creature you control with lifelink deals combat damage to multiple creatures, players, planeswalkers, and/or battles at the same time (perhaps because it has trample or was blocked by more than one creature), the ability will trigger only once."
@@ -74,7 +74,7 @@ fn nazar_counts_life_gaining_events() {
 
 #[test]
 fn nazar_ignores_a_teammates_life_gain() {
-    cr!("810.9", "119.10");
+    cr!("810.9", "119.9");
     ruling!(
         "Nazar, the Velvet Fang",
         "In a Two-Headed Giant game, life gained by your teammate won't cause Nazar's second ability to trigger, even though it caused your team's life total to increase."
@@ -89,7 +89,7 @@ fn nazar_ignores_a_teammates_life_gain() {
 
 #[test]
 fn nazar_must_be_on_the_battlefield_to_remove_its_counters() {
-    cr!("608.2b", "118.3", "603.10");
+    cr!("118.12", "118.3", "400.7");
     ruling!(
         "Nazar, the Velvet Fang",
         "If Nazar isn't on the battlefield as its last ability resolves, you can't remove three feeding counters from it, even if it had three or more feeding counters on it before it left the battlefield. You won't draw cards or lose life."
@@ -143,7 +143,7 @@ fn preacher_tied_for_most_life_triggers_both() {
 
 #[test]
 fn preacher_doesnt_recheck_life_totals_on_resolution() {
-    cr!("603.4", "603.2");
+    cr!("603.2", "608.2c");
     ruling!(
         "Preacher of the Schism",
         "Once Preacher of the Schism's middle ability triggers, it doesn't matter what happens to players' life totals before the ability resolves. You'll create a Vampire token even if the player Preacher of the Schism attacked doesn't have the most life as the ability resolves."
@@ -198,7 +198,7 @@ fn preacher_attacking_a_planeswalker_doesnt_trigger_its_middle_ability() {
 
 #[test]
 fn mindblade_render_and_an_opponents_warrior() {
-    cr!("603.2", "603.5", "102.2");
+    cr!("603.2", "608.2c", "806.1");
     ruling!(
         "Mindblade Render",
         "Mindblade Render's ability triggers if a Warrior an opponent controls deals combat damage to another player who's also your opponent. You can't choose not to draw a card or lose 1 life if this happens."
@@ -394,7 +394,7 @@ fn equip_knight_checks_knight_on_activation_and_resolution_only() {
 
 #[test]
 fn the_chief_warg_checks_power_only_when_you_attack() {
-    cr!("603.2", "603.4");
+    cr!("603.2", "508.1m");
     ruling!(
         "The Chief Warg",
         "The Chief Warg's triggered ability will check when you attack to see if you control a creature with power 4 or greater. If you don't, the ability won't trigger at all. It will not check again when it resolves, so the trigger will resolve even if you no longer control a creature with power 4 or greater."
@@ -427,7 +427,7 @@ const KETRAMOSE: &str = "Ketramose, the New Dawn";
 
 #[test]
 fn ketramose_counts_every_card_in_exile() {
-    cr!("406.3", "508.1c", "509.1b");
+    cr!("508.1c", "509.1b");
     ruling!(
         "Ketramose, the New Dawn",
         "The ability that prevents Ketramose from attacking or blocking counts the total number of cards in exile, regardless of who owns them or how they were exiled."
@@ -444,11 +444,26 @@ fn ketramose_counts_every_card_in_exile() {
     let giant = t.graveyard(P1, "Hill Giant");
     crate::r_s05_common::move_to(&mut t, giant, Zone::Exile);
     assert!(crate::r_s02_common::can_attack(&mut t, ketramose));
+    // Blocking: P1's Grizzly Bears attack; Ketramose can block them once a seventh card,
+    // P0's this time, is exiled.
+    let mut t = TestGame::new(2);
+    let ketramose = t.battlefield(P0, KETRAMOSE);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    for i in 0..6 {
+        t.exile(if i % 2 == 0 { P0 } else { P1 }, "Hill Giant");
+    }
+    t.set_step(P1, Step::BeginningOfCombat);
+    attack_with(&mut t, &[(bears, Entity::Player(P0))]);
+    let block = [(ketramose, bears)];
+    assert!(!crate::r_s21_common::legal_blocks(&mut t, P0, &block));
+    let giant = t.graveyard(P0, "Hill Giant");
+    crate::r_s05_common::move_to(&mut t, giant, Zone::Exile);
+    assert!(crate::r_s21_common::legal_blocks(&mut t, P0, &block));
 }
 
 #[test]
 fn ketramose_keeps_attacking_when_exile_shrinks() {
-    cr!("506.4", "508.1c");
+    cr!("506.4a", "508.1c", "509.1b");
     ruling!(
         "Ketramose, the New Dawn",
         "Once Ketramose has been declared as an attacker or blocker, it will continue to attack or block that combat even if the number of cards in exile falls below seven."
@@ -462,13 +477,35 @@ fn ketramose_keeps_attacking_when_exile_shrinks() {
     t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(t.life(P1), 16);
     assert_eq!(t.life(P0), 24);
+    // Blocking: it blocks P1's Hill Giant with seven cards in exile, keeps blocking with
+    // six, and deals and takes its damage.
+    let mut t = TestGame::new(2);
+    let ketramose = t.battlefield(P0, KETRAMOSE);
+    let giant = t.battlefield(P1, "Hill Giant");
+    let exiled: Vec<ObjectId> = (0..7).map(|_| t.exile(P1, "Grizzly Bears")).collect();
+    t.set_step(P1, Step::BeginningOfCombat);
+    attack_with(&mut t, &[(giant, Entity::Player(P0))]);
+    t.answer(
+        P0,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(ketramose, giant)]),
+    );
+    t.advance_to(P1, Step::DeclareBlockers);
+    assert!(crate::r_s10_common::blocking(&t, ketramose));
+    crate::r_s05_common::move_to(&mut t, exiled[0], Zone::Graveyard(P1));
+    assert!(!crate::r_s21_common::legal_blocks(&mut t, P0, &[(ketramose, giant)]));
+    assert!(crate::r_s10_common::blocking(&t, ketramose));
+    t.advance_to(P1, Step::EndOfCombat);
+    assert!(t.in_graveyard(P1, "Hill Giant"));
+    assert_eq!(t.life(P0), 24);
+    assert_eq!(t.obj_now(ketramose).damage, 3);
 }
 
 // --- Summon: Primal Odin -----------------------------------------------------------------------
 
 #[test]
 fn primal_odins_granted_trigger_works_whatever_happens_to_odin() {
-    cr!("603.10", "113.7a", "104.3a");
+    cr!("113.7a", "104.3e");
     ruling!(
         "Summon: Primal Odin",
         "Once Summon: Primal Odin deals combat damage to a player and the ability granted by Summon: Primal Odin's second chapter ability triggers, it doesn't matter what happens to Summon: Primal Odin. When that ability resolves, the player who was dealt combat damage this way loses the game even if Summon: Primal Odin isn't on the battlefield anymore or is controlled by another player."
@@ -501,7 +538,7 @@ fn primal_odins_granted_trigger_works_whatever_happens_to_odin() {
 
 #[test]
 fn turned_face_down_after_blocks_stays_blocked() {
-    cr!("509.1h", "702.110b", "708.2");
+    cr!("509.1h", "702.111b", "708.2");
     ruling!(
         "Roshan, Hidden Magister",
         "Once a creature you control has become blocked by a single creature, giving it menace by turning it face down somehow won’t cause it to become unblocked."
@@ -530,7 +567,7 @@ fn turned_face_down_after_blocks_stays_blocked() {
 
 #[test]
 fn grasping_shadows_isnt_undone_by_creatures_entering_attacking() {
-    cr!("506.5", "603.4", "508.4");
+    cr!("506.5", "508.4");
     ruling!(
         "Grasping Shadows // Shadows' Lair",
         "Once the ability of Grasping Shadows has triggered, creatures entering the battlefield attacking won't affect that ability."
@@ -593,7 +630,7 @@ fn hazoret_unblockable_stays_after_power_grows() {
 
 #[test]
 fn shessras_block_requirement_yields_to_tapped_cant_block_and_costs() {
-    cr!("509.1c", "506.5", "509.1d");
+    cr!("509.1c", "509.1d");
     ruling!(
         "Shessra, Death's Whisper",
         "If the creature affected by the Bewitching Whispers ability is tapped or is affected by a spell or ability that says it can't block, then it doesn't block. If there's a cost associated with having that creature block, its controller isn't forced to pay that cost, so it doesn't have to block in that case either."
@@ -623,15 +660,18 @@ fn shessras_block_requirement_yields_to_tapped_cant_block_and_costs() {
     // Craven Giant: "This creature can't block."
     assert!(may_decline("Craven Giant", |_, _| {}));
     // War Cadence: "{X}{R}: This turn, creatures can't block unless their controller pays
-    // {X} for each blocking creature they control." Activated for X = 1.
-    assert!(may_decline("Grizzly Bears", |t, _| {
+    // {X} for each blocking creature they control." Activated for X = 1; P1 keeps two
+    // untapped Mountains, enough to pay for the block, and still needn't block.
+    assert!(may_decline("Grizzly Bears", |t, b| {
         let cadence = t.battlefield(P1, "War Cadence");
         t.lands(P1, "Mountain", 2);
         t.set_step(P1, Step::PrecombatMain);
         t.answer(P1, DecisionKind::X, Answer::Number(1));
         crate::r_s06_common::activate_containing(t, P1, cadence, "can't block").unwrap();
         t.resolve_all();
+        t.lands(P1, "Mountain", 2);
         t.set_step(P0, Step::PrecombatMain);
+        assert!(mtg_engine::combat::required_block_cost(&t.g, b).is_some());
     }));
 }
 

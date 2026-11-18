@@ -22,7 +22,7 @@ fn hand_of(t: &mut TestGame, p: PlayerId, n: usize) {
 
 #[test]
 fn bad_deal_in_a_multiplayer_game() {
-    cr!("101.4", "701.9a", "119.3");
+    cr!("701.9a", "119.3");
     ruling!(
         "Bad Deal",
         "Each player loses 2 life, including you, regardless of how many cards they draw or discard."
@@ -52,7 +52,7 @@ fn bad_deal_in_a_multiplayer_game() {
 
 #[test]
 fn bad_deal_in_two_headed_giant() {
-    cr!("810.9", "810.9a");
+    cr!("810.9");
     ruling!(
         "Bad Deal",
         "In a Two-Headed Giant game, Bad Deal causes each team to lose 4 life. Your teammate doesn't draw or discard any cards."
@@ -75,7 +75,7 @@ fn bad_deal_in_two_headed_giant() {
 
 #[test]
 fn dark_bargain_with_fewer_than_three_cards() {
-    cr!("401.2", "120.3a");
+    cr!("609.3", "120.3a");
     ruling!(
         "Dark Bargain",
         "If you have fewer than three cards in your library, you put them all into your hand and none into your graveyard."
@@ -103,7 +103,7 @@ fn stargaze(t: &mut TestGame, x: i64, library: usize) {
 
 #[test]
 fn stargaze_with_a_short_library() {
-    cr!("401.2", "119.3", "107.3a");
+    cr!("609.3", "119.3", "107.3a");
     ruling!(
         "Stargaze",
         "If your library contains fewer than X cards, you'll put them all into your hand. You can't choose to put any of them into your graveyard. You'll still lose X life."
@@ -320,7 +320,7 @@ fn yawgmoth_counters_are_removed_in_pairs() {
 
 #[test]
 fn yawgmoth_needs_no_target_but_an_illegal_one_stops_the_draw() {
-    cr!("115.10a", "608.2b", "601.2c");
+    cr!("115.6", "608.2b", "601.2c");
     ruling!(
         "Yawgmoth, Thran Physician",
         "You may activate Yawgmoth's first activated ability without choosing a target creature. You'll just draw a card. However, if you choose a target and it becomes illegal before the ability tries to resolve, the ability won't resolve and you won't draw a card."
@@ -348,7 +348,7 @@ fn yawgmoth_needs_no_target_but_an_illegal_one_stops_the_draw() {
 
 #[test]
 fn spoils_of_the_vault_naming_a_card_not_in_the_library() {
-    cr!("201.3", "701.20a", "119.3");
+    cr!("201.4", "701.20a", "119.3");
     ruling!(
         "Spoils of the Vault",
         "You don’t have to choose the name of a card that’s still in your library, or even a card that’s in your deck at all. If no card with the chosen name is in your library, you exile your library and lose 1 life for each of those cards."
@@ -398,21 +398,227 @@ fn clues(t: &TestGame, p: PlayerId) -> Vec<ObjectId> {
 }
 
 /// Checks that `clue` is an artifact token whose ability ("{2}, Sacrifice this token:
-/// Draw a card.") draws a card for {2}.
-fn check_clue(t: &mut TestGame, clue: ObjectId) {
+/// Draw a card.") draws its controller `p` a card for {2}.
+fn check_clue(t: &mut TestGame, p: PlayerId, clue: ObjectId) {
     let o = t.obj_now(clue).clone();
     assert!(o.is_token() && o.is(CardType::Artifact));
-    t.lands(P0, "Wastes", 2);
-    let hand = t.hand_size(P0);
-    crate::r_s06_common::activate_containing(t, P0, clue, "Draw a card").unwrap();
+    t.lands(p, "Wastes", 2);
+    let hand = t.hand_size(p);
+    crate::r_s06_common::activate_containing(t, p, clue, "Draw a card").unwrap();
     t.resolve_all();
-    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(t.hand_size(p), hand + 1);
     assert!(!t.on_battlefield(clue));
 }
+
+/// One of the cards that create Clue tokens without investigating: `run` (with both
+/// players controlling an Erdwal Illuminator) makes it create them and returns the player
+/// who does, who ends up with `n` Clues once everything resolves.
+struct ClueCase {
+    card: &'static str,
+    n: usize,
+    run: fn(&mut TestGame) -> PlayerId,
+}
+
+fn enters(t: &mut TestGame, name: &str) -> PlayerId {
+    crate::r_s05_common::enter(t, P0, name);
+    P0
+}
+
+fn dies(t: &mut TestGame, name: &str) -> PlayerId {
+    let id = t.battlefield(P0, name);
+    kill(t, id);
+    P0
+}
+
+const CLUE_CASES: &[ClueCase] = &[
+    ClueCase {
+        card: "Air Nomad Legacy",
+        n: 1,
+        run: |t| enters(t, "Air Nomad Legacy"),
+    },
+    ClueCase {
+        card: "Azula, On the Hunt",
+        n: 1,
+        run: |t| {
+            let azula = t.battlefield(P0, "Azula, On the Hunt");
+            attack_with(t, &[(azula, Entity::Player(P1))]);
+            P0
+        },
+    },
+    ClueCase {
+        card: "Callous Inspector",
+        n: 1,
+        run: |t| dies(t, "Callous Inspector"),
+    },
+    ClueCase {
+        card: "Cunning Maneuver",
+        n: 1,
+        run: |t| {
+            let bears = t.battlefield(P0, "Grizzly Bears");
+            cast_spell(t, P0, "Cunning Maneuver", &[obj(bears)]);
+            P0
+        },
+    },
+    ClueCase {
+        card: "Fire Nation Raider",
+        n: 1,
+        run: |t| {
+            // Raid: P0 attacked this turn.
+            let bears = t.battlefield(P0, "Grizzly Bears");
+            attack_with(t, &[(bears, Entity::Player(P1))]);
+            t.advance_to(P0, Step::PostcombatMain);
+            enters(t, "Fire Nation Raider")
+        },
+    },
+    ClueCase {
+        card: "Fire Nation Warship",
+        n: 1,
+        run: |t| dies(t, "Fire Nation Warship"),
+    },
+    ClueCase {
+        card: "Forecasting Fortune Teller",
+        n: 1,
+        run: |t| enters(t, "Forecasting Fortune Teller"),
+    },
+    ClueCase {
+        card: "Jet's Brainwashing",
+        n: 1,
+        run: |t| {
+            let bears = t.battlefield(P1, "Grizzly Bears");
+            cast_spell(t, P0, "Jet's Brainwashing", &[obj(bears)]);
+            P0
+        },
+    },
+    ClueCase {
+        card: "June, Bounty Hunter",
+        n: 1,
+        run: |t| {
+            let june = t.battlefield(P0, "June, Bounty Hunter");
+            let bears = t.battlefield(P0, "Grizzly Bears");
+            t.lands(P0, "Wastes", 1);
+            t.answer_choose(P0, &[obj(bears)]);
+            crate::r_s06_common::activate_containing(t, P0, june, "Create a Clue").unwrap();
+            P0
+        },
+    },
+    ClueCase {
+        card: "Knowledge Seeker",
+        n: 1,
+        run: |t| dies(t, "Knowledge Seeker"),
+    },
+    ClueCase {
+        card: "Lost Days",
+        n: 1,
+        run: |t| {
+            let bears = t.battlefield(P1, "Grizzly Bears");
+            cast_spell(t, P0, "Lost Days", &[obj(bears)]);
+            P0
+        },
+    },
+    ClueCase {
+        card: "Messenger Hawk",
+        n: 1,
+        run: |t| enters(t, "Messenger Hawk"),
+    },
+    ClueCase {
+        card: "Nyla, Shirshu Sleuth",
+        // Grizzly Bears exiled from P0's graveyard: X = 2.
+        n: 2,
+        run: |t| {
+            let bears = t.graveyard(P0, "Grizzly Bears");
+            t.answer_targets(P0, &[obj(bears)]);
+            enters(t, "Nyla, Shirshu Sleuth")
+        },
+    },
+    ClueCase {
+        card: "Obsessive Pursuit",
+        n: 1,
+        run: |t| enters(t, "Obsessive Pursuit"),
+    },
+    ClueCase {
+        card: "Raven Eagle",
+        n: 1,
+        run: |t| {
+            let bears = t.graveyard(P1, "Grizzly Bears");
+            t.answer_targets(P0, &[obj(bears)]);
+            enters(t, "Raven Eagle")
+        },
+    },
+    ClueCase {
+        card: "Sokka's Sword Training",
+        n: 1,
+        run: |t| {
+            let bears = t.battlefield(P0, "Grizzly Bears");
+            cast_spell(t, P0, "Sokka's Sword Training", &[obj(bears)]);
+            assert_eq!(t.pt(bears), (4, 4));
+            P0
+        },
+    },
+    ClueCase {
+        card: "Sold Out",
+        n: 1,
+        run: |t| {
+            // The creature was dealt damage this turn.
+            let bears = t.battlefield(P1, "Grizzly Bears");
+            let giant = t.battlefield(P0, "Hill Giant");
+            crate::r_s06_common::damage(t, giant, 1, bears);
+            cast_spell(t, P0, "Sold Out", &[obj(bears)]);
+            P0
+        },
+    },
+    ClueCase {
+        card: "The Mechanist, Aerial Artisan",
+        n: 1,
+        run: |t| {
+            t.battlefield(P0, "The Mechanist, Aerial Artisan");
+            cast_spell(t, P0, "Divination", &[]);
+            P0
+        },
+    },
+    ClueCase {
+        card: "Tolls of War",
+        n: 1,
+        run: |t| enters(t, "Tolls of War"),
+    },
+    ClueCase {
+        card: "True Ancestry",
+        n: 1,
+        run: |t| {
+            let bears = t.graveyard(P0, "Grizzly Bears");
+            cast_spell(t, P0, "True Ancestry", &[obj(bears)]);
+            P0
+        },
+    },
+    ClueCase {
+        card: "Zuko's Exile",
+        n: 1,
+        run: |t| {
+            // "Its controller creates a Clue token": P1, whose creature is exiled.
+            let bears = t.battlefield(P1, "Grizzly Bears");
+            cast_spell(t, P0, "Zuko's Exile", &[obj(bears)]);
+            P1
+        },
+    },
+];
 
 #[test]
 fn clue_tokens_and_investigating() {
     cr!("111.10f", "701.16a", "603.2");
+    // The two rulings shared by these 21 cards, one test case each (each card words its
+    // Clue-making differently: spells, enters, dies, attack, cast and activated
+    // abilities, conditions, X Clues, and a Clue for the exiled creature's controller).
+    ruling!("Air Nomad Legacy", "Clue tokens are artifact tokens with");
+    ruling!("Air Nomad Legacy", "isn't the same thing as investigating");
+    ruling!("Azula, On the Hunt", "Clue tokens are artifact tokens with");
+    ruling!("Azula, On the Hunt", "isn't the same thing as investigating");
+    ruling!("Callous Inspector", "Clue tokens are artifact tokens with");
+    ruling!("Callous Inspector", "isn't the same thing as investigating");
+    ruling!("Cunning Maneuver", "Clue tokens are artifact tokens with");
+    ruling!("Cunning Maneuver", "isn't the same thing as investigating");
+    ruling!("Fire Nation Raider", "Clue tokens are artifact tokens with");
+    ruling!("Fire Nation Raider", "isn't the same thing as investigating");
+    ruling!("Fire Nation Warship", "Clue tokens are artifact tokens with");
+    ruling!("Fire Nation Warship", "isn't the same thing as investigating");
     ruling!(
         "Forecasting Fortune Teller",
         "Clue tokens are artifact tokens with \"{2}, Sacrifice this token: Draw a card.\""
@@ -421,34 +627,63 @@ fn clue_tokens_and_investigating() {
         "Forecasting Fortune Teller",
         "Creating a Clue token this way isn't the same thing as investigating. Notably, an ability that triggers whenever you investigate won't trigger because of creating a Clue token this way."
     );
-    supported("Forecasting Fortune Teller");
+    ruling!("Jet's Brainwashing", "Clue tokens are artifact tokens with");
+    ruling!("Jet's Brainwashing", "isn't the same thing as investigating");
+    ruling!("June, Bounty Hunter", "Clue tokens are artifact tokens with");
+    ruling!("June, Bounty Hunter", "isn't the same thing as investigating");
+    ruling!("Knowledge Seeker", "Clue tokens are artifact tokens with");
+    ruling!("Knowledge Seeker", "isn't the same thing as investigating");
+    ruling!("Lost Days", "Clue tokens are artifact tokens with");
+    ruling!("Lost Days", "isn't the same thing as investigating");
+    ruling!("Messenger Hawk", "Clue tokens are artifact tokens with");
+    ruling!("Messenger Hawk", "isn't the same thing as investigating");
+    ruling!("Nyla, Shirshu Sleuth", "Clue tokens are artifact tokens with");
+    ruling!("Nyla, Shirshu Sleuth", "isn't the same thing as investigating");
+    ruling!("Obsessive Pursuit", "Clue tokens are artifact tokens with");
+    ruling!("Obsessive Pursuit", "isn't the same thing as investigating");
+    ruling!("Raven Eagle", "Clue tokens are artifact tokens with");
+    ruling!("Raven Eagle", "isn't the same thing as investigating");
+    ruling!(
+        "Sokka's Sword Training",
+        "Clue tokens are artifact tokens with \"{2}, Sacrifice this token: Draw a card.\""
+    );
+    ruling!(
+        "Sokka's Sword Training",
+        "Creating a Clue token this way isn't the same thing as investigating. Notably, an ability that triggers whenever you investigate won't trigger because of creating a Clue token this way."
+    );
+    ruling!("Sold Out", "Clue tokens are artifact tokens with");
+    ruling!("Sold Out", "isn't the same thing as investigating");
+    ruling!("The Mechanist, Aerial Artisan", "Clue tokens are artifact tokens with");
+    ruling!("The Mechanist, Aerial Artisan", "isn't the same thing as investigating");
+    ruling!("Tolls of War", "Clue tokens are artifact tokens with");
+    ruling!("Tolls of War", "isn't the same thing as investigating");
+    ruling!("True Ancestry", "Clue tokens are artifact tokens with");
+    ruling!("True Ancestry", "isn't the same thing as investigating");
+    ruling!("Zuko's Exile", "Clue tokens are artifact tokens with");
+    ruling!("Zuko's Exile", "isn't the same thing as investigating");
     supported("Erdwal Illuminator");
     // Erdwal Illuminator: "Whenever you investigate for the first time each turn,
-    // investigate an additional time." An enters trigger creating a Clue: one Clue.
+    // investigate an additional time." Investigating makes it add a second Clue...
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Erdwal Illuminator");
-    crate::r_s05_common::enter(&mut t, P0, "Forecasting Fortune Teller");
+    supported("Thraben Inspector");
+    crate::r_s05_common::enter(&mut t, P0, "Thraben Inspector");
     t.resolve_all();
-    assert_eq!(clues(&t, P0).len(), 1);
-    let clue = clues(&t, P0)[0];
-    check_clue(&mut t, clue);
-
-    ruling!(
-        "Sokka's Sword Training",
-        "Clue tokens are artifact tokens with \"{2}, Sacrifice this token: Draw a card.\""
-    );
-    ruling!(
-        "Sokka's Sword Training",
-        "Creating a Clue token this way isn't the same thing as investigating. Notably, an ability that triggers whenever you investigate won't trigger because of creating a Clue token this way."
-    );
-    supported("Sokka's Sword Training");
-    // A spell creating a Clue.
-    let mut t = TestGame::new(2);
-    t.battlefield(P0, "Erdwal Illuminator");
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    cast_spell(&mut t, P0, "Sokka's Sword Training", &[obj(bears)]);
-    assert_eq!(clues(&t, P0).len(), 1);
-    assert_eq!(t.pt(bears), (4, 4));
-    let clue = clues(&t, P0)[0];
-    check_clue(&mut t, clue);
+    assert_eq!(clues(&t, P0).len(), 2);
+    // ... creating a Clue doesn't, whoever creates it.
+    assert_eq!(CLUE_CASES.len(), 21);
+    for c in CLUE_CASES {
+        supported(c.card);
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Erdwal Illuminator");
+        t.battlefield(P1, "Erdwal Illuminator");
+        let who = (c.run)(&mut t);
+        t.resolve_all();
+        t.clear_answers();
+        let other = if who == P0 { P1 } else { P0 };
+        assert_eq!(clues(&t, who).len(), c.n, "{}", c.card);
+        assert!(clues(&t, other).is_empty(), "{}", c.card);
+        let clue = clues(&t, who)[0];
+        check_clue(&mut t, who, clue);
+    }
 }

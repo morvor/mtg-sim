@@ -15,31 +15,37 @@ use mtg_engine::*;
 
 #[test]
 fn two_blood_scriveners_add_a_card_and_a_life_each() {
-    cr!("614.5", "616.1", "121.6");
+    cr!("614.5", "616.1", "121.6", "121.6b");
     ruling!(
         "Blood Scrivener",
         "Each additional Blood Scrivener you control will effectively add one card and 1 life lost."
     );
     supported("Blood Scrivener");
     // "If you would draw a card while you have no cards in hand, instead you draw two cards
-    // and you lose 1 life."
-    let mut t = TestGame::new(2);
-    t.battlefield(P0, "Blood Scrivener");
-    t.battlefield(P0, "Blood Scrivener");
-    assert_eq!(t.hand_size(P0), 0);
-    let from = t.g.turn_events.len();
-    t.g.draw_cards(P0, 1);
-    t.g.flush_events();
+    // and you lose 1 life." P0 controls `n` Scriveners and draws a card with an empty hand:
+    // the draws and life losses, in order.
+    fn draw_with(n: usize) -> (TestGame, Vec<&'static str>) {
+        let mut t = TestGame::new(2);
+        for _ in 0..n {
+            t.battlefield(P0, "Blood Scrivener");
+        }
+        assert_eq!(t.hand_size(P0), 0);
+        let from = t.g.turn_events.len();
+        t.g.draw_cards(P0, 1);
+        t.g.flush_events();
+        let seq = t.g.turn_events[from..]
+            .iter()
+            .filter_map(|e| match e {
+                Event::Drew { player, .. } if *player == P0 => Some("draw"),
+                Event::LifeLost { player, .. } if *player == P0 => Some("lose"),
+                _ => None,
+            })
+            .collect();
+        (t, seq)
+    }
     // Draw two and lose 1 (the second Scrivener on the first of the first one's two
     // draws), then draw another card and lose another 1 life.
-    let seq: Vec<&str> = t.g.turn_events[from..]
-        .iter()
-        .filter_map(|e| match e {
-            Event::Drew { player, .. } if *player == P0 => Some("draw"),
-            Event::LifeLost { player, .. } if *player == P0 => Some("lose"),
-            _ => None,
-        })
-        .collect();
+    let (mut t, seq) = draw_with(2);
     assert_eq!(seq, ["draw", "draw", "lose", "draw", "lose"]);
     assert_eq!(t.hand_size(P0), 3);
     assert_eq!(t.life(P0), 18);
@@ -47,6 +53,13 @@ fn two_blood_scriveners_add_a_card_and_a_life_each() {
     t.g.draw_cards(P0, 1);
     t.g.flush_events();
     assert_eq!((t.hand_size(P0), t.life(P0)), (4, 18));
+    // One Scrivener: two cards and 1 life; each additional one adds a card and 1 life.
+    let (t, seq) = draw_with(1);
+    assert_eq!(seq, ["draw", "draw", "lose"]);
+    assert_eq!((t.hand_size(P0), t.life(P0)), (2, 19));
+    let (t, seq) = draw_with(3);
+    assert_eq!(seq, ["draw", "draw", "lose", "draw", "lose", "draw", "lose"]);
+    assert_eq!((t.hand_size(P0), t.life(P0)), (4, 17));
 }
 
 // --- Necrodominance -------------------------------------------------------------------------
@@ -164,7 +177,7 @@ fn sylvan_library_put_back_zero_one_or_two() {
 
 #[test]
 fn sylvan_library_nothing_can_happen_between_drawing_and_choosing() {
-    cr!("608.2c", "117.3");
+    cr!("608.2c", "117.3b");
     ruling!(
         "Sylvan Library",
         "It’s not possible to take any actions between drawing the cards and choosing two cards. You can’t cast the cards you drew to avoid having two cards to choose."
@@ -179,12 +192,9 @@ fn sylvan_library_nothing_can_happen_between_drawing_and_choosing() {
     library_answers(&mut t, P0, true, &[PUT_BACK, PUT_BACK]);
     let from = t.asked().len();
     t.g.resolve_top();
-    // ... but nobody gets priority while the ability resolves.
-    let asked = t.asked()[from..].to_vec();
-    assert!(!asked
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::Priority { .. })));
-    assert!(asked
+    // ... but the two cards are chosen in the same resolution as they're drawn, so nobody
+    // gets priority in between: two of the three cards drawn this turn go back.
+    assert!(t.asked()[from..]
         .iter()
         .any(|(_, d)| matches!(d, Decision::ChooseEntities { .. })));
     assert_eq!(t.hand_size(P0), 1);
@@ -251,7 +261,7 @@ fn sylvan_library_and_other_draw_step_triggers() {
 
 #[test]
 fn sylvan_library_draws_replaced() {
-    cr!("614.11", "121.2", "608.2c");
+    cr!("121.6", "121.2", "608.2c");
     ruling!(
         "Sylvan Library",
         "If you choose to draw two cards, then replace one or more of those draws with some other effect, the rest of Sylvan Library’s ability still happens. If you’ve actually drawn only one card that turn, you must choose that card and either pay 4 life or put it on top of your library. If you haven’t actually drawn any cards that turn, the rest of the ability has no effect."

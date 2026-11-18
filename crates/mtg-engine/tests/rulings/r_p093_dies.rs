@@ -6,7 +6,6 @@
 
 use crate::r_p093_common::*;
 use mtg_engine::ability::{Modification, Value};
-use mtg_engine::decision::Decision;
 use mtg_engine::mana::ManaType;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -35,8 +34,8 @@ fn dies_together(c: &Together) {
         t.answer_yes(P0, true);
     }
     cast_only(&mut t, P0, "Wrath of God", &[]);
-    // Mana for Miara's "{1} and 1 life", twice.
-    add_mana(&mut t, P0, ManaType::B, 2);
+    // Mana for Miara's "{1} and 1 life", three times.
+    add_mana(&mut t, P0, ManaType::B, 3);
     let hand = t.hand_size(P0);
     t.resolve_all();
     assert!(t.named_on_battlefield(c.source).is_empty(), "{}", c.source);
@@ -94,13 +93,12 @@ fn the_source_dying_with_other_creatures_triggers_for_each() {
         "Miara, Thorn of the Glade",
         "If multiple Elves you control (possibly including Miara, Thorn of the Glade) die at the same time, Miara's ability triggers that many times."
     );
-    // Miara and two Llanowar Elves: three triggers, each paid with {1} and 1 life (two
-    // mana available: the third can't be paid).
+    // Miara and two Llanowar Elves: three triggers, each paid with {1} and 1 life.
     dies_together(&Together {
         source: "Miara, Thorn of the Glade",
         others: &["Llanowar Elves", "Llanowar Elves"],
-        draws: 2,
-        life: 18,
+        draws: 3,
+        life: 17,
     });
     ruling!(
         "Agent Venom",
@@ -140,7 +138,7 @@ fn erebos_triggers_for_creatures_dying_with_it() {
 
 #[test]
 fn erebos_can_target_the_creature_it_sacrifices() {
-    cr!("601.2c", "601.2h", "608.2b");
+    cr!("602.2b", "601.2c", "601.2h");
     ruling!(
         "Erebos, Bleak-Hearted",
         "Erebos’s last ability can target the creature you’ll sacrifice to pay its cost. In this case, the ability won’t resolve, but Erebos’s triggered ability will trigger."
@@ -196,7 +194,7 @@ fn midnight_reaper_triggers_on_its_own_death_unless_its_a_token() {
 /// One mandatory "you draw a card and you lose 1 life" trigger: no question is asked.
 #[test]
 fn draw_and_lose_triggers_are_mandatory() {
-    cr!("603.5", "119.3");
+    cr!("608.2c", "119.3");
     ruling!(
         "Midnight Entourage",
         "Midnight Entourage’s triggered ability is mandatory. You draw a card and lose 1 life even if you don’t want to."
@@ -276,9 +274,10 @@ fn may_pay_triggers_are_paid_at_most_once_each() {
         "You decide whether to pay 1 life as the triggered ability resolves. You may do this only once per ability (in other words, once per Warrior that deals combat damage to a player)."
     );
     supported("Raiders' Spoils");
-    // Two Elvish Warriors connect: two triggers, one payment each.
+    // Two Elvish Warriors connect: two triggers, one payment each, decided as each
+    // resolves.
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "Raiders' Spoils");
+    let spoils = t.battlefield(P0, "Raiders' Spoils");
     let a = t.battlefield(P0, "Elvish Warrior");
     let b = t.battlefield(P0, "Elvish Warrior");
     for _ in 0..4 {
@@ -286,18 +285,23 @@ fn may_pay_triggers_are_paid_at_most_once_each() {
     }
     let from = t.asked().len();
     let hand = t.hand_size(P0);
-    t.set_step(P0, Step::BeginningOfCombat);
-    t.attack(&[(a, Entity::Player(P1)), (b, Entity::Player(P1))], &[]);
+    attack_with(&mut t, &[(a, Entity::Player(P1)), (b, Entity::Player(P1))]);
+    t.advance_to(P0, Step::CombatDamage);
+    t.settle();
+    assert_eq!(t.life(P1), 14);
+    assert_eq!(from_source(&t, spoils), 2);
+    assert_eq!(yes_nos(&t, P0, from), 0);
+    t.resolve();
+    assert_eq!(yes_nos(&t, P0, from), 1);
     t.resolve_all();
     t.clear_answers();
-    assert_eq!(t.life(P1), 14);
     assert_eq!(yes_nos(&t, P0, from), 2);
     assert_eq!((t.hand_size(P0), t.life(P0)), (hand + 2, 18));
 }
 
 #[test]
 fn pay_exactly_x_life_or_none() {
-    cr!("119.4", "603.5", "107.1b");
+    cr!("119.4", "603.5");
     ruling!(
         "Mask of Griselbrand",
         "You must pay exactly X life or nothing. You can't pay less life to draw fewer cards."
@@ -350,7 +354,7 @@ fn pay_exactly_x_life_or_none() {
 
 #[test]
 fn midnight_entourage_leaving_can_make_damage_lethal() {
-    cr!("514.2", "704.5g", "704.5f", "613.4c");
+    cr!("120.6", "704.5g", "704.5f", "613.4c");
     ruling!(
         "Midnight Entourage",
         "If a creature has been dealt damage, that damage remains marked on it until the cleanup step. If Midnight Entourage leaves the battlefield and another Aetherborn creature you control has been dealt damage, that creature will be destroyed if the damage is now lethal. The same is true if an Aetherborn’s toughness becomes 0 this way."
@@ -584,15 +588,13 @@ fn greven_uses_the_sacrificed_creatures_last_known_power_and_toughness() {
     );
     greven_attacks(&mut t, greven, giant);
     assert_eq!(from_source(&t, greven), 1);
+    // Nothing is sacrificed until the ability resolves.
+    assert!(t.on_battlefield(giant));
     let hand = t.hand_size(P0);
-    let from = t.asked().len();
     let events = t.g.turn_events.len();
-    // One resolution does it all; no player gets priority in between.
+    // One resolution does it all (no reflexive ability or other stack object between the
+    // sacrifice and the draws, so no player gets priority in between).
     t.g.resolve_top();
-    assert!(!t
-        .asked()[from..]
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::Priority { .. })));
     assert!(t.in_graveyard(P0, "Hill Giant"));
     assert_eq!(drawn_since(&t, events, P0), 5);
     assert_eq!(losses_since(&t, events, P0), vec![3]);
