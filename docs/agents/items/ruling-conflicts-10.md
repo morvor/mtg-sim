@@ -153,6 +153,16 @@ The other cards the brief named say nothing on this.
   - A new "Not yet investigated" bullet for Kaboom!'s ruling: a template error by the log's definition, whose caster's choice isn't implemented. It is left for the change that follows the user's decision, since that change asks the caster there under either reading.
 - **Register:** the new entry `per-object-actions-in-given-order` (deviation, provisional). docs/INTERPRETATIONS.md is regenerated.
 
+**Tests and checks run** (Nov 18, in this worktree, on the committed state).
+- `cargo build --workspace --all-targets`: exit 0, no warnings.
+- `cargo test --workspace`: exit 0.
+  - mtg-engine: rulings 18,999 passed (the two new tests among them), cr 2,891, cards 6,657, keywords 1,677, actions 258, properties 17, smoke 10, and 158 unit tests.
+  - mtg-data passed, including its `discrepancies` and `interpretations` tests. So did mtg-api, mtg-sim and mtg-tools.
+- `cargo run --release -q -p mtg-tools -- rulings-coverage --check`: exit 0. Unchanged: 28,158 of 33,955 ruling texts cited, 193 exempt, 3,740 open. Chaotic Transformation's ruling is still among the open ones.
+- `cargo run --release -q -p mtg-tools -- interpretations --check`: exit 0 (151 entries, 1 provisional, 0 problems).
+- The log check catches the new entry: dated 2022-09-10 instead of 2022-09-09, it fails.
+- The mutant check described under "Engine".
+
 **Noticed, not investigated.**
 - **Two players' processes at once?** Divergent Transformations' rulings (2016-11-08) put two players' processes one after the other, starting with the active player ("The two creatures that are put onto the battlefield are put onto the battlefield sequentially."). 608.2f, added in 2020, processes an action simultaneously "in most cases", and individually only when it "can’t be processed simultaneously". Whether two players' reveal-until processes can be performed at once wasn't investigated; if they can, the 2016 rulings would be outdated. The engine follows the 2016 rulings (cited) and does the same for Chaotic Transformation's different players. Chaotic Transformation's ruling doesn't address different players.
 - **Where Kaboom!'s 2022-09-09 ruling first appeared** wasn't found.
