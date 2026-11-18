@@ -104,8 +104,8 @@ fn twelfth_doctor_demonstrate_copies_see_kicker() {
     let gorm = t.battlefield(P1, "Gorm the Great");
     let a = t.battlefield(P1, "Hill Giant");
     t.answer_yes(P0, true); // demonstrate
-    change_copy_targets(&mut t, P0, &[Some(ent(a))]);
     t.cast(P0, card).target(gorm).kicked(true).go();
+    change_copy_targets(&mut t, P0, &[Some(ent(a))]);
     t.settle();
     t.resolve_all();
     // P0's copy (aimed at the Hill Giant) dealt 4; the original and the opponent's copy
