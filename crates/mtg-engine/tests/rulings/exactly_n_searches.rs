@@ -5,8 +5,8 @@
 //! reveal exactly two cards you own with different names from outside the game",
 //! Extrapolate the Impossible). They are N cards or none: a searcher finds N of them or, as
 //! CR 701.23b allows for cards with a stated quality, none, never between one and N - 1;
-//! if N such cards can't be found together, none are, and a library searched is still
-//! shuffled (CR 701.23g, 118.12b). No rule or ruling speaks to the shortfall: register
+//! if N such cards can't be found together, none are, and a library searched for
+//! Burning-Rune Demon is still shuffled (CR 701.23g, 118.12b). No rule or ruling speaks to the shortfall: register
 //! entry `exactly-n-cards-are-n-or-none` (provisional), which reads "exactly" as Spry and
 //! Mighty's ruling does for "Choose exactly two creatures you control". A player who
 //! chooses not to search for Burning-Rune Demon doesn't shuffle (its ruling).
@@ -232,4 +232,40 @@ fn exactly_two_is_two_or_none_whether_searched_revealed_or_chosen() {
     cast_resolve(&mut t, P0, "Spry and Mighty", &[]);
     assert_eq!(t.hand_size(P0), hand, "chosen: no cards drawn");
     assert_eq!(t.pt(wurm), (6, 4), "chosen: no bonus");
+}
+
+#[test]
+fn a_search_for_exactly_a_quantity_of_cards_finds_that_many_or_none() {
+    cr!("701.23d");
+    interp!("exactly-n-cards-are-n-or-none");
+    // No real card searches for "exactly" a quantity with no stated quality.
+    let def = crate::r_s01_common::custom_card(
+        "Exacting Tutor",
+        "Sorcery",
+        "{0}",
+        None,
+        "Search your library for exactly two cards, put them into your hand, then shuffle.",
+    );
+    // Three cards: two must be found (CR 701.23d); one alone isn't accepted. One card:
+    // not two, so none (where 701.23d alone would find "as many as possible").
+    for (lib, found) in [(&["Shock", "Forest", "Island"][..], 2), (&["Shock"][..], 0)] {
+        let mut t = TestGame::new(2);
+        let ids = set_library(&mut t, P0, lib);
+        let from = t.asked().len();
+        if lib.len() > 1 {
+            t.answer_choose(P0, &[obj(ids[0])]);
+        }
+        let spell = t.custom(P0, def.clone(), Zone::Hand(P0));
+        t.cast(P0, spell).go();
+        t.resolve_all();
+        let choices = card_choices(&t, P0, from);
+        if found > 0 {
+            assert_eq!(choices, [(3, 2, 2)], "{lib:?}");
+        } else {
+            assert!(choices.is_empty(), "{lib:?}");
+        }
+        assert_eq!(t.hand_size(P0), found, "{lib:?}");
+        assert_eq!(t.library_size(P0), lib.len() - found, "{lib:?}");
+        assert_eq!(shuffles(&t, P0), 1, "{lib:?}: searched and shuffled");
+    }
 }
