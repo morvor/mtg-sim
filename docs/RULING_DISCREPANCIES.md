@@ -204,6 +204,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: Cleric Class's level 3 ability gains the permanent's toughness (Scourge of Skola Vale, 0/0 in the graveyard and returned with two +1/+1 counters: 2 life, plus 1 from its first ability); Reanimate, Grave Researcher // Reanimate's Reanimate and Sister Hospitaller use the mana value of the card in the graveyard (a Clone returned as a copy of Grizzly Bears: 4).
 - Recorded: register `returned-card-values-by-wording` (decided by the user, Nov 12); tests `tests/rulings/r_p179_toughness.rs` (`cleric_class_level_3_uses_toughness_on_the_battlefield`), `tests/rulings/r_p069_costs.rs` (`reanimate_card_life_loss_uses_the_card_in_the_graveyard`, `reanimate_life_loss_uses_the_card_in_the_graveyard`), `tests/rulings/returned_card_values.rs` (`sister_hospitaller_gains_life_equal_to_the_returned_cards_mana_value_in_the_graveyard`).
 
+### Chaotic Transformation: "that player first chooses" the order of their own exiled permanents' processes
+- Kind: inconsistent
+- Status: open for review
+- Ruling, Chaotic Transformation (2022-09-09): "If a player controls multiple permanents that were exiled this way, that player first chooses which target they’re considering, then they reveal cards until they reveal a card that shares a type with that permanent as it last existed on the battlefield, then they put that card onto the battlefield and shuffle. They then repeat this process for the remaining targets they controlled."
+- Conflicts with: CR 608.2f: "Some spells and abilities include actions taken on multiple players and/or objects. In most cases, each such action is processed simultaneously. If the action can’t be processed simultaneously, it’s instead processed considering each affected player or object individually. APNAP order is used to make the primary determination of the order of those actions. Secondarily, if the action is to be taken on both a player and an object they control or on multiple objects controlled by the same player, the player who controls the resolving spell or ability chooses the relative order of those actions." Its Soulfire Eruption example has the caster "first choose which target they are considering". The rulings that have the caster choose, for actions the caster performs: Soulfire Eruption (2020-11-10) and Kaboom! (2022-09-09), in the same words: "... You choose the relative order of targets within that group. ...". The card: "Exile up to one target artifact, up to one target creature, up to one target enchantment, up to one target planeswalker, and/or up to one target land. For each permanent exiled this way, its controller reveals cards from the top of their library until they reveal a card that shares a card type with it, puts that card onto the battlefield, then shuffles."
+- Evidence: the rule is older than the ruling, so the ruling isn't outdated. 608.2f entered the CR effective 2020-11-20 (Commander Legends). The archived CR texts have no such rule in the CR effective 2020-09-25, and today's text from 2020-11-20 on; the only change since is "converted mana cost" to "mana value" in the example (CR effective 2021-04-22). The rule came two weeks after the Commander Legends Release Notes (Eli Shiffrin, 2020-11-06; ormos mirror, Wayback capture 2020-11-07) gave Soulfire Eruption's ruling, which it generalizes. No Wizards article explaining it was found: ormos has no rules-change article for that release. The ruling is in the Dominaria United Release Notes as the data has it (Jess Dunks, 2022-08-26; ormos mirror, Wayback capture 2022-08-26 15:02:32), 21 months after the rule. It borrows the example's words ("first chooses which target they're considering") with a different chooser, and Kaboom!'s ruling, published the same day, kept the caster for a process the caster performs. The two agree when the caster controlled the exiled permanents. For two or more of another player's permanents, the rule has the caster choose and the ruling that player; the order matters when that player's library top is known, or when a permanent the first process puts onto the battlefield changes how a later card can enter. One reading reconciles them. 608.2f's "Secondarily" sentence covers an action taken on a player and their objects, or on several objects of one player; Chaotic Transformation's second sentence acts on each controller's own library, not on the exiled permanents. So the rule leaves the order of one player's repetitions open, and the ruling decides it, as 101.4c lets a player order their own choices. The CR allocates the order the ruling's way for the two per-permanent processes it has each permanent's controller perform: connive, 701.50c "If multiple permanents are instructed to connive at the same time, the first player in APNAP order who controls (or, in the case of a permanent no longer on the battlefield, last controlled; see rule 701.50b) one or more of those permanents chooses one of them and it connives. Then this process is repeated for each remaining instruction to connive." (with the same chooser since the CR effective 2022-04-29, first as 701.47d, so in force when the ruling was written), and explore, 701.44d, in the same words (since the CR effective 2025-04-04). Neither calls itself an exception to 608.2f, but neither has differed from it in play: every card that has several permanents connive or explore at once has its controller's own do so (Change of Plans, Lethal Scheme, Hakbal of the Surging Soul). Read with the exiled permanents as the objects considered one at a time (the ruling's own words), they contradict. Investigated in work item ruling-conflicts-10 (conclusion D: the user decides; the recommendation is the reconciling reading; upheld by the adversarial skeptic, who added the connive and explore rules).
+- Engine: asks no one. The players' groups go in APNAP order, and one player's permanents in the order of the target slots (artifact, creature, enchantment, planeswalker, land), so neither the caster nor that player chooses.
+- Recorded: no exemption until the user decides (the ruling stays uncited); register `per-object-actions-in-given-order` (provisional); tests `tests/rulings/per_object_order.rs` (`chaotic_transformation_takes_one_players_permanents_in_target_order`), `tests/rulings/r_p135_mass.rs` (`chaotic_transformation_handles_each_exiled_permanent_of_a_player_in_turn`).
+
 ## Narrower than stated
 
 ### Tempt with Glory and the other tempting offers: "starting with the opponent on your left"
@@ -703,30 +712,41 @@ decides whether they become a conflict case.
   `ajani_unyielding_takes_artifact_creature_enchantment_and_planeswalker_cards`); the engine
   follows CR 110.4 (in the first of those tests, Invasion of Zendikar, a battle card, is
   among the cards Emeria Shepherd's ability can target).
-- **Chaotic Transformation** (rulings-P135 review; left uncited, a possible conflict case):
-  "If a player controls multiple permanents that were exiled this way, that player first
-  chooses which target they’re considering, then they reveal cards until they reveal a card
-  that shares a type with that permanent as it last existed on the battlefield, then they
-  put that card onto the battlefield and shuffle. They then repeat this process for the
-  remaining targets they controlled." (2022-09-09) beside CR 608.2f: "... If the action
-  can’t be processed simultaneously, it’s instead processed considering each affected player
-  or object individually. APNAP order is used to make the primary determination of the order
-  of those actions. Secondarily, if the action is to be taken on both a player and an object
-  they control or on multiple objects controlled by the same player, the player who controls
-  the resolving spell or ability chooses the relative order of those actions." (with its
-  Soulfire Eruption example). They agree when the caster exiles their own permanents and
-  differ when two or more of another player's are exiled: the ruling has that player choose
-  the order, the rule the caster. The order matters only when the library's order is known
-  (after a scry, the first permanent considered reveals from the known top). The engine asks
-  no one: `simultaneous::for_each_object` processes them in APNAP order of their
-  controllers, one player's in the order the targets were listed. Not checked: when 608.2f's
-  "Secondarily" sentence entered the CR (as recalled, not verified, with Soulfire Eruption in
-  2020, before the ruling, which would leave the ruling unexplained; the archived CR texts
-  weren't reachable from that session). The parts both agree on (each permanent's process in
-  turn, by its types as it last existed) are tested without citing the ruling
-  (`tests/rulings/r_p135_mass.rs`,
-  `chaotic_transformation_handles_each_exiled_permanent_of_a_player_in_turn`). For the
-  coordinator.
+- **Kaboom!** (ruling-conflicts-10): "As Kaboom! resolves, if you have chosen multiple
+  targets, those targets will be handled one at a time in turn order. ... You choose the
+  relative order of targets within that group. For whichever target you select first, exile
+  the top card of your library, then Soulfire Eruption deals damage to that target. ..."
+  (2022-09-09) is Soulfire Eruption's ruling (2020-11-10) word for word, but for "Kaboom!" in
+  place of "Soulfire Eruption" in its first sentence and "(and we really hope you have)"
+  left out. Its fourth sentence still describes Soulfire Eruption ("exile the top card of
+  your library, then Soulfire Eruption deals damage"), where Kaboom! reveals cards until a
+  nonland card and puts the revealed cards on the bottom of the library: a template error by
+  this log's definition, not yet an entry. Where Wizards published it wasn't found (Kaboom!
+  isn't in the Dominaria United Release Notes or the Dominaria United Commander decklists).
+  The ruling is cited for its one-at-a-time processing in turn order
+  (`tests/cards/c4_reveal_until.rs`, `kaboom_reveals_and_deals_damage_for_each_target`). Its
+  "You choose the relative order of targets within that group", which CR 608.2f also says,
+  isn't implemented: the caster's order of the targets, chosen at casting, decides it
+  (register `per-object-actions-in-given-order`). Both are left for the change that follows
+  the user's decision on Chaotic Transformation (the inconsistent entry above), which would
+  ask the caster here under either reading.
+- **Divergent Transformations** (ruling-conflicts-10): "The two creatures that are put onto
+  the battlefield are put onto the battlefield sequentially. Triggered abilities of the second
+  won't see the first enter the battlefield." and "If two players' creatures are exiled this
+  way, start with the player whose turn it is. ..." (2016-11-08; the Commander 2016 Release
+  Notes, Eli Shiffrin, 2016-10-28, have both; ormos mirror) are older than CR 608.2f (first in
+  the CR effective 2020-11-20): "In most cases, each such action is processed simultaneously.
+  If the action can’t be processed simultaneously, it’s instead processed considering each
+  affected player or object individually." Its Soulfire Eruption example names one library as
+  what keeps a process from being simultaneous ("the player can’t exile the top card of their
+  library multiple times at the same time"); two players' reveal-until processes use two
+  libraries. If those can be processed simultaneously, the rulings are outdated for two
+  players' creatures (for one player's two, from one library, they agree with the rule). Not
+  investigated. The rulings are cited (`tests/rulings/r_p162_misc.rs`,
+  `divergent_transformations_enters_sequentially_and_triggers_wait`;
+  `tests/cards/iteration_for_each.rs`, `divergent_transformations_the_active_player_replaces_first`),
+  and the engine performs different players' processes one after another in APNAP order, for
+  Chaotic Transformation too, whose ruling says nothing about different players.
 - **Spiteful Blow** (rulings-P135): "You can't cast Spiteful Blow without a legal creature
   and land to target. If one of those targets is illegal when Spiteful Below tries to
   resolve, the other one will still be destroyed." (2014-04-26) spells the card's name
@@ -763,3 +783,8 @@ decides whether they become a conflict case.
   above), and work item user-decisions-nov12 (Part C) applied the user's decision of Nov 12:
   the ruling's look half is set aside as inconsistent with CR 406.3 (exempt in
   `docs/rulings-exemptions/rulings-P144.tsv`), and its play half is cited.
+- Work item ruling-conflicts-10 took up Chaotic Transformation's ruling, left uncited by
+  rulings-P135 beside CR 608.2f: an inconsistent entry above (conclusion D, open for the
+  user's decision), with the engine's order, which asks no one, registered as the provisional
+  deviation `per-object-actions-in-given-order`. Kaboom!'s and Divergent Transformations'
+  rulings, found on the way, are listed above.
