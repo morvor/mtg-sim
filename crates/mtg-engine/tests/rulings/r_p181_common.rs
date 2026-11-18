@@ -82,3 +82,16 @@ pub fn last_candidates(t: &TestGame, p: PlayerId, from: usize) -> Vec<Entity> {
         })
         .unwrap_or_default()
 }
+
+/// Casts the real card `name` from `p`'s hand with mana from `p`'s pool (no lands are
+/// added) and the given targets (one per slot), and resolves the stack.
+pub fn cast_pool(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) -> ObjectId {
+    supported(name);
+    lots(t, p);
+    let card = t.hand(p, name);
+    let id = t
+        .cast_with(p, card, targets)
+        .unwrap_or_else(|e| panic!("casting {name} failed: {e:?}"));
+    t.resolve_all();
+    id
+}
