@@ -694,6 +694,38 @@ decides whether they become a conflict case.
   `ajani_unyielding_takes_artifact_creature_enchantment_and_planeswalker_cards`); the engine
   follows CR 110.4 (in the first of those tests, Invasion of Zendikar, a battle card, is
   among the cards Emeria Shepherd's ability can target).
+- **Chaotic Transformation** (rulings-P135 review; left uncited, a possible conflict case):
+  "If a player controls multiple permanents that were exiled this way, that player first
+  chooses which target they’re considering, then they reveal cards until they reveal a card
+  that shares a type with that permanent as it last existed on the battlefield, then they
+  put that card onto the battlefield and shuffle. They then repeat this process for the
+  remaining targets they controlled." (2022-09-09) beside CR 608.2f: "... If the action
+  can’t be processed simultaneously, it’s instead processed considering each affected player
+  or object individually. APNAP order is used to make the primary determination of the order
+  of those actions. Secondarily, if the action is to be taken on both a player and an object
+  they control or on multiple objects controlled by the same player, the player who controls
+  the resolving spell or ability chooses the relative order of those actions." (with its
+  Soulfire Eruption example). They agree when the caster exiles their own permanents and
+  differ when two or more of another player's are exiled: the ruling has that player choose
+  the order, the rule the caster. The order matters only when the library's order is known
+  (after a scry, the first permanent considered reveals from the known top). The engine asks
+  no one: `simultaneous::for_each_object` processes them in APNAP order of their
+  controllers, one player's in the order the targets were listed. Not checked: when 608.2f's
+  "Secondarily" sentence entered the CR (as recalled, not verified, with Soulfire Eruption in
+  2020, before the ruling, which would leave the ruling unexplained; the archived CR texts
+  weren't reachable from that session). The parts both agree on (each permanent's process in
+  turn, by its types as it last existed) are tested without citing the ruling
+  (`tests/rulings/r_p135_mass.rs`,
+  `chaotic_transformation_handles_each_exiled_permanent_of_a_player_in_turn`). For the
+  coordinator.
+- **Spiteful Blow** (rulings-P135): "You can't cast Spiteful Blow without a legal creature
+  and land to target. If one of those targets is illegal when Spiteful Below tries to
+  resolve, the other one will still be destroyed." (2014-04-26) spells the card's name
+  "Spiteful Below" once. Nothing in the ruling depends on the spelling: it stays cited,
+  tested on Spiteful Blow (`tests/rulings/r_p135_lands.rs`,
+  `two_target_destruction_with_one_target_left_affects_it`). Whether the Journey into Nyx
+  release notes (2014; ormos mirror) have the same spelling wasn't checked. No kind fits a
+  misspelled name.
 - Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (copying errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the
