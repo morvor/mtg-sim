@@ -187,11 +187,14 @@ fn start(g: &mut Game, players: &[PlayerId], span: ControlSpan) {
         g.player_control
             .pending
             .retain(|e| !(e.player == p && e.span == span));
-        let e = mine.into_iter().max_by_key(|e| e.timestamp).unwrap();
-        if e.extra_turn_after {
-            // "After that turn, that player takes an extra turn."
+        // "After that turn, that player takes an extra turn.": an effect overwritten by a
+        // later one still gives its extra turn (Emrakul, the Promised End ruling: "If
+        // multiple players have cast Emrakul and targeted the same player, each
+        // ability's effect will create an extra turn.").
+        for _ in mine.iter().filter(|e| e.extra_turn_after) {
             g.extra_turns.push(p);
         }
+        let e = mine.into_iter().max_by_key(|e| e.timestamp).unwrap();
         g.log(|_| format!("{} controls {p}", e.controller));
         g.player_control.active.retain(|a| a.player != p);
         g.player_control.active.push(e);

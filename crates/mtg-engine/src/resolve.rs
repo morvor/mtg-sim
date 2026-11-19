@@ -162,6 +162,12 @@ impl Game {
                     if exiles_whole_set(effect) {
                         ctx.prev_happened = true;
                     }
+                    // "You may gain control of target permanent ... If you do, untap it":
+                    // choosing to apply the effect to a permanent you already control still
+                    // counts (Dominus of Fealty ruling).
+                    if matches!(**effect, Effect::GainControl { .. }) {
+                        ctx.prev_happened = true;
+                    }
                 }
                 // Set after the offered instruction ran, so a "you may" inside it doesn't
                 // stand in for this one (`Condition::PrevChosen`).
