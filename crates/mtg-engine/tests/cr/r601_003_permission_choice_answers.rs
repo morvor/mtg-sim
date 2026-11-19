@@ -1,6 +1,7 @@
 //! CR 601.2, 601.3: the player announces which permission they're using to cast a card
-//! from outside their hand. An answer that names no permission among those offered gets
-//! the default (the first one whose costs could be paid), never another permission.
+//! from outside their hand. Each permission offered is named so the player can tell them
+//! apart, and an answer that names no permission among those offered gets the default (the
+//! first one whose costs could be paid), never another permission.
 
 use mtg_engine::decision::Answer;
 use mtg_engine::testing::*;
@@ -65,5 +66,49 @@ fn an_answer_one_past_the_last_permission_uses_the_default_permission() {
     assert_eq!(
         t.g.history.once_permissions_used,
         vec![(muldrotha, "artifact spell".into())]
+    );
+}
+
+/// Kills `permissions.rs:984:5` (`permissions::label` replaced with `String::new()` and with
+/// `"xyzzy".into()`) and `995:12` (the `!` of `!slot.is_empty()` deleted: a once-each-turn
+/// permission's use goes unnamed, and one without a named use reads " (as your )"). Muldrotha's
+/// two permissions come from one object, so P0 is asked by name (`ChooseOption`), and those
+/// names are all an agent gets to tell the options apart (docs/AGENT_PROTOCOL.md: a
+/// `choose_option` option has only its `index` and `text`). With each mutant both options read
+/// the same, so P0 can't announce the permission they mean (the Muldrotha ruling).
+#[test]
+fn the_permissions_asked_by_name_are_named_by_source_and_use() {
+    cr!("601.2", "601.3");
+    ruling!(
+        "Muldrotha, the Gravetide",
+        "you must announce which permission you're using as you begin to play the card"
+    );
+    let mut t = TestGame::new(2);
+    let muldrotha = t.battlefield(P0, "Muldrotha, the Gravetide");
+    let thopter = t.graveyard(P0, "Ornithopter");
+    // P0 announces the second permission offered.
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.cast(P0, thopter).go();
+    let asked: Vec<Vec<String>> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseOption {
+                prompt, options, ..
+            } if prompt.starts_with("Choose the permission") => Some(options),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        asked,
+        vec![vec![
+            "Muldrotha, the Gravetide's permission (as your artifact spell)".to_string(),
+            "Muldrotha, the Gravetide's permission (as your creature spell)".to_string(),
+        ]]
+    );
+    // The option named for the creature spell uses that permission.
+    assert_eq!(
+        t.g.history.once_permissions_used,
+        vec![(muldrotha, "creature spell".into())]
     );
 }
