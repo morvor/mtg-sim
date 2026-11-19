@@ -1036,6 +1036,7 @@ fn kefnet_s_reveal_is_optional() {
 #[test]
 fn kefnet_copies_a_card_that_left_the_hand_using_its_last_known_information() {
     cr!("707.12", "608.2h");
+    interp!("copy-of-a-card-that-left-is-made-where-it-was");
     ruling!(
         "God-Eternal Kefnet",
         "If the card leaves your hand before Kefnet's triggered ability resolves, you'll copy it using its last known information."
