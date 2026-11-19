@@ -930,7 +930,10 @@ impl Game {
                 // effect does nothing. (One about the affected objects, "for as long as
                 // that creature has a bounty counter on it", is checked for them below.)
                 let about_affected = matches!(duration, Duration::WhileCondition(_));
-                if !about_affected && self.effect_expired(duration, ctx.source, ctx.controller) {
+                if !about_affected
+                    && (self.effect_expired(duration, ctx.source, ctx.controller)
+                        || crate::untap_choice::ended_before_it_began(self, duration, ctx))
+                {
                     return;
                 }
                 // CR 702.26e: a phased-out permanent isn't among the objects it affects,
