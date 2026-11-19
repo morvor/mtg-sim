@@ -85,10 +85,13 @@ pub fn each_opponent_may_effect(effect: Effect, b: &mut Builder) -> Effect {
         },
         Effect::ForEachPlayer {
             who: PlayerRef::EachOpponent,
-            effect: Box::new(Effect::May {
-                who: PlayerRef::Iterated,
-                effect: Box::new(Effect::Custom(OPT_IN.into())),
-            }),
+            effect: Box::new(crate::search_rules::guard_search_opt_in(
+                &effect,
+                Effect::May {
+                    who: PlayerRef::Iterated,
+                    effect: Box::new(Effect::Custom(OPT_IN.into())),
+                },
+            )),
         },
         Effect::Store {
             var: ACCEPTED,

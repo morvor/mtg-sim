@@ -1100,3 +1100,29 @@ fn winds_of_change_everyone_shuffles_then_each_draws_as_many_as_they_shuffled() 
     assert_eq!(t.hand_size(P0), 2);
     assert_eq!(t.hand_size(P1), 4);
 }
+
+#[test]
+fn flux_each_player_discards_the_cards_they_chose() {
+    cr!("701.9a", "701.9b", "608.2e");
+    ruling!(
+        "Flux",
+        "Each player chooses how many cards they would like to discard. That number may be 0."
+    );
+    supported("Flux");
+    let mut t = TestGame::new(2);
+    let forest = t.hand(P0, "Forest");
+    let plains = t.hand(P0, "Plains");
+    let swamp = t.hand(P1, "Swamp");
+    let bears = t.hand(P1, "Grizzly Bears");
+    // Each player discards the second card of their hand, not the first.
+    t.answer_choose(P0, &[Entity::Object(plains)]);
+    t.answer_choose(P1, &[Entity::Object(bears)]);
+    t.lands(P0, "Island", 3);
+    let spell = t.hand(P0, "Flux");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(t.zone(plains), Zone::Graveyard(P0));
+    assert_eq!(t.zone(bears), Zone::Graveyard(P1));
+    assert_eq!(t.zone(forest), Zone::Hand(P0));
+    assert_eq!(t.zone(swamp), Zone::Hand(P1));
+}

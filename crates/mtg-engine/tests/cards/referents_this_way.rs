@@ -166,6 +166,33 @@ fn spiteful_repossession_deals_each_opponent_the_difference() {
 }
 
 #[test]
+fn spiteful_repossession_counts_each_opponents_damage_once() {
+    cr!("608.2c", "608.2f");
+    compiles("Spiteful Repossession");
+    // Both opponents control more lands than P0 (3): 4 damage to P1, 2 to P2, dealt at
+    // once; the damage dealt this way is 6, each opponent's counted once.
+    let mut t = TestGame::new(3);
+    let p2 = PlayerId(2);
+    t.lands(P0, "Mountain", 3);
+    t.battlefield(P0, "Llanowar Elves");
+    t.battlefield(P0, "Llanowar Elves");
+    t.lands(P1, "Forest", 7);
+    t.lands(p2, "Forest", 5);
+    let spell = t.hand(P0, "Spiteful Repossession");
+    t.advance_to(P0, Step::PrecombatMain);
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!((t.life(P1), t.life(p2)), (16, 18));
+    let treasures = t
+        .g
+        .battlefield
+        .iter()
+        .filter(|id| t.g.obj(**id).chars.has_subtype("Treasure"))
+        .count();
+    assert_eq!(treasures, 6, "4 + 2, each opponent's damage once");
+}
+
+#[test]
 fn savage_punch_gives_the_bonus_before_the_fight() {
     cr!("701.14a");
     ruling!(

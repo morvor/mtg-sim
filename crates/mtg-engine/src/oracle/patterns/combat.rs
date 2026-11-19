@@ -79,6 +79,7 @@ fn combat_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
             return Some((
                 TriggerCond::BlockedByN {
                     attacker: object_filter(x)?,
+                    blocker: Filter::creature(),
                     n,
                 },
                 obj,
@@ -95,6 +96,21 @@ fn combat_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         }
         let attacker = object_filter(x)?;
         let blocker = object_filter(b)?;
+        // "Whenever equipped creature becomes blocked by one or more colorless creatures"
+        // (Hedron Blade): once, as it first has such a blocker (CR 509.3e: as blockers are
+        // declared, or when an effect adds one), not once for each of them (CR 509.3d is
+        // "a creature").
+        if b.starts_with("one or more ") {
+            return Some((
+                TriggerCond::BlockedByN {
+                    attacker,
+                    blocker,
+                    n: 1,
+                },
+                obj,
+                PlayerRef::TriggerPlayer,
+            ));
+        }
         return Some((
             TriggerCond::BlockedByCreature { attacker, blocker },
             obj,

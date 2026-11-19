@@ -147,14 +147,16 @@ impl Renderer<'_> {
         let Effect::Seq(steps) = body.as_ref() else {
             return None;
         };
-        let [act, Effect::StoreValue {
-            var: set,
-            value: Value::Const(1),
-        }] = steps.as_slice()
-        else {
+        let [act, note] = steps.as_slice() else {
             return None;
         };
-        if set != var {
+        if *var != crate::oracle::patterns::any_player_may_have_damage::CHOSE
+            || format!("{note:?}")
+                != format!(
+                    "{:?}",
+                    crate::oracle::patterns::any_player_may_have_damage::chose()
+                )
+        {
             return None;
         }
         let a = self.effect(act);

@@ -134,6 +134,21 @@ pub fn search(
     n: u32,
     ctx: &Ctx,
 ) -> Vec<ObjectId> {
+    search_excluding(g, searcher, owner, filter, n, &[], ctx)
+}
+
+/// [`search`], except that the cards in `taken` can't be found: they were found by an
+/// earlier part of the same search (CR 701.23h: searching a library again before it's
+/// shuffled is a single search for all those cards, so a card is found once).
+pub fn search_excluding(
+    g: &mut Game,
+    searcher: PlayerId,
+    owner: PlayerId,
+    filter: &Filter,
+    n: u32,
+    taken: &[ObjectId],
+    ctx: &Ctx,
+) -> Vec<ObjectId> {
     if g.player_restricted(searcher, |r| matches!(r, Restriction::CantSearch(_)))
         || crate::rule_statics::caused_actions::search_forbidden(g, searcher, owner, ctx)
     {
@@ -152,7 +167,7 @@ pub fn search(
         .rev()
         .take(portion)
         .copied()
-        .filter(|c| g.matches(*c, filter, ctx))
+        .filter(|c| !taken.contains(c) && g.matches(*c, filter, ctx))
         .collect();
     let n = n.min(cands.len() as u32);
     // CR 701.23b, 701.23d: cards with a stated quality needn't be found; a quantity of
