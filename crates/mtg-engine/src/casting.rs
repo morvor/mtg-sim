@@ -4847,6 +4847,15 @@ impl Game {
                     for o in v.iter().filter_map(|x| x.object()) {
                         if self.obj(o).zone == Zone::Exile && !paid.objects.contains(&o) {
                             paid.objects.push(o);
+                        } else if let (Effect::Move { .. }, true, Some(prev)) =
+                            (&**e, self.obj(o).zone.is_public(), self.obj(o).prev)
+                        {
+                            // CR 400.7j: a card the cost put into a graveyard ("Put a card
+                            // exiled with ~ into its owner's graveyard: Counter target
+                            // spell if it has the same name as that card") is found there.
+                            if !paid.objects.contains(&prev) {
+                                paid.objects.push(prev);
+                            }
                         }
                     }
                 }
