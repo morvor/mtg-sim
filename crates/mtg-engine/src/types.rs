@@ -330,17 +330,20 @@ impl CardType {
         }
     }
 
+    /// The six permanent types, in the order CR 110.4 lists them: "There are six permanent
+    /// types: artifact, battle, creature, enchantment, land, and planeswalker."
+    pub const PERMANENT_TYPES: [CardType; 6] = [
+        CardType::Artifact,
+        CardType::Battle,
+        CardType::Creature,
+        CardType::Enchantment,
+        CardType::Land,
+        CardType::Planeswalker,
+    ];
+
     /// Permanent types (CR 110.4).
     pub fn is_permanent_type(self) -> bool {
-        matches!(
-            self,
-            CardType::Artifact
-                | CardType::Battle
-                | CardType::Creature
-                | CardType::Enchantment
-                | CardType::Land
-                | CardType::Planeswalker
-        )
+        Self::PERMANENT_TYPES.contains(&self)
     }
 
     fn bit(self) -> u16 {
