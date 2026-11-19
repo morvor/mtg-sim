@@ -11,6 +11,10 @@ use crate::replacement::*;
 use crate::types::*;
 use std::sync::Arc;
 
+/// Counters damage causes to be put (recipient, kind, number, source), gathered while
+/// simultaneous damage is dealt (see `Game::put_batched_damage_counters`).
+pub(crate) type DamageCounters = (Entity, &'static str, u32, ObjectId);
+
 impl Game {
     // ------------------------------------------------------------------
     // Zone changes (CR 400.7)
@@ -982,7 +986,7 @@ impl Game {
                 target,
                 amount,
                 combat,
-            } => self.perform_damage(source, target, amount, combat),
+            } => self.perform_damage(source, target, amount, combat, &mut None),
             ReplEvent::Draw { player } => {
                 self.perform_draw(player);
             }
@@ -1606,13 +1610,13 @@ impl Game {
         {
             return 0;
         }
+        if self.dirty {
+            self.recompute();
+        }
         // "You can't get poison counters" (with shared poison counters, for the team,
         // CR 810.10c).
         if crate::multiplayer::two_headed::cant_get_counters(self, target, kind) {
             return 0;
-        }
-        if self.dirty {
-            self.recompute();
         }
         let mut placed = 0;
         for e in self.replace(ReplEvent::AddCounters {
@@ -1974,6 +1978,8 @@ impl Game {
         // CR 702.15e: each source with lifelink causes one life gain event, even if it
         // dealt damage to several recipients at once.
         let mut lifelink_gains: Vec<(ObjectId, PlayerId, u32)> = Vec::new();
+        // The counters this damage causes to be put (infect, wither), put afterwards.
+        let mut damage_counters = Some(Vec::new());
         for e in finals {
             match e {
                 ReplEvent::Damage {
@@ -1984,7 +1990,7 @@ impl Game {
                 } => {
                     let left = matches!(target, Entity::Object(o) if left_meanwhile.contains(&o));
                     if (self.valid_damage_recipient(target) || left) && amount > 0 {
-                        self.perform_damage(source, target, amount, combat);
+                        self.perform_damage(source, target, amount, combat, &mut damage_counters);
                         dealt.push((source, target, amount));
                         // CR 120.3f, 702.15b: lifelink — damage causes the source's
                         // controller (its owner if it has none) to gain that much life.
@@ -2003,6 +2009,7 @@ impl Game {
             }
         }
         self.damage_event_gains = outer_gains;
+        self.put_batched_damage_counters(damage_counters.unwrap_or_default());
         crate::excess_damage::record_excess(self, &excess_before, &dealt, combat);
         // CR 702.164c: toxic's poison counters, one event for each player and controller.
         crate::keyword_impls::toxic_counters(self, &dealt, combat);
@@ -2013,13 +2020,17 @@ impl Game {
         self.recompute();
     }
 
-    /// Applies the results of damage (CR 120.3). Lifelink is handled by the caller.
+    /// Applies the results of damage (CR 120.3). Lifelink is handled by the caller. The
+    /// counters damage from a source with infect or wither causes to be put are gathered
+    /// in `batch` when it's `Some` (see [`Self::put_batched_damage_counters`]), and put
+    /// at once otherwise.
     pub(crate) fn perform_damage(
         &mut self,
         source: ObjectId,
         target: Entity,
         amount: u32,
         combat: bool,
+        batch: &mut Option<Vec<DamageCounters>>,
     ) {
         let src = self.obj(source).clone();
         let infect = src.has_keyword(KeywordKind::Infect);
@@ -2030,7 +2041,13 @@ impl Game {
                 if infect || crate::kw::damage_as_though_infect(self, source, p) {
                     // CR 120.3b; the counters can be modified by replacement effects
                     // (CR 120.4c).
-                    self.put_damage_counters(Entity::Player(p), counters::POISON, amount, source);
+                    self.damage_counters(
+                        batch,
+                        Entity::Player(p),
+                        counters::POISON,
+                        amount,
+                        source,
+                    );
                 } else {
                     // CR 120.3a (life loss can be replaced as "lose life")
                     for e in self.replace(ReplEvent::LoseLife {
@@ -2065,7 +2082,8 @@ impl Game {
                 if obj.is_creature() {
                     if wither || infect {
                         // CR 120.3d, 120.4c
-                        self.put_damage_counters(
+                        self.damage_counters(
+                            batch,
                             Entity::Object(o),
                             counters::MINUS1,
                             amount,
@@ -2101,9 +2119,56 @@ impl Game {
         crate::keyword_impls::after_damage(self, source, target, amount, combat);
     }
 
+    /// Counters damage causes to be put: gathered in `batch`, or put now without one.
+    fn damage_counters(
+        &mut self,
+        batch: &mut Option<Vec<DamageCounters>>,
+        target: Entity,
+        kind: &'static str,
+        n: u32,
+        source: ObjectId,
+    ) {
+        match batch {
+            Some(v) => v.push((target, kind, n, source)),
+            None => self.put_damage_counters(target, kind, n, source),
+        }
+    }
+
+    /// Puts the counters that damage dealt at the same time caused (CR 510.2, 120.3b,
+    /// 120.3d): those one player puts on the same recipient are put at once, as one
+    /// event, so a replacement effect modifying "one or more -1/-1 counters" applies to
+    /// them once (Vizier of Remedies ruling: "If multiple creatures with wither and/or
+    /// infect deal damage to a creature at once, Vizier of Remedies causes only one
+    /// counter fewer to be put on that creature."). The first source dealing such
+    /// damage stands for them as the source.
+    fn put_batched_damage_counters(&mut self, batch: Vec<DamageCounters>) {
+        let mut groups: Vec<(Entity, &'static str, Option<PlayerId>, u32, ObjectId)> = vec![];
+        for (target, kind, n, source) in batch {
+            let by = crate::event_causes::CounterPut::damage(self, source).by;
+            match groups
+                .iter_mut()
+                .find(|(t, k, b, _, _)| *t == target && *k == kind && *b == by)
+            {
+                Some(g) => g.3 += n,
+                None => groups.push((target, kind, by, n, source)),
+            }
+        }
+        for (target, kind, _, n, source) in groups {
+            self.put_damage_counters(target, kind, n, source);
+        }
+    }
+
     /// Counters that are the result of damage (infect and wither, CR 120.3b, 120.3d),
     /// as modified by replacement effects that interact with them (CR 120.4c).
     fn put_damage_counters(&mut self, target: Entity, kind: &str, n: u32, source: ObjectId) {
+        // "You can't get poison counters" stops infect damage's counters too, as it does
+        // other counters (`put_counters`; Melira, Sylvok Outcast).
+        if self.dirty {
+            self.recompute();
+        }
+        if crate::multiplayer::two_headed::cant_get_counters(self, target, kind) {
+            return;
+        }
         // The source's controller puts them, and not by an effect (CR 702.80a, 702.90b–c).
         let how = crate::event_causes::CounterPut::damage(self, source);
         for e in self.replace(ReplEvent::AddCounters {
