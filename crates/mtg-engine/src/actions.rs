@@ -626,6 +626,22 @@ impl Game {
                         n.attached_to = Some(to);
                     }
                 }
+                // Copy effects a later "enter as a copy" replacement overrode
+                // (`EtbInfo::earlier_copies`), applied before the one it enters with.
+                for (_, values, exceptions, id) in m.etb.earlier_copies.iter().cloned() {
+                    let ts = self.obj(new_id).timestamp;
+                    self.effects.push(ContinuousEffect {
+                        id,
+                        source: Some(new_id),
+                        controller,
+                        timestamp: ts,
+                        duration: Duration::Permanent,
+                        affected: Affected::Objects(vec![new_id]),
+                        mods: vec![],
+                        layer1: Some(Layer1::Copy { values, exceptions }),
+                        created_turn: self.turn.number,
+                    });
+                }
                 let mut copy_effect = None;
                 if let Some(src) = m.etb.copy_of {
                     let values = Box::new(m.etb.copied_values(self, src).clone());

@@ -618,8 +618,9 @@ pub struct ActiveStatics {
     pub cost_modifiers: Vec<(ObjectId, PlayerId, CostModifier)>,
     pub replacements: Vec<(ObjectId, PlayerId, Timestamp, Ability, ReplacementDef)>,
     /// (source, controller, permission, the once-each-turn use it is, if it's one: see
-    /// `kw/once_each_turn_cast.rs`)
-    pub play_permissions: Vec<(ObjectId, PlayerId, PlayPermission, Option<SmolStr>)>,
+    /// `kw/once_each_turn_cast.rs`; the ability's link, for "cards exiled with ~" of an
+    /// ability a copy effect gave, CR 607.5, 707.7)
+    pub play_permissions: Vec<(ObjectId, PlayerId, PlayPermission, Option<SmolStr>, u16)>,
     pub flash_permissions: Vec<(ObjectId, PlayerId, PlayerRel, Filter)>,
     pub customs: Vec<(ObjectId, PlayerId, SmolStr)>,
     pub other: Vec<(ObjectId, PlayerId, StaticEffect)>,

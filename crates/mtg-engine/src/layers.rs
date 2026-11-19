@@ -1595,6 +1595,7 @@ impl Game {
                         ctl,
                         p.clone(),
                         crate::kw::once_each_turn_cast::once_slot(s),
+                        a.link,
                     )),
                     StaticEffect::FlashPermission { who, what } => {
                         st.flash_permissions.push((id, ctl, *who, what.clone()))
@@ -1637,7 +1638,7 @@ impl Game {
                         .map(|_| smol_str::SmolStr::from(format!("effect {}", e.id)));
                     for p in &e.players {
                         st.play_permissions
-                            .push((src, *p, pp.clone(), once.clone()));
+                            .push((src, *p, pp.clone(), once.clone(), 0));
                     }
                 }
                 // "You may cast sorcery spells this turn as though they had flash."

@@ -62,6 +62,13 @@ pub struct EtbInfo {
     /// have, links included (abilities a copy effect gives are linked per copy effect,
     /// CR 607.5, 707.7).
     pub copy_effect: Option<u32>,
+    /// Copy effects it was to enter with before a later "enter as a copy" replacement chose
+    /// something else to copy (Body Double entering as a copy of Vesuvan Shapeshifter,
+    /// whose own ability has it enter as a copy of another creature): (copied object, its
+    /// copiable values, the exceptions that are modifications, effect id). They're created
+    /// too, with earlier timestamps, so they apply again if the later one ends (CR 613.2a,
+    /// 707.2; a face-down Body Double is then a face-down Vesuvan Shapeshifter).
+    pub earlier_copies: Vec<(ObjectId, Box<Characteristics>, Vec<Modification>, u32)>,
     /// Modifications to its copiable values from "as this enters" abilities that set
     /// power and toughness (CR 707.2), applied after any copy effect it enters with.
     pub copiable_mods: Vec<Modification>,
@@ -102,6 +109,16 @@ pub struct EtbInfo {
 }
 
 impl EtbInfo {
+    /// Before a later "enter as a copy" replacement replaces the copy it would enter
+    /// with: keeps that copy effect (see [`EtbInfo::earlier_copies`]).
+    fn keep_earlier_copy(&mut self, g: &Game) {
+        if let (Some(src), Some(id)) = (self.copy_of, self.copy_effect) {
+            let values = Box::new(self.copied_values(g, src).clone());
+            self.earlier_copies
+                .push((src, values, self.copy_exceptions.clone(), id));
+        }
+    }
+
     /// The copiable values it enters copying from `src` (its `copy_of`): those fixed as
     /// the copy was determined ([`EtbInfo::copy_values`]), or else `src`'s now.
     pub fn copied_values<'a>(&'a self, g: &'a Game, src: ObjectId) -> &'a Characteristics {
@@ -1958,6 +1975,7 @@ impl Game {
                     }
                     // "It enters as a copy of one of those cards" (CR 707.9).
                     if let Some(o) = em.copy_of {
+                        m.etb.keep_earlier_copy(self);
                         // CR 707.9e, 707.9g: as for `EnterAsCopy`.
                         m.etb.copy_exceptions = std::mem::take(&mut m.etb.own_copy_exceptions);
                         m.etb.copy_extras = std::mem::take(&mut m.etb.own_copy_extras);
@@ -2033,6 +2051,7 @@ impl Game {
                     // of them, and once the permanent enters as a copy of something else,
                     // its own ability no longer applies (CR 614.12).
                     let own = cand.source == Some(m.obj);
+                    m.etb.keep_earlier_copy(self);
                     let exceptions = std::mem::take(&mut m.etb.own_copy_exceptions);
                     let extras = std::mem::take(&mut m.etb.own_copy_extras);
                     m.etb.copy_exceptions = if own { exceptions } else { Vec::new() };
