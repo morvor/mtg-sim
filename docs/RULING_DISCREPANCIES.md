@@ -349,6 +349,16 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: as the ruling says, for Vanille: an intervening "if" clause checked when the ability would trigger and again on resolution (CR 603.4); with Fang gone by then, nothing is paid or melded.
 - Recorded: test `tests/rulings/r_p093_misc.rs` (`vanilles_meld_trigger_checks_on_trigger_and_on_resolution`), citing it under Fang, which takes part as Vanille's meld partner (and, controlled but not owned, as the Fang that doesn't count).
 
+### Argoth, Sanctum of Nature: Titania, Gaea Incarnate's rulings about its last ability
+- Kind: misattached
+- Status: open for review
+- Ruling, Argoth, Sanctum of Nature (2022-10-14): "Titania, Gaea Incarnate's last ability doesn't have a duration, which means that the land remains a creature indefinitely."
+- Ruling, Argoth, Sanctum of Nature (2022-10-14): "You can activate the ability multiple times targeting the same land to add more counters."
+- Conflicts with: Argoth has no ability that puts counters on a land or makes it a creature: "This land enters tapped unless you control a legendary green creature. / {T}: Add {G}. / {2}{G}{G}, {T}: Create a 2/2 green Bear creature token, then mill three cards. Activate only as a sorcery. / (Melds with Titania, Voice of Gaea.)" Both rulings describe the last ability of Titania, Gaea Incarnate, the meld pair's combined back face: "{3}{G}: Put four +1/+1 counters on target land you control. It becomes a 0/0 Elemental creature with haste. It's still a land."
+- Evidence: Argoth, Titania, Voice of Gaea and Titania, Gaea Incarnate share the meld pair's eleven general notes in the data (all dated 2022-10-14, The Brothers' War); these two, specific to Titania, Gaea Incarnate's ability, are only under Argoth, its meld partner. Titania, Gaea Incarnate has no note of its own in the data. Found in work item rulings-P105.
+- Engine: as the rulings say, for Titania, Gaea Incarnate: the land stays a creature with no end, and activating twice on the same land puts eight counters on it.
+- Recorded: test `tests/rulings/r_p105_costs.rs` (`titania_gaea_incarnate_animates_lands_indefinitely_and_repeatedly`), citing both under Argoth, which is part of the melded permanent that activates the ability.
+
 ## Outdated rulings
 
 ### Souls of the Faultless: "you may choose either member of the attacking team"

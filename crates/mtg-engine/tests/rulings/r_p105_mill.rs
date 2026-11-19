@@ -246,7 +246,7 @@ fn soulcipher(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn soulcipher_board_counts_creature_cards_not_creatures_dying() {
-    cr!("603.2", "603.10a", "700.4", "111.8");
+    cr!("603.2", "603.10a", "700.4", "111.1");
     ruling!(
         "Soulcipher Board // Cipherbound Spirit",
         "Soulcipher Board's last ability triggers when a creature card is put into a graveyard from anywhere. This is different than an ability that triggers when a creature dies. Notably, a noncreature card on the battlefield that becomes a creature and dies (such as an animated land) won't cause this ability to trigger. Similarly, a creature card on the battlefield that has been made a noncreature permanent (such as one enchanted with Minimus Containment) will cause this ability to trigger when that card is put into your graveyard."

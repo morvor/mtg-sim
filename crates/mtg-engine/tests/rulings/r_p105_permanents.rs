@@ -30,7 +30,7 @@ use mtg_engine::*;
 
 #[test]
 fn grell_philosopher_gained_abilities_refer_to_the_grell() {
-    cr!("113.6", "201.5a", "613.1f");
+    cr!("201.5b", "613.1f");
     ruling!(
         "Grell Philosopher",
         "The granted abilities effectively use “this permanent” rather than “[that card's name],” so you treat the abilities as if they were printed on the creature that gained the ability."
@@ -293,7 +293,7 @@ fn wondrous_crucible_card_stays_exiled_whatever_happens_to_the_copy() {
 
 #[test]
 fn harnfel_cards_not_played_stay_exiled() {
-    cr!("611.2b", "514.2");
+    cr!("611.2a", "514.2");
     ruling!(
         "Birgi, God of Storytelling // Harnfel, Horn of Bounty",
         "Any cards exiled with Harnfel that you don’t play remain exiled."

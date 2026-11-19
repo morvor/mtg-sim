@@ -365,7 +365,7 @@ fn icetill_explorer_land_drops_add_up() {
 
 #[test]
 fn rot_farm_skeleton_mills_as_a_cost_from_the_graveyard_only() {
-    cr!("602.2b", "601.2h", "113.6k");
+    cr!("602.2b", "601.2h", "113.6m");
     ruling!(
         "Rot Farm Skeleton",
         "Putting four cards from your library into your graveyard is part of the activation cost of Rot Farm Skeleton's ability. The four cards will be in the graveyard before any player can respond."
@@ -558,7 +558,7 @@ fn ancient_cornucopia_counts_colors_not_mana_symbols() {
 
 #[test]
 fn ancient_cornucopia_resolves_first_and_uses_last_known_colors() {
-    cr!("603.3", "405.5", "608.2h", "113.7a");
+    cr!("603.3", "405.5", "608.2h");
     ruling!(
         "Ancient Cornucopia",
         "Ancient Cornucopia’s triggered ability resolves before the spell that caused it to trigger. The ability will resolve even if that spell is countered. If that spell is countered, use its last known information to determine what colors it was."
@@ -684,7 +684,8 @@ fn perpetual_timepiece_with_no_targets_just_shuffles() {
 // ---------------------------------------------------------------------------
 // Titania, Gaea Incarnate (the melded Argoth, Sanctum of Nature): "{3}{G}: Put four +1/+1
 // counters on target land you control. It becomes a 0/0 Elemental creature with haste.
-// It's still a land."
+// It's still a land." Misattached: the data files these two rulings under Argoth only,
+// though they describe Titania, Gaea Incarnate (docs/RULING_DISCREPANCIES.md).
 // ---------------------------------------------------------------------------
 
 #[test]

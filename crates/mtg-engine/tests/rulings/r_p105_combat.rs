@@ -79,8 +79,7 @@ fn ursine_monstrosity_doesnt_attack_when_it_cant() {
 
 #[test]
 fn ursine_monstrosity_must_attack_the_player_not_their_planeswalker_or_battle() {
-    cr!("508.1d", "506.4", "310.5");
-    interp!("pre-battle-rulings-give-way-to-the-cr");
+    cr!("508.1d", "310.5");
     ruling!(
         "Ursine Monstrosity",
         "Ursine Monstrosity must attack the chosen player if able, not a planeswalker they control or a battle they protect."
@@ -339,7 +338,7 @@ fn emblem_animates(t: &mut TestGame, target: ObjectId) {
 
 #[test]
 fn tezzeret_emblem_sets_base_5_5_even_through_crewing() {
-    cr!("613.4b", "702.122a", "613.1d");
+    cr!("613.4b", "702.122a", "613.1d", "301.7b");
     ruling!(
         "Tezzeret the Schemer",
         "An artifact creature targeted by the emblem's ability becomes 5/5 instead of its normal power and toughness."
@@ -420,7 +419,7 @@ fn corsair_captain_leaving_can_make_marked_damage_lethal() {
 
 #[test]
 fn cultivators_caravan_taps_for_mana_the_turn_it_arrives_unless_its_a_creature() {
-    cr!("302.6", "301.7b", "702.122a");
+    cr!("302.6", "702.122a");
     ruling!(
         "Cultivator's Caravan",
         "As long as Cultivator's Caravan isn't an artifact creature, its {T} ability can be activated if it came under your control this turn."
@@ -470,7 +469,7 @@ fn tyvar_lets_tap_abilities_be_activated_but_grants_no_haste() {
 
 #[test]
 fn domris_mana_loyalty_ability_uses_the_stack_at_sorcery_speed() {
-    cr!("606.3", "605.1a", "606.4");
+    cr!("606.3", "605.1a");
     ruling!(
         "Domri, Anarch of Bolas",
         "Because it's a loyalty ability, Domri's first loyalty ability isn't a mana ability. It can be activated only any time you could cast a sorcery. It uses the stack and can be responded to."
