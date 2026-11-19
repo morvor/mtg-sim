@@ -111,6 +111,18 @@ Judgment calls about attacking, blocking and combat damage (CR 506–511). Forma
 - Code: `crates/mtg-engine/src/combat.rs` (`lethal_damage`); `crates/mtg-engine/src/kw/trample.rs` (`lethal_damage`).
 - Tests: `tests/cr/r510_audit_damage.rs` (`deathtouch_damage_marked_in_the_first_step_doesnt_count_as_lethal_in_the_second`).
 
+## requirements-of-creatures-unable-to-attack: A creature that can't attack isn't bound by its attack requirements, conditional ones included
+- Kind: interpretation
+- Status: decided
+- Rules: 508.1d "The active player checks each creature they control to see whether it’s affected by any requirements (effects that say a creature attacks if able, or that it attacks if some condition is met). If the number of requirements that are being obeyed is fewer than the maximum possible number of requirements that could be obeyed without disobeying any restrictions, the declaration of attackers is illegal. ..." / Viashino Bey ruling: "The ability is not a triggered ability. It is a constraint on declaring an attack." / Goblin Rabblemaster ruling (2014-07-18): "If, during your declare attackers step, a creature that must attack if able is tapped, is affected by a spell or ability that says it can't attack, or hasn't been under your control continuously since the turn began (and doesn't have haste), then it doesn't attack."
+- Question: A conditional requirement ("if Viashino Bey attacks, all creatures you control attack if able"; Ekundu Cyclops's "if a creature you control attacks, ~ also attacks if able") is obeyed when its condition isn't met. Counted literally, a requirement of a creature that can't attack at all (tapped, summoning sick) is then obeyed only by declarations that don't meet the condition, so they would obey more requirements than any declaration meeting it: Viashino Bey could never attack while its controller had a tapped creature, and nothing could attack beside a tapped Ekundu Cyclops. Does a requirement of a creature that can't attack count?
+- Decision: No. A requirement about a creature that can't attack in this declaration at all (it isn't among the creatures that could be declared as attackers, CR 508.1a) asks nothing of the declaration and isn't counted, whether it's unconditional or conditional.
+- Alternatives: Count it as obeyed whenever its condition isn't met (the engine's earlier behavior): a tapped or summoning-sick creature would stop Viashino Bey from attacking, and a tapped Ekundu Cyclops every other creature, contradicting "if able" and the rulings on creatures that can't attack.
+- Why: "attacks if able" binds only a creature able to attack; the rulings treat a creature that can't attack as simply not attacking, never as constraining the rest of the declaration. Not counting it changes nothing for unconditional requirements (no declaration obeys them).
+- Affects: Viashino Bey, Ekundu Cyclops, Magnetic Web, War's Toll ("attack together" requirements) with a creature that can't attack.
+- Code: `crates/mtg-engine/src/combat.rs` (`attack_requirements`).
+- Tests: `tests/rulings/r_residue_type_change_abilities.rs` (`viashino_bey_is_a_constraint_on_declaring_attackers`, `conditional_requirements_of_creatures_that_cant_attack_ask_nothing`).
+
 ## block-count-triggers-at-the-nth-block: "Blocks N or more" and "becomes blocked by N or more" trigger when a block brings the number to N
 - Kind: interpretation
 - Status: provisional

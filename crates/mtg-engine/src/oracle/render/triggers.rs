@@ -1907,7 +1907,8 @@ impl Renderer<'_> {
                         | BatchPer::Player
                         | BatchPer::AnyPlayer
                         | BatchPer::Recipient
-                        | BatchPer::OtherController,
+                        | BatchPer::OtherController
+                        | BatchPer::ObjectController,
                     ) => {
                         Det::OneOrMore
                     }

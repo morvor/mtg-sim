@@ -3592,6 +3592,18 @@ impl Game {
                     .collect();
                 Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
             }
+            // "creatures defending player controls without flying can't block this turn"
+            // (The Motherlode, Excavator): the defending player as the effect begins; the
+            // creatures are a class (CR 611.2c).
+            Filter::ControlledBy(rel @ PlayerRel::Defending) => {
+                let ps = self
+                    .player_ids()
+                    .into_iter()
+                    .filter(|p| self.player_rel_matches(*rel, *p, ctx))
+                    .map(PlayerFilter::Is)
+                    .collect();
+                Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
+            }
             // "creatures that player controls", "creatures the active player controls":
             // the players as the effect begins.
             Filter::ControlledByPlayer(r) => {
