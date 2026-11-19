@@ -48,3 +48,19 @@ pub fn blocked(t: &TestGame, id: ObjectId) -> bool {
         .as_ref()
         .is_some_and(|c| c.attackers.iter().any(|a| a.id == id && a.blocked))
 }
+
+/// Queues `p`'s action for the next time it has priority (played through the priority
+/// loop with [`play_until`]).
+pub fn act(t: &mut TestGame, p: PlayerId, a: mtg_engine::decision::Action) {
+    t.answer(
+        p,
+        DecisionKind::Priority,
+        mtg_engine::decision::Answer::Action(a),
+    );
+}
+
+/// Plays on through the priority loop (players pass unless answers are queued) until
+/// `done` holds.
+pub fn play_until(t: &mut TestGame, done: fn(&Game) -> bool) {
+    assert!(t.g.run_until(2000, done), "{}", t.dump_log());
+}

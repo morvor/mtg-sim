@@ -11,9 +11,9 @@ use crate::r_s01_common::*;
 use crate::r_s02_common::destroy;
 use crate::r_s05_common::{enter, move_to, tokens_with_subtype};
 use crate::r_s06_common::attach_new;
-use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::decision::{Action, Answer, Decision};
 use mtg_engine::facedown::can_look_at;
-use mtg_engine::object::Zone;
+use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -90,20 +90,46 @@ fn cauldrons_gift_mills_and_returns_with_no_actions_in_between() {
         "No player may take actions between the time you put cards into your graveyard, the time you choose a creature card to return, and the time you return that card to the battlefield."
     );
     supported("Cauldron's Gift");
+    // Played through the priority loop: P0 casts Cauldron's Gift (five Swamps: adamant,
+    // mill four) and returns the Hill Giant it mills. What P1 sees each time it's asked
+    // anything (its only chances to act) is recorded: the stack's size, and whether the
+    // Hill Giant is in P0's graveyard. It never is: the Giant is milled and returned within
+    // the resolution.
     let mut t = TestGame::new(2);
     let lib = stack_library(&mut t, P0, &["Island", "Hill Giant", "Forest", "Island"]);
     t.lands(P0, "Swamp", 5);
     let gift = t.hand(P0, "Cauldron's Gift");
-    t.cast(P0, gift).go();
+    let views = watch(
+        &mut t,
+        P1,
+        |_| true,
+        |g| {
+            let in_gy = !g.find_in_zone(Zone::Graveyard(P0), "Hill Giant").is_empty();
+            (g.stack.len(), in_gy)
+        },
+    );
+    act(
+        &mut t,
+        P0,
+        Action::Cast {
+            card: gift,
+            method: CastMethod::Normal,
+        },
+    );
     t.answer_yes(P0, true);
     t.answer_choose_moved(P0, &[obj(lib[1])]);
-    let from = t.asked().len();
-    t.resolve();
-    // The milled Hill Giant was chosen and returned during the resolution; no player got
-    // priority in between.
+    play_until(&mut t, |g| {
+        g.stack.is_empty() && !g.find_in_zone(Zone::Battlefield, "Hill Giant").is_empty()
+    });
     assert!(t.on_battlefield(lib[1]));
     assert_eq!(t.counters(lib[1], counters::PLUS1), 1);
-    assert!(!asked_any(&t, from, |d| matches!(d, Decision::Priority { .. })));
+    // The three other milled cards and the Gift itself.
+    assert_eq!(t.graveyard_size(P0), 4);
+    let views = views.lock().unwrap().clone();
+    // P1 had priority with the Gift on the stack, and never with the Giant in the
+    // graveyard.
+    assert!(views.contains(&(1, false)), "{views:?}");
+    assert!(views.iter().all(|(_, in_gy)| !in_gy), "{views:?}");
 }
 
 #[test]

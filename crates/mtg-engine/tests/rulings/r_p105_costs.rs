@@ -13,7 +13,7 @@ use crate::r_s02_common::{can_activate, can_cast, can_play_land, create_token, d
 use crate::r_s08_common::mana_value;
 use crate::r_s19_common::gain_level;
 use crate::r_s33_common::shuffled_since;
-use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::decision::{Action, Answer, Decision};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
@@ -79,11 +79,12 @@ fn emry_cost_increases_apply_before_its_reduction() {
 
 #[test]
 fn emry_cost_is_locked_in_before_mana_abilities_are_activated() {
-    cr!("601.2f", "601.2g", "601.2h", "702.41a");
+    cr!("601.2f", "601.2g", "601.2h", "601.2i", "702.41a");
     ruling!(
         "Emry, Lurker of the Loch",
         "Once you announce that you're casting a spell, no player may take actions until the spell has been paid for. Notably, opponents can't try to change by how much Emry's cost is reduced."
     );
+    supported("Shatter");
     // Two Treasures: Emry costs {U}. One of them is sacrificed for that mana while paying,
     // after the total cost was locked in: with one artifact left Emry would cost {1}{U},
     // but the cost doesn't change, so the other Treasure stays.
@@ -92,15 +93,59 @@ fn emry_cost_is_locked_in_before_mana_abilities_are_activated() {
         create_token(&mut t, P0, "Treasure");
     }
     let emry = t.hand(P0, "Emry, Lurker of the Loch");
-    let from = t.asked().len();
     t.cast(P0, emry).go();
     assert_eq!(crate::r_s05_common::tokens_with_subtype(&t, P0, "Treasure").len(), 1);
-    // No player received priority while it was being cast.
-    assert!(!t.asked()[from..]
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::Priority { .. })));
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Emry, Lurker of the Loch").len(), 1);
+    // Through the priority loop: P0, with an Ornithopter and a Treasure (Emry costs {U})
+    // and no other mana, casts Emry; P1 tries to Shatter the Ornithopter at its first
+    // chance, which comes with Emry already paid for (the Treasure sacrificed). Destroying
+    // the Ornithopter then doesn't change Emry's cost: it resolves.
+    let mut t = TestGame::new(2);
+    let thopter = t.battlefield(P0, "Ornithopter");
+    create_token(&mut t, P0, "Treasure");
+    let emry = t.hand(P0, "Emry, Lurker of the Loch");
+    t.lands(P1, "Mountain", 2);
+    let shatter = t.hand(P1, "Shatter");
+    let views = watch(
+        &mut t,
+        P1,
+        |_| true,
+        |g| {
+            let treasures = g
+                .permanents()
+                .filter(|o| o.chars.has_subtype("Treasure"))
+                .count();
+            (g.stack.len(), treasures)
+        },
+    );
+    act(
+        &mut t,
+        P0,
+        Action::Cast {
+            card: emry,
+            method: NORMAL,
+        },
+    );
+    act(
+        &mut t,
+        P1,
+        Action::Cast {
+            card: shatter,
+            method: NORMAL,
+        },
+    );
+    t.answer_targets(P1, &[obj(thopter)]);
+    play_until(&mut t, |g| {
+        g.stack.is_empty()
+            && !g
+                .find_in_zone(Zone::Battlefield, "Emry, Lurker of the Loch")
+                .is_empty()
+    });
+    // P1's first decision: Emry on the stack, the Treasure already gone.
+    assert_eq!(views.lock().unwrap().first(), Some(&(1, 0)));
+    assert_eq!(t.zone(thopter), Zone::Graveyard(P0));
+    assert!(t.in_graveyard(P1, "Shatter"));
 }
 
 // ---------------------------------------------------------------------------
