@@ -25,7 +25,7 @@ fn spent_casting(t: &mut TestGame, p: PlayerId, spell: ObjectId) -> Option<usize
 
 #[test]
 fn hierophant_bio_titan_costs_at_least_gg_and_any_number_of_counters_can_be_removed() {
-    cr!("601.2f", "118.7d");
+    cr!("601.2f", "118.7a");
     ruling!(
         "Hierophant Bio-Titan",
         "Heirophant Bio-Titan's first ability can't reduce its cost below {G}{G}. You can remove any number of counters, even if they won't reduce its cost any further."
@@ -63,7 +63,7 @@ fn purple_worm_reduces_its_cost_by_at_most_two() {
 
 #[test]
 fn tolarian_terror_costs_at_least_u() {
-    cr!("601.2f");
+    cr!("601.2f", "118.7a");
     ruling!(
         "Tolarian Terror",
         "Tolarian Terror's first ability can't reduce its cost below {U}."
@@ -100,7 +100,7 @@ fn tolarian_terror_increases_apply_before_reductions_and_mana_value_is_its_mana_
 
 #[test]
 fn harmonious_grovestriders_power_and_toughness_apply_in_every_zone() {
-    cr!("604.3", "208.3");
+    cr!("604.3", "208.2a");
     ruling!(
         "Harmonious Grovestrider",
         "The ability that defines Harmonious Grovestrider’s power and toughness works in all zones, not just the battlefield."
@@ -173,11 +173,12 @@ fn loot_x_is_determined_as_its_ability_resolves() {
 
 #[test]
 fn loot_exiled_cards_follow_the_normal_timing_rules() {
-    cr!("305.1", "305.2", "601.2");
+    cr!("305.1", "117.1a", "601.2f", "601.2h");
     ruling!(
         "Loot, the Key to Everything",
         "You pay all costs and follow all normal timing rules for cards played from exile with Loot's last ability. For example, if the exiled card is a land card, you may play it only during your main phase while the stack is empty."
     );
+    use crate::r_s21_common::castable;
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Loot, the Key to Everything");
     t.battlefield(P0, "Grizzly Bears");
@@ -190,13 +191,38 @@ fn loot_exiled_cards_follow_the_normal_timing_rules() {
     assert!(t.play_land(P0, forest).is_err());
     // In the main phase with a spell on the stack: no.
     t.advance_to(P0, Step::PrecombatMain);
-    let shock = cast_at(&mut t, P0, "Shock", &[pl(P1)]);
+    cast_at(&mut t, P0, "Shock", &[pl(P1)]);
     assert!(t.play_land(P0, forest).is_err());
-    let _ = shock;
     t.resolve_all();
     // With the stack empty: yes.
     assert!(t.play_land(P0, forest).is_ok());
     assert_eq!(t.named_on_battlefield("Forest").len(), 1);
+    // A spell is cast with its costs paid, at its normal time: an exiled Grizzly Bears
+    // ({1}{G}) not in the upkeep, even with the mana, and in the main phase only with
+    // the mana, which pays for it.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Loot, the Key to Everything");
+    t.battlefield(P0, "Hill Giant");
+    stack_library(&mut t, P0, &["Grizzly Bears"]);
+    to_loot_upkeep(&mut t);
+    t.resolve_all();
+    let bears = t.g.exile[0];
+    assert_eq!(t.g.obj(bears).chars.name, "Grizzly Bears");
+    let forests = t.lands(P0, "Forest", 2);
+    assert!(!castable(&mut t, P0, bears), "not in the upkeep");
+    t.advance_to(P0, Step::PrecombatMain);
+    for f in &forests {
+        t.g.tap(*f);
+    }
+    assert!(!castable(&mut t, P0, bears), "not without the mana");
+    for f in &forests {
+        t.g.untap(*f);
+    }
+    assert!(castable(&mut t, P0, bears));
+    t.cast(P0, bears).go();
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert_eq!(crate::r_s04_common::untapped_lands(&t, P0), 0);
 }
 
 #[test]

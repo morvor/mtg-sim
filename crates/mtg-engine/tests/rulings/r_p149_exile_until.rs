@@ -155,7 +155,7 @@ fn abuelo_exiles(t: &mut TestGame, abuelo: ObjectId, target: ObjectId) {
 
 #[test]
 fn abuelo_returns_the_card_at_the_next_end_step_even_without_abuelo() {
-    cr!("603.7a", "603.7c", "610.3c");
+    cr!("603.7a", "603.7b", "603.7c");
     ruling!(
         "Abuelo, Ancestral Echo",
         "The exiled card will return to the battlefield at the beginning of the next end step even if Abuelo, Ancestral Echo is no longer on the battlefield at that time."

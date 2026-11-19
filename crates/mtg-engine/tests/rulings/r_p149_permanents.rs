@@ -143,7 +143,7 @@ fn codsworth_mana_cant_pay_for_equip_or_aura_abilities() {
 
 #[test]
 fn hunters_bow_no_damage_if_either_creature_is_an_illegal_target() {
-    cr!("608.2b", "701.14");
+    cr!("608.2b");
     ruling!(
         "Hunter's Bow",
         "If either creature is an illegal target as Hunter's Bow's first ability tries to resolve, the creature you control won't deal damage."
@@ -174,7 +174,7 @@ fn hunters_bow_no_damage_if_either_creature_is_an_illegal_target() {
 
 #[test]
 fn kitesail_larcenist_only_the_legal_targets_become_treasures() {
-    cr!("608.2b", "115.3");
+    cr!("608.2b");
     ruling!(
         "Kitesail Larcenist",
         "If some of the targets, but not all, are illegal as the ability resolves, the illegal targets will be unaffected. Only the remaining legal targets will become Treasures."
@@ -267,7 +267,7 @@ fn vren_exiles_opponents_creatures_instead_and_dies_triggers_dont_trigger() {
 
 #[test]
 fn vren_leaving_with_the_creatures_still_exiles_them() {
-    cr!("614.1a", "603.10a", "614.12");
+    cr!("614.1", "614.1a");
     ruling!(
         "Vren, the Relentless",
         "If Vren would leave the battlefield at the same time as one or more creatures an opponent controls would die, those creatures will still be exiled."
@@ -288,7 +288,7 @@ fn vren_leaving_with_the_creatures_still_exiles_them() {
 
 #[test]
 fn vren_counts_exiled_creature_tokens() {
-    cr!("111.1", "406.3");
+    cr!("111.8", "704.5d");
     ruling!(
         "Vren, the Relentless",
         "Vren's last ability counts any creatures your opponents controlled that were exiled this turn, including creature tokens."

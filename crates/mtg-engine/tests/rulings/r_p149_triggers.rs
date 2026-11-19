@@ -5,7 +5,6 @@
 
 use crate::r_p149_common::*;
 use mtg_engine::decision::Decision;
-use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -139,7 +138,7 @@ fn nafs_asp_damage_redirected_to_its_controller_still_triggers() {
 
 #[test]
 fn sabertooth_cobra_second_poison_counter_without_the_cobra() {
-    cr!("603.7a", "603.7c");
+    cr!("603.7a", "603.7b");
     ruling!(
         "Sabertooth Cobra",
         "The ability still gives a poison counter even if Sabertooth Cobra leaves the battlefield before the next upkeep."
@@ -312,12 +311,20 @@ fn saruman_counts_spells_cast_before_it_including_itself() {
     let army = crate::r_s01_common::with_subtype(&t, P0, "Army");
     assert_eq!(army.len(), 1);
     assert_eq!(t.counters(army[0], counters::PLUS1), 2);
-    // Storm of Saruman, the first spell; Shock, the second: copied.
+    // Storm of Saruman, the first spell; Shock, the second: copied (the copy keeping its
+    // target).
     let mut t = TestGame::new(2);
     cast_at(&mut t, P0, "Storm of Saruman", &[]);
     t.resolve_all();
+    t.answer_yes(P0, false);
+    let from = t.asked().len();
     cast_at(&mut t, P0, "Shock", &[pl(P1)]);
     t.resolve_all();
+    fn new_targets(d: &Decision) -> bool {
+        let prompt = "Choose new targets for the copy?";
+        matches!(d, Decision::YesNo { prompt: p, .. } if p == prompt)
+    }
+    assert_eq!(asked_who(&t, from, new_targets), vec![P0]);
     assert_eq!(t.life(P1), 16);
     // A spell cast before it counts: Shock first, Saruman second (its ability isn't on
     // the battlefield to see that), then a third spell doesn't trigger it.
@@ -362,7 +369,7 @@ fn cackling_prowler_doesnt_trigger_if_no_creature_died() {
 
 #[test]
 fn imoen_checks_the_initiative_as_the_end_step_begins_and_on_resolution() {
-    cr!("603.4", "725.2");
+    cr!("603.4", "726.1");
     ruling!(
         "Imoen, Mystic Trickster",
         "Imoen's second ability triggers only if you have the initiative as your end step begins. If the ability does trigger, it will check if you have the initiative again as it tries to resolve. If you don't still have the initiative at that time, the ability won't resolve and none of its effects will happen. Notably, if you don't have the initiative as your end step begins but you have completed a dungeon, the ability won't trigger and you won't draw any cards."
@@ -618,5 +625,4 @@ fn aboleth_spawn_copies_triggered_abilities_not_replacement_or_static_ones() {
     assert!(asked_who(&t, from, |d| matches!(d, Decision::YesNo { .. }))
         .iter()
         .all(|p| *p != P0));
-    let _ = Zone::Battlefield;
 }

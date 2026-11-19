@@ -4,7 +4,6 @@
 
 use crate::r_p149_common::*;
 use mtg_engine::testing::*;
-use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
@@ -155,5 +154,4 @@ fn koma_can_be_targeted_by_a_counterspell_whose_other_effects_happen() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Koma, World-Eater").len(), 1);
     assert_eq!(t.hand_size(P1), hand + 1);
-    let _ = Step::PrecombatMain;
 }

@@ -139,6 +139,74 @@ fn rhystic_shield_paid_by_one_player_is_still_offered_to_the_next() {
     assert_eq!(t.pt(bears), (2, 3));
 }
 
+/// P0 casts Development ("Create a 3/1 red Elemental creature token unless any opponent
+/// has you draw a card. Repeat this process two more times.") with the opponents' answers
+/// given pass by pass, each opponent asked in turn order; the cards P0 drew and the
+/// Elementals P0 got.
+fn development(t: &mut TestGame, answers: &[(PlayerId, bool)]) -> (usize, usize) {
+    supported("Research // Development");
+    for (p, yes) in answers {
+        t.answer_yes(*p, *yes);
+    }
+    lots(t, P0);
+    let card = t.hand(P0, "Research // Development");
+    let hand = t.hand_size(P0) - 1;
+    let from = t.asked().len();
+    t.cast(P0, card).method(CastMethod::Half(1)).go();
+    t.resolve_all();
+    let asked: Vec<PlayerId> = answers.iter().map(|(p, _)| *p).collect();
+    assert_eq!(asked_who(t, from, is_yes_no), asked);
+    let elementals = crate::r_s01_common::with_subtype(t, P0, "Elemental").len();
+    (t.hand_size(P0) - hand, elementals)
+}
+
+#[test]
+fn development_repeats_three_times_each_opponent_offered_in_turn() {
+    cr!("118.12a", "101.4");
+    ruling!(
+        "Research // Development",
+        "Development's effect is repeated three times no matter which option the opponent chooses. The opponent may choose a different option each time."
+    );
+    ruling!(
+        "Research // Development",
+        "In a multiplayer game, each opponent, in turn, has the option to let you draw a card. If no opponent does, you put a token onto the battlefield. Then the process repeats two more times. A different opponent may let you draw a card each time."
+    );
+    interp!("unless-any-player-pays-offers-everyone");
+    // Two players: a card, a token, a card.
+    let mut t = TestGame::new(2);
+    let got = development(&mut t, &[(P1, true), (P1, false), (P1, true)]);
+    assert_eq!(got, (2, 1));
+    // Three players: P2 lets P0 draw after P1 declines, then P1 does, then neither.
+    let mut t = TestGame::new(3);
+    let got = development(
+        &mut t,
+        &[
+            (P1, false),
+            (P2, true),
+            (P1, true),
+            (P2, false),
+            (P1, false),
+            (P2, false),
+        ],
+    );
+    assert_eq!(got, (2, 1));
+    // Both let P0 draw in the first pass: P2 is still offered after P1 has, and P0 draws
+    // for each of them (`unless-any-player-pays-offers-everyone`).
+    let mut t = TestGame::new(3);
+    let got = development(
+        &mut t,
+        &[
+            (P1, true),
+            (P2, true),
+            (P1, false),
+            (P2, false),
+            (P1, false),
+            (P2, false),
+        ],
+    );
+    assert_eq!(got, (2, 2));
+}
+
 #[test]
 fn rhystic_deluge_and_plague_fiend_the_creatures_controller_may_pay_on_resolution() {
     cr!("608.2d", "118.12");
@@ -192,7 +260,7 @@ fn rhystic_deluge_and_plague_fiend_the_creatures_controller_may_pay_on_resolutio
 
 #[test]
 fn carrionette_cant_target_protection_from_creatures() {
-    cr!("702.16b", "115.4");
+    cr!("702.16b");
     ruling!(
         "Carrionette",
         "A creature with Protection from Creatures can't be targeted by this card's ability."
@@ -232,7 +300,7 @@ fn carrionette_can_be_activated_more_than_once() {
 
 #[test]
 fn reservoir_kraken_each_opponent_may_tap_but_only_one_fish() {
-    cr!("101.4", "603.4");
+    cr!("101.4", "118.12");
     ruling!(
         "Reservoir Kraken",
         "Each opponent in turn order may choose to tap an untapped creature as Reservoir Kraken's triggered ability resolves, even if a player earlier in the turn order already chose to tap a creature. Reservoir Kraken's controller will create a maximum of one Fish creature token each combat, no matter how many creatures were tapped."
@@ -515,6 +583,8 @@ fn explore_the_vastlands_players_choose_in_turn_order_seeing_earlier_reveals() {
     assert_eq!(s2[0], vec![tops[0][0], tops[0][1], tops[1][0]]);
     assert!(t.in_hand(P0, "Shock") && t.in_hand(P1, "Forest"));
     assert_eq!(t.life(P2), 23);
+    // (Each player's revealed cards are put into their hand before the next player
+    // chooses, not all together afterwards: docs/agents/engine-gaps.md, G10.)
 }
 
 #[test]
