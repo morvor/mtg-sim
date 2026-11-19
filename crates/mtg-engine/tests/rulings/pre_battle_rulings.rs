@@ -11,14 +11,16 @@
 
 use crate::r_p016_common::lots;
 use crate::r_p132_common::where_is;
-use crate::r_s01_common::{attack_with, supported};
+use crate::r_s01_common::{attack_with, give_mana_for, supported};
 use crate::r_s03_common::to_blockers;
+use crate::r_s06_common::attach_new;
 use crate::r_s09_common::{legal_attack, to_combat};
 use crate::r_s12_common::attack_target;
 use crate::r_s21_common::{castable, legal_blocks};
 use crate::r_s35_common::pick_options;
 use mtg_engine::battle;
-use mtg_engine::decision::Decision;
+use mtg_engine::combat::player_has_attacked;
+use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -27,6 +29,10 @@ const POLICY: &str = "pre-battle-rulings-give-way-to-the-cr";
 
 fn obj(id: ObjectId) -> Entity {
     Entity::Object(id)
+}
+
+fn pl(p: PlayerId) -> Entity {
+    Entity::Player(p)
 }
 
 /// `controller`'s Invasion of Azgol (a Siege) on the battlefield, protected by `protector`.
@@ -53,7 +59,8 @@ fn creeping_renaissance_can_return_battle_cards() {
     );
     supported("Creeping Renaissance");
     // "Choose a permanent type. Return all cards of the chosen type from your graveyard to
-    // your hand." Battle is among the choices, and choosing it returns the battle card.
+    // your hand." The choices are the six permanent types, battle among them, and choosing
+    // it returns the battle card.
     let mut t = TestGame::new(2);
     let invasion = t.graveyard(P0, "Invasion of Azgol");
     let bears = t.graveyard(P0, "Grizzly Bears");
@@ -68,17 +75,20 @@ fn creeping_renaissance_can_return_battle_cards() {
             _ => None,
         })
         .collect();
-    let opts = &options[0];
-    for ty in [
-        "artifact",
-        "battle",
-        "creature",
-        "enchantment",
-        "land",
-        "planeswalker",
-    ] {
-        assert!(opts.iter().any(|o| o == ty), "{ty} in {opts:?} ({POLICY})");
-    }
+    let mut opts = options[0].clone();
+    opts.sort();
+    assert_eq!(
+        opts,
+        [
+            "artifact",
+            "battle",
+            "creature",
+            "enchantment",
+            "land",
+            "planeswalker"
+        ],
+        "{POLICY}"
+    );
     assert_eq!(where_is(&t, invasion), "hand");
     assert_eq!(where_is(&t, bears), "graveyard");
 }
@@ -131,6 +141,7 @@ fn liliana_dreadhorde_general_keeps_one_battle() {
         "Liliana, Dreadhorde General",
         "The permanent types are artifact, creature, enchantment, land, and planeswalker. Supertypes, like legendary, aren't permanent types."
     );
+    supported("Liliana, Dreadhorde General");
     // −9: "Each opponent chooses a permanent they control of each permanent type and
     // sacrifices the rest." P1 keeps the second of its two battles (and its creature, its
     // only one), and sacrifices the first.
@@ -197,11 +208,13 @@ fn in_search_of_greatness_casts_a_battle_spell() {
     // "At the beginning of your upkeep, you may cast a permanent spell from your hand with
     // mana value equal to 1 plus the greatest mana value among other permanents you control
     // without paying its mana cost." P0 controls a Grizzly Bears (mana value 2): the battle
-    // spell Invasion of Segovia (mana value 3) can be cast, a sorcery of mana value 3 can't.
+    // spell Invasion of Segovia and the creature spell Gray Ogre (mana value 3) are offered,
+    // and the battle is cast; the sorcery Divination (mana value 3) isn't offered.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "In Search of Greatness");
     t.battlefield(P0, "Grizzly Bears");
     let invasion = t.hand(P0, "Invasion of Segovia");
+    let ogre = t.hand(P0, "Gray Ogre");
     let sorcery = t.hand(P0, "Divination");
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[obj(invasion)]);
@@ -211,11 +224,15 @@ fn in_search_of_greatness_casts_a_battle_spell() {
     t.advance_to(P0, Step::Upkeep);
     t.resolve_all();
     assert!(t.on_battlefield(invasion), "{}", t.dump_log());
-    let sorcery_offered = t.asked()[from..].iter().any(|(_, d)| match d {
-        Decision::ChooseEntities { candidates, .. } => candidates.contains(&obj(sorcery)),
-        _ => false,
-    });
-    assert!(!sorcery_offered);
+    assert!(t.in_hand(P0, "Gray Ogre"));
+    let offered = |id: ObjectId| {
+        t.asked()[from..].iter().any(|(_, d)| match d {
+            Decision::ChooseEntities { candidates, .. } => candidates.contains(&obj(id)),
+            _ => false,
+        })
+    };
+    assert!(offered(invasion) && offered(ogre));
+    assert!(!offered(sorcery));
 }
 
 // ---------------------------------------------------------------------------------
@@ -241,7 +258,7 @@ fn torrent_elemental_attacking_a_battle_taps_its_protectors_creatures() {
     // "Whenever this creature attacks, tap all creatures defending player controls."
     // Attacking P2's planeswalker: P2's creatures. Attacking the Siege P2 controls and P1
     // protects: P1's.
-    let (mut t, b) = three_with_siege();
+    let (mut t, _) = three_with_siege();
     let jace = t.battlefield(P2, "Jace Beleren");
     let torrent = t.battlefield(P0, "Torrent Elemental");
     let p1s = t.battlefield(P1, "Grizzly Bears");
@@ -250,13 +267,12 @@ fn torrent_elemental_attacking_a_battle_taps_its_protectors_creatures() {
     attack_with(&mut t, &[(torrent, obj(jace))]);
     t.resolve_all();
     assert!(!t.obj_now(p1s).tapped && t.obj_now(p2s).tapped);
-    let (mut t, b2) = three_with_siege();
-    let _ = b;
+    let (mut t, b) = three_with_siege();
     let torrent = t.battlefield(P0, "Torrent Elemental");
     let p1s = t.battlefield(P1, "Grizzly Bears");
     let p2s = t.battlefield(P2, "Grizzly Bears");
     to_combat(&mut t, P0);
-    attack_with(&mut t, &[(torrent, obj(b2))]);
+    attack_with(&mut t, &[(torrent, obj(b))]);
     t.resolve_all();
     assert!(t.obj_now(p1s).tapped, "the protector's creature ({POLICY})");
     assert!(!t.obj_now(p2s).tapped, "not the battle's controller's");
@@ -375,42 +391,67 @@ fn attacks_if_able_attacks_a_battle_when_attacking_the_player_costs() {
 }
 
 #[test]
-fn territorial_hellkite_may_attack_a_battle_when_attacking_the_chosen_player_costs() {
-    cr!("508.1d", "508.1b");
+fn territorial_hellkite_may_attack_a_battle_when_free_not_to_attack_the_chosen_player() {
+    cr!("508.1d", "508.1b", "508.1c");
     interp!("pre-battle-rulings-give-way-to-the-cr");
     ruling!(
         "Territorial Hellkite",
-        "If there's a cost associated with attacking the chosen player, it's free to attack any other player or planeswalker or to not attack."
+        "If Territorial Hellkite can't attack the chosen player, it's free to attack any other player or planeswalker or to not attack. If there's a cost associated with attacking the chosen player, it's free to attack any other player or planeswalker or to not attack. But if there's a cost associated with Territorial Hellkite attacking at all, Territorial Hellkite has to attack the chosen player or not attack."
     );
     supported("Territorial Hellkite");
+    supported("Blazing Archon");
+    supported("Brainwash");
     // "At the beginning of combat on your turn, choose an opponent at random that this
     // creature didn't attack during your last combat. This creature attacks that player this
-    // combat if able." With Archon of Absolution taxing attacks on P1, the Hellkite may
-    // attack the battle P1 protects, or not attack; without it, it must attack P1.
-    for taxed in [false, true] {
+    // combat if able." The chosen player is P1, who protects P0's Siege. Free to attack P1,
+    // the Hellkite must attack P1. If it can't attack P1 (P1's Blazing Archon: "Creatures
+    // can't attack you.") or attacking P1 costs (P1's Archon of Absolution), it may attack the
+    // battle or not attack. If attacking at all costs (Brainwash: "Enchanted creature can't
+    // attack unless its controller pays {3}."), it attacks P1 or doesn't attack.
+    for case in ["free", "can't attack P1", "attacking P1 costs", "attacking costs"] {
         let (mut t, b) = two_with_siege();
         let hk = t.battlefield(P0, "Territorial Hellkite");
-        if taxed {
-            t.battlefield(P1, "Archon of Absolution");
+        match case {
+            "can't attack P1" => {
+                t.battlefield(P1, "Blazing Archon");
+            }
+            "attacking P1 costs" => {
+                t.battlefield(P1, "Archon of Absolution");
+            }
+            "attacking costs" => {
+                attach_new(&mut t, P1, "Brainwash", hk);
+            }
+            _ => {}
         }
-        t.lands(P0, "Wastes", 2);
+        t.lands(P0, "Wastes", 3);
         t.set_step(P0, Step::PrecombatMain);
         t.advance_to(P0, Step::BeginningOfCombat);
         t.resolve_all();
-        assert_eq!(legal_attack(&mut t, &[]), taxed, "taxed {taxed}");
+        // (no attack, the battle, P1)
+        let legal = match case {
+            "free" => (false, false, true),
+            "can't attack P1" => (true, true, false),
+            "attacking P1 costs" => (true, true, true),
+            _ => (true, false, true),
+        };
+        assert_eq!(legal_attack(&mut t, &[]), legal.0, "{case}: no attack");
         assert_eq!(
             legal_attack(&mut t, &[(hk, obj(b))]),
-            taxed,
-            "taxed {taxed} ({POLICY})"
+            legal.1,
+            "{case}: the battle ({POLICY})"
         );
-        assert!(legal_attack(&mut t, &[(hk, Entity::Player(P1))]));
+        assert_eq!(
+            legal_attack(&mut t, &[(hk, pl(P1))]),
+            legal.2,
+            "{case}: P1"
+        );
     }
 }
 
 #[test]
 fn boros_battleshaper_its_forced_attacker_may_attack_a_battle_and_its_forced_blocker_blocks_for_one(
 ) {
-    cr!("508.1b", "508.1d", "509.1a", "509.1c", "310.9c");
+    cr!("508.1b", "508.1d", "509.1a", "509.1b", "509.1c", "310.9c");
     interp!("pre-battle-rulings-give-way-to-the-cr");
     ruling!(
         "Boros Battleshaper",
@@ -418,7 +459,7 @@ fn boros_battleshaper_its_forced_attacker_may_attack_a_battle_and_its_forced_blo
     );
     ruling!(
         "Boros Battleshaper",
-        "A creature forced to block does so only if it’s able to do so as blockers are declared. If, at that time, the creature is tapped, is affected by a spell or ability that says it can’t block, or no creatures are attacking its controller or a planeswalker controlled by that player, then it doesn’t block."
+        "A creature forced to block does so only if it’s able to do so as blockers are declared. If, at that time, the creature is tapped, is affected by a spell or ability that says it can’t block, or no creatures are attacking its controller or a planeswalker controlled by that player, then it doesn’t block. If there’s a cost associated with having the creature block, its controller isn’t forced to pay that cost, so it doesn’t block in that case either."
     );
     supported("Boros Battleshaper");
     // "At the beginning of each combat, up to one target creature attacks or blocks this
@@ -436,19 +477,72 @@ fn boros_battleshaper_its_forced_attacker_may_attack_a_battle_and_its_forced_blo
     assert!(!legal_attack(&mut t, &[]));
     assert!(legal_attack(&mut t, &[(bears, Entity::Player(P1))]));
     assert!(legal_attack(&mut t, &[(bears, obj(b))]), "{POLICY}");
-    // P1's Lions, forced to block, must block the Bears attacking the battle P1 protects.
-    let (mut t, b) = two_with_siege();
-    t.battlefield(P0, "Boros Battleshaper");
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    let lions = t.battlefield(P1, "Savannah Lions");
-    t.answer_targets(P0, &[obj(lions)]);
-    t.answer_targets(P0, &[]);
-    t.set_step(P0, Step::PrecombatMain);
-    t.advance_to(P0, Step::BeginningOfCombat);
-    t.resolve_all();
-    attack_with(&mut t, &[(bears, obj(b))]);
-    assert!(!legal_blocks(&mut t, P1, &[]), "{POLICY}");
-    assert!(legal_blocks(&mut t, P1, &[(lions, bears)]));
+    // P1's Savannah Lions, forced to block, in a three-player game where P1 protects P0's
+    // Siege. P0's Bears attack P1 (and with a Hill Giant attacking P1 too, P1 chooses which
+    // of them the Lions block), the battle P1 protects, or P2. The Lions must block unless,
+    // as blockers are declared, they're tapped or can't block (Pacifism), no creature is
+    // attacking P1, a planeswalker P1 controls or a battle P1 protects, or blocking costs
+    // (War Cadence for 1; P1 has the mana).
+    for case in [
+        "P1",
+        "two attackers",
+        "the battle",
+        "tapped",
+        "can't block",
+        "P2",
+        "cost",
+    ] {
+        let mut t = TestGame::new(3);
+        let b = siege(&mut t, P0, P1);
+        t.battlefield(P0, "Boros Battleshaper");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let giant = t.battlefield(P0, "Hill Giant");
+        let lions = t.battlefield(P1, "Savannah Lions");
+        t.lands(P1, "Plains", 1);
+        t.answer_targets(P0, &[obj(lions)]);
+        t.answer_targets(P0, &[]);
+        t.set_step(P0, Step::PrecombatMain);
+        t.advance_to(P0, Step::BeginningOfCombat);
+        t.resolve_all();
+        match case {
+            "tapped" => {
+                t.g.tap(lions);
+            }
+            "can't block" => {
+                attach_new(&mut t, P2, "Pacifism", lions);
+            }
+            "cost" => {
+                t.lands(P0, "Mountain", 2);
+                let cadence = t.battlefield(P0, "War Cadence");
+                t.answer(P0, DecisionKind::X, Answer::Number(1));
+                t.activate(P0, cadence, 0, &[]).unwrap();
+                t.resolve_all();
+            }
+            _ => {}
+        }
+        let attacks = match case {
+            "two attackers" => vec![(bears, pl(P1)), (giant, pl(P1))],
+            "the battle" => vec![(bears, obj(b))],
+            "P2" => vec![(bears, pl(P2))],
+            _ => vec![(bears, pl(P1))],
+        };
+        attack_with(&mut t, &attacks);
+        let forced = matches!(case, "P1" | "two attackers" | "the battle");
+        assert_eq!(
+            legal_blocks(&mut t, P1, &[]),
+            !forced,
+            "{case}: no block ({POLICY})"
+        );
+        let can_block = forced || case == "cost";
+        assert_eq!(
+            legal_blocks(&mut t, P1, &[(lions, bears)]),
+            can_block,
+            "{case}: the Lions block the Bears"
+        );
+        if case == "two attackers" {
+            assert!(legal_blocks(&mut t, P1, &[(lions, giant)]), "{case}");
+        }
+    }
 }
 
 /// The creatures attacking now that aren't among `declared`.
@@ -518,7 +612,7 @@ fn a_creature_put_onto_the_battlefield_attacking_may_attack_a_battle() {
                 attackers.push(t.battlefield(P0, "Grizzly Bears"));
             }
             "Minion of the Mighty" => {
-                // Pack tactics: total power 6 or greater (2 + 5).
+                // Pack tactics: total power 6 or greater (0 + 6).
                 attackers.push(t.battlefield(P0, name));
                 attackers.push(t.battlefield(P0, "Craw Wurm"));
                 let dragon = t.hand(P0, "Shivan Dragon");
@@ -605,4 +699,43 @@ fn a_band_attacks_one_battle() {
     attack_with(&mut t, &[(hero, obj(b)), (bears, Entity::Player(P1))]);
     assert_eq!(band_of(&t, hero), None);
     assert_eq!(band_of(&t, bears), None);
+}
+
+#[test]
+fn a_reselected_attacker_may_attack_a_battle() {
+    cr!("508.7", "508.7a", "508.7c");
+    interp!("pre-battle-rulings-give-way-to-the-cr");
+    ruling!(
+        "Portal Mage",
+        "If you reselect which player or planeswalker an attacking creature is attacking, that creature is still considered to have attacked the player or planeswalker as declared, but it is now attacking the new player or planeswalker."
+    );
+    supported("Portal Mage");
+    // "When this creature enters during the declare attackers step, you may reselect which
+    // player or permanent target attacking creature is attacking." Three players: P1
+    // controls a Siege that P2 protects. P0's Bears attack P1; P1 flashes in Portal Mage and
+    // sends them at the Siege. They still attacked P1, as declared, and now attack the
+    // battle, which takes their damage.
+    let mut t = TestGame::new(3);
+    let b = siege(&mut t, P1, P2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    to_combat(&mut t, P0);
+    attack_with(&mut t, &[(bears, pl(P1))]);
+    let options = mtg_engine::kw::reselect_attack::reselect_options(&t.g, bears);
+    assert!(options.contains(&obj(b)), "{options:?} ({POLICY})");
+    give_mana_for(&mut t, P1, "Portal Mage");
+    let mage = t.hand(P1, "Portal Mage");
+    t.answer_targets(P1, &[obj(bears)]);
+    t.answer_choose(P1, &[obj(b)]);
+    t.cast(P1, mage).go();
+    t.resolve();
+    t.resolve();
+    assert_eq!(attack_target(&t, bears), Some(obj(b)), "{POLICY}");
+    assert!(player_has_attacked(&t.g, P0, P1));
+    let defense = t.counters(b, mtg_engine::types::counters::DEFENSE);
+    t.advance_to(P0, Step::EndOfCombat);
+    assert_eq!(
+        t.counters(b, mtg_engine::types::counters::DEFENSE),
+        defense - 2
+    );
+    assert_eq!((t.life(P1), t.life(P2)), (20, 20));
 }
