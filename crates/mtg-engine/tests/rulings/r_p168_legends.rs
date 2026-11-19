@@ -691,10 +691,21 @@ fn heroes_podium_bonus_applies_as_the_legend_rule_is_applied() {
 #[test]
 fn heroes_podium_counts_itself_only_as_a_creature() {
     // The card's own behavior: "Each legendary creature you control gets +1/+1 for each
-    // other legendary creature you control." (Its ruling's "in addition to being a land" is
-    // left uncited for the coordinator: docs/RULING_DISCREPANCIES.md, "Not yet
-    // investigated".)
+    // other legendary creature you control." Its ruling (2014-02-01) has it count itself
+    // only as a creature "in addition to being a land", but Heroes' Podium is a Legendary
+    // Artifact, and the same note in the Born of the Gods Release Notes (2014-01-22) ends
+    // "It won't count itself." without that clause (a copying error; exempt in
+    // docs/rulings-exemptions/rulings-P168.tsv, logged in docs/RULING_DISCREPANCIES.md).
+    // The rest holds: only legendary creatures count, and the Podium counts itself, and
+    // gets the bonus, once another effect makes it a creature.
     cr!("613.4c", "613.1d");
+    interp!("ruling-contradicting-oracle-gives-way");
+    ruling!(
+        "Heroes' Podium",
+        "The bonus given by Heroes' Podium counts only legendary creatures. It won't count itself unless some other effect causes it to be a creature"
+    );
+    ruling!("Heroes' Podium", "(in which case it will also get the bonus)");
+    supported("Heroes' Podium");
     supported("March of the Machines");
     let mut t = TestGame::new(2);
     let podium = t.battlefield(P0, "Heroes' Podium");
