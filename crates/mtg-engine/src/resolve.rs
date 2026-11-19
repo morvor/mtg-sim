@@ -1136,6 +1136,8 @@ impl Game {
                 self.dirty = true;
                 // CR 113.11: not for an object that can't have an ability it adds.
                 crate::kw::cant_have::drop_ungrantable_keywords(self, first);
+                // CR 205.3d: nor a subtype it can't have as the effect begins.
+                crate::subtype_gain::lock_ungainable_parts(self, first);
             }
             Effect::AddRestriction {
                 restriction,
