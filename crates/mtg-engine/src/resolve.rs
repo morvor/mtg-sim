@@ -214,8 +214,23 @@ impl Game {
             }
             Effect::ForEach { sel, var, effect } => {
                 let items = self.resolve_sel(sel, ctx);
+                let stack_before = self.stack.len();
                 // CR 608.2f: an action on several objects happens to all of them at once.
                 crate::simultaneous::for_each_object(self, items, *var, effect, ctx);
+                // "For each of those creatures, copy that spell" (Feather, Radiant
+                // Arbiter): the copies are put on the stack at once, in the order their
+                // controller chooses (CR 405.3).
+                if matches!(**effect, Effect::CopySpellRetargeted { .. }) {
+                    let copies: Vec<ObjectId> = self.stack[stack_before.min(self.stack.len())..]
+                        .iter()
+                        .copied()
+                        .filter(|c| {
+                            self.obj(*c).kind == ObjKind::SpellCopy
+                                && self.obj(*c).controller == ctx.controller
+                        })
+                        .collect();
+                    crate::copy::order_copies(self, ctx.controller, &copies);
+                }
             }
             Effect::ForEachPlayer { who, effect } => {
                 let players = self.eval_players(who, ctx);
