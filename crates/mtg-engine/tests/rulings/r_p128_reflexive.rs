@@ -969,7 +969,11 @@ fn yannik_leaving_first_exiles_nothing_and_its_reflexive_ability_doesnt_trigger(
         t.settle();
         assert_eq!(t.on_battlefield(giant), leaves, "leaves: {leaves}");
         // The reflexive ability is waiting only if the Giant was exiled.
-        assert_eq!(t.stack_len(), n - 1 + usize::from(!leaves), "leaves: {leaves}");
+        assert_eq!(
+            t.stack_len(),
+            n - 1 + usize::from(!leaves),
+            "leaves: {leaves}"
+        );
         t.resolve_all();
         if !leaves {
             assert_eq!(t.counters(y, counters::PLUS1), 3, "the Giant's power");
