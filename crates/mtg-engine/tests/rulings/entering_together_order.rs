@@ -282,7 +282,7 @@ fn each_players_entering_permanents_have_their_effects_applied_in_apnap_order() 
 
 #[test]
 fn token_copies_doubling_season_doubles_have_their_effects_applied_in_the_chosen_order() {
-    cr!("616.1", "616.1g", "111.1");
+    cr!("616.1", "616.1g");
     cr_example!(
         "616.1g",
         "the effects of the two Voice of All tokens may be applied in either order"
@@ -431,4 +431,47 @@ fn an_effect_another_permanent_generates_is_ordered_too() {
         assert!(!t.obj_now(ids[1]).face_down, "entering at the same time");
         assert_eq!(plus1(&t, ids[1]), bears_n, "{pick:?}");
     }
+}
+
+#[test]
+fn cards_from_both_graveyards_entering_under_your_control_are_ordered_by_you() {
+    cr!("616.1", "616.1f");
+    interp!("simultaneous-entries-ordered-by-controller");
+    interp!("entering-would-be-controller-chooses");
+    supported("Rise of the Dark Realms");
+    // Rise of the Dark Realms: "Put all creature cards from all graveyards onto the
+    // battlefield under your control." P1's Thief of Blood and P0's Sin, Unending Cataclysm
+    // enter together under P0's control: P0, the player they'd enter under the control of,
+    // orders both (CR 616.1), and P1 is asked nothing. Whichever P0 picks first takes the
+    // Bears' three counters (Thief 3, or Sin twice that).
+    let mut seen = Vec::new();
+    for pick in [0usize, 1] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let bears = with_counters(&mut t, P1, "Grizzly Bears", 3);
+        t.graveyard(P1, "Thief of Blood");
+        t.graveyard(P0, "Sin, Unending Cataclysm");
+        t.answer(P0, DecisionKind::Replacement, Answer::Index(pick));
+        t.answer_choose(P0, &[obj(bears)]);
+        cast_new(&mut t, P0, "Rise of the Dark Realms", &[]);
+        t.resolve_all();
+        let questions = entry_order_questions(&t, P0);
+        assert_eq!(questions.len(), 1, "pick {pick}: {questions:?}");
+        assert!(order_questions(&t, P1).is_empty());
+        let thief = t.named_on_battlefield("Thief of Blood");
+        let sin = t.named_on_battlefield("Sin, Unending Cataclysm");
+        assert_eq!((thief.len(), sin.len()), (1, 1));
+        assert_eq!(
+            controller(&mut t, thief[0]),
+            P0,
+            "P1's card, under P0's control"
+        );
+        let thief_first = questions[0][pick].starts_with("Thief of Blood");
+        seen.push(thief_first);
+        let (thief_n, sin_n) = if thief_first { (3, 0) } else { (0, 6) };
+        assert_eq!(plus1(&t, thief[0]), thief_n, "pick {pick}: Thief of Blood");
+        assert_eq!(plus1(&t, sin[0]), sin_n, "pick {pick}: Sin");
+        assert_eq!(plus1(&t, bears), 0);
+    }
+    assert_ne!(seen[0], seen[1], "each pick puts a different one first");
 }
