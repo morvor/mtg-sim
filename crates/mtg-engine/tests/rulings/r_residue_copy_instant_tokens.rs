@@ -11,11 +11,8 @@ use crate::r_p030_common::{kill, tokens_named};
 use crate::r_s01_common::{attack_with, supported};
 use crate::r_s06_common::{activate_containing, attach_new};
 use crate::r_s25_common::cast_new;
-use crate::r_s26_common::{dress_up, fresh, modify_until_eot};
-use mtg_engine::ability::Modification;
-use mtg_engine::decision::Decision;
+use crate::r_s26_common::{dress_up, fresh};
 use mtg_engine::events::Event;
-use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::*;
@@ -413,45 +410,6 @@ fn scouring_swarm_s_token_after_it_left() {
 // --- Jace, Mirror Mage -----------------------------------------------------------------------
 
 #[test]
-fn jace_reveals_the_drawn_card_as_it_resolves() {
-    cr!("701.20a", "121.1");
-    ruling!(
-        "Jace, Mirror Mage",
-        "While resolving Jace's last ability, you must reveal the card before it's mixed with the other cards in your hand."
-    );
-    supported("Jace, Mirror Mage");
-    // The hand holds two other cards; the drawn Grizzly Bears is the card revealed, and
-    // two loyalty counters (its mana value) are removed.
-    let mut t = TestGame::new(2);
-    let jace = t.battlefield(P0, "Jace, Mirror Mage");
-    t.hand(P0, "Island");
-    t.hand(P0, "Lightning Bolt");
-    let giant = t.library_top(P0, "Grizzly Bears");
-    let from = t.g.turn_events.len();
-    activate_containing(&mut t, P0, jace, "Draw a card").unwrap();
-    t.resolve_all();
-    let drawn = t.g.current(giant);
-    assert_eq!(t.zone(drawn), Zone::Hand(P0));
-    let revealed: Vec<ObjectId> = t.g.turn_events[from..]
-        .iter()
-        .filter_map(|e| match e {
-            Event::Custom {
-                name, obj: Some(o), ..
-            } if name == mtg_engine::reveal::REVEALED => Some(*o),
-            _ => None,
-        })
-        .collect();
-    assert!(
-        !revealed.is_empty()
-            && revealed
-                .iter()
-                .all(|o| t.g.current(*o) == drawn || *o == giant),
-        "{revealed:?}"
-    );
-    assert_eq!(t.counters(jace, "loyalty"), 2);
-}
-
-#[test]
 fn one_legendary_jace_and_any_number_of_nonlegendary_copies() {
     cr!("704.5j", "707.9b");
     ruling!(
@@ -591,40 +549,3 @@ fn magar_s_face_down_card_is_revealed_as_it_leaves() {
 }
 
 // --- Invasion of Arcavios ----------------------------------------------------------------------
-
-#[test]
-fn invasion_of_arcavios_searches_its_zones_in_one_choice() {
-    cr!("701.23a", "400.11b");
-    interp!("outside-the-game-is-the-sideboard");
-    ruling!(
-        "Invasion of Arcavios // Invocation of the Founders",
-        "You don’t have to declare up front where you’re going to search. You may search your library, pause, sigh, check out your graveyard, frown meaningfully at your opponent, then finally grab a game-winning sorcery card from your sideboard. Bit dramatic though."
-    );
-    // A sorcery in each zone: one choice offers all three, and the one in the sideboard
-    // can be taken.
-    let mut t = TestGame::new(2);
-    t.set_step(P0, Step::PrecombatMain);
-    let side =
-        t.g.add_to_sideboard(P0, vec![mtg_engine::card::card("Divination")]);
-    let lib = t.library_top(P0, "Lava Spike");
-    let gy = t.graveyard(P0, "Lightning Bolt");
-    t.answer_choose(P0, &[pl(P1)]);
-    t.answer_choose(P0, &[obj(side[0])]);
-    let from = t.asked().len();
-    t.enter(P0, "Invasion of Arcavios // Invocation of the Founders");
-    t.resolve_all();
-    assert!(t.in_hand(P0, "Divination"));
-    let offered: Vec<Vec<Entity>> = t.asked()[from..]
-        .iter()
-        .filter_map(|(_, d)| match d {
-            Decision::ChooseEntities { candidates, .. } => Some(candidates.clone()),
-            _ => None,
-        })
-        .collect();
-    assert!(
-        offered
-            .iter()
-            .any(|c| c.contains(&obj(lib)) && c.contains(&obj(gy)) && c.contains(&obj(side[0]))),
-        "{offered:?}"
-    );
-}

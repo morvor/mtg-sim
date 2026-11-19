@@ -619,32 +619,6 @@ fn beamsplitter_mage_s_copy_has_the_same_x() {
 }
 
 #[test]
-fn zada_triggers_only_for_a_spell_targeting_only_zada() {
-    cr!("603.2", "115.9c");
-    ruling!(
-        "Zada, Hedron Grinder",
-        "Zada's ability triggers whenever you cast an instant or sorcery spell that targets only Zada and no other object or player."
-    );
-    supported("Zada, Hedron Grinder");
-    // Electrolyze at Zada and P1: no trigger. At Zada alone: a trigger.
-    for only in [false, true] {
-        let mut t = TestGame::new(2);
-        let zada = t.battlefield(P0, "Zada, Hedron Grinder");
-        t.battlefield(P0, "Grizzly Bears");
-        lands_for_cost(&mut t, P0, "Electrolyze");
-        let card = t.hand(P0, "Electrolyze");
-        if only {
-            t.cast(P0, card).targets(&[obj(zada)]).go();
-        } else {
-            t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![1, 1]));
-            t.cast(P0, card).targets(&[obj(zada), pl(P1)]).go();
-        }
-        t.settle();
-        assert_eq!(t.stack_len(), if only { 2 } else { 1 }, "only Zada: {only}");
-    }
-}
-
-#[test]
 fn zada_s_copies_are_yours_in_the_order_you_choose_above_the_original() {
     cr!("707.10", "707.10d", "405.3");
     ruling!(
@@ -755,7 +729,7 @@ fn return_the_favor_changes_the_target_on_resolution_if_it_can() {
 
 /// P0 casts Dimensional Infiltrator (an Eldrazi creature with flash and no targets) with
 /// Ulalek on the battlefield and pays {C}{C} for Ulalek's ability (P0's Wastes).
-fn eldrazi_spell(t: &mut TestGame) -> ObjectId {
+pub fn eldrazi_spell(t: &mut TestGame) -> ObjectId {
     t.lands(P0, "Wastes", 2);
     t.answer_yes(P0, true);
     cast_new(t, P0, "Dimensional Infiltrator", &[])
@@ -897,37 +871,12 @@ fn ulalek_s_copies_aren_t_cast() {
     assert_eq!(other_tokens, 1);
 }
 
-#[test]
-fn ulalek_must_be_on_the_battlefield_to_trigger() {
-    cr!("603.2", "603.6a");
-    ruling!(
-        "Ulalek, Fused Atrocity",
-        "Ulalek must be on the battlefield in order for its triggered ability to trigger. Casting Ulalek itself won't cause that ability to trigger."
-    );
-    // Casting Ulalek (an Eldrazi spell): no trigger, and no {C}{C} asked for.
-    let mut t = TestGame::new(2);
-    t.lands(P0, "Wastes", 7);
-    let from = t.asked().len();
-    let card = t.hand(P0, "Ulalek, Fused Atrocity");
-    t.cast(P0, card).go();
-    t.settle();
-    assert_eq!(t.stack_len(), 1);
-    assert!(!t.asked()[from..]
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::YesNo { .. })));
-    t.resolve_all();
-    // Once it's there, casting an Eldrazi spell triggers it.
-    eldrazi_spell(&mut t);
-    t.settle();
-    assert_eq!(t.stack_len(), 2);
-}
-
 // --- God-Eternal Kefnet ---------------------------------------------------------------------------
 
 /// P0 controls Kefnet; `name` is on top of P0's library. P0 draws it as the first card
 /// drawn this turn, answering whether to reveal it with `reveal`. (The turn is P1's, in
 /// its upkeep, unless `own_turn`.)
-fn kefnet_draw(name: &str, reveal: bool, own_turn: bool) -> (TestGame, ObjectId) {
+pub fn kefnet_draw(name: &str, reveal: bool, own_turn: bool) -> (TestGame, ObjectId) {
     supported("God-Eternal Kefnet");
     let mut t = TestGame::new(2);
     if own_turn {
@@ -1018,19 +967,6 @@ fn kefnet_s_copy_can_be_cast_only_as_the_ability_resolves() {
         .iter()
         .filter(|o| o.chars.name == "Shatter" && t.g.is_live(o.id) && o.zone != Zone::Nowhere)
         .all(|o| o.id == t.g.current(card)));
-}
-
-#[test]
-fn kefnet_s_reveal_is_optional() {
-    cr!("701.20a", "603.2");
-    ruling!(
-        "God-Eternal Kefnet",
-        "You don't have to reveal a drawn card if you don't wish to copy it at that time."
-    );
-    let (t, card) = kefnet_draw("Lightning Bolt", false, true);
-    assert!(t.g.stack.is_empty());
-    assert!(!mtg_engine::reveal::is_revealed(&t.g, t.g.current(card)));
-    assert!(t.in_hand(P0, "Lightning Bolt"));
 }
 
 #[test]
