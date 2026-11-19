@@ -48,3 +48,16 @@ item's row (mutants run, missing tests added, engine bugs) is in docs/agents/yie
   `mixed-each-player-instruction`). Report: docs/MUTATION.md, "Second round, Nov 2026".
   `scripts/mutants.sh` gained `FULL=1` (every mutant) and `RESUME=1` (continue a run a
   machine restart interrupted). Next in the order above: `permissions.rs`.
+- `trigger_timing.rs` + `triggers.rs` half 1 (`mutation-2/triggers-half-1`, started Nov 19 at
+  `45bb684`): `scripts/mutants.sh` gained `SHARD=k/n` (a contiguous slice of the file's
+  mutants in `cargo mutants --list` order; `RESUME=1` with it tests the slice's untested
+  mutants itself, since cargo-mutants shards after `--iterate`/`-E`). triggers.rs had 576
+  mutants at `45bb684`; **half 1 = `FULL=1 SHARD=0/2`, mutants 1–288**, from
+  `triggers.rs:17:5: replace keyword_has_trigger -> bool with true` to
+  `triggers.rs:1491:33: delete field amount from struct EventInfo expression in Game::trigger_matches_ctx`.
+  **Half 2 (next session) = `FULL=1 SHARD=1/2 scripts/mutants.sh triggers`**, mutants 289–576,
+  from `triggers.rs:1492:33: delete field objects from struct EventInfo expression in
+  Game::trigger_matches_ctx` to `triggers.rs:2913:9: delete match arm TriggerCond::AnyOf(ts)
+  in on_sacrifice`; the code will have moved, so check that `SHARD=1/2`'s first mutant is
+  still the one after half 1's last (`cargo mutants --list -f crates/mtg-engine/src/triggers.rs`)
+  and adjust the slice by hand (a `target/mutants/triggers.shard` list with `RESUME=1`) if not.
