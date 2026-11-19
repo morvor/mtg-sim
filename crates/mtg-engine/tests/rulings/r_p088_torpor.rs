@@ -59,7 +59,7 @@ fn as_enters_choices_still_happen_under_hushbringer_and_its_kin() {
 
 #[test]
 fn hushbringer_and_put_into_a_graveyard_from_anywhere() {
-    cr!("603.2", "603.10a", "700.4");
+    cr!("603.2", "603.6c", "603.10a", "700.4");
     ruling!(
         "Hushbringer",
         "An ability that triggers when a card is put into a graveyard \"from anywhere\" may still trigger even if a creature dies. It will trigger if the ability is of a dying creature that triggers only when that creature is put into a graveyard from anywhere, if Hushbringer is the card being put into a graveyard, or if Hushbringer leaves the battlefield at the same time as the dying creature."
@@ -413,7 +413,7 @@ fn hushwing_gryff_and_amulet_of_vigor() {
 
 #[test]
 fn containment_priest_doesnt_affect_creatures_entering_with_it() {
-    cr!("614.12", "614.1c");
+    cr!("614.12", "614.1a");
     ruling!(
         "Containment Priest",
         "If Containment Priest enters the battlefield at the same time as other creatures, its ability won't affect those creatures."

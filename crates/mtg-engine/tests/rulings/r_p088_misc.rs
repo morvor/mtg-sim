@@ -59,9 +59,9 @@ fn aeromoeba_switch_applies_after_other_effects() {
         "Effects that switch a creature's power and toughness apply after all other effects, regardless of when those effects began to apply. For instance, if you switch Aeromoeba's power and toughness and then give it +2/+0 later in the turn, it's a 4/4 creature, not a 6/2 creature."
     );
     supported("Aeromoeba");
-    supported("Brute Strength");
-    // Aeromoeba 2/4: switched (4/2), then Brute Strength (+3/+1): 5/5 (2+3 / 4+1,
-    // switched), not 7/3.
+    supported("Sure Strike");
+    // Aeromoeba 2/4: switched (4/2), then Sure Strike (+3/+0): 4/5 (2+3 / 4+0, switched),
+    // not 7/2 (and not 5/4, unswitched).
     let mut t = TestGame::new(2);
     let a = t.battlefield(P0, "Aeromoeba");
     let fodder = t.hand(P0, "Island");
@@ -69,9 +69,9 @@ fn aeromoeba_switch_applies_after_other_effects() {
     activate_containing(&mut t, P0, a, "Switch").expect("switch");
     t.resolve_all();
     assert_eq!(t.pt(a), (4, 2));
-    cast_new(&mut t, P0, "Brute Strength", &[obj(a)]);
+    cast_new(&mut t, P0, "Sure Strike", &[obj(a)]);
     t.resolve_all();
-    assert_eq!(t.pt(a), (5, 5));
+    assert_eq!(t.pt(a), (4, 5));
 }
 
 #[test]
@@ -122,6 +122,8 @@ fn conflagrate(
 #[test]
 fn conflagrate_divides_its_damage_as_its_cast() {
     cr!("601.2d", "608.2b", "115.1a", "107.3a");
+    // A division giving a target 0 isn't legal: the default division replaces it.
+    interp!("default-division");
     ruling!(
         "Conflagrate",
         "If X is 0, Conflagrate has no targets and deals no damage."
@@ -273,7 +275,7 @@ fn shadow_granted_by_discarding() {
 
 #[test]
 fn hellbent_activation_doesnt_check_the_hand_on_resolution() {
-    cr!("602.5b", "608.2");
+    cr!("602.1", "608.2");
     ruling!(
         "Keldon Megaliths",
         "It doesn't matter how many cards you have in your hand when the ability resolves."

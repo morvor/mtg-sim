@@ -238,12 +238,13 @@ fn tomiks_lands_dont_have_hexproof() {
     let from = t.asked().len();
     t.lands(P1, "Mountain", 3);
     let rain = t.hand(P1, "Stone Rain");
-    t.answer_targets(P1, &[obj(land)]);
     let r = t.cast(P1, rain).target(land).try_go();
     let offered = crate::r_s02_common::target_candidates(&t, P1, from)
         .iter()
         .any(|c| c.contains(&obj(land)));
     assert!(r.is_err() || !offered);
+    t.clear_answers();
+    t.resolve_all();
     assert!(t.on_battlefield(land));
 }
 
@@ -291,7 +292,7 @@ fn meddling_mage_names_as_it_enters_with_no_window() {
 
 #[test]
 fn meddling_mage_doesnt_affect_spells_already_on_the_stack() {
-    cr!("101.2", "601.2", "608.2");
+    cr!("601.2", "608.2");
     ruling!(
         "Meddling Mage",
         "Spells with the chosen name that somehow happen to already be on the stack when Meddling Mage enters the battlefield aren't affected by Meddling Mage's ability."

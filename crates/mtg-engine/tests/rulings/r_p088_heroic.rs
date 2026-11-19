@@ -33,7 +33,7 @@ fn counter_below_top(t: &mut TestGame, ability: bool) {
 
 #[test]
 fn cast_triggers_resolve_first_even_if_the_spell_is_countered() {
-    cr!("603.3", "405.5", "701.6a", "603.4");
+    cr!("603.3", "405.5", "701.6a");
     ruling!(
         "Brigone, Soldier of Meletis",
         "Brigone's second ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered or otherwise leaves the stack without resolving."
@@ -158,7 +158,7 @@ fn target_triggers_resolve_before_the_spell() {
 
 #[test]
 fn professor_hojo_draws_even_if_the_ability_is_countered() {
-    cr!("603.3", "701.6b", "602.2");
+    cr!("603.3", "701.6a", "602.2");
     ruling!(
         "Professor Hojo",
         "Professor Hojo's last ability resolves before the activated ability that caused it to trigger. It resolves even if that activated ability is countered or otherwise leaves the stack."
@@ -183,7 +183,7 @@ fn professor_hojo_draws_even_if_the_ability_is_countered() {
 
 #[test]
 fn a_spell_targeting_the_creature_several_times_triggers_once() {
-    cr!("603.2", "115.3", "601.2c");
+    cr!("603.2", "603.2c", "115.3", "601.2c");
     ruling!(
         "Gnarlback Rhino",
         "Gnarlback Rhino's last ability triggers when you cast a spell that has multiple targets as long as at least one of those targets is Gnarlback Rhino. It doesn't trigger multiple times if you cast a spell that targets Gnarlback Rhino multiple times."
@@ -351,7 +351,7 @@ fn conscript(t: &mut TestGame, conscriptor: ObjectId, steal: ObjectId) {
 
 #[test]
 fn akroan_conscriptor_targets_and_attachments() {
-    cr!("115.1", "301.5c", "303.4e", "702.103f", "613.1b");
+    cr!("115.1", "301.5d", "303.4e", "702.103f", "613.1b");
     ruling!(
         "Akroan Conscriptor",
         "The ability can target any creature except Akroan Conscriptor, including one that’s untapped or one you already control."
@@ -422,7 +422,7 @@ fn akroan_conscriptor_and_the_legend_rule() {
 
 #[test]
 fn king_of_the_oathbreakers_triggers_for_each_spirit_targeted() {
-    cr!("603.2", "702.26a", "702.26b");
+    cr!("603.2", "603.2c", "702.26b");
     ruling!(
         "King of the Oathbreakers",
         "If a spell an opponent controls targets multiple Spirits you control, King of the Oathbreakers's triggered ability will trigger once for each of those Spirits."
@@ -489,20 +489,20 @@ fn orvar_copies_one_of_your_targeted_permanents() {
         "If a spell or ability an opponent controls allows or instructs you to choose a card to discard, and you discard Orvar, its last ability will trigger."
     );
     supported("Mind Rot");
-    // Seeds of Strength targeting P1's Hill Giant, P0's Bears and P0's Isamaru: P0 picks
-    // Isamaru; the Giant can't be copied.
+    // Seeds of Strength targeting P1's Hill Giant, P0's Bears and P0's Llanowar Elves: P0
+    // picks the Elves; the Giant can't be copied.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Orvar, the All-Form");
     let giant = t.battlefield(P1, "Hill Giant");
     let bears = t.battlefield(P0, "Grizzly Bears");
-    let isamaru = t.battlefield(P0, "Isamaru, Hound of Konda");
-    t.answer_choose(P0, &[obj(isamaru)]);
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    t.answer_choose(P0, &[obj(elves)]);
     let from = t.asked().len();
     cast_new(
         &mut t,
         P0,
         "Seeds of Strength",
-        &[obj(giant), obj(bears), obj(isamaru)],
+        &[obj(giant), obj(bears), obj(elves)],
     );
     t.resolve_all();
     let offered: Vec<Vec<Entity>> = t.asked()[from..]
@@ -514,11 +514,13 @@ fn orvar_copies_one_of_your_targeted_permanents() {
         .collect();
     assert!(offered
         .iter()
-        .any(|c| c.contains(&obj(bears)) && c.contains(&obj(isamaru)) && !c.contains(&obj(giant))));
-    // Isamaru copied (and the legend rule kept one of them).
+        .any(|c| c.contains(&obj(bears)) && c.contains(&obj(elves)) && !c.contains(&obj(giant))));
+    // The Elves copied, under P0's control; nothing else.
     assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
-    assert_eq!(t.named_on_battlefield("Isamaru, Hound of Konda").len(), 1);
+    let copies = t.named_on_battlefield("Llanowar Elves");
+    assert_eq!(copies.len(), 2);
+    assert!(copies.iter().all(|e| t.g.obj(*e).controller == P0));
     // Discarding Orvar to P1's Mind Rot ("Target player discards two cards."): a token
     // copy of any target permanent, here P1's Hill Giant.
     let mut t = TestGame::new(2);
@@ -589,7 +591,7 @@ fn orvar_checks_the_spells_targets_as_its_ability_resolves() {
 
 #[test]
 fn orvars_token_copies_only_copiable_values() {
-    cr!("707.2", "707.3", "707.4", "202.3e");
+    cr!("707.2", "707.3", "202.3e");
     ruling!(
         "Orvar, the All-Form",
         "The token copies exactly what is printed on the permanent and nothing else (unless that permanent is a token or is copying something else; see below). It doesn’t copy whether that permanent is tapped or untapped, whether it has any counters on it, whether it has any Auras and/or Equipment attached to it, or any non-copy effects that changed its power, toughness, types, color, and so on."
@@ -717,9 +719,9 @@ fn battlefield_thaumaturge_reduces_the_total_cost() {
 }
 
 #[test]
-fn battlefield_thaumaturge_counts_each_target_creature() {
+fn battlefield_thaumaturge_counts_each_target_creature_once() {
     cr!("601.2f", "115.3");
-    interp!("thaumaturge-counts-each-time-a-creature-is-targeted");
+    interp!("thaumaturge-counts-each-targeted-creature-once");
     ruling!(
         "Battlefield Thaumaturge",
         "The cost reduction is {1} per target creature, even if the spell targets a creature more than once."
@@ -729,21 +731,30 @@ fn battlefield_thaumaturge_counts_each_target_creature() {
     // Epic Fight ({2}{G}, "Choose one or both — • Double target creature's power and
     // toughness until end of turn. • Target creature you control fights target creature an
     // opponent controls.") plus {1} from Thalia: {3}{G}. Both modes, the Bears targeted
-    // twice and the Giant once: three target creatures, {3} less: {G}.
-    let mut t = TestGame::new(2);
-    t.battlefield(P0, "Battlefield Thaumaturge");
-    t.battlefield(P1, "Thalia, Guardian of Thraben");
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    let giant = t.battlefield(P1, "Hill Giant");
-    add_mana(&mut t, P0, ManaType::G, 1);
-    let fight = t.hand(P0, "Epic Fight");
-    t.cast(P0, fight)
-        .modes(&[0, 1])
-        .target(bears)
-        .target(bears)
-        .target(giant)
-        .go();
-    assert_eq!(t.zone(fight), Zone::Stack);
+    // twice and the Giant once: two creatures it targets, {2} less: {1}{G}, not {G}.
+    let cast = |extra: u32| {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Battlefield Thaumaturge");
+        t.battlefield(P1, "Thalia, Guardian of Thraben");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let giant = t.battlefield(P1, "Hill Giant");
+        add_mana(&mut t, P0, ManaType::G, 1);
+        colorless(&mut t, P0, extra);
+        let fight = t.hand(P0, "Epic Fight");
+        let r = t
+            .cast(P0, fight)
+            .modes(&[0, 1])
+            .target(bears)
+            .target(bears)
+            .target(giant)
+            .try_go();
+        (t, r.is_ok(), bears, giant)
+    };
+    let (_, ok, _, _) = cast(0);
+    assert!(!ok);
+    let (mut t, ok, bears, giant) = cast(1);
+    assert!(ok);
+    assert_eq!(t.player(P0).mana_pool.total(), 0);
     t.resolve_all();
     // Doubled to 4/4, it fights the 3/3 Giant.
     assert!(!t.on_battlefield(giant));

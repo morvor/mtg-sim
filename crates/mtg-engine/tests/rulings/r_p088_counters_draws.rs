@@ -85,7 +85,7 @@ fn suncleanser_and_wither() {
 
 #[test]
 fn suncleanser_and_counter_replacement_effects() {
-    cr!("614.6", "616.1", "122.1");
+    cr!("614.6", "122.1");
     ruling!(
         "Suncleanser",
         "If a replacement effect allows a player to modify or replace an event by putting counters on a creature or player affected by Suncleanser, that player may apply that replacement effect, but they won’t get counters. If the original event is entirely replaced (such as by applying Soul-Scar Mage’s replacement effect), the original event won’t happen."
@@ -116,13 +116,14 @@ fn suncleanser_and_counter_replacement_effects() {
 
 #[test]
 fn suncleanser_costs_and_choices_to_put_counters() {
-    cr!("614.17b", "118.3", "122.1");
+    cr!("614.17b", "122.1");
     ruling!(
         "Suncleanser",
         "If the cost of an ability or an additional cost of a spell requires putting counters on a creature or player affected by Suncleanser, that cost can’t be paid. If a resolving spell or ability says that a player may give counters to that creature or player, that player can’t choose to do so."
     );
     supported("Devoted Druid");
     supported("Ajani's Pridemate");
+    supported("Sanctuary Wall");
     // Devoted Druid: "Put a -1/-1 counter on this creature: Untap this creature."
     let mut t = TestGame::new(2);
     let druid = t.battlefield(P0, "Devoted Druid");
@@ -140,6 +141,28 @@ fn suncleanser_costs_and_choices_to_put_counters() {
     t.g.flush_events();
     t.resolve_all();
     assert_eq!(t.counters(pm, "+1/+1"), 0);
+    // Sanctuary Wall: "{2}{W}, {T}: Tap target creature. You may put a stun counter on it.
+    // If you do, put a stun counter on this creature." Choosing to put one on the affected
+    // creature isn't possible, so the Wall gets none either.
+    for cleansed in [false, true] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        if cleansed {
+            suncleanse(&mut t, obj(bears));
+        }
+        let wall = t.battlefield(P0, "Sanctuary Wall");
+        add_mana(&mut t, P0, ManaType::W, 1);
+        colorless(&mut t, P0, 2);
+        t.answer_yes(P0, true);
+        t.answer_targets(P0, &[obj(bears)]);
+        activate_containing(&mut t, P0, wall, "stun").expect("activate");
+        t.resolve_all();
+        t.clear_answers();
+        assert!(tapped(&t, bears), "{cleansed}");
+        let n = u32::from(!cleansed);
+        assert_eq!(t.counters(bears, "stun"), n, "{cleansed}");
+        assert_eq!(t.counters(wall, "stun"), n, "{cleansed}");
+    }
 }
 
 #[test]
@@ -287,6 +310,15 @@ fn tunnel_ignus_counts_lands_that_entered_earlier_or_together() {
     t.enter(P1, "Forest");
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
+    // The earlier land is now P0's: it still entered under P1's control this turn.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Tunnel Ignus");
+    let f = t.enter(P1, "Forest");
+    t.settle();
+    crate::r_s06_common::give_control(&mut t, f, P0);
+    t.enter(P1, "Forest");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
     // Two lands at once, the first this turn: two triggers.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Tunnel Ignus");
@@ -295,6 +327,34 @@ fn tunnel_ignus_counts_lands_that_entered_earlier_or_together() {
     assert_eq!(t.stack_len(), 2);
     t.resolve_all();
     assert_eq!(t.life(P1), 14);
+}
+
+/// The same reading for another intervening "if" counting this turn's events: a creature
+/// entering at the same time as Lictor counts, whichever comes first in the batch.
+#[test]
+fn lictor_sees_an_opponents_creature_entering_with_it() {
+    cr!("603.4", "603.2c", "603.6a");
+    interp!("simultaneous-events-count-as-an-ability-triggers");
+    supported("Lictor");
+    // "When this creature enters, if a creature entered the battlefield under an
+    // opponent's control this turn, create a 3/3 green Tyranid Warrior creature token with
+    // trample."
+    for (together, order_lictor_first) in [(false, true), (true, true), (true, false)] {
+        let mut t = TestGame::new(2);
+        if !together {
+            t.enter(P0, "Lictor");
+        } else if order_lictor_first {
+            enter_together(&mut t, &[("Lictor", P0), ("Grizzly Bears", P1)]);
+        } else {
+            enter_together(&mut t, &[("Grizzly Bears", P1), ("Lictor", P0)]);
+        }
+        t.resolve_all();
+        assert_eq!(
+            crate::r_s25_common::creature_tokens(&t, P0),
+            usize::from(together),
+            "{together} {order_lictor_first}"
+        );
+    }
 }
 
 #[test]
@@ -315,5 +375,4 @@ fn thresher_lizard_damage_can_become_lethal() {
     t.g.draw_cards(P0, 2);
     t.settle();
     assert!(!t.on_battlefield(lizard));
-    let _ = ManaType::C;
 }

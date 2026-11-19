@@ -29,7 +29,7 @@ fn tarmogoyf_in_a_graveyard_is_0_1_under_yixlid_jailer() {
 
 #[test]
 fn yixlid_jailer_stops_flashback_but_not_other_permissions() {
-    cr!("601.2", "601.2b", "601.2f", "702.34a", "613.1f");
+    cr!("601.2", "601.2a", "601.2b", "601.2f", "702.34a", "613.1f");
     ruling!(
         "Yixlid Jailer",
         "If a spell or ability allows you to cast a spell from your graveyard, the first step in doing so is to move it to the stack. That spell's additional and alternative costs may be applied. However, if a card's own ability allows you to cast it from your graveyard (such as a flashback ability) Yixlid Jailer stops that ability."

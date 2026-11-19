@@ -673,8 +673,9 @@ pub struct Game {
     /// batch of simultaneous events. They happened at the same time, so "this turn"
     /// queries made as the ability triggers count them (CR 603.4: an intervening "if" is
     /// checked immediately after the trigger event; Tunnel Ignus's ruling; CR 120.10:
-    /// excess damage dealt along with the damage being looked at).
-    pub batch_ahead: Vec<Event>,
+    /// excess damage dealt along with the damage being looked at). Filled once per batch
+    /// and emptied from the front as its events are processed.
+    pub batch_ahead: std::collections::VecDeque<Event>,
     /// The events of the latest turns before this one, for "last turn", "during your last
     /// turn" and "since your last turn" (see `history_query.rs`).
     pub past_turns: Vec<crate::history_query::PastTurn>,
@@ -935,7 +936,7 @@ impl Game {
             agents: Agents(Arc::new(Mutex::new(agents))),
             events: vec![],
             turn_events: vec![],
-            batch_ahead: vec![],
+            batch_ahead: Default::default(),
             past_turns: vec![],
             turn_start: Default::default(),
             game_events: vec![],
