@@ -119,6 +119,27 @@ fn rhystic_shield_affects_only_creatures_you_control_as_it_resolves() {
 }
 
 #[test]
+fn rhystic_shield_paid_by_one_player_is_still_offered_to_the_next() {
+    cr!("118.12a", "101.4");
+    interp!("unless-any-player-pays-offers-everyone");
+    // Rhystic Shield: "Creatures you control get +0/+1 until end of turn. They get an
+    // additional +0/+2 until end of turn unless any player pays {2}."
+    let mut t = TestGame::new(3);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    for p in [P1, P2] {
+        t.lands(p, "Wastes", 2);
+    }
+    t.answer_yes(P0, false);
+    t.answer_yes(P1, true);
+    t.answer_yes(P2, false);
+    cast_at(&mut t, P0, "Rhystic Shield", &[]);
+    let from = t.asked().len();
+    t.resolve_all();
+    assert_eq!(asked_who(&t, from, is_yes_no), vec![P0, P1, P2]);
+    assert_eq!(t.pt(bears), (2, 3));
+}
+
+#[test]
 fn rhystic_deluge_and_plague_fiend_the_creatures_controller_may_pay_on_resolution() {
     cr!("608.2d", "118.12");
     ruling!(
@@ -216,6 +237,7 @@ fn reservoir_kraken_each_opponent_may_tap_but_only_one_fish() {
         "Reservoir Kraken",
         "Each opponent in turn order may choose to tap an untapped creature as Reservoir Kraken's triggered ability resolves, even if a player earlier in the turn order already chose to tap a creature. Reservoir Kraken's controller will create a maximum of one Fish creature token each combat, no matter how many creatures were tapped."
     );
+    interp!("any-player-may-after-a-payment");
     supported("Reservoir Kraken");
     let mut t = TestGame::new(3);
     let kraken = t.battlefield(P0, "Reservoir Kraken");
