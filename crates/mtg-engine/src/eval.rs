@@ -413,7 +413,10 @@ impl Game {
                 self.eval_value(v, ctx),
             ),
             PlayerFilter::Defending => self.defending_player_for(ctx) == Some(p),
-            PlayerFilter::Active => self.turn.active == p,
+            // A player whose turn it is ("during their own turns", "it's that player's
+            // turn"): with shared team turns, each player on the active team (CR 805.4a,
+            // 805.9: "all of the active players").
+            PlayerFilter::Active => self.is_active_player(p),
             PlayerFilter::AttackedThisTurn => {
                 self.turn.active == p && !self.history.attackers.is_empty()
             }

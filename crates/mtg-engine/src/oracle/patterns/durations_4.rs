@@ -79,10 +79,10 @@ inventory::submit! { EffectPattern { name: "durations 4: for as long as [conditi
 
 /// "that player can't attack you or permanents you control during their next turn"
 /// (Willie Lumpkin, Postman; The Second Doctor's "each opponent who does"): a rule for
-/// that player's next turn — creatures they control (the active player's, then) can't
-/// attack you or planeswalkers you control, whenever they came under their control
-/// (CR 611.2c, 508.1c; see `next_turn.rs` and the interpretation
-/// `next-turn-effects-start-with-the-turn`).
+/// that player's next turn — creatures they control (that player's, as the turn begins:
+/// with shared team turns not their teammates') can't attack you or planeswalkers you
+/// control, whenever they came under their control (CR 611.2c, 508.1c; see
+/// `next_turn.rs` and the interpretation `next-turn-effects-start-with-the-turn`).
 fn cant_attack_you_during_their_next_turn(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l);
     let rest = l
@@ -101,9 +101,10 @@ fn cant_attack_you_during_their_next_turn(l: &str, b: &mut Builder) -> Option<Ef
     if matches!(who, PlayerRef::You) {
         return None;
     }
+    // "That player" as the turn begins is the player it waited for (`next_turn::start`).
     let attackers = Filter::and(vec![
         Filter::creature(),
-        Filter::ControllerMatches(Box::new(PlayerFilter::Active)),
+        Filter::ControlledByPlayer(Box::new(PlayerRef::Iterated)),
     ]);
     let mut effects = vec![Effect::AddRestriction {
         restriction: Restriction::CantAttackPlayer {

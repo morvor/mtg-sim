@@ -101,6 +101,45 @@ fn second_doctor_opponents_who_draw_cant_attack_you_next_turn() {
 }
 
 #[test]
+fn second_doctor_in_two_headed_giant_restricts_only_the_opponent_who_drew() {
+    cr!("611.2a", "805.4", "805.10a");
+    interp!("next-turn-effects-start-with-the-turn");
+    // P3, who doesn't represent the next team turn (P2 does), draws: during that turn
+    // P3's creatures can't attack P0, and P2's still can.
+    let mut t = TestGame::with_config(
+        4,
+        mtg_engine::game::GameConfig {
+            variant: mtg_engine::game::Variant::TwoHeadedGiant,
+            teams: Some(vec![0, 0, 1, 1]),
+            ..Default::default()
+        },
+    );
+    t.battlefield(P0, "The Second Doctor");
+    for p in [P0, P1, P2, P3] {
+        t.library_top(p, "Island");
+        t.library_top(p, "Island");
+    }
+    let bears2 = t.battlefield(P2, "Grizzly Bears");
+    let bears3 = t.battlefield(P3, "Grizzly Bears");
+    for (p, draw) in [(P0, false), (P1, false), (P2, false), (P3, true)] {
+        t.answer_yes(p, draw);
+    }
+    t.set_step(P0, Step::PostcombatMain);
+    t.advance_to(P2, Step::DeclareAttackers);
+    let targets = |t: &TestGame, c: ObjectId| -> Vec<Entity> {
+        mtg_engine::combat::attack_options(&t.g)
+            .into_iter()
+            .filter(|(x, _)| *x == c)
+            .flat_map(|(_, e)| e)
+            .collect()
+    };
+    t.g.recompute();
+    assert!(targets(&t, bears2).contains(&Entity::Player(P0)));
+    assert!(!targets(&t, bears3).contains(&Entity::Player(P0)));
+    assert!(targets(&t, bears3).contains(&Entity::Player(P1)));
+}
+
+#[test]
 fn willie_lumpkin_creatures_entering_later_cant_attack_either() {
     cr!("611.2c", "508.1c");
     interp!("next-turn-effects-start-with-the-turn");

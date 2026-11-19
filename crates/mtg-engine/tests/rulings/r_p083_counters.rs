@@ -579,6 +579,39 @@ fn city_of_solitude_doesnt_stop_triggered_abilities() {
     assert_eq!(t.life(P1), 21);
 }
 
+#[test]
+fn city_of_solitude_in_two_headed_giant_is_each_teams_own_turn() {
+    cr!("805.4", "805.4a", "810.2", "602.5", "702.29a");
+    // With shared team turns, the turn is the team's: on it both players of the active
+    // team may cast spells and activate abilities (P0 represents the team's turn), and
+    // neither player of the other team may.
+    let mut t = TestGame::with_config(
+        4,
+        GameConfig {
+            variant: Variant::TwoHeadedGiant,
+            teams: Some(vec![0, 0, 1, 1]),
+            ..Default::default()
+        },
+    );
+    t.battlefield(P2, "City of Solitude");
+    let mut minotaurs = vec![];
+    for p in [P1, P2, P3] {
+        t.lands(p, "Mountain", 2);
+        minotaurs.push(t.hand(p, "Deadshot Minotaur"));
+    }
+    let bolt = t.hand(P1, "Lightning Bolt");
+    assert!(crate::r_s04_common::can_cycle(&mut t, P1, minotaurs[0]));
+    let life = t.life(P2);
+    assert!(t.cast_with(P1, bolt, &[player(P2)]).is_ok());
+    t.resolve_all();
+    assert_eq!(t.life(P2), life - 3);
+    for (i, p) in [P2, P3].into_iter().enumerate() {
+        assert!(!crate::r_s04_common::can_cycle(&mut t, p, minotaurs[i + 1]));
+        let bolt = t.hand(p, "Lightning Bolt");
+        assert!(t.cast_with(p, bolt, &[player(P0)]).is_err(), "{p:?}");
+    }
+}
+
 // ---------------------------------------------------------------------------------
 // Defense Grid in Two-Headed Giant.
 // ---------------------------------------------------------------------------------
