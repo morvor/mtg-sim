@@ -281,7 +281,9 @@ fn tomb_of_aclazotz_creature_enters_with_finality_counter_as_a_vampire() {
     t.resolve_all();
     let spell = t.cast(P0, bears).go();
     t.g.recompute();
-    assert!(!t.g.obj(spell).chars.subtypes.iter().any(|s| s == "Vampire"));
+    // The spell is a Vampire on the stack too (the card's ruling; CR 400.7a carries the
+    // type to the permanent).
+    assert!(t.g.obj(spell).chars.subtypes.iter().any(|s| s == "Vampire"));
     t.resolve_all();
     let b = on_bf(&t, "Grizzly Bears");
     assert_eq!(t.counters(b, "finality"), 1);

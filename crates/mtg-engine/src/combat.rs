@@ -928,6 +928,15 @@ pub fn attack_requirements(g: &Game) -> Vec<AttackRequirement> {
     }
     // Requirements that rules of keywords and hand-written abilities define.
     out.extend(crate::kw::attack_requirements(g));
+    // A creature that can't attack at all (tapped, summoning sick, "can't attack") isn't
+    // bound by "attacks if able": its requirements ask nothing of the declaration, so a
+    // conditional one ("if Viashino Bey attacks, ... attacks if able") can't make the
+    // declarations that meet its condition obey fewer requirements (CR 508.1d; register
+    // `requirements-of-creatures-unable-to-attack`).
+    if out.iter().any(|r| r.creature().is_some()) {
+        let able: BTreeSet<ObjectId> = attack_options(g).into_iter().map(|(c, _)| c).collect();
+        out.retain(|r| r.creature().is_none_or(|c| able.contains(&c)));
+    }
     out
 }
 
@@ -3720,6 +3729,8 @@ fn add_block(g: &mut Game, blocker: ObjectId, attacker: ObjectId, entered: bool)
     let Some(c) = g.combat.as_mut() else { return };
     let was_blocking = c.blockers.iter().any(|b| b.id == blocker);
     let was_blocked = c.is_blocked(attacker);
+    let blocking_before = c.blocking(blocker);
+    let blockers_before = c.blockers_of(attacker);
     match c.blockers.iter_mut().find(|x| x.id == blocker) {
         Some(bi) => bi.blocking.push(attacker),
         None => c.blockers.push(BlockerInfo {
@@ -3738,6 +3749,8 @@ fn add_block(g: &mut Game, blocker: ObjectId, attacker: ObjectId, entered: bool)
         entered,
         was_blocking,
         was_blocked,
+        blocking_before,
+        blockers_before,
     });
     if !was_blocked {
         g.emit(Event::BecameBlocked {
@@ -4280,6 +4293,32 @@ pub fn combat_trigger_matches(
                     .collect(),
             )
         }
+        (
+            TriggerCond::BlocksN {
+                blocker,
+                attacker,
+                n,
+            },
+            Event::BlockersDeclared { blocks },
+        ) => {
+            let mut per: BTreeMap<ObjectId, Vec<ObjectId>> = BTreeMap::new();
+            for (b, a) in blocks {
+                if g.matches(*a, attacker, ctx) {
+                    per.entry(*b).or_default().push(*a);
+                }
+            }
+            Some(
+                per.into_iter()
+                    .filter(|(b, as_)| as_.len() as u32 >= *n && g.matches(*b, blocker, ctx))
+                    .map(|(b, as_)| EventInfo {
+                        object: Some(b),
+                        amount: as_.len() as i32,
+                        objects: as_,
+                        ..Default::default()
+                    })
+                    .collect(),
+            )
+        }
         // Blocks added by effects or by creatures entering blocking (CR 509.3a–e, 509.4).
         (
             cond,
@@ -4289,6 +4328,8 @@ pub fn combat_trigger_matches(
                 entered,
                 was_blocking,
                 was_blocked,
+                blocking_before,
+                blockers_before,
             },
         ) => {
             let (b, a) = (*b, *a);
@@ -4332,31 +4373,61 @@ pub fn combat_trigger_matches(
                         vec![]
                     },
                 ),
-                // CR 509.3e: effects that add blockers can make the count reach N.
+                // CR 509.3e: effects that add blockers can make the count reach N: this
+                // blocker brings the number of matching blockers from below N to N,
+                // counted as of this block (one effect may add several; the abilities
+                // trigger once, as the Nth is added).
                 TriggerCond::BlockedByN {
                     attacker,
                     blocker,
                     n,
                 } => {
-                    let count = g
-                        .combat
-                        .as_ref()
-                        .map(|c| {
-                            c.blockers_of(a)
-                                .into_iter()
-                                .filter(|x| g.matches(*x, blocker, ctx))
-                                .count() as u32
-                        })
-                        .unwrap_or(0);
+                    let before = blockers_before
+                        .iter()
+                        .filter(|x| g.matches(**x, blocker, ctx))
+                        .count() as u32;
                     Some(
                         if g.matches(b, blocker, ctx)
-                            && count >= *n
-                            && count.saturating_sub(1) < *n
+                            && before < *n
+                            && before + 1 >= *n
                             && g.matches(a, attacker, ctx)
                         {
                             vec![EventInfo {
                                 object: Some(a),
-                                amount: count as i32,
+                                amount: (before + 1) as i32,
+                                ..Default::default()
+                            }]
+                        } else {
+                            vec![]
+                        },
+                    )
+                }
+                // CR 509.3e: an effect making it block one more matching attacker can
+                // make their number reach N, counted as of this block as above; never
+                // when it enters blocking (it never "blocked", CR 509.4).
+                TriggerCond::BlocksN {
+                    blocker,
+                    attacker,
+                    n,
+                } => {
+                    let mut blocked: Vec<ObjectId> = blocking_before
+                        .iter()
+                        .copied()
+                        .filter(|x| g.matches(*x, attacker, ctx))
+                        .collect();
+                    let before = blocked.len() as u32;
+                    blocked.push(a);
+                    Some(
+                        if !entered
+                            && g.matches(a, attacker, ctx)
+                            && before < *n
+                            && before + 1 >= *n
+                            && g.matches(b, blocker, ctx)
+                        {
+                            vec![EventInfo {
+                                object: Some(b),
+                                amount: (before + 1) as i32,
+                                objects: blocked,
                                 ..Default::default()
                             }]
                         } else {
