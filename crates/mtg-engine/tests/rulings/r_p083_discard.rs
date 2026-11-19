@@ -129,7 +129,7 @@ fn leyline_first(_g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
 
 #[test]
 fn obstinate_baloth_against_leyline_of_the_void_its_owner_chooses() {
-    cr!("616.1", "616.1a", "614.1a");
+    cr!("616.1", "616.1e", "614.1a");
     ruling!(
         "Obstinate Baloth",
         "If a spell or ability an opponent controls causes you to discard Obstinate Baloth, and both Obstinate Baloth's ability and another ability (such as that of an opponent's Leyline of the Void) instruct you to put Obstinate Baloth somewhere else instead of putting it into your graveyard, you choose which one to apply."
@@ -157,7 +157,10 @@ fn obstinate_baloth_against_leyline_of_the_void_its_owner_chooses() {
             t.named_on_battlefield("Obstinate Baloth").len(),
             usize::from(battlefield)
         );
-        assert_eq!(exiled(&t, "Obstinate Baloth").len(), usize::from(!battlefield));
+        assert_eq!(
+            exiled(&t, "Obstinate Baloth").len(),
+            usize::from(!battlefield)
+        );
     }
 }
 
@@ -225,14 +228,18 @@ fn nephalia_academy_applies_when_you_choose_to_discard() {
     t.resolve_all();
     assert_eq!(t.life(P0), 20, "discarded instead");
     let top = *t.g.player(P0).library.last().unwrap();
-    assert_eq!(t.g.obj(top).chars.name, "Lightning Bolt", "on top of the library");
+    assert_eq!(
+        t.g.obj(top).chars.name,
+        "Lightning Bolt",
+        "on top of the library"
+    );
     assert!(!t.in_graveyard(P0, "Lightning Bolt"));
     let _ = bolt;
 }
 
 #[test]
 fn nephalia_academy_or_madness() {
-    cr!("616.1", "702.35a", "702.35b");
+    cr!("616.1", "616.1f", "702.35a", "702.35b");
     ruling!(
         "Nephalia Academy",
         "If you discard a card with madness, you’ll choose whether to exile it or put it on top of your library. If you put it on top of your library, you can’t cast it using madness."
@@ -267,7 +274,15 @@ fn nephalia_academy_or_madness() {
         let rain = t.hand(P0, "Biting Rain");
         let bears = t.battlefield(P1, "Grizzly Bears");
         t.lands(P0, "Swamp", 3);
-        respond(&mut t, P0, if academy { academy_first } else { madness_first });
+        respond(
+            &mut t,
+            P0,
+            if academy {
+                academy_first
+            } else {
+                madness_first
+            },
+        );
         let from = t.asked().len();
         mind_rot(&mut t);
         t.resolve_all();
@@ -284,6 +299,78 @@ fn nephalia_academy_or_madness() {
             assert!(!t.on_battlefield(bears), "cast for madness");
             assert!(t.in_graveyard(P0, "Biting Rain"));
         }
+    }
+}
+
+#[test]
+fn madness_still_applies_after_leyline_of_the_void_exiles_the_card() {
+    cr!("616.1", "616.1e", "616.1f", "702.35a");
+    ruling!(
+        "Leyline of the Void",
+        "abilities that check whether a card is discarded (such as Hollow One, or a madness ability of the discarded card) still work, even though that card never reaches that player's graveyard"
+    );
+    supported("Leyline of the Void");
+    // P1's Leyline of the Void and Biting Rain's madness both apply to P0's discard. If
+    // P0 applies the Leyline first, the card is already going to exile, and the madness
+    // ability still applies to it; if P0 applies madness first, the Leyline no longer
+    // applies. Either way P0 may cast it for its madness cost.
+    fn answer(d: &Decision, leyline: bool) -> Option<Answer> {
+        match d {
+            Decision::ChooseReplacement { options } => options
+                .iter()
+                .position(|o| o.contains("Leyline") == leyline)
+                .map(Answer::Index),
+            Decision::YesNo { prompt, .. } if prompt.contains("madness cost") => {
+                Some(Answer::Bool(true))
+            }
+            _ => None,
+        }
+    }
+    fn leyline_first(_g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+        answer(d, true)
+    }
+    fn madness_first(_g: &mtg_engine::game::Game, d: &Decision) -> Option<Answer> {
+        answer(d, false)
+    }
+    for leyline in [true, false] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P1, "Leyline of the Void");
+        t.hand(P0, "Biting Rain");
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.lands(P0, "Swamp", 3);
+        respond(
+            &mut t,
+            P0,
+            if leyline {
+                leyline_first
+            } else {
+                madness_first
+            },
+        );
+        let from = t.asked().len();
+        mind_rot(&mut t);
+        let options: Vec<Vec<String>> = t.asked()[from..]
+            .iter()
+            .filter_map(|(p, d)| match d {
+                Decision::ChooseReplacement { options } if *p == P0 => Some(options.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            options.len(),
+            1,
+            "leyline = {leyline}: one choice of the two"
+        );
+        assert_eq!(options[0].len(), 2);
+        t.resolve_all();
+        assert!(
+            !t.on_battlefield(bears),
+            "leyline = {leyline}: cast for madness"
+        );
+        assert!(
+            t.in_exile("Biting Rain"),
+            "the resolved spell is exiled instead"
+        );
     }
 }
 
@@ -387,7 +474,11 @@ fn may_pay_triggers_make_one_token_each() {
         crate::r_p146_common::discard(&mut t, P0, card);
         t.resolve_all();
         assert_eq!(tokens(&t, P0).len(), 1, "{name}");
-        assert_eq!(crate::r_s04_common::untapped_lands(&t, P0), 4, "{name}: paid once");
+        assert_eq!(
+            crate::r_s04_common::untapped_lands(&t, P0),
+            4,
+            "{name}: paid once"
+        );
     }
 }
 
@@ -458,7 +549,7 @@ fn rielle_gets_its_bonus_only_on_the_battlefield() {
 
 #[test]
 fn glint_horn_buccaneer_trigger_is_not_activated() {
-    cr!("603.1", "602.5b", "701.9a");
+    cr!("113.3c", "603.1", "602.5", "701.9a");
     ruling!(
         "Glint-Horn Buccaneer",
         "The middle ability of Glint-Horn Buccaneer is a triggered ability, not an activated ability. It doesn’t allow you to discard a card whenever you want; rather, you need some other way of discarding a card, such as by activating its last ability."
@@ -568,7 +659,7 @@ fn guerrilla_tactics_deals_damage_as_a_card_with_an_ability() {
 
 #[test]
 fn ignorant_bliss_cards_stay_exiled_if_the_delayed_trigger_is_countered() {
-    cr!("603.7", "701.6b", "406.3");
+    cr!("603.7", "701.6a", "406.3");
     ruling!(
         "Ignorant Bliss",
         "If the delayed triggered ability is countered (for example, with Voidslime), the cards remain exiled forever."
@@ -584,13 +675,12 @@ fn ignorant_bliss_cards_stay_exiled_if_the_delayed_trigger_is_countered() {
     t.hand(P0, "Craw Wurm");
     cast_resolve(&mut t, P0, "Ignorant Bliss", &[]);
     assert_eq!(t.hand_size(P0), 0);
-    let gone: Vec<ObjectId> = t
-        .g
-        .exile
-        .iter()
-        .copied()
-        .filter(|id| t.g.obj(*id).owner == P0)
-        .collect();
+    let gone: Vec<ObjectId> =
+        t.g.exile
+            .iter()
+            .copied()
+            .filter(|id| t.g.obj(*id).owner == P0)
+            .collect();
     assert_eq!(gone.len(), 2);
     for id in &gone {
         assert!(t.g.obj(*id).face_down);
@@ -609,7 +699,9 @@ fn ignorant_bliss_cards_stay_exiled_if_the_delayed_trigger_is_countered() {
     t.advance_to(P1, Step::End);
     t.resolve_all();
     t.advance_to(P0, Step::Upkeep);
-    assert!(gone.iter().all(|id| t.g.obj(*id).zone == Zone::Exile && t.g.is_live(*id)));
+    assert!(gone
+        .iter()
+        .all(|id| t.g.obj(*id).zone == Zone::Exile && t.g.is_live(*id)));
 }
 
 #[test]
@@ -796,7 +888,10 @@ fn nullhide_ferox_ability_only_on_the_battlefield_and_once() {
     t.activate(P1, ferox, 0, &[]).unwrap();
     t.resolve_all();
     assert!(t.obj_now(ferox).chars.abilities.is_empty());
-    assert!(!ferox_activatable(&mut t, P1, ferox), "it lost that ability too");
+    assert!(
+        !ferox_activatable(&mut t, P1, ferox),
+        "it lost that ability too"
+    );
     // New abilities afterwards stay.
     cast_resolve(&mut t, P1, "Jump", &[obj(ferox)]);
     assert!(t

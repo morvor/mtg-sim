@@ -494,6 +494,11 @@ fn note_this_way(e: &Effect, out: &mut Vec<(Var, &'static str, Option<CardType>)
             set(out, vars::IT, Some(("returned", ty(what))))
         }
         Effect::Tap { what } => set(out, vars::TAPPED, Some(("tapped", ty(what)))),
+        Effect::CounterSpell { .. } => set(
+            out,
+            crate::kw::value_results::COUNTERED,
+            Some(("countered", None)),
+        ),
         // "If a permanent dealt damage this way would die this turn, ...".
         Effect::DealDamage { .. } => set(out, vars::DAMAGED, Some(("dealt damage", None))),
         Effect::Discard { .. } | Effect::DiscardHand { .. } => set(

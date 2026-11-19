@@ -231,8 +231,11 @@ fn banefire_with_an_illegal_target_doesnt_resolve() {
         "If its target is illegal by the time Banefire tries to resolve, the spell isn’t countered, but it doesn’t resolve. The target won’t be dealt damage."
     );
     supported("Banefire");
+    supported("Multani's Presence");
     for x in [3, 5] {
         let mut t = TestGame::new(2);
+        // "Whenever a spell you've cast is countered, draw a card."
+        t.battlefield(P0, "Multani's Presence");
         let bears = t.battlefield(P1, "Grizzly Bears");
         t.lands(P0, "Mountain", x as usize + 1);
         let bf = t.hand(P0, "Banefire");
@@ -242,8 +245,14 @@ fn banefire_with_an_illegal_target_doesnt_resolve() {
         // new object (CR 400.7).
         cast_resolve(&mut t, P1, "Unsummon", &[obj(bears)]);
         let again = t.battlefield(P1, "Grizzly Bears");
+        let hand = t.hand_size(P0);
         t.resolve_all();
         assert!(t.in_graveyard(P0, "Banefire"), "X = {x}");
+        assert_eq!(
+            t.hand_size(P0),
+            hand,
+            "X = {x}: not countered, so no card drawn"
+        );
         assert_eq!(damage_on(&t, again), 0);
         assert_eq!(t.life(P1), 20);
         assert_eq!(t.life(P0), 20);
@@ -303,6 +312,7 @@ fn glen_elendras_answer_counters_spells_and_both_kinds_of_abilities_already_on_t
     assert_eq!(t.life(P0), 20, "the Bolt was countered");
     assert_eq!(tokens(&t, P1).len(), p1_tokens, "no Warrior token");
     assert!(!is_creature(&t, copter), "not crewed");
+    assert!(t.obj_now(bears).tapped, "the crew cost isn't refunded");
     // Static abilities aren't affected: Glorious Anthem still pumps P1's creatures.
     assert_eq!(t.pt(bears), (3, 3));
     // Later this turn, P1 can still activate abilities and cast spells.
@@ -337,6 +347,9 @@ fn glen_elendras_answer_doesnt_touch_mana_abilities() {
         "Glen Elendra's Answer can't target mana abilities. An activated mana ability is one that could add mana as it resolves, doesn't have a target, and isn't a loyalty ability. A triggered mana ability is one that could add mana as it resolves and triggers based on an activated mana ability."
     );
     supported("Wild Growth");
+    // (The Answer has no target: its "can't target" is the wording of the same ruling on
+    // targeted counters such as Tale's End. It holds trivially, and what it means here,
+    // that mana abilities, which never use the stack, aren't countered, is tested.)
     // P1 taps a Forest enchanted with Wild Growth ("Whenever enchanted land is tapped for
     // mana, its controller adds an additional {G}", a triggered mana ability) while Glen
     // Elendra's Answer is on the stack: neither ability uses the stack, so nothing is
@@ -355,22 +368,65 @@ fn glen_elendras_answer_doesnt_touch_mana_abilities() {
     assert_eq!(t.g.player(P1).mana_pool.total(), 3);
 }
 
+#[test]
+fn spells_countered_this_way_are_counted_wherever_they_go() {
+    cr!("701.6a", "614.1a", "707.10a");
+    // "For each spell and ability countered this way" (Glen Elendra's Answer) and "for
+    // each spell countered this way" (Swift Silence) count every spell the instruction
+    // countered: a copy of a spell (which then ceases to exist, CR 707.10a), and Darksteel
+    // Colossus, which its own replacement effect shuffles into its owner's library
+    // instead of putting it into a graveyard.
+    supported("Darksteel Colossus");
+    supported("Twincast");
+    supported("Swift Silence");
+    let setup = |t: &mut TestGame| {
+        t.set_step(P1, Step::PrecombatMain);
+        cast_new(t, P1, "Darksteel Colossus", &[]);
+        let bolt = cast_new(t, P1, "Lightning Bolt", &[player(P0)]);
+        cast_new(t, P1, "Twincast", &[obj(bolt)]);
+        t.resolve();
+        assert_eq!(t.stack_len(), 3, "the Colossus, the Bolt and its copy");
+    };
+    let mut t = TestGame::new(2);
+    setup(&mut t);
+    let library = t.library_size(P1);
+    cast_new(&mut t, P0, "Glen Elendra's Answer", &[]);
+    t.resolve();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(
+        t.library_size(P1),
+        library + 1,
+        "the Colossus was shuffled in"
+    );
+    assert_eq!(faeries(&t, P0), 3);
+    let mut t = TestGame::new(2);
+    setup(&mut t);
+    let hand = t.hand_size(P0);
+    cast_new(&mut t, P0, "Swift Silence", &[]);
+    t.resolve();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(t.hand_size(P0), hand + 3);
+}
+
 // ---------------------------------------------------------------------------------
 // Gaea's Revenge.
 // ---------------------------------------------------------------------------------
 
 #[test]
 fn gaeas_revenge_abilities_work_in_their_zones() {
-    cr!("101.2", "113.6", "115.4");
+    cr!("101.2", "113.6", "113.6g");
     ruling!(
         "Gaea's Revenge",
         "Gaea's Revenge's first ability works only while it's a spell on the stack. Gaea's Revenge's last ability works only while it's on the battlefield."
     );
     supported("Gaea's Revenge");
     // On the stack: it can't be countered, but its last ability doesn't work yet, so the
-    // blue Unsubstantiate can target the spell and return it to its owner's hand.
+    // blue Dismiss and Unsubstantiate can target the spell: Dismiss doesn't counter it, and
+    // Unsubstantiate returns it to its owner's hand.
     let mut t = TestGame::new(2);
     let gr = cast_new(&mut t, P0, "Gaea's Revenge", &[]);
+    counter_with(&mut t, P1, "Dismiss", gr);
+    assert!(on_stack(&t, gr), "not countered");
     cast_new(&mut t, P1, "Unsubstantiate", &[obj(gr)]);
     t.resolve_all();
     assert!(t.in_hand(P0, "Gaea's Revenge"));
@@ -381,7 +437,7 @@ fn gaeas_revenge_abilities_work_in_their_zones() {
 
 #[test]
 fn gaeas_revenge_stops_your_own_colorless_equip() {
-    cr!("115.4", "702.6a", "105.2c");
+    cr!("115.1e", "702.6a", "105.2c");
     ruling!(
         "Gaea's Revenge",
         "Gaea's Revenge's last ability applies to all nongreen spells and abilities from nongreen sources, including ones you control. For example, you can't target it with the equip ability of an Equipment you control (unless the Equipment is somehow green)."
@@ -394,7 +450,10 @@ fn gaeas_revenge_stops_your_own_colorless_equip() {
     let bone = t.battlefield(P0, "Bonesplitter");
     let targets = ability_targets(&mut t, bone, 0);
     assert!(targets.contains(&obj(bears)));
-    assert!(!targets.contains(&obj(gr)), "a colorless source's equip can't target it");
+    assert!(
+        !targets.contains(&obj(gr)),
+        "a colorless source's equip can't target it"
+    );
     // Your own nongreen spell can't target it either; your green one can.
     assert!(spell_targets(&mut t, P0, "Giant Growth").contains(&obj(gr)));
     assert!(!spell_targets(&mut t, P0, "Shock").contains(&obj(gr)));
@@ -411,13 +470,12 @@ fn gaeas_revenge_stops_your_own_colorless_equip() {
 
 #[test]
 fn gaeas_revenge_can_be_targeted_by_a_spell_that_is_green_and_another_color() {
-    cr!("105.2", "115.4");
+    cr!("105.2", "115.1a");
     ruling!(
         "Gaea's Revenge",
         "If a spell is one or more colors, and one of those colors is green, that spell can target Gaea's Revenge."
     );
     supported("Ground Assault");
-    supported("Abrupt Decay");
     let mut t = TestGame::new(2);
     let gr = t.battlefield(P1, "Gaea's Revenge");
     // Ground Assault ({R}{G}): red and green.
@@ -578,9 +636,7 @@ fn magic_missile_keeps_its_division_when_a_target_becomes_illegal() {
     crate::r_s25_common::lands_for_cost(&mut t, P0, "Magic Missile");
     let mm = t.hand(P0, "Magic Missile");
     t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![1, 1, 1]));
-    t.cast(P0, mm)
-        .targets(&[obj(a), obj(b), player(P1)])
-        .go();
+    t.cast(P0, mm).targets(&[obj(a), obj(b), player(P1)]).go();
     cast_resolve(&mut t, P1, "Unsummon", &[obj(a)]);
     t.resolve_all();
     assert_eq!(damage_on(&t, b), 1, "unchanged");
@@ -611,7 +667,10 @@ fn magic_missile_keeps_its_division_when_a_target_becomes_illegal() {
 #[test]
 fn kavu_chameleon_new_color_replaces_its_colors() {
     cr!("105.3", "613.1e");
-    ruling!("Kavu Chameleon", "The new color replaces all previous colors.");
+    ruling!(
+        "Kavu Chameleon",
+        "The new color replaces all previous colors."
+    );
     let mut t = TestGame::new(2);
     let kavu = t.battlefield(P0, "Kavu Chameleon");
     assert!(t.obj_now(kavu).chars.colors.contains(Color::Green));

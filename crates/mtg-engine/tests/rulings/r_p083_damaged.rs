@@ -26,7 +26,7 @@ fn regenerated_boa(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn a_regenerated_creature_was_still_dealt_damage_this_turn() {
-    cr!("701.19a", "701.19b", "120.3");
+    cr!("701.19a", "120.3");
     ruling!(
         "Witch's Mist",
         "If a creature is lethally damaged and regenerates, all damage is removed from that creature. But since it was actually dealt damage earlier in the turn, it can be targeted by Witch’s Mist."
@@ -69,7 +69,7 @@ fn a_regenerated_creature_was_still_dealt_damage_this_turn() {
 
 #[test]
 fn a_creature_whose_damage_was_all_prevented_wasnt_dealt_damage() {
-    cr!("615.1", "120.3", "609.7");
+    cr!("615.1", "615.7", "120.3");
     ruling!(
         "Witch's Mist",
         "If all damage that would be dealt to a creature is prevented, no damage is actually dealt and that creature can’t be targeted by Witch’s Mist."
@@ -105,8 +105,16 @@ fn final_sting_faerie_must_target_your_own_damaged_creature() {
     t.battlefield(P1, "Grizzly Bears");
     let pinger = t.battlefield(P1, "Prodigal Pyromancer");
     damage(&mut t, pinger, 1, mine);
-    // No answer queued: the only legal target is chosen.
+    // P0 tries to choose no target: the trigger still targets the Wurm (the undamaged
+    // Bears aren't a legal target).
+    t.answer_targets(P0, &[]);
     t.enter(P0, "Final-Sting Faerie");
+    t.settle();
+    let trigger = *t.g.stack.last().unwrap();
+    assert_eq!(
+        crate::r_s25_common::targets_of(&t, trigger),
+        vec![obj(mine)]
+    );
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Craw Wurm"));
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
@@ -183,7 +191,10 @@ fn damage_stays_marked_and_becomes_lethal_when_toughness_drops() {
     damage(&mut t, pinger, 3, tym);
     assert!(t.on_battlefield(tym));
     cast_resolve(&mut t, P1, "Unsummon", &[obj(hawk)]);
-    assert!(t.in_graveyard(P0, "Tymaret, Chosen from Death"), "2 toughness, 3 damage");
+    assert!(
+        t.in_graveyard(P0, "Tymaret, Chosen from Death"),
+        "2 toughness, 3 damage"
+    );
     // Elite Vanguard (a 2/1 Human) is 3/2 with General Kudro; 1 damage, then Kudro leaves.
     let mut t = TestGame::new(2);
     let kudro = t.battlefield(P0, "General Kudro of Drannith");

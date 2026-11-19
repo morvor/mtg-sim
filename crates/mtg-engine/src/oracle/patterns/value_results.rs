@@ -1486,7 +1486,7 @@ fn their_rel(b: &Builder) -> Option<PlayerRel> {
 /// "land cards put into their graveyard this way".
 pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
     use crate::discard_rules::DISCARDED;
-    use crate::kw::value_results::DESTROYED;
+    use crate::kw::value_results::{COUNTERED, DESTROYED};
     let i = r.find(" this way")?;
     let rest = &r[i + " this way".len()..];
     if !word_end(rest) {
@@ -1537,7 +1537,9 @@ pub fn this_way_sel(r: &str, b: &Builder) -> Option<(Sel, String)> {
         (" returned to their owner's hand", vars::IT, None),
         (" returned to their owners' hands", vars::IT, None),
         (" returned", vars::IT, None),
-        (" countered", vars::IT, None),
+        // "each spell countered this way" (Swift Silence): the spells as they were on the
+        // stack, wherever they went.
+        (" countered", COUNTERED, None),
         (" tapped", vars::TAPPED, None),
         (" drawn", vars::REVEALED, None),
         (" revealed", vars::REVEALED, None),

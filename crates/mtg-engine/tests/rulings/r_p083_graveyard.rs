@@ -23,12 +23,14 @@ fn named_in(t: &TestGame, zone: Zone, name: &str) -> usize {
         Zone::Library(p) => t.g.player(p).library.clone(),
         _ => vec![],
     };
-    ids.iter().filter(|id| t.g.obj(**id).chars.name == name).count()
+    ids.iter()
+        .filter(|id| t.g.obj(**id).chars.name == name)
+        .count()
 }
 
 #[test]
 fn eradicate_on_a_face_down_creature_finds_no_name() {
-    cr!("708.2", "201.2b", "701.23a");
+    cr!("708.2", "201.2a", "701.23a");
     ruling!(
         "Eradicate",
         "A face-down creature has no name, so no card can possibly share a name with it (not even other cards with no name). If you Eradicate a face-down creature you will still search its controller’s library, but you won’t be able to exile any cards from that library."
@@ -42,7 +44,11 @@ fn eradicate_on_a_face_down_creature_finds_no_name() {
     let lib = t.library_size(P1);
     cast_resolve(&mut t, P0, "Eradicate", &[obj(fd)]);
     assert!(!t.on_battlefield(fd));
-    assert_eq!(named_in(&t, Zone::Exile, "Grizzly Bears"), 1, "only the creature");
+    assert_eq!(
+        named_in(&t, Zone::Exile, "Grizzly Bears"),
+        1,
+        "only the creature"
+    );
     assert_eq!(named_in(&t, Zone::Hand(P1), "Grizzly Bears"), 1);
     assert_eq!(named_in(&t, Zone::Graveyard(P1), "Grizzly Bears"), 1);
     assert_eq!(t.library_size(P1), lib, "nothing exiled from the library");
@@ -132,7 +138,7 @@ fn mnemonic_deluge_casts_sorcery_copies_while_resolving() {
 
 #[test]
 fn lochmere_serpent_after_blockers_stays_blocked() {
-    cr!("509.1h", "506.4");
+    cr!("509.1h");
     ruling!(
         "Lochmere Serpent",
         "Activating Lochmere Serpent's first activated ability after it has become blocked won't cause it to become unblocked."
@@ -324,7 +330,10 @@ fn armored_scrapgorger_triggers_however_it_becomes_tapped() {
     t.lands(P1, "Island", 1);
     t.lands(P1, "Wastes", 1);
     let fi = t.hand(P1, "Fire // Ice");
-    t.cast(P1, fi).method(CastMethod::Half(1)).targets(&[obj(sg)]).go();
+    t.cast(P1, fi)
+        .method(CastMethod::Half(1))
+        .targets(&[obj(sg)])
+        .go();
     t.resolve_all();
     assert!(t.obj_now(sg).tapped);
     assert_eq!(t.counters(sg, "oil"), 1);
@@ -357,7 +366,9 @@ fn extirpate_cant_stop_a_flashback_spell_being_cast() {
     t.answer_targets(P0, &[player(P1)]);
     let spell = t
         .cast(P0, mj)
-        .method(CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Flashback))
+        .method(CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Flashback,
+        ))
         .go();
     assert!(!seen.lock().unwrap().is_empty());
     assert!(seen.lock().unwrap().iter().all(|x| *x));

@@ -37,7 +37,10 @@ fn dense_canopy_reach_blocks_anything() {
     assert!(legal_blocks(&mut t, P0, &[(spider, bears)]));
     assert!(legal_blocks(&mut t, P0, &[(spider, drake)]));
     assert!(legal_blocks(&mut t, P0, &[(angel, drake)]));
-    assert!(!legal_blocks(&mut t, P0, &[(angel, bears)]), "flying blocks only flying");
+    assert!(
+        !legal_blocks(&mut t, P0, &[(angel, bears)]),
+        "flying blocks only flying"
+    );
 }
 
 #[test]
@@ -63,10 +66,16 @@ fn bower_passage_reach_still_blocks_and_late_flying_doesnt_matter() {
     assert!(legal_blocks(&mut t, P0, &[(spider, attacker)]));
     assert!(!legal_blocks(&mut t, P0, &[(angel, attacker)]));
     // The Bears block, then gain flying from Jump: they stay blocking and deal damage.
-    t.answer(P0, DecisionKind::Blockers, Answer::Blockers(vec![(bears, attacker)]));
+    t.answer(
+        P0,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(bears, attacker)]),
+    );
     t.advance_to(P1, Step::DeclareBlockers);
     cast_resolve(&mut t, P0, "Jump", &[obj(bears)]);
-    assert!(t.obj_now(bears).has_keyword(mtg_engine::keywords::KeywordKind::Flying));
+    assert!(t
+        .obj_now(bears)
+        .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
     assert_eq!(blocks_now(&t), vec![(bears, attacker)]);
     t.advance_to(P1, Step::EndOfCombat);
     assert_eq!(damage_on(&t, attacker), 2);
@@ -75,7 +84,7 @@ fn bower_passage_reach_still_blocks_and_late_flying_doesnt_matter() {
 
 #[test]
 fn dizzying_gaze_only_on_your_own_creature() {
-    cr!("303.4a", "303.4d", "704.5m", "115.1");
+    cr!("303.4a", "303.4c", "704.5m", "115.1");
     ruling!(
         "Dizzying Gaze",
         "Dizzying Gaze can’t be cast targeting an opponent’s creature. And this card is put into the graveyard if ever on a creature you do not control."
@@ -196,7 +205,7 @@ fn pistus_strike_and_aerial_predation_need_their_target() {
 
 #[test]
 fn pistus_strike_poisons_even_if_the_creature_survives() {
-    cr!("608.2c", "701.19c", "702.12b");
+    cr!("608.2c", "701.19a", "702.12b");
     ruling!(
         "Pistus Strike",
         "If the creature with flying regenerates or has indestructible, its controller will still get a poison counter."
@@ -208,7 +217,7 @@ fn pistus_strike_poisons_even_if_the_creature_survives() {
     cast_resolve(&mut t, P0, "Pistus Strike", &[obj(gargoyle)]);
     assert!(t.on_battlefield(gargoyle));
     assert_eq!(t.g.player(P1).poison(), 1);
-    // Regenerated: a regeneration shield from Mossbridge... (Regenerate via an effect).
+    // Regenerated: Mending Touch ("Regenerate target creature.") gave it a shield.
     supported("Mending Touch");
     let mut t = TestGame::new(2);
     let drake = t.battlefield(P1, "Wind Drake");
@@ -229,6 +238,8 @@ fn enters_trigger_targeting_a_flyer_is_mandatory() {
     let mut t = TestGame::new(2);
     let angel = t.battlefield(P0, "Serra Angel");
     t.battlefield(P1, "Grizzly Bears");
+    // P0 tries to choose no target: the trigger still targets P0's own Angel.
+    t.answer_targets(P0, &[]);
     t.enter(P0, "Deadshot Minotaur");
     t.resolve_all();
     assert_eq!(damage_on(&t, angel), 3);

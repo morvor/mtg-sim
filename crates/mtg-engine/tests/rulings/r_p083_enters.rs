@@ -37,7 +37,10 @@ fn torpor_orb_doesnt_stop_as_enters_choices_or_enters_with_counters() {
     t.enter(P0, "Painter's Servant");
     t.settle();
     t.g.recompute();
-    assert!(t.obj_now(bolt).chars.colors.contains(Color::Green), "the color was chosen");
+    assert!(
+        t.obj_now(bolt).chars.colors.contains(Color::Green),
+        "the color was chosen"
+    );
     // Mistcutter Hydra with X = 2 enters with two +1/+1 counters.
     t.lands(P0, "Forest", 3);
     let c = t.hand(P0, "Mistcutter Hydra");
@@ -71,7 +74,11 @@ fn torpor_orb_entering_with_a_creature() {
         t.resolve_all();
         assert_eq!(t.named_on_battlefield("Solemn Simulacrum").len(), 1);
         assert_eq!(t.named_on_battlefield("Torpor Orb").len(), usize::from(orb));
-        assert_eq!(lands(&t), before + usize::from(!orb), "orb = {orb}: the search");
+        assert_eq!(
+            lands(&t),
+            before + usize::from(!orb),
+            "orb = {orb}: the search"
+        );
     }
 }
 
@@ -100,7 +107,11 @@ fn torpor_orb_looks_at_the_permanent_as_it_enters() {
         let hand = t.hand_size(P0);
         t.enter(P0, "Ichor Wellspring");
         t.resolve_all();
-        assert_eq!(t.hand_size(P0), hand + usize::from(!march), "march = {march}");
+        assert_eq!(
+            t.hand_size(P0),
+            hand + usize::from(!march),
+            "march = {march}"
+        );
     }
     // Captain Storm: an artifact creature entering doesn't trigger it; a noncreature
     // artifact does.
@@ -193,7 +204,7 @@ fn mistcaller_ignores_tokens_permanents_and_cast_creatures() {
 
 #[test]
 fn muck_drubb_cant_target_a_spell_with_several_targets() {
-    cr!("115.7", "115.9a", "115.10");
+    cr!("115.9c", "603.3d");
     ruling!(
         "Muck Drubb",
         "If a spell has multiple targets, you can't target it with Muck Drubb's ability, even if only one of those targets is a creature or all but one of those targets have become illegal."
@@ -237,7 +248,7 @@ fn muck_drubb_cant_target_a_spell_with_several_targets() {
 
 #[test]
 fn muck_drubb_changes_the_target_only_to_a_legal_one() {
-    cr!("115.7", "115.7d", "608.2b");
+    cr!("115.7", "115.7a");
     ruling!(
         "Muck Drubb",
         "The spell's target is changed to Muck Drubb only if Muck Drubb is a legal target for that spell."
@@ -260,7 +271,10 @@ fn muck_drubb_changes_the_target_only_to_a_legal_one() {
     t.resolve_all();
     assert!(t.on_battlefield(bears));
     assert_eq!(damage_on(&t, bears), 0);
-    assert!(t.in_graveyard(P0, "Muck Drubb"), "3 damage to the 3/3 Drubb");
+    assert!(
+        t.in_graveyard(P0, "Muck Drubb"),
+        "3 damage to the 3/3 Drubb"
+    );
 }
 
 // ---------------------------------------------------------------------------------
@@ -269,7 +283,7 @@ fn muck_drubb_changes_the_target_only_to_a_legal_one() {
 
 #[test]
 fn an_aura_cant_be_moved_onto_azorius_first_wing() {
-    cr!("701.3b", "702.16c");
+    cr!("701.3b", "303.4j", "702.16c");
     ruling!(
         "Azorius First-Wing",
         "If an effect tries to move an Aura onto this creature, the effect will fail and the Aura will stay where it was."
@@ -295,7 +309,7 @@ fn an_aura_cant_be_moved_onto_azorius_first_wing() {
 
 #[test]
 fn aura_barbs_damage_is_dealt_by_the_enchantments() {
-    cr!("120.3", "702.16e", "608.2h");
+    cr!("120.3", "702.16e");
     ruling!(
         "Aura Barbs",
         "The damage is dealt by the enchantments, not by Aura Barbs."
@@ -322,7 +336,10 @@ fn distraction(t: &mut TestGame, a: ObjectId, b: ObjectId) {
     crate::r_s25_common::lands_for_cost(t, P0, "Fulgent Distraction");
     let c = t.hand(P0, "Fulgent Distraction");
     let spell = t.cast(P0, c).targets(&[obj(a), obj(b)]).go();
-    assert_eq!(crate::r_s25_common::targets_of(t, spell), vec![obj(a), obj(b)]);
+    assert_eq!(
+        crate::r_s25_common::targets_of(t, spell),
+        vec![obj(a), obj(b)]
+    );
 }
 
 #[test]
@@ -458,6 +475,9 @@ fn tamiyo_stops_sacrifices_not_game_rules() {
     t.battlefield(P0, "Tymaret, Chosen from Death");
     t.battlefield(P0, "Tymaret, Chosen from Death");
     t.settle();
-    assert_eq!(t.named_on_battlefield("Tymaret, Chosen from Death").len(), 1);
+    assert_eq!(
+        t.named_on_battlefield("Tymaret, Chosen from Death").len(),
+        1
+    );
     assert!(t.in_graveyard(P0, "Tymaret, Chosen from Death"));
 }
