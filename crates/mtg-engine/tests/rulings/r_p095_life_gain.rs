@@ -417,6 +417,17 @@ fn cat_collector_triggers_only_for_the_first_life_gain_each_turn() {
     gain(&mut t, P0, 1);
     t.resolve_all();
     assert_eq!(with_subtype(&t, P0, "Cat").len(), 1);
+    // Not on P1's turn; again on P0's next turn, once.
+    t.advance_to(P1, Step::PrecombatMain);
+    gain(&mut t, P0, 2);
+    t.resolve_all();
+    assert_eq!(with_subtype(&t, P0, "Cat").len(), 1);
+    t.advance_to(P0, Step::PrecombatMain);
+    gain(&mut t, P0, 2);
+    t.resolve_all();
+    gain(&mut t, P0, 2);
+    t.resolve_all();
+    assert_eq!(with_subtype(&t, P0, "Cat").len(), 2);
 }
 
 // ---------------------------------------------------------------------------------------

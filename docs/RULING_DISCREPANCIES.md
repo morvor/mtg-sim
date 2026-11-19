@@ -716,12 +716,14 @@ decides whether they become a conflict case.
   enchantment, land, and planeswalker. Things like “legendary” or “snow” are supertypes, not
   types." (2021-04-16) beside CR 110.4: "There are six permanent types: artifact, battle,
   creature, enchantment, land, and planeswalker. ..." Written before battles existed (March
-  of the Machine, 2023; the CR texts of that change weren't read in this review), like the
-  Emeria Shepherd group above; a later ruling of the same template names battle: Korvold,
-  Gleeful Glutton's "The permanent types are artifact, battle, creature, enchantment, land,
-  and planeswalker. ..." (2023-09-01). Possibly outdated in its list. The same list without
-  battle is in Creeping Renaissance's (2011-09-22), Role Reversal's (2019-05-03) and
-  Liliana, Dreadhorde General's (2024-01-12) rulings, cited by earlier batches. The ruling
+  of the Machine, 2023; the archived CR texts of that change weren't reachable from the
+  P095 sessions), like the Emeria Shepherd group above; a later ruling of the same template
+  names battle: Korvold, Gleeful Glutton's "The permanent types are artifact, battle,
+  creature, enchantment, land, and planeswalker. ..." (2023-09-01). Possibly outdated in its
+  list. The same list without battle is in Creeping Renaissance's (2011-09-22), Role
+  Reversal's (2019-05-03) and Liliana, Dreadhorde General's (2024-01-12, after battles and
+  Korvold's ruling, so the list wasn't updated everywhere) rulings, cited by earlier
+  batches. The ruling
   stays cited (`tests/rulings/r_p095_abilities.rs`,
   `revival_experiment_one_card_per_permanent_type`); the engine follows CR 110.4 (in that
   test a battle card, Invasion of Eldraine, is returned too, the sixth type).
