@@ -97,9 +97,10 @@ pub fn copy_with(t: &mut TestGame, card: &str, what: ObjectId) -> Vec<ObjectId> 
         | "Cursed Mirror"
         | "Pirated Copy"
         | "Auton Soldier" => {
-            // Cursed Mirror asks "may" first.
+            // Some ask "you may" first; answers left unused are dropped.
             t.answer_yes(P0, true);
             let c = enter_copying(t, P0, card, what);
+            t.clear_answers();
             t.resolve_all();
             vec![t.g.current(c)]
         }
@@ -287,7 +288,7 @@ pub fn giant() -> Printed {
     }
 }
 
-/// Myr Enforcer: a colorless 7/7 Myr artifact creature.
+/// Myr Enforcer: a colorless 4/4 Myr artifact creature.
 pub fn enforcer() -> Printed {
     Printed {
         name: "Myr Enforcer",
