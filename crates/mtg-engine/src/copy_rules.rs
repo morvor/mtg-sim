@@ -539,7 +539,10 @@ pub fn copy_cards(
             }
             // "Copy that card" (God-Eternal Kefnet): the card the trigger names, as it
             // last existed if it has since left that zone (CR 608.2h); the copy is still
-            // created where the card was.
+            // created where the card was (interpretation
+            // `copy-of-a-card-that-left-is-made-where-it-was`). Cards described by where
+            // they are ("the exiled card", cards exiled with ~) aren't copied once they've
+            // left it (CR 607.2a; Isochron Scepter's ruling).
             let trigger_card = matches!(what, Sel::TriggerObject);
             // CR 707.12: created in the zone the object is in.
             for o in g.resolve_objects(what, ctx) {

@@ -71,7 +71,7 @@ fn zada_triggers_only_for_a_spell_targeting_only_zada() {
 }
 
 fn ulalek_must_be_on_the_battlefield_to_trigger() {
-    cr!("603.2", "603.6a");
+    cr!("603.2", "113.6");
     ruling!(
         "Ulalek, Fused Atrocity",
         "Ulalek must be on the battlefield in order for its triggered ability to trigger. Casting Ulalek itself won't cause that ability to trigger."

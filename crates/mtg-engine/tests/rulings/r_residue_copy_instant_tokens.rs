@@ -10,7 +10,7 @@
 use crate::r_p030_common::{kill, tokens_named};
 use crate::r_s01_common::{attack_with, supported};
 use crate::r_s06_common::{activate_containing, attach_new};
-use crate::r_s25_common::cast_new;
+use crate::r_s25_common::{cast_new, lands_for_cost};
 use crate::r_s26_common::{dress_up, fresh};
 use mtg_engine::events::Event;
 use mtg_engine::testing::*;
@@ -102,13 +102,18 @@ fn tokens_entering_attacking_weren_t_declared_and_don_t_trigger_attack_abilities
 
 #[test]
 fn shredder_s_tokens_after_shredder_left() {
-    cr!("707.2", "608.2h");
+    cr!("707.2", "608.2h", "113.7a");
+    interp!("ruling-contradicting-oracle-gives-way");
     ruling!(
         "Shredder, Shadow Master",
         "If Shredder leaves the battlefield before his last ability resolves, the tokens will still enter as a copy of Shredder, using Shredder's copiable values from when he was last on the battlefield."
     );
-    // (The ability that makes the tokens.) Shredder is a copy of a Hill Giant (Cytoshape)
-    // and then dies before it resolves: the token is a Hill Giant attacking P2.
+    // The ruling calls the ability that makes the tokens "his last ability"; by the Oracle
+    // text it's his first ("Whenever Shredder attacks a player, for each other opponent,
+    // create a token that's a copy of Shredder ..."; that part of the ruling is exempt,
+    // docs/rulings-exemptions/rulings-P030.tsv, docs/RULING_DISCREPANCIES.md). Shredder
+    // (or Shredder made a copy of a Hill Giant by Cytoshape) dies before that ability
+    // resolves: the token is a copy of him as he last existed, attacking P2.
     for cytoshaped in [false, true] {
         let mut t = TestGame::new(3);
         t.set_step(P0, Step::BeginningOfCombat);
@@ -135,6 +140,24 @@ fn shredder_s_tokens_after_shredder_left() {
             Some(pl(P2))
         );
     }
+    // His last ability ("Whenever Shredder deals combat damage to a player, that player
+    // loses half their life, rounded up.") makes no tokens: in a two-player game (no other
+    // opponent, so his first ability makes none either) he deals 5 combat damage to P1 and
+    // dies before that ability resolves. P1 loses half of 15, rounded up, and no token is
+    // created.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::BeginningOfCombat);
+    let sh = t.battlefield(P0, "Shredder, Shadow Master");
+    attack_with(&mut t, &[(sh, pl(P1))]);
+    t.resolve_all();
+    t.advance_to(P0, Step::CombatDamage);
+    t.settle();
+    assert_eq!(t.life(P1), 15);
+    assert_eq!(t.stack_len(), 1);
+    kill(&mut t, sh);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 7);
+    assert!(tokens_named(&t, P0, "Shredder, Shadow Master").is_empty());
 }
 
 #[test]
@@ -148,17 +171,27 @@ fn shredder_s_tokens_copy_only_copiable_values() {
     let mut t = TestGame::new(3);
     t.set_step(P0, Step::BeginningOfCombat);
     let sh = t.battlefield(P0, "Shredder, Shadow Master");
-    // Rancor (+2/+0 and trample), two +1/+1 counters, +3/+3 and green-blue.
+    // Rancor (+2/+0 and trample), two +1/+1 counters, +3/+3, green-blue, and an artifact
+    // in addition to its other types.
     attach_new(&mut t, P0, "Rancor", obj(sh));
     dress_up(&mut t, sh);
+    crate::r_s26_common::modify_until_eot(
+        &mut t,
+        sh,
+        vec![mtg_engine::ability::Modification::AddTypes(vec![
+            CardType::Artifact,
+        ])],
+    );
     t.g.untap(sh);
     t.g.recompute();
     assert_eq!(t.pt(sh), (12, 10));
+    assert!(t.obj_now(sh).is(CardType::Artifact));
     attack_with(&mut t, &[(sh, pl(P1))]);
     t.resolve_all();
     let tok = one_token(&t, P0, "Shredder, Shadow Master");
     assert_eq!(t.pt(tok), (5, 5));
     assert_eq!(t.obj_now(tok).chars.colors, ColorSet::single(Color::Black));
+    assert!(!t.obj_now(tok).is(CardType::Artifact));
     assert!(t.obj_now(tok).counters.values().all(|n| *n == 0));
     assert!(t.g.attachments_of(obj(tok)).is_empty());
     // Not legendary (the exception), and tapped only because it enters tapped and
@@ -168,20 +201,24 @@ fn shredder_s_tokens_copy_only_copiable_values() {
 }
 
 #[test]
-fn a_myriad_token_s_enters_abilities_trigger() {
-    cr!("702.116a", "707.9a", "603.6a");
+fn a_myriad_token_s_enters_abilities_work() {
+    cr!("702.116a", "707.9a", "603.6a", "614.1c", "702.63a");
     ruling!(
         "Scurry of Squirrels",
         "Any \"enters\" abilities of the copied creature will trigger when the tokens enter. Any \"as [this permanent] enters\" or \"[this permanent] enters with\" abilities of the copied creature will also work."
     );
     supported("Scurry of Squirrels");
     supported("Callidus Assassin");
-    // Callidus Assassin enters as a copy of Scurry of Squirrels, except it has "When this
-    // creature enters, destroy up to one other target creature with the same name as this
-    // creature." (a copiable value, CR 707.9a). It attacks P1: its myriad tokens (for P2)
-    // are copies of it with that ability, which triggers as each enters and destroys the
-    // original Scurry of Squirrels. (Scurry of Squirrels itself has no "as enters" or
-    // "enters with" ability for its tokens to have.)
+    supported("Flesh Duplicate");
+    // Scurry of Squirrels' printed abilities have no "enters" ability of any kind; its
+    // myriad tokens copy a creature that has its myriad, so the copied creature is a copy
+    // of Scurry of Squirrels whose copy effect gave it one (CR 707.9a).
+    //
+    // An "enters" triggered ability: Callidus Assassin enters as a copy of Scurry of
+    // Squirrels, except it has "When this creature enters, destroy up to one other target
+    // creature with the same name as this creature.". It attacks P1: its myriad tokens
+    // (for P2) are copies of it with that ability, which triggers as each enters and
+    // destroys the original Scurry of Squirrels.
     let mut t = TestGame::new(3);
     t.set_step(P0, Step::PrecombatMain);
     let scurry = t.battlefield(P0, "Scurry of Squirrels");
@@ -214,11 +251,40 @@ fn a_myriad_token_s_enters_abilities_trigger() {
         !t.on_battlefield(scurry),
         "a token's enters ability destroyed it"
     );
+    // An "enters with" ability: Flesh Duplicate enters as a copy of Scurry of Squirrels,
+    // except it has vanishing 3 ("This permanent enters with three time counters on it.",
+    // CR 702.63a). It enters with three time counters, and so does each of its myriad
+    // tokens (two for P2: myriad twice).
+    let mut t = TestGame::new(3);
+    t.set_step(P0, Step::PrecombatMain);
+    let scurry = t.battlefield(P0, "Scurry of Squirrels");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[obj(scurry)]);
+    let fd = t.enter(P0, "Flesh Duplicate");
+    t.resolve_all();
+    assert_eq!(t.obj_now(fd).chars.name, "Scurry of Squirrels");
+    assert_eq!(t.counters(fd, "time"), 3);
+    let fd = t.g.current(fd);
+    t.g.objects[fd.0 as usize].summoning_sick = false;
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    attack_with(&mut t, &[(fd, pl(P1))]);
+    t.resolve_all();
+    let toks = tokens_named(&t, P0, "Scurry of Squirrels");
+    assert_eq!(toks.len(), 2, "{}", t.dump_log());
+    for tok in toks {
+        assert_eq!(t.counters(tok, "time"), 3);
+        assert_eq!(
+            t.g.combat.as_ref().unwrap().attack_target(tok),
+            Some(pl(P2))
+        );
+    }
 }
 
 #[test]
 fn battle_angels_of_tyr_checks_each_condition_on_resolution() {
-    cr!("608.2c", "603.4");
+    cr!("608.2c", "608.2h");
     ruling!(
         "Battle Angels of Tyr",
         "Each condition is checked as the triggered ability resolves, not when it is placed on the stack."
@@ -288,30 +354,58 @@ fn ran_and_shaw_s_token_copies_only_printed_values_but_isn_t_legendary() {
     );
     supported("Ran and Shaw");
     supported("Rancor");
-    let mut t = TestGame::new(2);
-    for _ in 0..3 {
-        t.graveyard(P0, "Shivan Dragon");
+    supported("Bonesplitter");
+    supported("Mirrorweave");
+    /// P0 casts Ran and Shaw with three Dragon cards in the graveyard; their enters
+    /// ability waits on the stack.
+    fn cast_ran_and_shaw(t: &mut TestGame) -> ObjectId {
+        for _ in 0..3 {
+            t.graveyard(P0, "Shivan Dragon");
+        }
+        let rs = cast_new(t, P0, "Ran and Shaw", &[]);
+        t.resolve();
+        let rs = t.g.current(rs);
+        assert!(t.on_battlefield(rs));
+        assert_eq!(t.stack_len(), 1);
+        rs
     }
-    let rs = cast_new(&mut t, P0, "Ran and Shaw", &[]);
-    t.resolve();
-    let rs = t.g.current(rs);
-    assert!(t.on_battlefield(rs));
-    assert_eq!(t.stack_len(), 1);
-    // Before the ability resolves: Rancor, counters, +3/+3, green-blue, tapped.
+    // Before the ability resolves: Rancor (an Aura) and Bonesplitter (an Equipment)
+    // attached, two +1/+1 counters, +3/+3, green-blue, an artifact, tapped. The token is a
+    // fresh red 4/4 Dragon, not an artifact, and not legendary.
+    let mut t = TestGame::new(2);
+    let rs = cast_ran_and_shaw(&mut t);
     attach_new(&mut t, P0, "Rancor", obj(rs));
+    attach_new(&mut t, P0, "Bonesplitter", obj(rs));
     dress_up(&mut t, rs);
+    crate::r_s26_common::modify_until_eot(
+        &mut t,
+        rs,
+        vec![mtg_engine::ability::Modification::AddTypes(vec![
+            CardType::Artifact,
+        ])],
+    );
+    assert_eq!(t.pt(rs), (13, 9));
     t.resolve_all();
     let tok = one_token(&t, P0, "Ran and Shaw");
     assert_eq!(t.pt(tok), (4, 4));
     assert!(fresh(&t, tok));
     assert_eq!(t.obj_now(tok).chars.colors, ColorSet::single(Color::Red));
+    assert!(!t.obj_now(tok).is(CardType::Artifact));
     assert!(!t.obj_now(tok).chars.is_legendary());
     assert!(t.obj_now(rs).chars.is_legendary());
-    // A copy effect on it is copied: Ran and Shaw is a Hill Giant (Cytoshape needs a
-    // nonlegendary target, so the token itself, a nonlegendary Ran and Shaw, is used).
+    // Modified by a copy effect: Mirrorweave ("Each other creature becomes a copy of
+    // target nonlegendary creature until end of turn.") at P1's Hill Giant before the
+    // ability resolves makes Ran and Shaw a Hill Giant; the token is a Hill Giant too.
+    let mut t = TestGame::new(2);
     let giant = t.battlefield(P1, "Hill Giant");
-    cytoshape(&mut t, tok, giant);
-    assert_eq!(t.obj_now(tok).chars.name, "Hill Giant");
+    let rs = cast_ran_and_shaw(&mut t);
+    cast_new(&mut t, P0, "Mirrorweave", &[obj(giant)]);
+    t.resolve();
+    assert_eq!(t.obj_now(rs).chars.name, "Hill Giant");
+    t.resolve_all();
+    let tok = one_token(&t, P0, "Hill Giant");
+    assert_eq!(t.pt(tok), (3, 3));
+    assert!(!t.obj_now(tok).chars.is_legendary());
 }
 
 #[test]
@@ -362,19 +456,39 @@ fn phoenix_fleet_airship_s_token_after_it_left() {
         "If Phoenix Fleet Airship leaves the battlefield before its triggered ability resolves, the token will still enter as a copy of Phoenix Fleet Airship, using its copiable values from when it was last on the battlefield."
     );
     supported("Phoenix Fleet Airship");
-    let mut t = TestGame::new(2);
-    t.set_step(P0, Step::PrecombatMain);
-    let ship = t.battlefield(P0, "Phoenix Fleet Airship");
-    let food = t.battlefield(P0, "Ornithopter");
-    t.g.sacrifice(food, P0);
-    t.g.flush_events();
-    t.settle();
-    t.advance_to(P0, Step::End);
-    t.settle();
-    assert_eq!(t.stack_len(), 1);
-    kill(&mut t, ship);
-    t.resolve_all();
-    one_token(&t, P0, "Phoenix Fleet Airship");
+    supported("Masterful Replication");
+    // The Airship (or the Airship made a copy of an Ornithopter by Masterful
+    // Replication's "Choose target artifact you control. Each other artifact you control
+    // becomes a copy of that artifact until end of turn.") leaves before its end step
+    // ability resolves: the token is a copy of it as it last was.
+    for copied in [false, true] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let ship = t.battlefield(P0, "Phoenix Fleet Airship");
+        let food = t.battlefield(P0, "Ornithopter");
+        let model = t.battlefield(P0, "Ornithopter");
+        t.g.sacrifice(food, P0);
+        t.g.flush_events();
+        t.settle();
+        t.advance_to(P0, Step::End);
+        t.settle();
+        assert_eq!(t.stack_len(), 1);
+        if copied {
+            lands_for_cost(&mut t, P0, "Masterful Replication");
+            let card = t.hand(P0, "Masterful Replication");
+            t.cast(P0, card).modes(&[1]).target(model).go();
+            t.resolve();
+            assert_eq!(t.obj_now(ship).chars.name, "Ornithopter");
+        }
+        kill(&mut t, ship);
+        t.resolve_all();
+        let name = if copied {
+            "Ornithopter"
+        } else {
+            "Phoenix Fleet Airship"
+        };
+        one_token(&t, P0, name);
+    }
 }
 
 #[test]
@@ -386,25 +500,41 @@ fn scouring_swarm_s_token_after_it_left() {
     );
     supported("Scouring Swarm");
     supported("Zuran Orb");
-    // Six lands in the graveyard; Zuran Orb ("Sacrifice a land: You gain 2 life.")
-    // sacrifices a seventh. The Swarm dies in response.
-    let mut t = TestGame::new(2);
-    t.set_step(P0, Step::PrecombatMain);
-    let swarm = t.battlefield(P0, "Scouring Swarm");
-    let orb = t.battlefield(P0, "Zuran Orb");
-    for _ in 0..6 {
+    // Five lands in the graveyard; Zuran Orb ("Sacrifice a land: You gain 2 life.")
+    // sacrifices a sixth, and the Swarm's ability triggers. In response a seventh land card
+    // is put into the graveyard (the count is taken as the ability resolves), and the Swarm
+    // (or the Swarm made a copy of a Hill Giant by Cytoshape) dies: the token is a tapped
+    // copy of it as it last was.
+    for cytoshaped in [false, true] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let swarm = t.battlefield(P0, "Scouring Swarm");
+        let orb = t.battlefield(P0, "Zuran Orb");
+        let giant = t.battlefield(P1, "Hill Giant");
+        for _ in 0..5 {
+            t.graveyard(P0, "Forest");
+        }
+        let land = t.battlefield(P0, "Forest");
+        t.answer_choose(P0, &[obj(land)]);
+        activate_containing(&mut t, P0, orb, "Sacrifice a land").unwrap();
+        t.settle();
+        assert_eq!(t.stack_len(), 2);
+        assert_eq!(t.graveyard_size(P0), 6);
         t.graveyard(P0, "Forest");
+        if cytoshaped {
+            cytoshape(&mut t, swarm, giant);
+        }
+        kill(&mut t, swarm);
+        t.resolve_all();
+        let (name, pt) = if cytoshaped {
+            ("Hill Giant", (3, 3))
+        } else {
+            ("Scouring Swarm", (1, 1))
+        };
+        let tok = one_token(&t, P0, name);
+        assert!(t.obj_now(tok).tapped);
+        assert_eq!(t.pt(tok), pt);
     }
-    let land = t.battlefield(P0, "Forest");
-    t.answer_choose(P0, &[obj(land)]);
-    activate_containing(&mut t, P0, orb, "Sacrifice a land").unwrap();
-    t.settle();
-    assert_eq!(t.stack_len(), 2);
-    kill(&mut t, swarm);
-    t.resolve_all();
-    let tok = one_token(&t, P0, "Scouring Swarm");
-    assert!(t.obj_now(tok).tapped);
-    assert_eq!(t.pt(tok), (1, 1));
 }
 
 // --- Jace, Mirror Mage -----------------------------------------------------------------------
@@ -492,19 +622,25 @@ fn a_copy_of_magar_s_face_down_creature_doesn_t_know_the_noted_name() {
         texts.iter().any(|x| x.contains("exile it instead")),
         "{texts:?}"
     );
-    // It hits P1: no copy of any card is created (P1 takes only the 3 combat damage).
+    // It and the face-down creature hit P1: the face-down creature's ability creates a
+    // copy of Lightning Bolt, cast at P1 (CR 707.14); the Clone's creates no copy of any
+    // card. (The answers would let it cast a second Bolt at P1.) P1 takes 3 + 3 combat
+    // damage and 3 from the one Bolt.
     let clone = t.g.current(clone);
-    t.g.untap(clone);
-    t.g.objects[clone.0 as usize].summoning_sick = false;
-    for _ in 0..3 {
+    for c in [clone, fd] {
+        t.g.untap(c);
+        t.g.objects[c.0 as usize].summoning_sick = false;
+    }
+    for _ in 0..4 {
         t.answer_yes(P0, true);
     }
     t.answer_targets(P0, &[pl(P1)]);
-    attack_with(&mut t, &[(clone, pl(P1))]);
+    t.answer_targets(P0, &[pl(P1)]);
+    attack_with(&mut t, &[(clone, pl(P1)), (fd, pl(P1))]);
     t.resolve_all();
     t.advance_to(P0, Step::EndOfCombat);
     t.resolve_all();
-    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P1), 11);
     assert!(t.g.stack.is_empty());
 }
 
@@ -546,6 +682,15 @@ fn magar_s_face_down_card_is_revealed_as_it_leaves() {
         revealed(&t, from, fd),
         "revealed as its controller left the game"
     );
+    // The game ends (P1 loses a two-player game).
+    let mut t = TestGame::new(2);
+    let fd = magar_face_down(&mut t);
+    let from = t.g.turn_events.len();
+    assert!(!revealed(&t, from, fd));
+    t.g.lose_game(P1);
+    t.g.flush_events();
+    assert!(t.g.result.is_some());
+    assert!(revealed(&t, from, fd), "revealed as the game ended");
 }
 
 // --- Invasion of Arcavios ----------------------------------------------------------------------

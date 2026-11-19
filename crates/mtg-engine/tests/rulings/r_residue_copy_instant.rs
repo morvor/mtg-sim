@@ -51,20 +51,55 @@ fn fork_s_copy_uses_the_same_number_of_targets() {
     supported("Fork");
     supported("Electrolyze");
     // Electrolyze ("2 damage divided as you choose among one or two targets") with one
-    // target, P1: the copy has one target too, which becomes the Bears.
+    // target, P1: the copy has one target too, which becomes the Bears. Its controller is
+    // asked for one new target (instead of P1), never for a second one.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     lands_for_cost(&mut t, P0, "Electrolyze");
     let card = t.hand(P0, "Electrolyze");
     let e = t.cast(P0, card).targets(&[pl(P1)]).go();
+    let from = t.asked().len();
     cast_new(&mut t, P0, "Fork", &[obj(e)]);
     change_copy_targets(&mut t, P0, &[Some(obj(bears))]);
     let copies = resolve_until_copies(&mut t);
     assert_eq!(copies.len(), 1);
+    assert_eq!(new_target_choices(&t, from, copies[0]), vec![(0, 1)]);
     assert_eq!(targets_of(&t, copies[0]), vec![obj(bears)]);
     t.resolve_all();
     assert!(!t.on_battlefield(bears));
     assert_eq!(t.life(P1), 18);
+    // With two targets (the Bears and P1), the copy keeps two: one new target is asked
+    // for each, and leaving P1 unchanged (no answer) keeps it.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![1, 1]));
+    lands_for_cost(&mut t, P0, "Electrolyze");
+    let card = t.hand(P0, "Electrolyze");
+    let e = t.cast(P0, card).targets(&[obj(bears), pl(P1)]).go();
+    let from = t.asked().len();
+    cast_new(&mut t, P0, "Fork", &[obj(e)]);
+    change_copy_targets(&mut t, P0, &[Some(obj(giant)), None]);
+    let copies = resolve_until_copies(&mut t);
+    assert_eq!(
+        new_target_choices(&t, from, copies[0]),
+        vec![(0, 1), (0, 1)]
+    );
+    assert_eq!(targets_of(&t, copies[0]), vec![obj(giant), pl(P1)]);
+}
+
+/// The (min, max) number of targets of each "new target" choice offered for the copy
+/// `copy` since `from`.
+fn new_target_choices(t: &TestGame, from: usize, copy: ObjectId) -> Vec<(u32, u32)> {
+    t.asked()[from..]
+        .iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseTargets {
+                source, min, max, ..
+            } if *source == copy => Some((*min, *max)),
+            _ => None,
+        })
+        .collect()
 }
 
 #[test]
@@ -128,7 +163,7 @@ fn fork_s_copy_keeps_every_choice_but_the_targets() {
 
 #[test]
 fn fork_s_copy_doesn_t_pay_the_spell_s_additional_costs_again() {
-    cr!("707.10", "601.2b", "601.2h");
+    cr!("707.10", "118.8", "601.2h");
     ruling!(
         "Fork",
         "When a spell with additional costs is copied, you don't have to pay those costs again."
@@ -294,7 +329,7 @@ fn the_copy_s_controller_pays_the_costs_paid_on_resolution() {
 
 #[test]
 fn a_copy_of_a_spell_targeting_a_spell_may_target_fork_itself() {
-    cr!("707.10c", "115.5", "608.2b");
+    cr!("707.10c", "608.2b");
     ruling!(
         "Fork",
         "If the spell being copied targets a spell on the stack, it is possible to target Fork itself since Fork is still on the stack when you pick the target(s) for the copy. Note that the copy's target will be illegal when it resolves."
@@ -359,18 +394,21 @@ fn tempt_with_mayhem_s_copies_may_each_get_new_targets() {
     assert_eq!(t.life(P0), 17);
     assert_eq!(t.life(P1), 14);
     assert!(!t.on_battlefield(giant));
-    // Giant Growth at P0's Bears, which then leave: there's no other creature, so the
-    // copies keep the illegal target and do nothing.
+    // Giant Growth at P0's Bears, which then leave. The only other creature, P1's Wall of
+    // Denial, has shroud: no copy can get a new legal target, so each keeps the illegal
+    // Bears (both players try to choose the Wall instead) and does nothing.
+    supported("Wall of Denial");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
+    let wall = t.battlefield(P1, "Wall of Denial");
     let gg = cast_new(&mut t, P0, "Giant Growth", &[obj(bears)]);
     t.g.destroy(bears, None);
     t.g.flush_events();
     cast_new(&mut t, P0, "Tempt with Mayhem", &[obj(gg)]);
     t.answer_yes(P1, true);
-    change_copy_targets(&mut t, P1, &[Some(obj(bears))]);
-    change_copy_targets(&mut t, P0, &[Some(obj(bears))]);
-    change_copy_targets(&mut t, P0, &[Some(obj(bears))]);
+    change_copy_targets(&mut t, P1, &[Some(obj(wall))]);
+    change_copy_targets(&mut t, P0, &[Some(obj(wall))]);
+    change_copy_targets(&mut t, P0, &[Some(obj(wall))]);
     let copies = resolve_until_copies(&mut t);
     assert_eq!(copies.len(), 3);
     for c in &copies {
@@ -378,6 +416,7 @@ fn tempt_with_mayhem_s_copies_may_each_get_new_targets() {
     }
     t.resolve_all();
     assert!(t.g.stack.is_empty());
+    assert_eq!(t.pt(wall), (0, 8));
 }
 
 /// P0 casts Izzet Charm choosing its second mode (2 damage to target creature) at P1's
@@ -465,7 +504,7 @@ fn finale_of_promise_s_copies_have_the_same_modes() {
 
 #[test]
 fn finale_of_promise_s_free_cast_pays_mandatory_additional_costs() {
-    cr!("118.9", "118.9d", "601.2b");
+    cr!("118.9", "118.9a", "118.9d", "601.2b");
     ruling!(
         "Finale of Promise",
         "If you cast a card \"without paying its mana cost,\" you can't choose to cast it for any alternative costs. You can, however, pay additional costs. If the card has any mandatory additional costs, such as that of Spark Harvest, you must pay those to cast the card."
@@ -551,7 +590,7 @@ fn finale_of_promise_s_free_cast_pays_mandatory_additional_costs() {
 
 #[test]
 fn beamsplitter_mage_s_copy_is_made_even_if_the_mage_left() {
-    cr!("603.4", "707.10", "608.2h");
+    cr!("603.4", "707.10", "113.7a", "608.2h", "608.2b");
     ruling!(
         "Beamsplitter Mage",
         "If Beamsplitter Mage leaves the battlefield or becomes an illegal target for the spell that caused its ability to trigger, that spell is still copied."
@@ -625,8 +664,8 @@ fn zada_s_copies_are_yours_in_the_order_you_choose_above_the_original() {
         "Zada, Hedron Grinder",
         "You control all the copies. You choose the order the copies are put onto the stack. The original spell will be on the stack beneath those copies and will resolve last."
     );
-    // P1's Zada... no: Zada is P0's; Giant Growth at Zada with the Bears and the Giant:
-    // two copies, P0's, above the original. Both orders can be chosen.
+    // P0's Giant Growth at P0's Zada, with P0's Bears and Hill Giant: two copies, P0's,
+    // above the original. Both orders can be chosen.
     let mut tops = vec![];
     for order in [[0usize, 1], [1, 0]] {
         let mut t = TestGame::new(2);
@@ -713,16 +752,21 @@ fn return_the_favor_changes_the_target_on_resolution_if_it_can() {
     assert_eq!(targets_of(&t, dis), vec![obj(giant)]);
     t.resolve_all();
     assert_eq!(t.pt(giant), (1, 1));
-    // No other legal target: the target isn't changed.
+    // No other legal target (the only other creature, P1's Wall of Denial, has shroud):
+    // the target isn't changed, and the Wall can't be chosen.
+    supported("Wall of Denial");
     let mut t = TestGame::new(2);
     t.set_step(P1, Step::PrecombatMain);
     let bears = t.battlefield(P0, "Grizzly Bears");
+    let wall = t.battlefield(P1, "Wall of Denial");
     let dis = cast_new(&mut t, P1, "Disfigure", &[obj(bears)]);
     cast_rtf(&mut t, dis);
+    t.answer_targets(P0, &[obj(wall)]);
     t.resolve();
     assert_eq!(targets_of(&t, dis), vec![obj(bears)]);
     t.resolve_all();
     assert!(!t.on_battlefield(bears));
+    assert_eq!(t.pt(wall), (0, 8));
 }
 
 // --- Ulalek, Fused Atrocity ---------------------------------------------------------------------
@@ -737,89 +781,186 @@ pub fn eldrazi_spell(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn ulalek_s_copies_may_get_new_targets_even_an_aura_spell() {
-    cr!("707.10c", "707.10f", "303.4j");
+    cr!("707.10c", "115.7d", "707.10f", "608.3c", "608.3f");
     ruling!(
         "Ulalek, Fused Atrocity",
         "Each copy will have the same targets as the spell or ability it's copying unless you choose new ones. You may change any number of the targets, including all of them or none of them. If the spell is a permanent spell with targets, such as an Aura, you may also choose a new target for that spell. The new targets must be legal. If, for any target, you can't choose a new legal target, then it remains unchanged (even if the current target is illegal)."
     );
     supported("Ulalek, Fused Atrocity");
     supported("Dimensional Infiltrator");
-    // P0 casts Pacifism at P1's Craw Wurm, then an Eldrazi spell: the copy of Pacifism
-    // gets P1's other Craw Wurm.
+    // P0 casts Pacifism at P1's Craw Wurm and Lightning Bolt at P1, then an Eldrazi spell:
+    // the copy of Pacifism gets P1's other Craw Wurm (all its targets changed), the Bolt's
+    // copy keeps P1 (none changed), and the Infiltrator's copy has no targets.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Ulalek, Fused Atrocity");
     let a = t.battlefield(P1, "Craw Wurm");
     let b = t.battlefield(P1, "Craw Wurm");
     let pac = cast_new(&mut t, P0, "Pacifism", &[obj(a)]);
-    // Pacifism's copy: new target b. The Infiltrator's copy has no targets.
-    change_copy_targets(&mut t, P0, &[Some(obj(b))]);
+    cast_new(&mut t, P0, "Lightning Bolt", &[pl(P1)]);
     eldrazi_spell(&mut t);
+    // The copies are made bottom first: Pacifism's, then the Bolt's.
+    change_copy_targets(&mut t, P0, &[Some(obj(b))]);
+    keep_copy_targets(&mut t, P0);
     let copies = resolve_until_copies(&mut t);
-    assert_eq!(copies.len(), 2);
-    let pac_copy = *copies
-        .iter()
-        .find(|c| t.obj(**c).chars.name == "Pacifism")
-        .unwrap();
-    assert_eq!(targets_of(&t, pac_copy), vec![obj(b)]);
+    assert_eq!(copies.len(), 3);
+    let copy_of = |t: &TestGame, name: &str| {
+        *copies
+            .iter()
+            .find(|c| t.obj(**c).chars.name == name)
+            .unwrap()
+    };
+    assert_eq!(targets_of(&t, copy_of(&t, "Pacifism")), vec![obj(b)]);
     assert_eq!(targets_of(&t, pac), vec![obj(a)]);
+    assert_eq!(targets_of(&t, copy_of(&t, "Lightning Bolt")), vec![pl(P1)]);
     t.resolve_all();
-    let attached = |t: &TestGame, w: ObjectId| {
+    assert_eq!(t.life(P1), 14);
+    let pacifisms = |t: &TestGame, w: ObjectId| -> Vec<ObjectId> {
         t.g.attachments_of(obj(w))
             .iter()
-            .filter(|x| t.obj(**x).chars.name == "Pacifism")
-            .count()
+            .copied()
+            .filter(|x| t.obj(*x).chars.name == "Pacifism")
+            .collect()
     };
-    assert_eq!(attached(&t, a), 1);
-    assert_eq!(attached(&t, b), 1);
+    // The card is attached to the first Wurm; the copy resolved as a token Pacifism
+    // attached to the second.
+    let on_a = pacifisms(&t, a);
+    let on_b = pacifisms(&t, b);
+    assert_eq!((on_a.len(), on_b.len()), (1, 1));
+    assert!(!t.obj(on_a[0]).is_token());
+    assert!(t.obj(on_b[0]).is_token());
+    // The new targets must be legal, and a target with no new legal one stays, even an
+    // illegal one: P0's Shatter ("Destroy target artifact.") at P1's Ornithopter, which is
+    // then destroyed (no artifact is left). P0 tries to give the copy P1's Craw Wurm
+    // instead: the copy keeps the Ornithopter.
+    supported("Shatter");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ulalek, Fused Atrocity");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let thopter = t.battlefield(P1, "Ornithopter");
+    cast_new(&mut t, P0, "Shatter", &[obj(thopter)]);
+    t.g.destroy(thopter, None);
+    t.g.flush_events();
+    eldrazi_spell(&mut t);
+    change_copy_targets(&mut t, P0, &[Some(obj(wurm))]);
+    let copies = resolve_until_copies(&mut t);
+    assert_eq!(copies.len(), 2);
+    let shatter = *copies
+        .iter()
+        .find(|c| t.obj(**c).chars.name == "Shatter")
+        .unwrap();
+    assert_eq!(targets_of(&t, shatter), vec![obj(thopter)]);
+}
+
+/// P0 casts `spell`, dividing it as `division` among `targets`, then an Eldrazi spell with
+/// Ulalek on the battlefield; the copy of `spell` changes its first target to
+/// `new_first`, and its controller would divide it as `other_division` if asked again.
+/// Returns the spell, its copy and the number of divisions asked since the spell was
+/// cast.
+fn ulalek_copies_divided(
+    t: &mut TestGame,
+    spell: &str,
+    targets: &[Entity],
+    division: Vec<i64>,
+    new_first: Entity,
+    other_division: Vec<i64>,
+) -> (ObjectId, ObjectId, usize) {
+    supported(spell);
+    t.battlefield(P0, "Ulalek, Fused Atrocity");
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(division));
+    lands_for_cost(t, P0, spell);
+    let card = t.hand(P0, spell);
+    let s = t.cast(P0, card).targets(targets).go();
+    let from = t.asked().len();
+    eldrazi_spell(t);
+    let mut new: Vec<Option<Entity>> = vec![Some(new_first)];
+    new.extend(targets[1..].iter().map(|_| None));
+    change_copy_targets(t, P0, &new);
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(other_division));
+    let copies = resolve_until_copies(t);
+    let copy = *copies
+        .iter()
+        .find(|c| t.obj(**c).chars.name == spell)
+        .unwrap();
+    let asked = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::Divide { .. }))
+        .count();
+    (s, copy, asked)
+}
+
+/// The division of the spell or ability `id` on the stack, over its targets in order.
+fn division_of(t: &TestGame, id: ObjectId) -> Vec<u32> {
+    t.g.obj(id)
+        .stack
+        .as_deref()
+        .map(|si| {
+            si.chosen
+                .iter()
+                .flat_map(|m| m.divided.iter().flatten().copied())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[test]
-fn ulalek_s_copies_keep_the_division_of_damage() {
+fn ulalek_s_copies_keep_the_division_of_damage_and_counters() {
     cr!("707.10", "707.10c", "601.2d");
     ruling!(
         "Ulalek, Fused Atrocity",
         "If the spell or ability that's copied has damage divided as it was cast or activated, the division can't be changed (although the targets receiving that damage still can). The same is true of spells and abilities that distribute counters."
     );
-    // Electrolyze: 1 to the Bears, 1 to P1; the copy gets the Giant instead of the Bears.
+    // Arc Lightning ("3 damage divided as you choose among one, two, or three targets"):
+    // 1 to P1's Bears and 2 to P1. The copy gets the Craw Wurm instead of the Bears and
+    // keeps the division (1 to the Wurm, 2 to P1); no division is asked for again.
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "Ulalek, Fused Atrocity");
     let bears = t.battlefield(P1, "Grizzly Bears");
-    let giant = t.battlefield(P1, "Craw Wurm");
-    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![1, 1]));
-    lands_for_cost(&mut t, P0, "Electrolyze");
-    let card = t.hand(P0, "Electrolyze");
-    let e = t.cast(P0, card).targets(&[obj(bears), pl(P1)]).go();
-    change_copy_targets(&mut t, P0, &[Some(obj(giant)), None]);
-    eldrazi_spell(&mut t);
-    let copies = resolve_until_copies(&mut t);
-    let e_copy = *copies
-        .iter()
-        .find(|c| t.obj(**c).chars.name == "Electrolyze")
-        .unwrap();
-    let div = |id: ObjectId| -> Vec<u32> {
-        t.g.obj(id)
-            .stack
-            .as_deref()
-            .map(|si| {
-                si.chosen
-                    .iter()
-                    .flat_map(|m| m.divided.iter().flatten().copied())
-                    .collect()
-            })
-            .unwrap_or_default()
-    };
-    assert_eq!(div(e_copy), vec![1, 1]);
-    assert_eq!(div(e_copy), div(e));
-    assert_eq!(targets_of(&t, e_copy), vec![obj(giant), pl(P1)]);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let (arc, copy, asked) = ulalek_copies_divided(
+        &mut t,
+        "Arc Lightning",
+        &[obj(bears), pl(P1)],
+        vec![1, 2],
+        obj(wurm),
+        vec![2, 1],
+    );
+    assert_eq!(asked, 0);
+    assert_eq!(division_of(&t, copy), vec![1, 2]);
+    assert_eq!(division_of(&t, arc), vec![1, 2]);
+    assert_eq!(targets_of(&t, copy), vec![obj(wurm), pl(P1)]);
     t.resolve_all();
-    assert_eq!(t.life(P1), 18);
-    assert_eq!(t.obj_now(giant).damage, 1);
+    assert_eq!(t.life(P1), 16);
+    assert_eq!(t.obj_now(wurm).damage, 1);
     assert_eq!(t.obj_now(bears).damage, 1);
+    // Defend the Celestus ("Distribute three +1/+1 counters among one, two, or three
+    // target creatures you control."): 2 on P0's first Bears and 1 on the Hill Giant. The
+    // copy puts its 2 on P0's second Bears instead, and 1 more on the Giant.
+    let mut t = TestGame::new(2);
+    let first = t.battlefield(P0, "Grizzly Bears");
+    let second = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let (dtc, copy, asked) = ulalek_copies_divided(
+        &mut t,
+        "Defend the Celestus",
+        &[obj(first), obj(giant)],
+        vec![2, 1],
+        obj(second),
+        vec![1, 2],
+    );
+    assert_eq!(asked, 0);
+    assert_eq!(division_of(&t, copy), vec![2, 1]);
+    assert_eq!(division_of(&t, dtc), vec![2, 1]);
+    assert_eq!(targets_of(&t, copy), vec![obj(second), obj(giant)]);
+    t.resolve_all();
+    let plus = |t: &TestGame, id: ObjectId| t.counters(id, "+1/+1");
+    assert_eq!(
+        (plus(&t, first), plus(&t, second), plus(&t, giant)),
+        (2, 2, 2)
+    );
 }
 
 #[test]
 fn ulalek_s_copies_aren_t_cast() {
-    cr!("707.10", "603.2", "601.2i");
+    cr!("707.10", "603.2", "601.2i", "602.2b");
     ruling!(
         "Ulalek, Fused Atrocity",
         "The copies are created on the stack, so they're not \"cast\" or \"activated.\" Creating the copies won't cause abilities that trigger when a player casts a spell or activates an ability to trigger. Abilities of copied spells that say \"When you cast [this spell]\" won't trigger."
@@ -859,7 +1000,7 @@ fn ulalek_s_copies_aren_t_cast() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Desolation Twin").len(), 2);
     assert_eq!(t.named_on_battlefield("Dimensional Infiltrator").len(), 2);
-    // The 10/10 and the Twin's token copy.
+    // Only the 10/10 (besides the copies that became tokens).
     let other_tokens =
         t.g.permanents()
             .filter(|o| {
@@ -869,6 +1010,26 @@ fn ulalek_s_copies_aren_t_cast() {
             })
             .count();
     assert_eq!(other_tokens, 1);
+    // A copy of an activated ability isn't activated: P1's Harsh Mentor ("Whenever an
+    // opponent activates an ability of an artifact, creature, or land on the battlefield,
+    // if it isn't a mana ability, this creature deals 2 damage to that player.") sees P0
+    // activate Prodigal Pyromancer's "{T}: This creature deals 1 damage to any target." at
+    // P1 once; Ulalek copies the ability, and the copy deals its 1 without another trigger.
+    supported("Harsh Mentor");
+    supported("Prodigal Pyromancer");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Ulalek, Fused Atrocity");
+    t.battlefield(P1, "Harsh Mentor");
+    let pyro = t.battlefield(P0, "Prodigal Pyromancer");
+    t.g.objects[pyro.0 as usize].summoning_sick = false;
+    t.answer_targets(P0, &[pl(P1)]);
+    crate::r_s06_common::activate_containing(&mut t, P0, pyro, "damage").unwrap();
+    t.settle();
+    eldrazi_spell(&mut t);
+    keep_copy_targets(&mut t, P0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18, "the ability and its copy");
+    assert_eq!(t.life(P0), 18, "one Harsh Mentor trigger");
 }
 
 // --- God-Eternal Kefnet ---------------------------------------------------------------------------
@@ -895,7 +1056,7 @@ pub fn kefnet_draw(name: &str, reveal: bool, own_turn: bool) -> (TestGame, Objec
 
 #[test]
 fn kefnet_reveals_and_copies_on_any_turn_and_casts_a_sorcery_copy_then() {
-    cr!("707.12", "608.2g", "307.1");
+    cr!("707.12", "608.2g");
     ruling!(
         "God-Eternal Kefnet",
         "You can reveal and copy an instant or sorcery card this way on any turn, not just your own, if it's the first card you've drawn that turn."
