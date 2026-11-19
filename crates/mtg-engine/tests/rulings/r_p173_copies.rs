@@ -1,9 +1,9 @@
 //! Rulings batch P173 — copies of spells and triggered abilities (CR 707.10): the copy
 //! keeps the original's modes, X, division of damage and additional or alternative cost
 //! choices (CR 707.10, 707.10c, 601.2b), new targets keep the number of targets (CR
-//! 115.7f), choices and costs on resolution are made separately for the copy (CR 608.2),
-//! a copy isn't cast (CR 707.10, 603.2), and cast triggers resolve before their spell, even
-//! if it was countered (CR 603.3, 608.2h, 113.7a).
+//! 115.7f), choices and costs on resolution are made separately for the copy (CR 608.2d,
+//! 118.12), a copy isn't cast (CR 707.10, 603.2), and cast triggers resolve before their
+//! spell, even if it was countered (CR 603.3, 608.2h).
 
 use crate::r_p212_common::back_face;
 use crate::r_s01_common::{attack_with, give_mana_for, supported, tokens, triggers_on_stack};
@@ -16,9 +16,11 @@ use crate::r_s25_common::{
 };
 use crate::r_s26_common::modes_on_stack;
 use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::mana::ManaType;
-use mtg_engine::object::Zone;
+use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
@@ -64,7 +66,7 @@ fn kirol_copies_top(t: &mut TestGame, k: ObjectId, bears: [ObjectId; 2]) {
 
 #[test]
 fn kirols_copy_makes_its_choices_and_pays_its_costs_separately() {
-    cr!("707.10", "608.2", "707.10c");
+    cr!("707.10", "608.2d", "118.12", "707.10c");
     ruling!(
         "Kirol, Attentive First-Year",
         "Any choices made when the ability resolves won't have been made yet when it's copied by Kirol's ability. Any such choices will be made separately when the copy resolves. If a triggered ability asks you to pay a cost, you pay that cost for the copy separately."
@@ -166,7 +168,7 @@ fn p1_counters(t: &mut TestGame, spell: ObjectId) {
 
 #[test]
 fn aziza_copies_the_spell_before_it_resolves_even_if_it_was_countered() {
-    cr!("603.3", "707.10", "608.2h", "113.7a");
+    cr!("603.3", "707.10", "608.2h", "118.12");
     ruling!(
         "Aziza, Mage Tower Captain",
         "Aziza's ability and the copy it creates both resolve before the spell that caused the ability to trigger. They resolve even if the spell is countered before the copy is created."
@@ -175,9 +177,7 @@ fn aziza_copies_the_spell_before_it_resolves_even_if_it_was_countered() {
     for counter in [false, true] {
         let mut t = TestGame::new(2);
         t.battlefield(P0, "Aziza, Mage Tower Captain");
-        let cs: Vec<ObjectId> = (0..3)
-            .map(|_| t.battlefield(P0, "Grizzly Bears"))
-            .collect();
+        let cs: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
         add_mana(&mut t, P0, ManaType::R, 1);
         let b = t.hand(P0, "Lightning Bolt");
         let bolt = t.cast(P0, b).target(P1).go();
@@ -204,7 +204,7 @@ fn aziza_copies_the_spell_before_it_resolves_even_if_it_was_countered() {
 
 #[test]
 fn raff_draws_before_the_spell_resolves_even_if_it_was_countered() {
-    cr!("603.3", "608.2");
+    cr!("603.3", "118.12");
     ruling!(
         "Raff, Weatherlight Stalwart",
         "Raff, Weatherlight Stalwart’s triggered ability resolves before the spell that caused it to trigger. The ability will resolve even if that spell is countered."
@@ -229,14 +229,18 @@ fn raff_draws_before_the_spell_resolves_even_if_it_was_countered() {
 
 #[test]
 fn barracks_of_the_thousand_token_comes_before_the_spell_resolves() {
-    cr!("603.3", "106.11");
+    cr!("603.3", "601.2i");
     ruling!(
         "Thousand Moons Smithy",
         "Barracks of the Thousand's triggered ability will resolve before the spell that caused it to trigger."
     );
     supported("Thousand Moons Smithy // Barracks of the Thousand");
     let mut t = TestGame::new(2);
-    let barracks = back_face(&mut t, P0, "Thousand Moons Smithy // Barracks of the Thousand");
+    let barracks = back_face(
+        &mut t,
+        P0,
+        "Thousand Moons Smithy // Barracks of the Thousand",
+    );
     t.battlefield(P0, "Forest");
     assert!(tap_for_mana(&mut t, P0, barracks, "Add {W}"));
     let c = t.hand(P0, "Grizzly Bears");
@@ -317,14 +321,19 @@ fn sorcerer_class_ignores_copies_but_counts_cast_copies_of_cards() {
     activate_containing(&mut t, P0, scepter, "copy the exiled card").expect("activates");
     t.resolve();
     t.settle();
-    assert_eq!(triggers_on_stack(&t, "deals damage to each opponent"), 1, "{}", t.dump_log());
+    assert_eq!(
+        triggers_on_stack(&t, "deals damage to each opponent"),
+        1,
+        "{}",
+        t.dump_log()
+    );
     t.resolve_all();
     assert_eq!(t.life(P1), 15 - 2 - 2, "{}", t.dump_log());
 }
 
 #[test]
 fn sorcerer_class_damage_from_a_countered_spell_uses_last_known_information() {
-    cr!("608.2h", "113.7a", "702.15b");
+    cr!("608.2h", "702.15b");
     ruling!(
         "Sorcerer Class",
         "If the spell that causes the last ability to trigger is countered or is otherwise no longer on the stack as the ability resolves, it will still deal damage. Last known information will be used to do determine the effects of that damage. For example, if the spell has lifelink, you will still gain life when it deals damage, even if the spell was countered."
@@ -364,7 +373,7 @@ fn sigil_copy(t: &mut TestGame, tracer: ObjectId, spell: ObjectId) {
 
 #[test]
 fn sigil_tracer_copies_untargeted_spells_and_kicker_choices() {
-    cr!("707.10", "601.2b", "702.33d");
+    cr!("707.10", "601.2b", "702.33d", "702.76a", "118.9");
     ruling!(
         "Sigil Tracer",
         "Sigil Tracer’s ability can copy an instant or sorcery spell that isn’t targeted."
@@ -389,10 +398,38 @@ fn sigil_tracer_copies_untargeted_spells_and_kicker_choices() {
     let b = t.hand(P0, "Burst Lightning");
     let spell = t.cast(P0, b).kicked(true).target(P1).go();
     sigil_copy(&mut t, tr, spell);
-    t.resolve();
     keep_copy_targets(&mut t, P0);
+    t.resolve();
+    assert_eq!(spell_copies(&t).len(), 1);
     t.resolve_all();
     assert_eq!(t.life(P1), 12, "both 4 damage");
+
+    // An alternative cost: Morsel Theft cast for its prowl cost {1}{B} after a Rogue dealt
+    // combat damage to P1 ("Target player loses 3 life and you gain 3 life. If Morsel
+    // Theft's prowl cost was paid, draw a card."): the copy draws a card too.
+    supported("Morsel Theft");
+    let mut t = TestGame::new(2);
+    let tr = sigil_tracer(&mut t);
+    let rogue = t.battlefield(P0, "Bane Alley Blackguard");
+    attack_with(&mut t, &[(rogue, Entity::Player(P1))]);
+    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![]));
+    t.advance_to(P0, Step::PostcombatMain);
+    assert_eq!(t.life(P1), 19);
+    t.lands(P0, "Swamp", 2);
+    let theft = t.hand(P0, "Morsel Theft");
+    let hand = t.hand_size(P0);
+    let spell = t
+        .cast(P0, theft)
+        .method(CastMethod::Keyword(KeywordKind::Prowl))
+        .target(P1)
+        .go();
+    sigil_copy(&mut t, tr, spell);
+    keep_copy_targets(&mut t, P0);
+    t.resolve();
+    assert_eq!(spell_copies(&t).len(), 1);
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1)), (26, 13));
+    assert_eq!(t.hand_size(P0), hand - 1 + 2, "{}", t.dump_log());
 }
 
 #[test]

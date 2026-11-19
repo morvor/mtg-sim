@@ -4,14 +4,16 @@
 //! 608.2d); a creature that became blocked stays blocked (CR 509.1h, 506.4); "becomes
 //! blocked by a creature" triggers once per blocker (CR 509.3d); and a creature that
 //! attacks each combat if able attacks whichever player, planeswalker or battle its
-//! controller chooses (CR 508.1d).
+//! controller chooses (CR 508.1b, 508.1d).
 
 use crate::r_p212_common::{back_face, grant};
-use crate::r_s01_common::{attack_with, supported};
+use crate::r_s01_common::{attack_with, supported, watch};
 use crate::r_s06_common::activate_containing;
 use crate::r_s24_common::tapped;
 use mtg_engine::decision::Answer;
+use mtg_engine::game::Game;
 use mtg_engine::keywords::KeywordKind;
+use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -28,6 +30,18 @@ fn objs(ids: &[ObjectId]) -> Vec<Entity> {
 fn no_blocks(t: &mut TestGame) {
     t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![]));
     t.advance_to(P0, Step::EndOfCombat);
+}
+
+/// The power of the only permanent named `name` and how many permanents named `tapped`
+/// are tapped.
+fn power_and_tapped(g: &Game, name: &str, tapped: &str) -> (i32, usize) {
+    let src = g.find_in_zone(Zone::Battlefield, name)[0];
+    let n = g
+        .find_in_zone(Zone::Battlefield, tapped)
+        .iter()
+        .filter(|o| g.obj(**o).tapped)
+        .count();
+    (g.obj(src).power(), n)
 }
 
 // --- Attack triggers that tap attacking creatures --------------------------------------------
@@ -77,11 +91,18 @@ fn attack_triggers_tap_attackers_with_vigilance_which_keep_attacking() {
         t.hand(P0, "Grizzly Bears");
         let before = t.pt(src);
         let hand = t.hand_size(P0);
-        attack_with(&mut t, &[(src, Entity::Player(P1)), (human, Entity::Player(P1))]);
+        attack_with(
+            &mut t,
+            &[(src, Entity::Player(P1)), (human, Entity::Player(P1))],
+        );
         assert!(!tapped(&t, src) && !tapped(&t, human), "{name}");
         t.answer_choose(P0, &objs(&[src, human]));
         t.resolve_all();
-        assert!(tapped(&t, src) && tapped(&t, human), "{name}: {}", t.dump_log());
+        assert!(
+            tapped(&t, src) && tapped(&t, human),
+            "{name}: {}",
+            t.dump_log()
+        );
         assert!(t.g.is_attacking(src) && t.g.is_attacking(human), "{name}");
         let after = t.pt(src);
         if name == "Minas Tirith Garrison" {
@@ -92,7 +113,11 @@ fn attack_triggers_tap_attackers_with_vigilance_which_keep_attacking() {
         let power = t.pt(src).0 * if name == "Siege Striker" { 2 } else { 1 };
         let other = t.pt(human).0;
         no_blocks(&mut t);
-        assert_eq!(t.life(P1), 20 - power - other, "{name}: both still dealt damage");
+        assert_eq!(
+            t.life(P1),
+            20 - power - other,
+            "{name}: both still dealt damage"
+        );
     }
     // Siege Striker without vigilance, untapped after attacking.
     let mut t = TestGame::new(2);
@@ -110,7 +135,7 @@ fn attack_triggers_tap_attackers_with_vigilance_which_keep_attacking() {
 
 #[test]
 fn ledev_champion_taps_creatures_that_came_under_your_control_this_turn() {
-    cr!("302.6", "608.2d");
+    cr!("302.6", "608.2d", "117.4");
     ruling!(
         "Ledev Champion",
         "Creatures that have come under your control this turn can be tapped for Ledev Champion's first ability."
@@ -124,20 +149,34 @@ fn ledev_champion_taps_creatures_that_came_under_your_control_this_turn() {
     let a = t.battlefield_sick(P0, "Grizzly Bears");
     let b = t.battlefield_sick(P0, "Grizzly Bears");
     attack_with(&mut t, &[(l, Entity::Player(P1))]);
-    // Nothing's chosen before the ability resolves.
-    let from = t.asked().len();
+    // The ability is on the stack and nothing's chosen yet: the choice is queued only now.
     t.answer_choose(P0, &objs(&[a, b]));
-    t.g.resolve_top();
-    // Chosen and boosted within the resolution: no one was asked anything else between.
-    let asked = crate::r_s01_common::asked_since(&t, from);
-    assert!(asked.iter().all(|(p, _)| *p == P0), "{asked:?}");
+    // Played through the priority loop to the declare blockers step: each time P1 could
+    // act (the ability on the stack, then after it resolved), Ledev's power and the
+    // number of Bears tapped go together.
+    let views = watch(
+        &mut t,
+        P1,
+        |_| true,
+        |g| power_and_tapped(g, "Ledev Champion", "Grizzly Bears"),
+    );
+    t.advance_to(P0, Step::DeclareBlockers);
+    let views = views.lock().unwrap().clone();
+    assert!(
+        views.contains(&(2, 0)) && views.contains(&(4, 2)),
+        "{views:?}"
+    );
+    assert!(
+        views.iter().all(|v| *v == (2, 0) || *v == (4, 2)),
+        "{views:?}"
+    );
     assert!(tapped(&t, a) && tapped(&t, b));
     assert_eq!(t.pt(l), (4, 4));
 }
 
 #[test]
 fn redcap_raiders_taps_a_vigilant_attacker_with_no_window_before_the_bonus() {
-    cr!("506.4", "608.2d", "608.2c");
+    cr!("506.4", "608.2d", "118.12", "117.4");
     ruling!(
         "Redcap Raiders",
         "Tapping an attacking creature with vigilance to pay the cost of Redcap Raiders's ability won't cause that creature to leave combat or to stop attacking."
@@ -150,17 +189,33 @@ fn redcap_raiders_taps_a_vigilant_attacker_with_no_window_before_the_bonus() {
     let mut t = TestGame::new(2);
     let r = t.battlefield(P0, "Redcap Raiders");
     let angel = t.battlefield(P0, "Serra Angel");
-    attack_with(&mut t, &[(r, Entity::Player(P1)), (angel, Entity::Player(P1))]);
-    let from = t.asked().len();
+    attack_with(
+        &mut t,
+        &[(r, Entity::Player(P1)), (angel, Entity::Player(P1))],
+    );
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[obj(angel)]);
-    t.g.resolve_top();
-    assert!(crate::r_s01_common::asked_since(&t, from)
-        .iter()
-        .all(|(p, _)| *p == P0));
+    // Each time P1 could act, the Angel tapped and the Raiders' bonus go together.
+    let views = watch(
+        &mut t,
+        P1,
+        |_| true,
+        |g| power_and_tapped(g, "Redcap Raiders", "Serra Angel"),
+    );
+    t.advance_to(P0, Step::DeclareBlockers);
+    let views = views.lock().unwrap().clone();
+    assert!(
+        views.contains(&(3, 0)) && views.contains(&(4, 1)),
+        "{views:?}"
+    );
+    assert!(
+        views.iter().all(|v| *v == (3, 0) || *v == (4, 1)),
+        "{views:?}"
+    );
     assert!(tapped(&t, angel) && t.g.is_attacking(angel));
     assert_eq!(t.pt(r), (4, 3));
-    no_blocks(&mut t);
+    assert!(t.obj_now(r).has_keyword(KeywordKind::Trample));
+    t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(t.life(P1), 20 - 4 - 4);
 }
 
@@ -231,7 +286,10 @@ fn aryel_and_frondland_felidar_tap_while_attacking_and_stay_in_combat() {
     let angel = t.battlefield(P0, "Serra Angel");
     t.lands(P0, "Wastes", 2);
     let bears = t.battlefield(P1, "Grizzly Bears");
-    attack_with(&mut t, &[(f, Entity::Player(P1)), (angel, Entity::Player(P1))]);
+    attack_with(
+        &mut t,
+        &[(f, Entity::Player(P1)), (angel, Entity::Player(P1))],
+    );
     // The Felidar taps itself for its granted ability; the Angel's taps the Bears.
     t.answer_targets(P0, &[obj(bears)]);
     activate_containing(&mut t, P0, f, "Tap target creature").expect("Felidar");
@@ -276,7 +334,10 @@ fn becoming_unblockable_after_blocks_doesnt_unblock() {
         activate_containing(&mut t, P0, src, "can't be blocked").expect("activates");
         t.resolve_all();
         assert!(tapped(&t, h));
-        assert!(t.g.combat.as_ref().unwrap().is_blocked(src), "{name}: still blocked");
+        assert!(
+            t.g.combat.as_ref().unwrap().is_blocked(src),
+            "{name}: still blocked"
+        );
         assert!(t.g.is_blocking(wall), "{name}: the blocker stays in combat");
         t.advance_to(P0, Step::EndOfCombat);
         assert_eq!(t.life(P1), 20, "{name}");
@@ -316,7 +377,9 @@ fn vicious_battlerager_triggers_for_each_blocker() {
 
 #[test]
 fn incited_rabble_attacks_whom_its_controller_chooses() {
-    cr!("508.1d", "508.1a");
+    cr!("508.1b", "508.1d", "508.1a");
+    // The second game leaves the declaration to the engine's default.
+    interp!("default-combat-declarations");
     ruling!(
         "Town Gossipmonger",
         "Incited Rabble’s controller still chooses which player, planeswalker, or battle it attacks."

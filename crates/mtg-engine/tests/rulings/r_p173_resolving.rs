@@ -205,12 +205,13 @@ fn spells_with_an_illegal_target_do_nothing_at_all() {
     add_mana(&mut t, P0, ManaType::U, 3);
     let s = t.hand(P0, "Crashing Wave");
     t.cast(P0, s).x(1).target(a).go();
-    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![0, 3]));
+    // All three on the creature that was tapped already, not the one Crashing Wave tapped.
+    t.answer_choose(P0, &[obj(already)]);
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![3]));
     t.resolve_all();
-    assert_eq!(
-        t.counters(a, counters::STUN) + t.counters(already, counters::STUN),
-        3
-    );
+    assert!(tapped(&t, a));
+    assert_eq!(t.counters(a, counters::STUN), 0);
+    assert_eq!(t.counters(already, counters::STUN), 3, "{}", t.dump_log());
 }
 
 #[test]

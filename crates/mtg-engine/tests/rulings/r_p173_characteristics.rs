@@ -1,11 +1,12 @@
 //! Rulings batch P173 — characteristics and damage: marked damage stays until the cleanup
 //! step, so lost bonuses can make it lethal (CR 120.6, 704.5g, 514.2); excess damage takes
-//! earlier damage and planeswalker loyalty into account (CR 120.10, 120.4a); type-changing
+//! earlier damage and planeswalker loyalty into account (CR 120.10); type-changing
 //! effects (CR 205.1b, 305.6, 305.7) and the replacement effects that apply after them (CR
-//! 614.12); what counts once (CR 109.1); color-setting effects (CR 105.3, 613.1e);
+//! 614.12); what a characteristic-defining ability counts (CR 208.2a, 604.3);
+//! color-setting effects (CR 105.3, 613.1e);
 //! base-setting effects under modifiers and counters (CR 613.4b, 613.4c); granted mana
 //! abilities (CR 113.3b, 605.1a); and Auras that can't legally enchant what they're on
-//! (CR 303.4d, 704.5m).
+//! (CR 303.4c, 704.5m).
 
 use crate::r_p196_common::pump;
 use crate::r_p212_common::back_face;
@@ -143,7 +144,7 @@ fn toralf_earlier_combat_damage_doesnt_matter() {
 
 #[test]
 fn toralf_excess_damage_to_a_creature_planeswalker_uses_the_smaller_lethal_amount() {
-    cr!("120.10", "120.4a", "120.3c", "120.3d");
+    cr!("120.10", "120.3c");
     ruling!(
         "Toralf, God of Fury",
         "If a permanent is both a creature and a planeswalker, the minimum amount of damage to be considered lethal damage is used to determine if excess damage has been dealt. For example, if a 5/5 creature that's also a planeswalker with three loyalty counters on it is dealt 4 noncombat damage, it's been dealt 1 excess damage and Toralf's ability will trigger."
@@ -226,7 +227,7 @@ fn ygra_food_creatures_trigger_it_and_enter_as_artifacts() {
 
 #[test]
 fn krovikan_plague_falls_off_a_creature_that_becomes_a_wall() {
-    cr!("303.4d", "704.5m");
+    cr!("303.4c", "704.5m");
     ruling!(
         "Krovikan Plague",
         "The Aura will be put into the graveyard if you lose control of the creature or if it somehow becomes a Wall."
@@ -284,7 +285,7 @@ fn arlinn_isnt_a_werewolf() {
 
 #[test]
 fn thousand_moons_smithy_counts_an_artifact_creature_once() {
-    cr!("109.1", "208.3");
+    cr!("208.2a", "604.3");
     ruling!(
         "Thousand Moons Smithy",
         "An artifact creature you control counts only once towards the Gnome Soldier's power and toughness."
@@ -357,7 +358,7 @@ fn katara_waterbend_sets_base_power_and_toughness_under_counters_and_bonuses() {
 
 #[test]
 fn rishkar_any_counter_and_its_own_target() {
-    cr!("122.1", "115.3");
+    cr!("122.1", "603.3d");
     ruling!(
         "Rishkar, Peema Renegade",
         "Each creature you control has Rishkar's mana ability as long as that creature has any kind of counter on it. The effect isn't limited to those with +1/+1 counters."
@@ -393,4 +394,3 @@ fn rishkar_any_counter_and_its_own_target() {
     assert_eq!(t.counters(r, counters::PLUS1), 1, "{}", t.dump_log());
     assert_eq!(t.counters(b, counters::PLUS1), 1);
 }
-

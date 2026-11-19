@@ -1,12 +1,13 @@
 //! Rulings batch P173 — the other rulings of the batch: sacrifice costs with colored
 //! creatures (CR 601.2h, 105.2), casting and playing cards from exile and from the top of
-//! the library with normal timing (CR 601.3, 305.2, 116.2a), choices on resolution (CR
+//! the library with normal timing (CR 601.3, 302.1, 305.1, 116.2a), choices on resolution (CR
 //! 608.2c), returns of copies (CR 111.7, 707.2), cost reductions (CR 601.2f), abilities
 //! that work only in a zone (CR 113.6), chapter abilities and affected sets (CR 611.2c),
-//! emblems (CR 114.1), simultaneous entering (CR 603.6a), mana abilities with {T} (CR
-//! 605.1a, 602.2b), "exile until" ending mid-resolution (CR 610.3c), searching (CR
-//! 701.23b), targets among the creatures tapped for the cost (CR 601.2c, 601.2h), and
-//! granted abilities on the stack (CR 113.7a).
+//! emblems (CR 114.3, 114.4), simultaneous entering (CR 603.6a), mana abilities with {T}
+//! (CR 605.1a, 107.5), creatures tapped to pay part of a cost that can't also be
+//! sacrificed for its mana (CR 601.2g–h), "exile until" ending mid-resolution (CR 610.3),
+//! searching (CR 701.23b), targets among the creatures tapped for the cost (CR 601.2c,
+//! 601.2h), and granted abilities on the stack (CR 113.7a).
 
 use crate::r_p196_common::pump;
 use crate::r_p197_common::{add_lore, blank_saga, walker};
@@ -77,7 +78,12 @@ fn heralds_multicolored_creatures_pay_one_part_and_the_herald_can_be_sacrificed(
     assert!(can_activate(&mut t, P0, h));
     activate_containing(&mut t, P0, h, "Search your library").expect("activates");
     t.resolve_all();
-    assert_eq!(t.named_on_battlefield("Godsire").len(), 1, "{}", t.dump_log());
+    assert_eq!(
+        t.named_on_battlefield("Godsire").len(),
+        1,
+        "{}",
+        t.dump_log()
+    );
     for n in ["Behemoth's Herald", "Boros Swiftblade", "Watchwolf"] {
         assert!(t.in_graveyard(P0, n), "{n}");
     }
@@ -105,7 +111,7 @@ fn heralds_multicolored_creatures_pay_one_part_and_the_herald_can_be_sacrificed(
 
 #[test]
 fn seek_the_beast_cards_are_played_with_normal_timing_and_costs() {
-    cr!("305.2", "116.2a", "601.3", "715.3d");
+    cr!("305.1", "302.1", "116.2a", "601.3");
     ruling!(
         "Questing Druid",
         "You pay all costs and follow all normal timing rules for cards played from exile with Seek the Beast. For example, if the exiled card is a land card, you may play it only during your main phase while the stack is empty."
@@ -141,7 +147,7 @@ fn seek_the_beast_cards_are_played_with_normal_timing_and_costs() {
 
 #[test]
 fn eladamri_and_elven_chorus_cast_creatures_from_the_top_with_normal_timing_only() {
-    cr!("305.9", "601.3", "307.1", "116.2a");
+    cr!("305.9", "601.3", "116.2a", "302.1", "702.8a");
     ruling!(
         "Eladamri, Korvecdal",
         "Because you never \"cast\" a land card, Eladamri, Korvecdal doesn't allow you to play a land creature (such as Dryad Arbor) from the top of your library."
@@ -181,31 +187,29 @@ fn eladamri_and_elven_chorus_cast_creatures_from_the_top_with_normal_timing_only
 
 #[test]
 fn summoning_materia_looks_at_the_top_card_without_priority() {
-    cr!("401.5", "116.1", "117.1");
+    cr!("401.5");
     ruling!(
         "Summoning Materia",
         "Summoning Materia lets you look at the top card of your library whenever you want (with one restriction—see below), even if you don't have priority. This action doesn't use the stack. Knowing what that card is becomes part of the information you have access to, just like you can look at the cards in your hand."
     );
     supported("Summoning Materia");
-    let sees_top = |t: &TestGame| {
+    let sees_top = |t: &TestGame, viewer: PlayerId| {
         t.g.library_top(P0)
-            .is_some_and(|c| mtg_engine::zones::can_see_in_library(&t.g, P0, c))
+            .is_some_and(|c| mtg_engine::zones::can_see_in_library(&t.g, viewer, c))
     };
     let mut t = TestGame::new(2);
     t.library_top(P0, "Grizzly Bears");
-    t.g.recompute();
-    assert!(!sees_top(&t));
+    assert!(!sees_top(&t, P0));
     t.battlefield(P0, "Summoning Materia");
-    t.g.recompute();
-    mtg_engine::zones::update_revealed_tops(&mut t.g);
-    assert!(sees_top(&t));
+    // P0 looks at it; it isn't revealed to P1.
+    assert!(sees_top(&t, P0) && !sees_top(&t, P1));
     // On P1's turn with P1 holding priority, and with something on the stack.
     t.set_step(P1, Step::Upkeep);
     add_mana(&mut t, P1, ManaType::R, 1);
     let bolt = t.hand(P1, "Lightning Bolt");
     t.cast(P1, bolt).target(P0).go();
     assert_eq!(t.g.turn.priority, Some(P1));
-    assert!(sees_top(&t));
+    assert!(sees_top(&t, P0) && !sees_top(&t, P1));
     assert_eq!(t.stack_len(), 1, "looking used no stack object");
 }
 
@@ -265,7 +269,11 @@ fn arachnus_spinner_may_fail_to_find_and_still_shuffles() {
     };
     let before = shuffles(&t);
     t.resolve_all();
-    assert!(t.named_on_battlefield("Arachnus Web").is_empty(), "{}", t.dump_log());
+    assert!(
+        t.named_on_battlefield("Arachnus Web").is_empty(),
+        "{}",
+        t.dump_log()
+    );
     assert_eq!(t.library_size(P0), 31);
     assert_eq!(shuffles(&t), before + 1);
 }
@@ -317,7 +325,10 @@ fn enduring_vitality_copies_return_only_if_nontoken_and_only_as_enchantments() {
     let back = t.g.current(c);
     assert!(t.on_battlefield(back), "{}", t.dump_log());
     let o = t.obj_now(back);
-    assert_eq!(o.chars.card_types, CardTypeSet::single(CardType::Enchantment));
+    assert_eq!(
+        o.chars.card_types,
+        CardTypeSet::single(CardType::Enchantment)
+    );
     assert_eq!(o.chars.name.as_str(), "Enduring Vitality");
 }
 
@@ -390,15 +401,23 @@ fn song_of_freyalise_affects_only_creatures_there_as_each_chapter_resolves() {
     assert_eq!(t.counters(early, counters::PLUS1), 1);
     assert_eq!(t.counters(late, counters::PLUS1), 1);
     assert_eq!(t.counters(later, counters::PLUS1), 0);
-    assert!(crate::r_s06_common::has_kw(&t, late, KeywordKind::Indestructible));
-    assert!(!crate::r_s06_common::has_kw(&t, later, KeywordKind::Indestructible));
+    assert!(crate::r_s06_common::has_kw(
+        &t,
+        late,
+        KeywordKind::Indestructible
+    ));
+    assert!(!crate::r_s06_common::has_kw(
+        &t,
+        later,
+        KeywordKind::Indestructible
+    ));
 }
 
 // --- Emblems, simultaneous entering, triggers ---------------------------------------------------
 
 #[test]
 fn chandras_emblem_is_colorless_and_damages_protection_from_red() {
-    cr!("114.4", "105.2c", "702.16b");
+    cr!("114.3", "114.4", "105.2c", "702.16b");
     ruling!(
         "Chandra, Spark Hunter",
         "Emblems are colorless. This means that a permanent with protection from red can be the target of the emblem’s triggered ability."
@@ -463,7 +482,7 @@ fn saradoc_triggers_for_itself_whatever_its_power() {
 
 #[test]
 fn cryptolith_rite_two_mana_abilities_but_one_tap() {
-    cr!("602.2b", "605.1a", "302.6");
+    cr!("605.1a", "107.5", "118.3");
     ruling!(
         "Cryptolith Rite",
         "If a creature has multiple mana abilities with a cost of {T}, such as if you control two Cryptolith Rites, you can only activate one of them at a time. Tapping the creature doesn’t produce multiple mana."
@@ -494,29 +513,107 @@ fn heirloom_epic_creatures_used_for_mana_cant_also_pay_by_tapping() {
         "Heirloom Epic",
         "If a creature you control has a mana ability with {T} in the cost, activating that ability to pay the activation cost of Heirloom Epic’s ability will result in the creature being tapped before you pay the ability’s costs."
     );
+    ruling!(
+        "Heirloom Epic",
+        "Similarly, if you sacrifice a creature to activate a mana ability while activating Heirloom Epic’s ability, that creature won’t be on the battlefield when you pay the ability’s activation cost"
+    );
     supported("Heirloom Epic");
     supported("Blood Pet");
-    // {4}: two Wastes and Llanowar Elves can pay {3} at most (the Elves either add {G} or
-    // are tapped for {1}); a third Wastes makes it.
-    for (wastes, creature, ok) in [
-        (2, "Llanowar Elves", false),
-        (3, "Llanowar Elves", true),
-        // Blood Pet: "Sacrifice this creature: Add {B}." Sacrificed, it can't be tapped.
-        (2, "Blood Pet", false),
-        (3, "Blood Pet", true),
+    // {4} with two Wastes; `tap` are the creatures P0 chooses to tap rather than pay {1}
+    // each. Two Grizzly Bears pay the rest. Llanowar Elves add {G} (their mana ability taps
+    // them first) or are tapped rather than paying {1}, not both: they pay {1} at most,
+    // whatever P0 chooses; with Grizzly Bears too, the rest is paid. Blood Pet ("Sacrifice
+    // this creature: Add {B}.") is sacrificed for its mana before the costs are paid, so it
+    // can't also be tapped for one: the same.
+    for (creatures, tap, ok) in [
+        (&["Grizzly Bears", "Grizzly Bears"][..], &[0, 1][..], true),
+        (&["Llanowar Elves"][..], &[][..], false),
+        (&["Llanowar Elves"][..], &[0][..], false),
+        (&["Llanowar Elves", "Grizzly Bears"][..], &[1][..], true),
+        (&["Blood Pet"][..], &[][..], false),
+        (&["Blood Pet"][..], &[0][..], false),
+        (&["Blood Pet", "Grizzly Bears"][..], &[1][..], true),
     ] {
         let mut t = TestGame::new(2);
         let e = t.battlefield(P0, "Heirloom Epic");
-        t.battlefield(P0, creature);
-        t.lands(P0, "Wastes", wastes);
+        let cs: Vec<ObjectId> = creatures.iter().map(|c| t.battlefield(P0, c)).collect();
+        t.lands(P0, "Wastes", 2);
+        let chosen: Vec<Entity> = tap.iter().map(|i| obj(cs[*i])).collect();
+        t.answer_choose(P0, &chosen);
         let r = activate_containing(&mut t, P0, e, "Draw a card");
-        assert_eq!(r.is_ok(), ok, "{wastes} Wastes and {creature}: {r:?}");
+        assert_eq!(r.is_ok(), ok, "{creatures:?} tapping {tap:?}: {r:?}");
+        if ok {
+            assert!(tap.iter().all(|i| tapped(&t, cs[*i])), "{creatures:?}");
+            t.resolve_all();
+            assert_eq!(t.hand_size(P0), 1);
+        }
+    }
+}
+
+#[test]
+fn creatures_tapped_for_a_cost_cant_also_be_sacrificed_for_its_mana() {
+    cr!("601.2g", "601.2h", "602.2b", "701.67a");
+    // The principle of Heirloom Epic's ruling for "Tap an untapped [creature] you control"
+    // costs: mana abilities are activated before the costs are paid, so Wild Cantor
+    // ("Sacrifice this creature: Add one mana of any color.", a Human) is either sacrificed
+    // for mana or tapped. Sanctuary Lockdown ("{2}, Tap two untapped Humans you control:
+    // Tap target creature an opponent controls.") with two Wild Cantors and no lands:
+    // they can't do both.
+    supported("Wild Cantor");
+    for lands in [0, 2] {
+        let mut t = TestGame::new(2);
+        let l = t.battlefield(P0, "Sanctuary Lockdown");
+        let cantors: Vec<ObjectId> = (0..2).map(|_| t.battlefield(P0, "Wild Cantor")).collect();
+        t.lands(P0, "Wastes", lands);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.answer_targets(P0, &[obj(bears)]);
+        let r = activate_containing(&mut t, P0, l, "Tap two untapped Humans");
+        assert_eq!(r.is_ok(), lands == 2, "{lands} lands: {r:?}");
+        if lands == 0 {
+            assert!(cantors
+                .iter()
+                .all(|c| t.on_battlefield(*c) && !tapped(&t, *c)));
+        } else {
+            // Control: the Wastes pay {2}, the Cantors are tapped.
+            assert!(cantors.iter().all(|c| tapped(&t, *c)));
+            t.resolve_all();
+            assert!(tapped(&t, bears));
+        }
+    }
+    // The same for waterbend (CR 701.67a): Crashing Wave ({U}{U}, waterbend {X}) with two
+    // Islands and a Wild Cantor pays waterbend {1}, not {2}, whether the Cantor is tapped
+    // for waterbend or sacrificed for its mana.
+    ruling!(
+        "Crashing Wave",
+        "Similarly, if you sacrifice an artifact or creature to activate a mana ability to pay a cost with waterbend, that artifact or creature won't be on the battlefield when you pay the spell's costs, so you won't be able to tap it for waterbend."
+    );
+    for (x, tap_it, ok) in [
+        (1, true, true),
+        (1, false, true),
+        (2, true, false),
+        (2, false, false),
+    ] {
+        let mut t = TestGame::new(2);
+        let cantor = t.battlefield(P0, "Wild Cantor");
+        t.lands(P0, "Island", 2);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        let s = t.hand(P0, "Crashing Wave");
+        t.answer_choose(P0, &if tap_it { vec![obj(cantor)] } else { vec![] });
+        let r = t.cast(P0, s).x(x).target(bears).try_go();
+        assert_eq!(
+            r.is_ok(),
+            ok,
+            "waterbend {{{x}}}, tapping it: {tap_it}: {r:?}"
+        );
+        if !ok {
+            assert!(t.on_battlefield(cantor) && !tapped(&t, cantor));
+        }
     }
 }
 
 #[test]
 fn explosive_singularity_taps_any_number_but_costs_at_least_rr() {
-    cr!("601.2b", "601.2f", "118.7");
+    cr!("601.2b", "601.2f", "118.7a");
     ruling!(
         "Explosive Singularity",
         "Explosive Singularity's additional cost can't reduce its cost below {R}{R}. You can tap any number of untapped creatures, however, even if they won't reduce the cost further."
@@ -532,7 +629,11 @@ fn explosive_singularity_taps_any_number_but_costs_at_least_rr() {
     t.answer_choose(P0, &objs(&cs));
     t.cast(P0, s).target(P1).go();
     assert!(cs.iter().all(|c| tapped(&t, *c)));
-    assert_eq!(ms.iter().filter(|m| tapped(&t, **m)).count(), 2, "{{R}}{{R}}");
+    assert_eq!(
+        ms.iter().filter(|m| tapped(&t, **m)).count(),
+        2,
+        "{{R}}{{R}}"
+    );
     t.resolve_all();
     assert_eq!(t.life(P1), 10);
 }
@@ -541,7 +642,7 @@ fn explosive_singularity_taps_any_number_but_costs_at_least_rr() {
 
 #[test]
 fn collective_effort_exiled_creatures_return_before_the_counters() {
-    cr!("610.3c", "608.2c", "702.120a");
+    cr!("610.3", "610.3c", "608.2c", "702.120a");
     ruling!(
         "Collective Effort",
         "If you choose the first and third modes, and destroying the creature ends an \"exile until\" effect (such as that of Lunarch Inquisitors), the creature will return to the battlefield before you put +1/+1 counters on creatures. The same is true if you choose the second and third modes and destroying the enchantment ends such an effect."
@@ -582,7 +683,10 @@ fn collective_effort_exiled_creatures_return_before_the_counters() {
 #[test]
 fn hand_of_justice_can_destroy_a_creature_it_tapped() {
     cr!("601.2c", "601.2h", "608.2b");
-    ruling!("Hand of Justice", "It can destroy one of the three creatures it taps.");
+    ruling!(
+        "Hand of Justice",
+        "It can destroy one of the three creatures it taps."
+    );
     supported("Hand of Justice");
     let mut t = TestGame::new(2);
     let h = t.battlefield(P0, "Hand of Justice");
@@ -617,4 +721,3 @@ fn frondland_felidar_granted_ability_resolves_without_the_felidar() {
     t.resolve_all();
     assert!(tapped(&t, bears));
 }
-
