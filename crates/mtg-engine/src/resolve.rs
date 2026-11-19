@@ -2605,13 +2605,36 @@ impl Game {
                         }
                         only = Some(f);
                     }
-                    if let Ok(spell) = crate::casting::cast_during_resolution_as(
+                    let prev = std::mem::replace(
+                        &mut self.special.casting_if_able,
+                        (!*optional).then_some(p),
+                    );
+                    let mut r = crate::casting::cast_during_resolution_as(
                         self,
                         p,
                         o,
-                        method,
+                        method.clone(),
                         only.as_deref(),
-                    ) {
+                    );
+                    // The player chose to activate no mana abilities for it: the casting was
+                    // reversed (CR 733.1), and they cast it again, as they must if able,
+                    // with the mana in their pool alone (CR 733.2), choosing only costs it
+                    // pays (an unkicked spell rather than a kicked one).
+                    if r.as_ref()
+                        .is_err_and(|e| e.0 == crate::cost_rules::DECLINED_MANA_ABILITIES)
+                    {
+                        let prev_pool = std::mem::replace(&mut self.special.pool_only, Some(p));
+                        r = crate::casting::cast_during_resolution_as(
+                            self,
+                            p,
+                            o,
+                            method,
+                            only.as_deref(),
+                        );
+                        self.special.pool_only = prev_pool;
+                    }
+                    self.special.casting_if_able = prev;
+                    if let Ok(spell) = r {
                         spent += self.mana_value_of(spell) as i64;
                         cast.push(Entity::Object(spell));
                     }

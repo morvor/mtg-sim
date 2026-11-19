@@ -1419,6 +1419,11 @@ fn sources_inner(
     beginning: Option<(ObjectId, u64)>,
 ) -> Vec<ManaSource> {
     let mut out = Vec::new();
+    // A player casting a spell "if able" who chose to activate no mana abilities for it
+    // (Wild Evocation's ruling, `cost_rules::agrees_to_activate_mana_abilities`).
+    if g.special.pool_only == Some(p) {
+        return out;
+    }
     for o in g.permanents() {
         let reserved = Some(o.id) == reserve;
         if reserved && !reserve_may_tap {
@@ -2627,6 +2632,31 @@ impl<'a> Planner<'a> {
     }
 }
 
+/// `spend` with how `p` may pay added (see [`pay_mana`]).
+fn payer_spend(g: &Game, p: PlayerId, spend: &SpendContext) -> SpendContext {
+    let mut adjusted = spend.clone();
+    adjusted.pay_life_for = crate::payment_rules::life_for_mana(g, p);
+    adjusted.rules = crate::kw::spend_rules::with_player_rules(g, p, &spend.rules);
+    if crate::as_though::spends_as_any_color(g, p) {
+        adjusted.any_color = ManaType::ALL.to_vec();
+    }
+    adjusted
+}
+
+/// Whether the mana already in `p`'s mana pool pays `cost` (no mana ability activated,
+/// no life paid for Phyrexian mana).
+pub fn pool_pays(g: &Game, p: PlayerId, cost: &ManaCost, spend: &SpendContext) -> bool {
+    let spend = payer_spend(g, p, spend);
+    find_payment_with(
+        &g.player(p).mana_pool.mana,
+        cost,
+        &spend,
+        0,
+        &usable_pool(g, p, &spend),
+    )
+    .is_some()
+}
+
 /// Pays a mana cost: activates planned mana abilities, then spends mana from the pool.
 /// Returns the types of mana spent.
 pub fn pay_mana(
@@ -2640,12 +2670,7 @@ pub fn pay_mana(
     // cost, you may pay 2 life rather than pay that mana"), and with mana that may be spent
     // as though it were mana of any color, any mana pays the X a spell or ability limits to
     // mana of particular colors (CR 609.4b).
-    let mut adjusted = spend.clone();
-    adjusted.pay_life_for = crate::payment_rules::life_for_mana(g, p);
-    adjusted.rules = crate::kw::spend_rules::with_player_rules(g, p, &spend.rules);
-    if crate::as_though::spends_as_any_color(g, p) {
-        adjusted.any_color = ManaType::ALL.to_vec();
-    }
+    let adjusted = payer_spend(g, p, spend);
     let spend = &adjusted;
     // Prefer paying from the pool if possible (without life for Phyrexian if mana suffices).
     let try_pool = |g: &Game, allow_life: u32| {
