@@ -214,7 +214,10 @@ fn nissa_and_omnath_landfall_abilities_that_add_mana_use_the_stack() {
             if name.starts_with("Omnath") && i == 0 {
                 assert_eq!(t.life(P0), 24);
             } else {
-                assert!(crate::r_p119_common::pool_total(&t, P0) > before, "{name} #{i}");
+                assert!(
+                    crate::r_p119_common::pool_total(&t, P0) > before,
+                    "{name} #{i}"
+                );
             }
         }
     }
@@ -229,7 +232,11 @@ fn nissa_after_the_second_time_just_adds_mana() {
     );
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Nissa, Resurgent Animist");
-    stack_library(&mut t, P0, &["Llanowar Elves", "Elvish Mystic", "Elvish Visionary"]);
+    stack_library(
+        &mut t,
+        P0,
+        &["Llanowar Elves", "Elvish Mystic", "Elvish Visionary"],
+    );
     let hand = t.hand_size(P0);
     let mut revealed = vec![];
     for _ in 0..3 {
@@ -336,7 +343,7 @@ fn moraug_landfall_in_the_first_main_phase_adds_a_combat_before_the_regular_one(
     assert!(!tapped(&t, bears));
     t.attack(&[(bears, Entity::Player(P1))], &[]);
     assert_eq!(t.life(P1), 17); // 2 + 1 for having attacked once this turn
-    // Then the regular combat, with no main phase between and no untap.
+                                // Then the regular combat, with no main phase between and no untap.
     t.advance_to(P0, Step::BeginningOfCombat);
     t.resolve_all();
     assert_eq!(t.g.turn.combat_phases, 2);
@@ -374,6 +381,9 @@ fn springheart_nantuko_makes_an_insect_whenever_no_copy_was_made() {
     let from = t.asked().len();
     play_forest(&mut t);
     t.resolve_all();
-    assert!(!was_asked(&t, from, |d| matches!(d, Decision::YesNo { .. })));
+    assert!(!was_asked(&t, from, |d| matches!(
+        d,
+        Decision::YesNo { .. }
+    )));
     assert_eq!(tokens_of(&t, P0, "Insect"), 1);
 }
