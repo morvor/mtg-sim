@@ -46,6 +46,7 @@ fn discard(t: &mut TestGame, p: PlayerId, card: ObjectId) -> ObjectId {
 #[test]
 fn a_card_cast_from_hand_for_its_mana_cost_with_omniscience_out_asks_no_permission() {
     cr!("601.3", "118.9b");
+    interp!("own-permission-first");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Omniscience");
     let forests = t.lands(P0, "Forest", 2);
@@ -88,6 +89,7 @@ fn a_card_cast_from_hand_for_its_mana_cost_with_omniscience_out_asks_no_permissi
 #[test]
 fn a_land_played_with_its_own_mayhem_ability_leaves_muldrothas_land_unused() {
     cr!("702.187c", "305.2");
+    interp!("own-permission-first");
     ruling!(
         "Muldrotha, the Gravetide",
         "If multiple effects allow you to play a card from your graveyard, you must announce which permission you're using as you begin to play the card."
