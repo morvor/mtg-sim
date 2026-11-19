@@ -2606,6 +2606,16 @@ pub fn is_mana_effect(e: &Effect) -> bool {
         Effect::If {
             then, otherwise, ..
         } => is_mana_effect(then) && is_mana_effect(otherwise),
+        // "Add one mana of that color unless any player pays {1}" (Rhystic Cave): it could
+        // add mana (CR 605.1a), and otherwise adds none.
+        Effect::PayOptional {
+            then, otherwise, ..
+        } => {
+            let mana_or_nothing = |e: &Effect| is_mana_effect(e) || matches!(e, Effect::Noop);
+            (is_mana_effect(then) || is_mana_effect(otherwise))
+                && mana_or_nothing(then)
+                && mana_or_nothing(otherwise)
+        }
         _ => false,
     }
 }

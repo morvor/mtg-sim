@@ -194,10 +194,16 @@ impl Game {
                     );
                     self.last_paid = None;
                     if pays && crate::entry_costs::pay(self, p, cost, ctx) {
+                        // The first payment is the one "if they do" refers to; the
+                        // remaining players are still offered the cost, to no further
+                        // effect (CR 118.12a; `any-player-may-after-a-payment`).
+                        if !paid {
+                            crate::kw::payment_mana::note(self, ctx);
+                            crate::cost_effects::note_paid(self, cost, ctx);
+                        }
+                        self.last_paid = None;
                         paid = true;
-                        crate::kw::payment_mana::note(self, ctx);
-                        crate::cost_effects::note_paid(self, cost, ctx);
-                        break;
+                        continue;
                     }
                     if !pays && matches!(**then, Effect::Noop) {
                         // CR 732.6: declining the [B] of "[A] unless [B]".
