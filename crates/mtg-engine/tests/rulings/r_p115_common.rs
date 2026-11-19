@@ -36,7 +36,7 @@ pub fn gy_names(t: &TestGame, p: PlayerId) -> Vec<String> {
         .collect()
 }
 
-/// Number of creature tokens `p` controls with the given subtype.
+/// Number of tokens `p` controls with the given subtype.
 pub fn tokens_of(t: &TestGame, p: PlayerId, subtype: &str) -> usize {
     t.g.permanents()
         .filter(|o| o.controller == p && o.is_token() && o.chars.has_subtype(subtype))

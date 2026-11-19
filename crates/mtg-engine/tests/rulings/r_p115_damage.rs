@@ -13,7 +13,7 @@ use mtg_engine::*;
 
 #[test]
 fn excess_damage_spells_do_nothing_if_the_creature_is_an_illegal_target() {
-    cr!("608.2b", "120.4a");
+    cr!("608.2b");
     ruling!(
         "Flame Spill",
         "If the target creature is an illegal target by the time Flame Spill tries to resolve, the spell won’t resolve. It won’t deal damage to any player."
@@ -37,7 +37,7 @@ fn excess_damage_spells_do_nothing_if_the_creature_is_an_illegal_target() {
 
 #[test]
 fn flame_spills_two_damage_amounts_are_modified_separately() {
-    cr!("120.4a", "120.4b", "615.1a");
+    cr!("120.4a", "120.4b", "615.1a", "614.1a");
     ruling!(
         "Flame Spill",
         "Once you’ve determined how much damage is excess, Flame Spill simultaneously deals damage to the creature and to its controller. This damage may be modified by replacement or prevention effects."
@@ -98,7 +98,7 @@ fn pigment_storms_excess_is_determined_before_other_replacements() {
 
 #[test]
 fn ancient_hellkite_pings_only_while_attacking() {
-    cr!("602.5b", "506.4", "511.1");
+    cr!("602.5", "511.3");
     ruling!(
         "Ancient Hellkite",
         "Unless Ancient Hellkite leaves combat, it continues to be attacking (so its ability may still be activated) through the end of combat step."
@@ -135,7 +135,7 @@ fn ancient_hellkite_pings_only_while_attacking() {
 
 #[test]
 fn raging_regisaurs_trigger_damage_isnt_combat_damage() {
-    cr!("510.2", "120.2");
+    cr!("510.2", "615.1");
     ruling!(
         "Raging Regisaur",
         "Damage dealt by Raging Regisaur's triggered ability isn't combat damage."
@@ -174,7 +174,7 @@ fn pings(t: &TestGame, stone: ObjectId) -> bool {
 
 #[test]
 fn quicksmith_rebel_grants_only_while_you_control_it() {
-    cr!("611.2b", "603.2");
+    cr!("611.2b");
     ruling!(
         "Quicksmith Rebel",
         "If Quicksmith Rebel leaves the battlefield while its ability is on the stack, the artifact never gains the damage-dealing ability."
@@ -205,7 +205,7 @@ fn quicksmith_rebel_grants_only_while_you_control_it() {
 
 #[test]
 fn quicksmith_rebels_ping_resolves_after_either_leaves() {
-    cr!("113.7a", "608.2b");
+    cr!("113.7a");
     ruling!(
         "Quicksmith Rebel",
         "If Quicksmith Rebel or the artifact leaves the battlefield while the damage-dealing ability is on the stack, that ability resolves as normal."
@@ -255,7 +255,7 @@ fn attack_trigger_candidates(t: &mut TestGame, attacker: ObjectId, target: Entit
 
 #[test]
 fn hellkite_whelp_defending_player_is_the_planeswalkers_controller() {
-    cr!("506.2", "508.5", "802.2a");
+    cr!("508.5", "802.2a");
     ruling!(
         "Hellkite Whelp",
         "If a creature attacks a planeswalker or battle, that permanent's controller is the defending player."
@@ -275,7 +275,7 @@ fn hellkite_whelp_defending_player_is_the_planeswalkers_controller() {
 
 #[test]
 fn heart_piercer_bow_defending_player_is_the_battles_protector() {
-    cr!("506.2", "508.5", "310.9e");
+    cr!("508.5", "802.2a", "310.9e");
     ruling!(
         "Heart-Piercer Bow",
         "If a creature is attacking a battle, the protector of that battle is the defending player."
@@ -329,7 +329,7 @@ fn hellkite_whelp_in_two_headed_giant_targets_only_the_attacked_players_creature
 
 #[test]
 fn rocket_launcher_can_target_differently_each_time() {
-    cr!("602.2b", "115.1");
+    cr!("602.2b", "601.2c");
     ruling!("Rocket Launcher", "You can choose different targets for each use.");
     supported("Rocket Launcher");
     let mut t = TestGame::new(2);

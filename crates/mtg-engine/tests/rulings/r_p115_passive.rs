@@ -90,7 +90,7 @@ fn huatli_changes_combat_damage_not_power() {
 
 #[test]
 fn huatlis_toughness_is_read_as_her_ability_resolves() {
-    cr!("608.2h", "606.3");
+    cr!("608.2h");
     ruling!(
         "Huatli, the Sun's Heart",
         "The greatest toughness among creatures you control is determined only as Huatli’s loyalty ability begins to resolve."
@@ -109,7 +109,7 @@ fn huatlis_toughness_is_read_as_her_ability_resolves() {
 
 #[test]
 fn tibalt_stops_set_life_totals_from_raising_an_opponents_life() {
-    cr!("119.5", "119.7");
+    cr!("119.5", "101.2");
     ruling!(
         "Tibalt, Rakish Instigator",
         "If an effect says to set an opponent's life total to a number that's higher than their current life total while Tibalt is on the battlefield, the player's life total doesn't change."
@@ -137,7 +137,7 @@ fn tibalt_stops_set_life_totals_from_raising_an_opponents_life() {
 
 #[test]
 fn tibalt_lets_life_gaining_spells_do_everything_else() {
-    cr!("119.7", "608.2c");
+    cr!("101.2", "608.2c");
     ruling!(
         "Tibalt, Rakish Instigator",
         "Spells and abilities that cause opponents to gain life still resolve while Tibalt is on the battlefield. No opponent will gain life, but any other effects of that spell or ability will happen."

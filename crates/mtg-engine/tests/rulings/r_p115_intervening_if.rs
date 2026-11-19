@@ -11,7 +11,7 @@ use mtg_engine::*;
 
 #[test]
 fn bridge_from_below_must_be_in_the_graveyard_as_it_triggers_and_resolves() {
-    cr!("603.4", "603.10a", "113.6k");
+    cr!("603.4", "603.10a");
     ruling!(
         "Bridge from Below",
         "If Bridge from Below isn't in your graveyard immediately before a creature dies, its abilities won't trigger at all. If Bridge from Below isn't still in your graveyard as its first ability resolves, you won't create a token."
@@ -70,7 +70,7 @@ fn bridge_from_below_simultaneous_deaths_let_you_make_the_token_first() {
 
 #[test]
 fn bridge_from_below_cares_about_the_graveyard_not_the_controller() {
-    cr!("603.10a", "404.2", "400.3");
+    cr!("603.10a", "400.3");
     ruling!(
         "Bridge from Below",
         "Neither ability cares who controlled the creature that died, only which graveyard it was put into."
@@ -99,7 +99,7 @@ fn bridge_from_below_cares_about_the_graveyard_not_the_controller() {
 
 #[test]
 fn bridge_from_below_on_the_battlefield_does_nothing() {
-    cr!("113.6", "113.6k");
+    cr!("603.4");
     ruling!(
         "Bridge from Below",
         "While Bridge from Below is on the battlefield, it has no effect."
@@ -157,7 +157,7 @@ fn wrangler_of_the_damned_checks_as_it_triggers_and_as_it_resolves() {
 
 #[test]
 fn ophiomancer_checks_for_snakes_as_it_triggers_and_resolves() {
-    cr!("603.4", "205.3m");
+    cr!("603.4", "503.1a");
     ruling!(
         "Ophiomancer",
         "Ophiomancer's ability checks if you control a Snake at the beginning of each upkeep. If you do, the ability won't trigger."

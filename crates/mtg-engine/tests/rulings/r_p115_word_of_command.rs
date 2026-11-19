@@ -72,7 +72,7 @@ fn word_of_command_can_be_responded_to_and_chooses_on_resolution() {
 
 #[test]
 fn word_of_command_chooses_only_from_the_hand() {
-    cr!("723.5");
+    cr!("723.7");
     ruling!(
         "Word of Command",
         "Word of Command can't be used to force a player to play a card that isn't in their hand."

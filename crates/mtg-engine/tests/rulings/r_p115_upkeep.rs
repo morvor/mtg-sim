@@ -101,7 +101,7 @@ fn three_left() -> TestGame {
 
 #[test]
 fn chittering_witch_counts_only_opponents_still_in_the_game() {
-    cr!("800.4a", "102.2");
+    cr!("800.4a");
     ruling!(
         "Chittering Witch",
         "In a multiplayer game, opponents who have left the game aren't counted by Chittering Witch's triggered ability."
@@ -115,7 +115,7 @@ fn chittering_witch_counts_only_opponents_still_in_the_game() {
 
 #[test]
 fn chittering_witch_can_sacrifice_itself() {
-    cr!("602.2", "118.3");
+    cr!("602.2", "701.21a");
     ruling!(
         "Chittering Witch",
         "You can sacrifice Chittering Witch to pay the cost of its last ability."
@@ -131,7 +131,7 @@ fn chittering_witch_can_sacrifice_itself() {
 
 #[test]
 fn benediction_of_moons_counts_players_in_the_game() {
-    cr!("102.2", "800.4a", "810.2");
+    cr!("102.2", "800.4a", "810.2", "801.2");
     ruling!(
         "Benediction of Moons",
         "\"For each player\" means for each player currently in the game, which is normally two. A Two-Headed Giant game has four players. In a Free-for-All multiplayer game, players who have been eliminated or who are outside your range of influence don't count toward the total."
@@ -162,7 +162,7 @@ fn benediction_of_moons_counts_players_in_the_game() {
 
 #[test]
 fn furious_spinesplitter_counts_damage_dealt_before_it_arrived() {
-    cr!("513.1a", "603.2");
+    cr!("513.1", "603.2");
     ruling!(
         "Furious Spinesplitter",
         "Furious Spinesplitter doesn't need to have been on the battlefield when the damage was dealt."
@@ -242,7 +242,7 @@ fn killer_instinct_leaves_a_noncreature_card_on_top() {
 
 #[test]
 fn visions_with_fewer_than_five_cards() {
-    cr!("401.2", "121.1", "701.24a");
+    cr!("401.2", "121.1", "704.5b", "701.24a");
     ruling!(
         "Visions",
         "If there are less than 5 cards in the library, you look at whatever ones remain and you still get the option to shuffle."

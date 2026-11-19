@@ -77,7 +77,7 @@ fn anointed_peacekeeper_taxes_activated_abilities_not_triggered_or_mana_abilitie
 
 #[test]
 fn anointed_peacekeeper_taxes_abilities_in_every_zone() {
-    cr!("602.1", "601.2f");
+    cr!("602.2b", "601.2f");
     ruling!(
         "Anointed Peacekeeper",
         "Anointed Peacekeeper’s last ability affects cards regardless of what zone they’re in. This includes cards in hands, cards in the graveyards, and exiled cards."
@@ -108,7 +108,7 @@ fn activates_with_keep(t: &mut TestGame, p: PlayerId, src: ObjectId, generic: u3
 
 #[test]
 fn anointed_peacekeepers_spell_tax_applies_to_every_opponent() {
-    cr!("601.2f", "102.3");
+    cr!("601.2f");
     ruling!(
         "Anointed Peacekeeper",
         "Anointed Peacekeeper’s third ability applies to all opponents, not just the opponent whose hand you looked at."
@@ -181,7 +181,7 @@ fn alhammarret(t: &mut TestGame, card: &str) -> ObjectId {
 
 #[test]
 fn alhammarrets_name_is_chosen_as_it_enters_with_no_window() {
-    cr!("614.12", "614.1c", "601.2");
+    cr!("614.1c", "614.12");
     ruling!(
         "Alhammarret, High Arbiter",
         "No one can cast spells or activate abilities between the time a card is named and the time that Alhammarret's last ability starts to work."
@@ -206,19 +206,23 @@ fn alhammarrets_name_is_chosen_as_it_enters_with_no_window() {
 
 #[test]
 fn alhammarret_doesnt_stop_putting_the_card_onto_the_battlefield() {
-    cr!("101.2");
+    cr!("101.2", "601.3");
     ruling!(
         "Alhammarret, High Arbiter",
         "Although spells with the chosen name can't be cast, permanent cards with that name can still be put onto the battlefield by a spell or ability."
     );
     let mut t = TestGame::new(2);
-    t.hand(P1, "Grizzly Bears");
+    let in_hand = t.hand(P1, "Grizzly Bears");
     alhammarret(&mut t, "Grizzly Bears");
     let dead = t.graveyard(P1, "Grizzly Bears");
     t.g.turn.active = P1;
+    lots(&mut t, P1);
+    t.g.turn.priority = Some(P1);
+    assert!(t.g.cast_spell(P1, in_hand, CastMethod::Normal).is_err());
     cast_at(&mut t, P1, "Reanimate", &[obj(dead)]);
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    assert_eq!(t.zone(in_hand), Zone::Hand(P1));
 }
 
 #[test]
@@ -255,7 +259,7 @@ fn alhammarret_doesnt_stop_face_down_spells_or_manifest() {
 
 #[test]
 fn thought_hemorrhage_damage_is_one_instance() {
-    cr!("120.2", "608.2h");
+    cr!("608.2h");
     ruling!(
         "Thought Hemorrhage",
         "the damage dealt by Thought Hemorrhage is all considered to be the same instance of damage"
@@ -357,7 +361,7 @@ fn quash(t: &mut TestGame, spell: ObjectId) {
 
 #[test]
 fn quash_exiles_the_countered_spell_and_the_other_copies() {
-    cr!("701.6a", "701.23b", "608.2c");
+    cr!("701.6a", "608.2c");
     ruling!(
         "Quash",
         "It exiles the countered spell. This is because the first sentence puts the spell into the graveyard before you continue to the second sentence."
@@ -391,7 +395,7 @@ fn quash_exiles_the_countered_spell_and_the_other_copies() {
 
 #[test]
 fn quash_still_searches_when_the_spell_cant_be_countered() {
-    cr!("113.6g", "101.1", "608.2c");
+    cr!("113.6g", "101.2", "608.2c");
     ruling!(
         "Quash",
         "If the spell is not countered (because the spell it targets can’t be countered), then it does not get exiled but all the other copies in the graveyard, hand, and library are exiled."
