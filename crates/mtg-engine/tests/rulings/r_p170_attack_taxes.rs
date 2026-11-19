@@ -45,6 +45,10 @@ fn a_creature_that_attacks_if_able_isnt_forced_to_pay_the_tax() {
         "Forbidding Spirit",
         "While Forbidding Spirit’s effect is in effect, your opponents can choose not to pay to attack with a creature that attacks “if able.” If there’s no other player or planeswalker to attack, that creature simply doesn’t attack."
     );
+    // (Sivitri's and Forbidding Spirit's "no other player or planeswalker" leaves out
+    // battles: that part is exempt as outdated, register pre-battle-rulings-give-way-to-
+    // the-cr, and tested in tests/rulings/pre_battle_rulings.rs. Here there's nothing
+    // else to attack.)
     for tax in [
         "",
         "Sivitri, Dragon Master",
