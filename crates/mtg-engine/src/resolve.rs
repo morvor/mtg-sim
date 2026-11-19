@@ -584,9 +584,17 @@ impl Game {
                         crate::zones::target_not_source_moved(ctx, what, e, found).object()
                     })
                     .collect();
+                let before = objs.clone();
                 let mut moves = self.destination_moves(objs, to, ctx);
                 self.put_by_chooser(what, to, ctx, &mut moves);
                 let res: Vec<ObjectId> = self.move_objects(moves).into_iter().flatten().collect();
+                // "You may put that card onto the battlefield. If you don't, put it into
+                // your hand": an Aura that can't enter stays where it is (CR 303.4g) and is
+                // still the same object (CR 400.7 is about zone changes), so "it" still
+                // refers to it, as when the player declines (Songbirds' Blessing ruling).
+                let stayed = matches!(what, Sel::Var(v) if *v == vars::IT)
+                    && !before.is_empty()
+                    && before.iter().all(|o| self.is_live(*o) && !res.contains(o));
                 crate::zones::note_source_moved(ctx, what, &res);
                 // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
                 let mut res = crate::merge::found_all(self, res);
@@ -601,7 +609,9 @@ impl Game {
                 // "... return it to the battlefield. If you do, ...": whether it moved
                 // (it may not, CR 400.7, 712.14a).
                 ctx.prev_happened = !res.is_empty();
-                ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
+                if !(stayed && res.is_empty()) {
+                    ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
+                }
             }
             Effect::Tap { what } => {
                 let mut tapped = Vec::new();
