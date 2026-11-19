@@ -4,8 +4,11 @@
 //! Another permission that lists cards elsewhere among those the player may play (Coram,
 //! the Undertaker; Sen Triplets; Xanathar, Guild Kingpin: `effect_permitted_cards`)
 //! doesn't widen it: each card is checked against the zone of each permission
-//! (`permissions::in_permission_zone`). Written for survivors of the November 2026
-//! mutation run of `permissions.rs` (docs/MUTATION.md).
+//! (`permissions::in_permission_zone`). Nor does a permission cover anything for a player
+//! it isn't for: "your" is its controller (CR 109.5), so another player's Crucible of
+//! Worlds doesn't let P0 play a land from P0's graveyard, even one a permission of P0's
+//! lists (`permissions::allowing` checks the player and the zone together). Written for
+//! survivors of the November 2026 mutation run of `permissions.rs` (docs/MUTATION.md).
 
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -111,6 +114,35 @@ fn future_sight_doesnt_cast_the_top_card_of_another_players_library() {
     t.cast(P0, targeted).go();
     t.resolve_all();
     assert!(t.on_battlefield(targeted));
+}
+
+/// Kills `permissions.rs:279:53` (in `permissions::allowing`,
+/// `!g.player_rel_matches(perm.who, p, &ctx) || !in_permission_zone(g, p, card, perm)` with
+/// `&&`: a static permission is skipped only if it's neither for the player nor for a zone
+/// holding the card). For the player's own permissions the mutant ignores the zone, as
+/// `180:5` does, and the first assertion of each test above kills it; this test kills its
+/// other half. Lurrus of the Dream-Den lists P0's graveyard among the cards P0 may play (and
+/// allows no land), so P0's Forest is checked against P1's Crucible of Worlds too: that
+/// permission is P1's, but its zone, "your graveyard" read for P0, holds the Forest, and the
+/// mutant lets P0 play it.
+#[test]
+fn another_players_crucible_of_worlds_doesnt_play_a_land_from_your_graveyard() {
+    cr!("109.5", "305.1");
+    ruling!(
+        "Lurrus of the Dream-Den",
+        "Lurrus doesn't let you play lands from your graveyard."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Lurrus of the Dream-Den");
+    t.battlefield(P1, "Crucible of Worlds");
+    let forest = t.graveyard(P0, "Forest");
+    assert!(t.play_land(P0, forest).is_err());
+    assert_eq!(t.zone(forest), Zone::Graveyard(P0));
+    // With a Crucible of Worlds of P0's own, it can be played: the land play was still
+    // available.
+    t.battlefield(P0, "Crucible of Worlds");
+    t.play_land(P0, forest).unwrap();
+    assert!(t.on_battlefield(forest));
 }
 
 /// Engine bug found triaging `permissions.rs:196:32`; this test FAILS until the fix is
