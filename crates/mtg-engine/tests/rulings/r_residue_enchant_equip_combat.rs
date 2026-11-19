@@ -147,7 +147,7 @@ fn farrels_mantle_two_mantles_one_use_is_enough() {
     cr!("510.1", "603.2");
     ruling!(
         "Farrel's Mantle",
-        "As long as the enchanted creature’s controller chooses to use Farrel’s Mantle’s ability at least once to deal damage, the enchanted creature will deal no combat damage."
+        "If the same creature is enchanted with more than one Farrel’s Mantle, they’ll each trigger if that creature attacks and isn’t blocked."
     );
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -158,10 +158,16 @@ fn farrels_mantle_two_mantles_one_use_is_enough() {
     t.answer_targets(P0, &[obj(wall)]);
     t.answer_yes(P0, true);
     t.answer_yes(P0, false);
+    let from = t.asked().len();
     attack_with(&mut t, &[(bears, Entity::Player(P1))]);
-    assert_eq!(triggers_on_stack(&t, "plus 2"), 0);
     t.advance_to(P0, Step::EndOfCombat);
     t.resolve_all();
+    // Both triggered (two choices), one was used: no combat damage.
+    let choices = t.asked()[from..]
+        .iter()
+        .filter(|(p, d)| *p == P0 && matches!(d, mtg_engine::decision::Decision::YesNo { .. }))
+        .count();
+    assert_eq!(choices, 2, "{}", t.dump_log());
     assert_eq!(t.obj_now(wall).damage, 4, "{}", t.dump_log());
     assert_eq!(t.life(P1), 20);
 }

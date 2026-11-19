@@ -180,10 +180,10 @@ fn the_masamune_put_into_a_graveyard_from_the_battlefield_triggers_twice() {
 
 #[test]
 fn two_masamunes_on_one_creature_trigger_three_times() {
-    cr!("603.2d", "700.4", "704.5j");
+    cr!("603.2d", "700.4", "704.5j", "114.4");
     ruling!(
         "The Masamune",
-        "If they're equipped to the same creature, the abilities of the equipped creature will also trigger three times."
+        "If you somehow control two of The Masamune and they're equipped to creatures you control, a creature dying causes abilities of emblems you own to trigger three times, not four."
     );
     supported("Mirror Gallery");
     // Mirror Gallery: "The "legend rule" doesn't apply."
@@ -197,6 +197,21 @@ fn two_masamunes_on_one_creature_trigger_three_times() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     destroy(&mut t, bears);
     assert_eq!(crate::r_s14_common::triggers_from(&t, artist), 3, "{}", t.dump_log());
+    // Equipped to two creatures: an emblem P0 owns (with Blood Artist's ability) triggers
+    // three times, not four.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Mirror Gallery");
+    for _ in 0..2 {
+        let c = t.battlefield(P0, "Hill Giant");
+        attach_new(&mut t, P0, MASAMUNE, c);
+    }
+    let donor = t.exile(P1, "Blood Artist");
+    let abilities = t.obj_now(donor).chars.abilities.clone();
+    mtg_engine::tokens::create_emblem(&mut t.g, P0, abilities, None);
+    t.g.recompute();
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    destroy(&mut t, bears);
+    assert_eq!(triggers_on_stack(&t, "dies"), 3, "{}", t.dump_log());
 }
 
 // --- Curse of Shaken Faith ----------------------------------------------------------------
