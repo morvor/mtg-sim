@@ -683,6 +683,10 @@ pub struct SearchPart {
     /// "all cards with that name": every matching card in a public zone is found.
     #[serde(default)]
     pub all: bool,
+    /// "exactly N": the searcher finds N cards or none, and none if N can't be found
+    /// together (register `exactly-n-cards-are-n-or-none`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub exactly: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

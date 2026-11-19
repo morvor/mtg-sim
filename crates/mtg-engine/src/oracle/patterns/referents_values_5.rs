@@ -219,6 +219,7 @@ fn search_destination_instead(l: &str, prev: &mut Effect, b: &mut Builder) -> bo
                 count: count.clone(),
                 up_to: false,
                 all: false,
+                exactly: false,
             }],
             distinct_names: false,
             optional: false,

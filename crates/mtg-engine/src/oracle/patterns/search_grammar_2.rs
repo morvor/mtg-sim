@@ -197,6 +197,10 @@ inventory::submit! {
     EffectPattern { name: "search for cards and reveal them (they stay for what follows)", priority: 96, parse: search_and_reveal_them }
 }
 
+/// Marks (in `Builder::named`) that the instructions that follow come after "If you do"
+/// about an optional search whose found cards stay where they are.
+const IF_YOU_SEARCHED: &str = "search_grammar_2: if you searched";
+
 /// "If you do, reveal those cards." after "You may search your library for exactly two
 /// cards ..." (Burning-Rune Demon): the cards found are revealed (only if the player
 /// searched) and stay where they are for what follows.
@@ -214,11 +218,48 @@ fn if_you_do_reveal_those_cards(l: &str, prev: &mut Effect, b: &mut Builder) -> 
     spec.reveal = true;
     let old = std::mem::take(prev);
     *prev = noted(old, b);
+    b.named.push((IF_YOU_SEARCHED.to_string(), Sel::None));
     true
 }
 
 inventory::submit! {
     FollowupPattern { name: "if you do, reveal those cards (after a search)", priority: 96, apply: if_you_do_reveal_those_cards }
+}
+
+/// "..., then shuffle." / "Then shuffle." in the instructions after "If you do, reveal
+/// those cards" (Burning-Rune Demon: "Put the chosen card into your hand and the other
+/// into your graveyard, then shuffle."): part of what's done if the player searched
+/// (CR 118.12b), so a player who chose not to search doesn't shuffle (the card's ruling:
+/// "If you choose not to search your library, no cards are revealed or put anywhere else,
+/// and you don't shuffle.").
+fn shuffle_if_you_searched(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
+    if !b.named.iter().any(|(n, _)| n == IF_YOU_SEARCHED) {
+        return false;
+    }
+    let mut v = vec![];
+    if !matches!(l, "shuffle" | "then shuffle" | "shuffle your library") {
+        let Some(head) = l.strip_suffix(", then shuffle") else {
+            return false;
+        };
+        let Some(e) = crate::oracle::effects::parse_sentence(head, b) else {
+            return false;
+        };
+        v.push(e);
+    }
+    v.insert(0, std::mem::take(prev));
+    v.push(Effect::If {
+        cond: Condition::Custom(crate::search_rules::YOU_SEARCHED_THIS_WAY.into()),
+        then: Box::new(Effect::Shuffle {
+            who: PlayerRef::You,
+        }),
+        otherwise: Box::new(Effect::Noop),
+    });
+    *prev = Effect::seq(v);
+    true
+}
+
+inventory::submit! {
+    FollowupPattern { name: "then shuffle (after if you do, reveal those cards)", priority: 5, apply: shuffle_if_you_searched }
 }
 
 /// "An opponent chooses two of those cards.", "Target opponent chooses two of those
