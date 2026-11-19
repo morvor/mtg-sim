@@ -1,6 +1,6 @@
 //! Rulings batch P083 — discard hate: cards that punish an opponent for making you
 //! discard them (Quagnoth, Obstinate Baloth, Loxodon Smiter, Guerrilla Tactics, Nephalia
-//! Academy; CR 701.9, 614.1a, 603.6e, 603.10a), replacement effects that compete
+//! Academy; CR 701.9, 614.1a, 113.6k), replacement effects that compete
 //! (CR 616.1), madness (CR 702.35), discard triggers (Spirit Cairn, Drake Haven, Rielle,
 //! Glint-Horn Buccaneer) including during the cleanup step (CR 514.3a), and Tamiyo's
 //! discard protection.
@@ -43,7 +43,7 @@ fn exiled(t: &TestGame, name: &str) -> Vec<ObjectId> {
 
 #[test]
 fn quagnoth_triggers_from_the_graveyard_unless_cards_there_lose_their_abilities() {
-    cr!("603.6e", "701.9a", "113.6");
+    cr!("113.6k", "701.9a", "113.6");
     ruling!(
         "Quagnoth",
         "If Quagnoth is discarded normally (it moves from your hand to your graveyard), its last ability triggers from your graveyard. If Yixlid Jailer is on the battlefield, it won't trigger."
@@ -66,7 +66,7 @@ fn quagnoth_triggers_from_the_graveyard_unless_cards_there_lose_their_abilities(
 
 #[test]
 fn quagnoth_that_leaves_its_new_zone_isnt_returned() {
-    cr!("603.6e", "400.7", "608.2b");
+    cr!("113.6k", "400.7", "608.2b");
     ruling!(
         "Quagnoth",
         "If an effect of a spell or ability an opponent controls causes Quagnoth to be discarded, but Quagnoth leaves its new zone after its ability triggers, the ability will have no effect when it resolves."
@@ -85,7 +85,7 @@ fn quagnoth_that_leaves_its_new_zone_isnt_returned() {
 
 #[test]
 fn quagnoth_discarded_into_exile_returns_from_exile() {
-    cr!("603.6e", "614.1a", "701.9a");
+    cr!("113.6k", "614.1a", "701.9a");
     ruling!(
         "Quagnoth",
         "If an effect of a spell or ability an opponent controls causes Quagnoth to be discarded, but Quagnoth moves from your hand directly to the Exile zone (due to Leyline of the Void, for example), the ability will trigger from that zone. It will return Quagnoth to your hand from that zone when it resolves."
@@ -497,7 +497,7 @@ fn glint_horn_buccaneer_trigger_is_not_activated() {
 
 #[test]
 fn glint_horn_buccaneer_in_two_headed_giant() {
-    cr!("810.7", "120.3a");
+    cr!("810.4", "810.9", "120.3a");
     ruling!(
         "Glint-Horn Buccaneer",
         "In a Two-Headed Giant game, Glint-Horn Buccaneer’s triggered ability causes the opposing team to be dealt 1 damage twice."
@@ -534,7 +534,7 @@ fn glint_horn_buccaneer_in_two_headed_giant() {
 
 #[test]
 fn guerrilla_tactics_deals_damage_as_a_card_with_an_ability() {
-    cr!("603.6e", "113.7a", "120.3");
+    cr!("113.6k", "113.7a", "120.3");
     ruling!(
         "Guerrilla Tactics",
         "If it is discarded, the damage done by it is done by this card due to an ability and not by a spell."

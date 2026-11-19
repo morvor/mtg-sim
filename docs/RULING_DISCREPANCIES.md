@@ -108,6 +108,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: the destroyed artifact's controller draws a card, also when Rest in Peace exiles the artifact instead; no card is drawn for an indestructible artifact; Acolyte Hybrid's controller draws nothing for an opponent's artifact.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P060.tsv` (its "you"; the rest stays cited); register `ruling-contradicting-oracle-gives-way`; test `tests/rulings/r_p060_misc.rs` (`acolyte_hybrid_draws_only_if_the_artifact_was_destroyed`).
 
+### Glen Elendra's Answer: "can't target" for a spell with no targets
+- Kind: template error
+- Status: open for review
+- Ruling, Glen Elendra's Answer (2025-11-17): "Glen Elendra's Answer can't target mana abilities. An activated mana ability is one that could add mana as it resolves, doesn't have a target, and isn't a loyalty ability. A triggered mana ability is one that could add mana as it resolves and triggers based on an activated mana ability."
+- Conflicts with: the card's Oracle text, which has no target: "This spell can't be countered. Counter all spells your opponents control and all abilities your opponents control. Create a 1/1 blue and black Faerie creature token with flying for each spell and ability countered this way." What the ruling means, that mana abilities aren't countered by it, holds: they don't use the stack (CR 605.3b: "An activated mana ability doesn’t go on the stack, so it can’t be targeted, countered, or otherwise responded to."; CR 605.4a, the same for a triggered mana ability), and the card counters only spells and abilities on the stack.
+- Evidence: the ruling is the template written for targeted counters of abilities: Tale's End (2019-07-12) "Tale's End can't target an activated or triggered mana ability. ...", Overcharged Amalgam (2025-01-24) "Overcharged Amalgam’s exploit ability can’t target mana abilities. ...", with the same definitions after it. For a counter with no target the template says "can't counter": Kadena's Silencer (2019-08-23) "Kadena's Silencer can't counter an activated or triggered mana ability. ...", Sublime Epiphany's second mode (2020-06-23). Only the verb is off: the ruling is true of the card (it targets nothing), and its intent agrees with the card and the rules, so nothing is exempted.
+- Engine: Glen Elendra's Answer counters the spells and the activated and triggered abilities its controller's opponents control on the stack; an opponent's activated and triggered mana abilities (Llanowar Elves, Wild Growth) activated while it's on the stack add their mana and aren't countered or counted.
+- Recorded: test `tests/rulings/r_p083_counters.rs` (`glen_elendras_answer_doesnt_touch_mana_abilities`), which cites the ruling.
+
 ### Sakashima's Protege: "only a creature" for "any permanent"
 - Kind: template error
 - Status: open for review

@@ -294,7 +294,11 @@ fn branching_bolt_modes_need_legal_targets() {
     let bears = t.battlefield(P1, "Grizzly Bears");
     crate::r_s25_common::lands_for_cost(&mut t, P0, "Branching Bolt");
     let bb = t.hand(P0, "Branching Bolt");
-    t.cast(P0, bb).modes(&[0, 1]).targets(&[obj(drake), obj(bears)]).go();
+    t.cast(P0, bb)
+        .modes(&[0, 1])
+        .target(obj(drake))
+        .target(obj(bears))
+        .go();
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Wind Drake"));
     assert!(t.in_graveyard(P1, "Grizzly Bears"));

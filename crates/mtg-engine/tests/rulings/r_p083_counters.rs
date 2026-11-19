@@ -186,9 +186,6 @@ fn banefire_checks_the_chosen_x() {
     // X = 5 with Goblin Electromancer ("Instant and sorcery spells you cast cost {1}
     // less"): five mana spent, but X is 5, so Dismiss doesn't counter it and P1's Healing
     // Salve shield doesn't prevent its damage.
-    let mut t = TestGame::new(2);
-    t.battlefield(P0, "Goblin Electromancer");
-    cast_resolve(&mut t, P1, "Healing Salve", &[]);
     let salve = |t: &mut TestGame| {
         t.lands(P1, "Plains", 1);
         let s = t.hand(P1, "Healing Salve");
@@ -334,7 +331,7 @@ fn glen_elendras_answer_leaves_its_controllers_own_spells_and_abilities() {
 
 #[test]
 fn glen_elendras_answer_doesnt_touch_mana_abilities() {
-    cr!("605.1a", "605.1b", "605.3a", "605.3b", "701.6a");
+    cr!("605.1a", "605.1b", "605.3b", "605.4a", "701.6a");
     ruling!(
         "Glen Elendra's Answer",
         "Glen Elendra's Answer can't target mana abilities. An activated mana ability is one that could add mana as it resolves, doesn't have a target, and isn't a loyalty ability. A triggered mana ability is one that could add mana as it resolves and triggers based on an activated mana ability."
@@ -398,8 +395,8 @@ fn gaeas_revenge_stops_your_own_colorless_equip() {
     let targets = ability_targets(&mut t, bone, 0);
     assert!(targets.contains(&obj(bears)));
     assert!(!targets.contains(&obj(gr)), "a colorless source's equip can't target it");
-    // Your own nongreen spell can't target it either.
-    assert!(!spell_targets(&mut t, P0, "Giant Growth").is_empty());
+    // Your own nongreen spell can't target it either; your green one can.
+    assert!(spell_targets(&mut t, P0, "Giant Growth").contains(&obj(gr)));
     assert!(!spell_targets(&mut t, P0, "Shock").contains(&obj(gr)));
     // With Painter's Servant naming green, the Equipment is green: equip can target it.
     crate::r_p022_common::choose_color(&mut t, P0, Color::Green);
@@ -588,8 +585,8 @@ fn magic_missile_keeps_its_division_when_a_target_becomes_illegal() {
     t.resolve_all();
     assert_eq!(damage_on(&t, b), 1, "unchanged");
     assert_eq!(t.life(P1), 19, "unchanged");
-    // A division with a target assigned 0 isn't legal: the engine fixes it so each gets
-    // at least 1.
+    // A division assigning a target 0 isn't legal: the engine doesn't accept it and
+    // divides the damage so that each target gets at least 1.
     let mut t = TestGame::new(2);
     let a = t.battlefield(P1, "Colossal Dreadmaw");
     let b = t.battlefield(P1, "Craw Wurm");
@@ -609,4 +606,24 @@ fn magic_missile_keeps_its_division_when_a_target_becomes_illegal() {
     assert!(!on_stack(&t, mm));
     assert!(t.in_graveyard(P0, "Magic Missile"));
     assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn kavu_chameleon_new_color_replaces_its_colors() {
+    cr!("105.3", "613.1e");
+    ruling!("Kavu Chameleon", "The new color replaces all previous colors.");
+    let mut t = TestGame::new(2);
+    let kavu = t.battlefield(P0, "Kavu Chameleon");
+    assert!(t.obj_now(kavu).chars.colors.contains(Color::Green));
+    t.lands(P0, "Forest", 1);
+    crate::r_p022_common::choose_color(&mut t, P0, Color::Blue);
+    t.activate(P0, kavu, 0, &[]).unwrap();
+    t.resolve_all();
+    let colors = t.obj_now(kavu).chars.colors;
+    assert!(colors.contains(Color::Blue));
+    assert!(!colors.contains(Color::Green), "green is replaced");
+    // Until end of turn.
+    t.advance_to(P1, Step::Upkeep);
+    let colors = t.obj_now(kavu).chars.colors;
+    assert!(colors.contains(Color::Green) && !colors.contains(Color::Blue));
 }
