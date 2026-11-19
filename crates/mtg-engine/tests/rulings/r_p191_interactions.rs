@@ -386,7 +386,8 @@ fn two_godheads_of_awe_make_each_other_one_one() {
 
 #[test]
 fn dominus_of_fealty_on_your_own_permanent_still_asks() {
-    cr!("608.2c", "603.5");
+    cr!("608.2c", "603.5", "118.12");
+    interp!("may-gain-control-if-you-do-follows-the-choice");
     ruling!(
         "Dominus of Fealty",
         "If you already control the targeted permanent when the ability resolves, you still need to choose whether or not to apply the effect. If you choose to apply it, the permanent untaps and gains haste. If you don’t, it doesn’t."
@@ -950,6 +951,7 @@ fn compleated_with_doubling_season(
 #[test]
 fn compleated_and_other_loyalty_replacements_both_apply() {
     cr!("702.150a", "616.1", "616.1e", "616.1f", "306.5b");
+    interp!("compleated-is-ordered-with-other-replacements");
     ruling!(
         "Nissa, Ascended Animist",
         "Other replacement effects that would change the number of loyalty counters Nissa enters with will apply as normal."
