@@ -173,6 +173,8 @@ impl Game {
                 then,
                 otherwise,
             } => {
+                let had_x = ctx.cost_has_x;
+                ctx.cost_has_x = cost.mana.as_ref().is_some_and(|m| m.has_x());
                 let cost = &crate::mana_abilities::bind_x_for_payment(self, cost, ctx);
                 // "[cost] for each ...": the total is determined now (CR 702.24a).
                 let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
@@ -204,6 +206,7 @@ impl Game {
                         crate::shortcuts::declined_unless(self);
                     }
                 }
+                ctx.cost_has_x = had_x;
                 ctx.prev_happened = paid;
                 if paid {
                     self.exec(then, ctx);

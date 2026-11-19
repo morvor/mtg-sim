@@ -105,6 +105,11 @@ pub struct Ctx {
     /// `Game::legal_target_candidates` on their own copy of the context.
     #[serde(default)]
     pub target_legality: bool,
+    /// The cost a resolving spell or ability asks for had {X} in it before X was replaced
+    /// by its value (`mana_abilities::bind_x_for_payment`): mana that may be spent only
+    /// on costs that contain {X} can pay it (CR 107.3; Elementalist's Palette's rulings).
+    #[serde(default)]
+    pub cost_has_x: bool,
 }
 
 /// Modifications to how a permanent enters, collected while applying an "as this

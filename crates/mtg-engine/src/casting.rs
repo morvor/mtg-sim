@@ -3754,6 +3754,10 @@ impl Game {
             // "Spend this mana only to pay cumulative upkeep costs": the cost the resolving
             // keyword ability asks for (CR 702.24a).
             purpose: crate::keyword_impls::resolving_keyword_purpose(self, ctx),
+            // "Spend this mana only on costs that contain {X}": a cost with {X} asked for
+            // as a spell or ability resolves (Power Sink's "unless its controller pays
+            // {X}"), whose X already has its value.
+            has_x: ctx.cost_has_x,
             ..Default::default()
         };
         match self.pay_total_cost(p, cost, src, &spend, ctx) {
