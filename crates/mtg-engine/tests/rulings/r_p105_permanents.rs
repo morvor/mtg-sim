@@ -30,33 +30,43 @@ use mtg_engine::*;
 
 #[test]
 fn grell_philosopher_gained_abilities_refer_to_the_grell() {
-    cr!("201.5b", "613.1f");
+    cr!("201.5b", "700.7", "613.1f");
     ruling!(
         "Grell Philosopher",
         "The granted abilities effectively use “this permanent” rather than “[that card's name],” so you treat the abilities as if they were printed on the creature that gained the ability."
     );
     supported("Grell Philosopher");
     supported("Universal Solvent");
-    let mut t = TestGame::new(2);
-    let grell = t.battlefield(P0, "Grell Philosopher");
-    let solvent = t.battlefield(P1, "Universal Solvent");
-    let giant = t.battlefield(P1, "Hill Giant");
-    t.lands(P0, "Island", 7);
-    // At P0's upkeep, Grell's trigger targets Universal Solvent.
-    t.answer_targets(P0, &[obj(solvent)]);
-    t.set_step(P1, Step::End);
-    t.advance_to(P0, Step::Upkeep);
-    t.resolve_all();
-    t.advance_to(P0, Step::PrecombatMain);
-    // "{7}, {T}, Sacrifice Universal Solvent: Destroy target permanent." on the Grell:
-    // sacrifice the Grell.
-    t.answer_targets(P0, &[obj(giant)]);
-    activate_containing(&mut t, P0, grell, "Destroy target permanent").unwrap();
-    assert!(!t.on_battlefield(grell));
-    assert!(t.on_battlefield(solvent));
-    t.resolve_all();
-    assert!(!t.on_battlefield(giant));
-    assert!(t.on_battlefield(solvent));
+    supported("Lunatic Pandora");
+    // Universal Solvent's ability says "Sacrifice this artifact" (the Grell isn't an
+    // artifact, CR 700.7); Lunatic Pandora's names the card ("Sacrifice Lunatic Pandora",
+    // CR 201.5b). Either way the Grell is sacrificed.
+    // (artifact, the ability's text)
+    let cases = [
+        ("Universal Solvent", "Destroy target permanent"),
+        ("Lunatic Pandora", "Destroy target nonland permanent"),
+    ];
+    for (artifact, text) in cases {
+        let mut t = TestGame::new(2);
+        let grell = t.battlefield(P0, "Grell Philosopher");
+        let source = t.battlefield(P1, artifact);
+        let giant = t.battlefield(P1, "Hill Giant");
+        t.lands(P0, "Island", 7);
+        // At P0's upkeep, Grell's trigger targets the artifact.
+        t.answer_targets(P0, &[obj(source)]);
+        t.set_step(P1, Step::End);
+        t.advance_to(P0, Step::Upkeep);
+        t.resolve_all();
+        t.advance_to(P0, Step::PrecombatMain);
+        // The gained ability, activated by the Grell: the Grell is sacrificed.
+        t.answer_targets(P0, &[obj(giant)]);
+        activate_containing(&mut t, P0, grell, text).unwrap();
+        assert!(!t.on_battlefield(grell), "{artifact}");
+        assert!(t.on_battlefield(source), "{artifact}");
+        t.resolve_all();
+        assert!(!t.on_battlefield(giant), "{artifact}");
+        assert!(t.on_battlefield(source), "{artifact}");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -268,7 +278,7 @@ fn the_warring_triad_enters_as_a_creature_only_with_eight_cards_in_the_graveyard
 
 #[test]
 fn wondrous_crucible_card_stays_exiled_whatever_happens_to_the_copy() {
-    cr!("707.10", "707.12", "111.1");
+    cr!("707.12", "111.1");
     ruling!(
         "Wondrous Crucible",
         "The card remains exiled no matter what happens to the copy."

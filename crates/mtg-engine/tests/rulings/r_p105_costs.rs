@@ -33,7 +33,7 @@ const NORMAL: CastMethod = CastMethod::Normal;
 
 #[test]
 fn emry_affinity_reduces_only_generic_mana() {
-    cr!("702.41a", "601.2f", "118.7d");
+    cr!("702.41a", "601.2f", "118.7a");
     ruling!(
         "Emry, Lurker of the Loch",
         "The cost reduction ability reduces only the generic mana in Emry's cost. The colored mana must still be paid."
@@ -64,7 +64,8 @@ fn emry_cost_increases_apply_before_its_reduction() {
     );
     supported("Sphere of Resistance");
     // Sphere of Resistance ("Spells cost {1} more to cast") and two Ornithopters: three
-    // artifacts. {2}{U} + {1} - {3} = {U}. (Reducing first would leave {1}{U}.)
+    // artifacts. {2}{U} + {1} - {3} = {U}, paid with P0's only land. (Reducing first would
+    // leave {1}{U}, which P0 couldn't pay: `go` fails if the cast does.)
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Sphere of Resistance");
     t.battlefield(P0, "Ornithopter");
@@ -72,6 +73,7 @@ fn emry_cost_increases_apply_before_its_reduction() {
     t.lands(P0, "Island", 1);
     let emry = t.hand(P0, "Emry, Lurker of the Loch");
     let spell = t.cast(P0, emry).go();
+    assert_eq!(tapped_lands(&t, P0), 1);
     assert_eq!(mana_value(&t, spell), 3);
 }
 
@@ -82,16 +84,17 @@ fn emry_cost_is_locked_in_before_mana_abilities_are_activated() {
         "Emry, Lurker of the Loch",
         "Once you announce that you're casting a spell, no player may take actions until the spell has been paid for. Notably, opponents can't try to change by how much Emry's cost is reduced."
     );
-    // Three Treasures: Emry costs {U}. One of them is sacrificed for that mana while
-    // paying, after the total cost was locked in.
+    // Two Treasures: Emry costs {U}. One of them is sacrificed for that mana while paying,
+    // after the total cost was locked in: with one artifact left Emry would cost {1}{U},
+    // but the cost doesn't change, so the other Treasure stays.
     let mut t = TestGame::new(2);
-    for _ in 0..3 {
+    for _ in 0..2 {
         create_token(&mut t, P0, "Treasure");
     }
     let emry = t.hand(P0, "Emry, Lurker of the Loch");
     let from = t.asked().len();
     t.cast(P0, emry).go();
-    assert_eq!(crate::r_s05_common::tokens_with_subtype(&t, P0, "Treasure").len(), 2);
+    assert_eq!(crate::r_s05_common::tokens_with_subtype(&t, P0, "Treasure").len(), 1);
     // No player received priority while it was being cast.
     assert!(!t.asked()[from..]
         .iter()
@@ -178,7 +181,7 @@ fn gisa_and_geralf_leaving_after_the_cast_began_doesnt_affect_the_spell() {
 
 #[test]
 fn gisa_and_geralf_zombie_spells_follow_timing_rules() {
-    cr!("601.3", "307.1", "117.1a");
+    cr!("601.3", "302.1", "117.1a");
     ruling!(
         "Gisa and Geralf",
         "You must follow the normal timing permissions and restrictions of the Zombie spell you cast from your graveyard."
@@ -398,7 +401,7 @@ fn rot_farm_skeleton_mills_as_a_cost_from_the_graveyard_only() {
 
 #[test]
 fn urborg_lhurgoyf_kicks_once_for_each_kicker_cost() {
-    cr!("702.33a", "702.33b", "702.33c");
+    cr!("702.33a", "702.33b", "702.33d");
     ruling!(
         "Urborg Lhurgoyf",
         "You may kick Urborg Lhurgoyf only once for its {U} cost and only once for its {B} cost. You can kick it twice by paying {U}{B}, but you can't kick it twice by paying {U}{U} or {B}{B}. You can't kick it more than twice."
@@ -444,7 +447,7 @@ fn urborg_lhurgoyf_kicks_once_for_each_kicker_cost() {
 
 #[test]
 fn pyromancers_goggles_copies_any_red_instant_or_sorcery() {
-    cr!("707.10", "707.12", "603.2");
+    cr!("707.10", "603.2");
     ruling!(
         "Pyromancer's Goggles",
         "Any red instant or sorcery spell you spend the mana on will be copied, not just one that requires targets."
@@ -464,7 +467,7 @@ fn pyromancers_goggles_copies_any_red_instant_or_sorcery() {
 
 #[test]
 fn pyromancers_goggles_copy_resolves_first_even_if_the_spell_is_countered() {
-    cr!("707.10", "707.10c", "608.2b", "405.5");
+    cr!("707.10", "707.10c", "608.2h", "405.5");
     ruling!(
         "Pyromancer's Goggles",
         "A copy is created even if the spell cast with the red mana produced by Pyromancer's Goggles has been countered or otherwise left the stack without resolving by the time that ability resolves. The copy resolves before the original spell."
@@ -499,7 +502,8 @@ fn pyromancers_goggles_copy_resolves_first_even_if_the_spell_is_countered() {
 
 #[test]
 fn carnelian_orb_mana_on_a_dragon_making_sorcery_gives_no_haste() {
-    cr!("205.2a", "205.3", "111.1");
+    // (That the mana gives a Dragon creature spell haste: `tests/cards/mana_spent_riders.rs`.)
+    cr!("205.2a", "111.1");
     ruling!(
         "Carnelian Orb of Dragonkind",
         "An instant or sorcery spell is not a creature spell, even if that spell creates Dragon creature tokens."
@@ -558,28 +562,48 @@ fn ancient_cornucopia_counts_colors_not_mana_symbols() {
 
 #[test]
 fn ancient_cornucopia_resolves_first_and_uses_last_known_colors() {
-    cr!("603.3", "405.5", "608.2h");
+    cr!("603.3", "405.5", "608.2h", "709.3b", "709.4");
     ruling!(
         "Ancient Cornucopia",
         "Ancient Cornucopia’s triggered ability resolves before the spell that caused it to trigger. The ability will resolve even if that spell is countered. If that spell is countered, use its last known information to determine what colors it was."
     );
-    let mut t = TestGame::new(2);
-    t.battlefield(P0, "Ancient Cornucopia");
-    t.lands(P0, "Mountain", 1);
-    t.lands(P0, "Plains", 1);
-    t.lands(P1, "Island", 2);
-    let helix = t.hand(P0, "Lightning Helix");
-    let spell = t.cast(P0, helix).target(pl(P1)).go();
-    t.settle();
-    assert_eq!(t.stack_len(), 2);
-    let cs = t.hand(P1, "Counterspell");
-    t.cast(P1, cs).target(obj(spell)).go();
-    t.answer_yes(P0, true);
-    t.resolve(); // Counterspell
-    assert!(t.in_graveyard(P0, "Lightning Helix"));
-    t.resolve(); // Cornucopia's trigger
-    assert_eq!(t.life(P0), 22);
-    assert_eq!(t.life(P1), 20);
+    supported("Fire // Ice");
+    // (card, half cast, lands, life gained). Lightning Helix is red and white. Ice, the
+    // blue half of Fire // Ice, is a blue spell on the stack (CR 709.3b), though the card
+    // put into the graveyard is red and blue (CR 709.4): the spell's last known
+    // information counts one color, not the card's two.
+    let cases: [(&str, CastMethod, &[&str], i32); 2] = [
+        ("Lightning Helix", NORMAL, &["Mountain", "Plains"], 2),
+        ("Fire // Ice", CastMethod::Half(1), &["Island", "Island"], 1),
+    ];
+    for (name, method, lands, gain) in cases {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Ancient Cornucopia");
+        for l in lands {
+            t.lands(P0, l, 1);
+        }
+        t.lands(P1, "Island", 2);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        let card = t.hand(P0, name);
+        let target = if name == "Lightning Helix" {
+            pl(P1)
+        } else {
+            obj(bears)
+        };
+        let spell = t.cast(P0, card).method(method).target(target).go();
+        t.settle();
+        // The trigger is on the stack above the spell.
+        assert_eq!(t.stack_len(), 2, "{name}");
+        let cs = t.hand(P1, "Counterspell");
+        t.cast(P1, cs).target(obj(spell)).go();
+        t.answer_yes(P0, true);
+        t.resolve(); // Counterspell
+        assert_eq!(t.zone(card), Zone::Graveyard(P0), "{name}");
+        t.resolve(); // Cornucopia's trigger
+        assert_eq!(t.stack_len(), 0, "{name}");
+        assert_eq!(t.life(P0), 20 + gain, "{name}");
+        assert_eq!(t.life(P1), 20, "{name}");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -682,28 +706,49 @@ fn perpetual_timepiece_with_no_targets_just_shuffles() {
 }
 
 // ---------------------------------------------------------------------------
-// Titania, Gaea Incarnate (the melded Argoth, Sanctum of Nature): "{3}{G}: Put four +1/+1
-// counters on target land you control. It becomes a 0/0 Elemental creature with haste.
-// It's still a land." Misattached: the data files these two rulings under Argoth only,
-// though they describe Titania, Gaea Incarnate (docs/RULING_DISCREPANCIES.md).
+// Titania, Gaea Incarnate (Titania, Voice of Gaea melded with Argoth, Sanctum of Nature):
+// "{3}{G}: Put four +1/+1 counters on target land you control. It becomes a 0/0 Elemental
+// creature with haste. It's still a land." Misattached: the data files these two rulings
+// under Argoth only, though they describe Titania, Gaea Incarnate
+// (docs/RULING_DISCREPANCIES.md); Argoth takes part as half of the melded permanent.
 // ---------------------------------------------------------------------------
 
 #[test]
 fn titania_gaea_incarnate_animates_lands_indefinitely_and_repeatedly() {
-    cr!("611.2a", "613.1d", "122.1a");
+    cr!("611.2a", "613.1d", "122.1a", "701.42a");
+    // Describes Titania, Gaea Incarnate; attached to Argoth, Sanctum of Nature.
     ruling!(
         "Argoth, Sanctum of Nature",
         "Titania, Gaea Incarnate's last ability doesn't have a duration, which means that the land remains a creature indefinitely."
     );
+    // Describes Titania, Gaea Incarnate; attached to Argoth, Sanctum of Nature.
     ruling!(
         "Argoth, Sanctum of Nature",
         "You can activate the ability multiple times targeting the same land to add more counters."
     );
+    supported("Titania, Voice of Gaea");
+    supported("Argoth, Sanctum of Nature");
     supported("Titania, Gaea Incarnate");
     let mut t = TestGame::new(2);
-    let titania = t.battlefield(P0, "Titania, Gaea Incarnate");
+    // At P0's upkeep, Titania, Voice of Gaea and Argoth meld (four land cards in the
+    // graveyard), and Titania, Gaea Incarnate returns those lands to the battlefield.
+    t.battlefield(P0, "Titania, Voice of Gaea");
+    t.battlefield(P0, "Argoth, Sanctum of Nature");
+    for _ in 0..4 {
+        t.graveyard(P0, "Forest");
+    }
     let forest = t.battlefield(P0, "Forest");
     t.lands(P0, "Forest", 8);
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Argoth, Sanctum of Nature").is_empty());
+    let titania = t.named_on_battlefield("Titania, Gaea Incarnate");
+    assert_eq!(titania.len(), 1);
+    let titania = titania[0];
+    assert_eq!(t.named_on_battlefield("Forest").len(), 13);
+    t.advance_to(P0, Step::PrecombatMain);
+    // Activated twice targeting the same Forest: eight counters on it.
     for _ in 0..2 {
         t.answer_targets(P0, &[obj(forest)]);
         crate::r_s06_common::activate_containing(&mut t, P0, titania, "four +1/+1 counters")
@@ -712,9 +757,14 @@ fn titania_gaea_incarnate_animates_lands_indefinitely_and_repeatedly() {
     }
     assert_eq!(t.counters(forest, counters::PLUS1), 8);
     assert_eq!(t.pt(forest), (8, 8));
+    // It stays a creature through the next turns, even once Titania has left the
+    // battlefield.
     t.advance_to(P1, Step::Upkeep);
+    crate::r_s02_common::destroy(&mut t, titania);
+    assert!(t.named_on_battlefield("Titania, Gaea Incarnate").is_empty());
     t.advance_to(P0, Step::PrecombatMain);
     let o = t.obj_now(forest);
     assert!(o.is(CardType::Creature) && o.is(CardType::Land));
     assert!(o.chars.has_subtype("Elemental"));
+    assert_eq!(t.pt(forest), (8, 8));
 }

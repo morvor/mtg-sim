@@ -84,7 +84,7 @@ fn madame_web_looks_at_the_top_card_any_time() {
 
 #[test]
 fn cauldrons_gift_mills_and_returns_with_no_actions_in_between() {
-    cr!("608.2c", "608.2f", "207.2c");
+    cr!("608.2c", "701.17a");
     ruling!(
         "Cauldron's Gift",
         "No player may take actions between the time you put cards into your graveyard, the time you choose a creature card to return, and the time you return that card to the battlefield."
@@ -189,22 +189,36 @@ fn egon_must_exile_two_cards_when_it_can() {
         "You choose which cards you're exiling as Egon's triggered ability is resolving. If there are two or more cards in your graveyard at that time, you must exile two of them. You can't choose not to exile cards and sacrifice Egon instead to draw a card."
     );
     supported("Egon, God of Death // Throne of Death");
-    let mut t = TestGame::new(2);
-    let egon = t.battlefield(P0, "Egon, God of Death // Throne of Death");
-    let gy: Vec<ObjectId> = ["Island", "Forest", "Grizzly Bears"]
-        .iter()
-        .map(|n| t.graveyard(P0, n))
-        .collect();
-    t.set_step(P1, Step::End);
-    t.advance_to(P0, Step::Upkeep);
-    let hand = t.hand_size(P0);
-    t.answer_choose(P0, &[obj(gy[0]), obj(gy[2])]);
-    t.resolve_all();
-    assert!(t.on_battlefield(egon));
-    assert_eq!(t.zone(gy[0]), Zone::Exile);
-    assert_eq!(t.zone(gy[2]), Zone::Exile);
-    assert_eq!(t.zone(gy[1]), Zone::Graveyard(P0));
-    assert_eq!(t.hand_size(P0), hand);
+    // P0 chooses the two cards as the ability resolves; answering with no cards (trying not
+    // to exile any) isn't a choice the ability offers: two are exiled all the same, and
+    // Egon stays.
+    for answer in [vec![0usize, 2], vec![]] {
+        let mut t = TestGame::new(2);
+        let egon = t.battlefield(P0, "Egon, God of Death // Throne of Death");
+        let gy: Vec<ObjectId> = ["Island", "Forest", "Grizzly Bears"]
+            .iter()
+            .map(|n| t.graveyard(P0, n))
+            .collect();
+        t.set_step(P1, Step::End);
+        t.advance_to(P0, Step::Upkeep);
+        let hand = t.hand_size(P0);
+        let chosen: Vec<Entity> = answer.iter().map(|i| obj(gy[*i])).collect();
+        t.answer_choose(P0, &chosen);
+        let from = t.asked().len();
+        t.resolve_all();
+        // The choice was made as the ability resolved, and it was of exactly two cards.
+        assert!(asked_any(&t, from, |d| matches!(
+            d,
+            Decision::ChooseEntities { min: 2, max: 2, .. }
+        )));
+        assert!(t.on_battlefield(egon), "{answer:?}");
+        let exiled: Vec<usize> = (0..3).filter(|i| t.zone(gy[*i]) == Zone::Exile).collect();
+        assert_eq!(exiled.len(), 2, "{answer:?}");
+        if !answer.is_empty() {
+            assert_eq!(exiled, answer);
+        }
+        assert_eq!(t.hand_size(P0), hand, "{answer:?}");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +260,7 @@ fn soulcipher(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn soulcipher_board_counts_creature_cards_not_creatures_dying() {
-    cr!("603.2", "603.10a", "700.4", "111.1");
+    cr!("603.2", "603.6c", "603.10", "700.4", "111.1");
     ruling!(
         "Soulcipher Board // Cipherbound Spirit",
         "Soulcipher Board's last ability triggers when a creature card is put into a graveyard from anywhere. This is different than an ability that triggers when a creature dies. Notably, a noncreature card on the battlefield that becomes a creature and dies (such as an animated land) won't cause this ability to trigger. Similarly, a creature card on the battlefield that has been made a noncreature permanent (such as one enchanted with Minimus Containment) will cause this ability to trigger when that card is put into your graveyard."
@@ -306,26 +320,38 @@ fn rad_counter_mills_are_one_batch() {
     );
     supported("Nightkin Ambusher");
     supported("The Wise Mothman");
-    // P0 has three rad counters: at the beginning of P0's precombat main phase, P0 mills
-    // three cards. The Wise Mothman ("Whenever one or more nonland cards are milled, put a
-    // +1/+1 counter on each of up to X target creatures, where X is the number of nonland
-    // cards milled this way") triggers once.
+    // P1's Nightkin Ambusher enters: "When this creature enters, target player gets four
+    // rad counters." P1 targets P0. At the beginning of P0's precombat main phase, P0 mills
+    // four cards, two of them nonland. P1's The Wise Mothman ("Whenever one or more nonland
+    // cards are milled, put a +1/+1 counter on each of up to X target creatures, where X is
+    // the number of nonland cards milled this way") triggers once.
     let mut t = TestGame::new(2);
     t.battlefield(P1, "The Wise Mothman");
     let a = t.battlefield(P1, "Grizzly Bears");
     let b = t.battlefield(P1, "Grizzly Bears");
-    stack_library(&mut t, P0, &["Hill Giant", "Lightning Bolt", "Island"]);
-    t.g.players[P0.idx()].counters.insert("rad".into(), 3);
+    stack_library(
+        &mut t,
+        P0,
+        &["Hill Giant", "Lightning Bolt", "Island", "Forest"],
+    );
+    t.answer_targets(P1, &[pl(P0)]);
+    enter(&mut t, P1, "Nightkin Ambusher");
+    t.resolve_all();
+    assert_eq!(t.g.player(P0).counters.get("rad").copied(), Some(4));
     t.answer_targets(P1, &[obj(a), obj(b)]);
     t.set_step(P1, Step::End);
     t.advance_to(P0, Step::PrecombatMain);
     t.settle();
     assert_eq!(crate::r_s01_common::triggers_on_stack(&t, "nonland cards are milled"), 0);
-    t.resolve(); // the radiation trigger: mill three
+    t.resolve(); // the rad counters' trigger: mill four
+    assert_eq!(t.graveyard_size(P0), 4);
     assert_eq!(crate::r_s01_common::triggers_on_stack(&t, "nonland cards are milled"), 1);
     t.resolve_all();
     assert_eq!(t.counters(a, counters::PLUS1), 1);
     assert_eq!(t.counters(b, counters::PLUS1), 1);
+    // Two nonland cards: P0 lost 2 life and two rad counters.
+    assert_eq!(t.life(P0), 18);
+    assert_eq!(t.g.player(P0).counters.get("rad").copied(), Some(2));
 }
 
 // ---------------------------------------------------------------------------
@@ -334,7 +360,7 @@ fn rad_counter_mills_are_one_batch() {
 
 #[test]
 fn graveyard_counting_power_and_toughness_works_in_every_zone() {
-    cr!("604.3", "611.3a", "208.3");
+    cr!("604.3", "611.3a", "208.2a");
     ruling!(
         "Lumra, Bellow of the Woods",
         "The ability that defines Lumra's power and toughness functions in all zones, not just the battlefield."
@@ -681,20 +707,76 @@ fn only_the_target_opponent_looks_at_and_separates_the_cards() {
     let from = t.asked().len();
     enter(&mut t, P0, "Atris, Oracle of Half-Truths");
     t.resolve_all();
-    let separators: Vec<PlayerId> = t.asked()[from..]
+    // Only P2 separates the cards, and its decision shows it the three cards.
+    let separations: Vec<(PlayerId, Vec<Entity>)> = t.asked()[from..]
         .iter()
-        .filter(|(_, d)| matches!(d, Decision::ChooseEntities { .. }))
-        .map(|(p, _)| *p)
+        .filter_map(|(p, d)| match d {
+            Decision::ChooseEntities { candidates, .. } => Some((*p, candidates.clone())),
+            _ => None,
+        })
         .collect();
-    assert_eq!(separators, vec![P2]);
+    assert_eq!(separations.len(), 1);
+    assert_eq!(separations[0].0, P2);
+    let mut shown = separations[0].1.clone();
+    shown.sort_by_key(|e| format!("{e:?}"));
+    let mut top: Vec<Entity> = lib.iter().map(|c| obj(*c)).collect();
+    top.sort_by_key(|e| format!("{e:?}"));
+    assert_eq!(shown, top);
     let seen = seen.lock().unwrap().clone();
     assert!(!seen.is_empty());
     assert!(seen.iter().all(|(p0, p1, _)| !p0 && !p1), "{seen:?}");
 }
 
 #[test]
+fn fortunes_favor_only_the_target_opponent_sees_the_cards_in_multiplayer() {
+    cr!("700.3a", "115.1", "401.2");
+    ruling!(
+        "Fortune's Favor",
+        "In a multiplayer game, the targeted opponent may choose what information to share with others if that player wants advice on how to split the cards, but that player doesn’t have to share any information at all."
+    );
+    supported("Fortune's Favor");
+    // P0 targets P2 of three players: P2 is shown the four cards to separate them; P1 (the
+    // other opponent) and P0 can't see them meanwhile, so what they learn is up to P2.
+    let mut t = TestGame::new(3);
+    let lib = stack_library(&mut t, P0, &["Grizzly Bears", "Island", "Hill Giant", "Shock"]);
+    t.lands(P0, "Island", 1);
+    t.lands(P0, "Wastes", 3);
+    let seen = crate::r_s01_common::watch(
+        &mut t,
+        P2,
+        |d| matches!(d, Decision::ChooseEntities { .. }),
+        |g| {
+            let top: Vec<ObjectId> = g.players[0].library.iter().rev().take(4).copied().collect();
+            let looks = |p| top.iter().any(|c| can_look_at(g, p, *c));
+            (looks(P0), looks(P1))
+        },
+    );
+    t.answer_choose(P2, &[obj(lib[0])]);
+    let s = t.hand(P0, "Fortune's Favor");
+    let from = t.asked().len();
+    t.cast(P0, s).target(pl(P2)).go();
+    t.resolve_all();
+    let separations: Vec<(PlayerId, Vec<Entity>)> = t.asked()[from..]
+        .iter()
+        .filter_map(|(p, d)| match d {
+            Decision::ChooseEntities { candidates, .. } => Some((*p, candidates.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(separations.len(), 1);
+    assert_eq!(separations[0].0, P2);
+    assert_eq!(separations[0].1.len(), 4);
+    assert!(lib.iter().all(|c| separations[0].1.contains(&obj(*c))));
+    assert_eq!(*seen.lock().unwrap(), vec![(false, false)]);
+    // The Grizzly Bears (the face-down pile) and the rest went to P0's hand and graveyard.
+    assert!(lib
+        .iter()
+        .all(|c| matches!(t.zone(*c), Zone::Hand(P0) | Zone::Graveyard(P0))));
+}
+
+#[test]
 fn fortunes_favor_caster_chooses_the_pile_without_seeing_the_face_down_one() {
-    cr!("700.3a", "700.3d");
+    cr!("700.3a", "401.2");
     ruling!(
         "Fortune's Favor",
         "You choose which pile to put into your hand and which to put into your graveyard. You can’t look at the face-down pile until after it’s moving to its new zone."
@@ -736,7 +818,7 @@ fn fortunes_favor_caster_chooses_the_pile_without_seeing_the_face_down_one() {
 
 #[test]
 fn curator_of_destinies_controller_picks_the_choosing_opponent() {
-    cr!("700.3a", "102.2");
+    cr!("700.3a", "806.1");
     interp!("controller-picks-the-choosing-opponent");
     ruling!(
         "Curator of Destinies",
@@ -829,7 +911,7 @@ fn terra_reflexive_trigger_targets_after_paying() {
 
 #[test]
 fn awaken_the_honored_dead_may_return_the_card_it_just_discarded() {
-    cr!("603.12", "603.3d", "714.2c");
+    cr!("603.12", "603.3d", "714.2b");
     ruling!(
         "Awaken the Honored Dead",
         "You don’t choose a target for Awaken the Honored Dead’s final chapter ability at the time it triggers. Rather, a second “reflexive” ability triggers when you discard a card this way. You choose a target for that ability as it goes on the stack. You may choose the card you just discarded as the target or a card that was already in your graveyard. Each player may respond to this triggered ability as normal."

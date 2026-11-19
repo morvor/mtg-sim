@@ -40,12 +40,14 @@ fn ursine_at_combat(t: &mut TestGame, u: ObjectId) -> ObjectId {
 
 #[test]
 fn ursine_monstrosity_doesnt_attack_when_it_cant() {
-    cr!("508.1d", "508.1h", "302.6", "508.1a");
+    cr!("508.1a", "508.1c", "508.1d", "302.6");
+    interp!("default-combat-declarations");
     ruling!(
         "Ursine Monstrosity",
         "If, during your declare attackers step, Ursine Monstrosity is tapped, is affected by a spell or ability that says it can't attack, or hasn't been under your control continuously since your turn began (and doesn't have haste), then it doesn't attack. If there's a cost associated with having Ursine Monstrosity attack the chosen player, you aren't forced to pay that cost, so it doesn't have to attack that player in that case either."
     );
     supported("Ursine Monstrosity");
+    supported("Propaganda");
     // (tapped, summoning sick, Pacifism, Propaganda, attacks)
     let cases = [
         (true, false, false, false, false),
@@ -61,19 +63,35 @@ fn ursine_monstrosity_doesnt_attack_when_it_cant() {
         } else {
             t.battlefield(P0, "Ursine Monstrosity")
         };
-        if tapped {
-            set_tapped(&mut t, u, true);
-        }
         if pacifism {
             attach_new(&mut t, P1, "Pacifism", obj(u));
         }
+        // Propaganda ("Creatures can't attack you unless their controller pays {2} for
+        // each creature they control that's attacking you"): P0 could pay.
         if propaganda {
             t.battlefield(P1, "Propaganda");
+            t.lands(P0, "Wastes", 2);
         }
         let u = ursine_at_combat(&mut t, u);
-        // P0 declares no attackers: the requirement is obeyed only if it can be.
+        if tapped {
+            set_tapped(&mut t, u, true);
+        }
+        let case = (tapped, sick, pacifism, propaganda);
+        // Declaring no attackers is legal exactly when the requirement can't be obeyed
+        // without paying a cost; attacking the chosen player is legal unless it can't
+        // attack at all (paying Propaganda's cost, it may).
+        assert_eq!(legal_attack(&mut t, &[]), !attacks, "{case:?}");
+        assert_eq!(
+            legal_attack(&mut t, &[(u, pl(P1))]),
+            attacks || propaganda,
+            "{case:?}"
+        );
+        // P0 declares no attackers; where that's illegal, the least legal declaration
+        // replaces it.
         attack_with(&mut t, &[]);
-        assert_eq!(attacking(&t, u), attacks, "{cases:?}");
+        assert_eq!(attacking(&t, u), attacks, "{case:?}");
+        // Nothing was paid for Propaganda.
+        assert_eq!(tapped_lands(&t, P0), 0, "{case:?}");
     }
 }
 
@@ -117,7 +135,6 @@ fn stinkweed_imp_is_a_combat_damage_trigger_not_deathtouch() {
         "Notably, Stinkweed Imp's ability isn't deathtouch. It's a triggered ability that triggers only on combat damage."
     );
     supported("Stinkweed Imp");
-    supported("Prodigal Pyromancer");
     let mut t = TestGame::new(2);
     let imp = t.battlefield(P0, "Stinkweed Imp");
     assert!(!has_kw(&t, imp, KeywordKind::Deathtouch));
@@ -149,7 +166,7 @@ fn stinkweed_imp_is_a_combat_damage_trigger_not_deathtouch() {
 
 #[test]
 fn devourer_of_memory_cant_be_blocked_after_blocks_doesnt_unblock_it() {
-    cr!("509.1h", "506.4", "510.1c");
+    cr!("509.1h", "510.1c");
     ruling!(
         "Devourer of Memory",
         "Once Devourer of Memory has been blocked, resolving its triggered ability (perhaps by activating its activated ability) won’t change or undo that block."
@@ -272,7 +289,7 @@ fn agility_bobblehead_doesnt_unblock_an_already_blocked_creature() {
 
 #[test]
 fn harald_chapter_three_trigger_resolves_before_blockers() {
-    cr!("508.1m", "508.2", "509.1", "603.7c");
+    cr!("508.1m", "508.2", "509.1", "603.7");
     ruling!(
         "Harald Unites the Elves",
         "The triggered ability created by the chapter III ability resolves before blockers are declared. It may remove opposing creatures before they have the chance to block."
@@ -298,7 +315,7 @@ fn harald_chapter_three_trigger_resolves_before_blockers() {
 
 #[test]
 fn harald_chapter_two_counts_elves_as_it_resolves() {
-    cr!("608.2h", "714.2c");
+    cr!("608.2h", "714.2b");
     ruling!(
         "Harald Unites the Elves",
         "Only Elves you control as the chapter II ability resolves will get a +1/+1 counter. Elves that come under your control later in the turn will not."
