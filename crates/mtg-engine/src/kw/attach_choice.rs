@@ -16,12 +16,23 @@ use crate::types::*;
 /// chosen.
 pub const RECIPIENT: Var = vars::USER + 8301;
 
-/// `Filter::Custom`: a permanent that could legally be attached to [`RECIPIENT`].
+/// `Filter::Custom`: a permanent that could legally be attached to [`RECIPIENT`], and
+/// that the instruction hasn't already attached to something else.
 pub const CAN_ATTACH_TO_RECIPIENT: &str = "attach grammar: can be attached to the recipient";
 
+/// The permanents chosen by this instruction (when it isn't stored elsewhere).
+pub const PICKED: Var = vars::USER + 8302;
+/// Every permanent the instruction has chosen so far: "for each of those tokens, you may
+/// attach an Equipment you control to it" (Goldwardens' Gambit) chooses a different
+/// Equipment for each token, all attached at once; the same Equipment can't be moved from
+/// token to token (CR 608.2c, 701.3a).
+pub const PICKED_ALL: Var = vars::USER + 8303;
+
 /// Attaches the permanents `choose` chooses among those matching its filter that could be
-/// attached to `to` (evaluated first).
+/// attached to `to` (evaluated first) and that it hasn't already chosen for another
+/// recipient.
 pub fn attach_chosen(choose: Sel, to: Sel) -> Effect {
+    let mut picked = None;
     let what = match choose {
         Sel::Choose {
             chooser,
@@ -29,16 +40,20 @@ pub fn attach_chosen(choose: Sel, to: Sel) -> Effect {
             count,
             up_to,
             store,
-        } => Sel::Choose {
-            chooser,
-            filter: Filter::and(vec![filter, Filter::Custom(CAN_ATTACH_TO_RECIPIENT.into())]),
-            count,
-            up_to,
-            store,
-        },
+        } => {
+            let v = store.unwrap_or(PICKED);
+            picked = Some(v);
+            Sel::Choose {
+                chooser,
+                filter: Filter::and(vec![filter, Filter::Custom(CAN_ATTACH_TO_RECIPIENT.into())]),
+                count,
+                up_to,
+                store: Some(v),
+            }
+        }
         other => other,
     };
-    Effect::Seq(vec![
+    let mut v = vec![
         Effect::Store {
             var: RECIPIENT,
             sel: to,
@@ -47,7 +62,14 @@ pub fn attach_chosen(choose: Sel, to: Sel) -> Effect {
             what,
             to: Sel::Var(RECIPIENT),
         },
-    ])
+    ];
+    if let Some(p) = picked {
+        v.push(Effect::Store {
+            var: PICKED_ALL,
+            sel: Sel::Union(vec![Sel::Var(PICKED_ALL), Sel::Var(p)]),
+        });
+    }
+    Effect::Seq(v)
 }
 
 /// `Filter::Custom`: an object with an Aura other than the source attached to it ("Enchant
@@ -79,7 +101,14 @@ impl KeywordRules for AttachChoice {
             return None;
         }
         let to = ctx.vars.get(&RECIPIENT).and_then(|v| v.first().copied());
-        Some(to.is_some_and(|to| to != Entity::Object(id) && crate::attach::can_attach(g, id, to)))
+        let picked = ctx
+            .vars
+            .get(&PICKED_ALL)
+            .is_some_and(|v| v.contains(&Entity::Object(id)));
+        Some(
+            !picked
+                && to.is_some_and(|to| to != Entity::Object(id) && crate::attach::can_attach(g, id, to)),
+        )
     }
 }
 

@@ -899,7 +899,6 @@ fn effects_cant_attach_equipment_where_it_cant_legally_be_attached() {
         "Yuffie, Materia Hunter",
         "You can't use Yuffie's last ability to try to attach an Equipment to Yuffie if that Equipment can't legally be attached to Yuffie."
     );
-    use crate::r_s20_common::to_beginning_of_combat;
     // Battlefield Improvisation on an attacking Tel-Jilad Chosen (protection from
     // artifacts): it gets +2/+2, the Equipment stays where it is.
     let mut t = TestGame::new(2);
@@ -923,12 +922,12 @@ fn effects_cant_attach_equipment_where_it_cant_legally_be_attached() {
     let chosen = t.battlefield(P0, "Tel-Jilad Chosen");
     let holder = t.battlefield(P0, "Grizzly Bears");
     let sword = attach_new(&mut t, P0, "Bonesplitter", holder);
-    to_beginning_of_combat(&mut t, P0);
-    t.settle();
-    assert_eq!(t.stack_len(), 1);
     t.answer_targets(P0, &[obj(chosen)]);
     t.answer_choose(P0, &[obj(sword)]);
     t.answer_yes(P0, true);
+    t.advance_to(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
     t.resolve_all();
     assert_eq!(attached_to(&t, sword), Some(obj(holder)));
     // Barret: an Equipment that's a creature (March of the Machines) can't equip the
@@ -941,19 +940,30 @@ fn effects_cant_attach_equipment_where_it_cant_legally_be_attached() {
     assert!(is_creature(&t, sword));
     t.answer_targets(P0, &[obj(sword)]);
     t.answer_targets(P0, &[obj(rebel)]);
-    to_beginning_of_combat(&mut t, P0);
+    t.advance_to(P0, mtg_engine::turn::Step::BeginningOfCombat);
     t.settle();
+    assert_eq!(t.stack_len(), 1);
     t.resolve_all();
     assert_eq!(attached_to(&t, sword), None);
-    // Yuffie: the same.
+    // Yuffie, given protection from artifacts in response to its trigger.
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "March of the Machines");
     let sword = t.battlefield(P0, "Bonesplitter");
     let relic = t.battlefield(P1, "Mind Stone");
     t.answer_targets(P0, &[obj(relic)]);
+    let yuffie = enter(&mut t, P0, "Yuffie, Materia Hunter");
+    assert_eq!(t.stack_len(), 1);
+    let blessing = t.hand(P0, "Apostle's Blessing");
+    mana(&mut t, P0, ManaType::W, 2);
+    // Protection from artifacts (the first of the choices offered).
+    t.cast(P0, blessing).target(obj(yuffie)).go();
+    t.answer(
+        P0,
+        DecisionKind::Option,
+        mtg_engine::decision::Answer::Index(0),
+    );
+    t.resolve();
     t.answer_choose(P0, &[obj(sword)]);
     t.answer_yes(P0, true);
-    let yuffie = enter(&mut t, P0, "Yuffie, Materia Hunter");
     t.resolve_all();
     assert_eq!(t.obj_now(relic).controller, P0);
     assert_eq!(attached_to(&t, sword), None);
@@ -1022,7 +1032,8 @@ fn reckless_crew_and_goldwardens_gambit_attach_one_equipment_per_token() {
         "Goldwardens' Gambit",
         "You choose which Equipment to attach to each token, then attach those Equipment all at once. You can't move the same Equipment around to each of the tokens as the ability resolves."
     );
-    for (spell, equipment) in [("Reckless Crew", 3), ("Goldwardens' Gambit", 1)] {
+    use mtg_engine::decision::Decision;
+    for (spell, equipment) in [("Reckless Crew", 3), ("Goldwardens' Gambit", 2)] {
         let mut t = TestGame::new(2);
         let eq: Vec<ObjectId> = ["Bonesplitter", "Leonin Scimitar", "Vulshok Morningstar"]
             [..equipment]
@@ -1032,24 +1043,36 @@ fn reckless_crew_and_goldwardens_gambit_attach_one_equipment_per_token() {
         let s = t.hand(P0, spell);
         mana(&mut t, P0, ManaType::R, 2);
         mana(&mut t, P0, ManaType::C, 6);
-        // Try to put every Equipment on every token.
-        let all: Vec<Entity> = eq.iter().map(|e| obj(*e)).collect();
+        // Try to put the same Equipment on every token.
         for _ in 0..5 {
-            t.answer_choose(P0, &all);
             t.answer_yes(P0, true);
+            t.answer_choose(P0, &[obj(eq[0])]);
         }
         t.cast(P0, s).go();
         let from = t.asked().len();
         t.resolve_all();
-        for (p, d) in &t.asked()[from..] { eprintln!("ASK {p:?} {d:?}"); }
         let toks = tokens(&t, P0);
         assert_eq!(toks.len(), if equipment == 3 { 3 } else { 5 }, "{spell}");
+        // Each choice is among the Equipment not chosen for an earlier token.
+        let offered: Vec<Vec<Entity>> = t.asked()[from..]
+            .iter()
+            .filter_map(|(_, d)| match d {
+                Decision::ChooseEntities { candidates, .. } => Some(candidates.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(offered.len(), equipment, "{spell}: {offered:?}");
+        for (i, c) in offered.iter().enumerate() {
+            assert_eq!(c.len(), equipment - i, "{spell}: {offered:?}");
+        }
+        assert_eq!(attached_to(&t, eq[0]), Some(obj(toks[0])), "{spell}");
         for tok in &toks {
             assert!(attachments_of(&t, *tok).len() <= 1, "{spell}");
         }
         let attached: Vec<_> = eq.iter().filter_map(|e| attached_to(&t, *e)).collect();
         assert_eq!(attached.len(), equipment, "{spell}: every Equipment got a token");
         let mut distinct = attached.clone();
+        distinct.sort_by_key(|e| format!("{e:?}"));
         distinct.dedup();
         assert_eq!(distinct.len(), attached.len());
     }
@@ -1064,21 +1087,16 @@ fn kor_outfitter_may_target_itself() {
     );
     let mut t = TestGame::new(2);
     let sword = t.battlefield(P0, "Bonesplitter");
+    let ko = t.enter(P0, "Kor Outfitter");
+    t.g.flush_events();
     let from = t.asked().len();
     t.answer_targets(P0, &[obj(sword)]);
-    // The creature target: the Outfitter itself (a new object once it entered).
-    let ko = enter(&mut t, P0, "Kor Outfitter");
+    t.answer_targets(P0, &[obj(ko)]);
+    t.answer_yes(P0, true);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
     let offered = crate::r_s02_common::target_candidates(&t, P0, from);
     assert!(offered.iter().any(|c| c.contains(&obj(ko))), "{offered:?}");
-    t.clear_answers();
-    let mut t = TestGame::new(2);
-    let sword = t.battlefield(P0, "Bonesplitter");
-    t.answer_targets(P0, &[obj(sword)]);
-    let next = ObjectId(t.g.objects.len() as u32);
-    t.answer_targets(P0, &[obj(next)]);
-    t.answer_yes(P0, true);
-    let ko = enter(&mut t, P0, "Kor Outfitter");
-    assert_eq!(ko, next);
     t.resolve_all();
     assert_eq!(attached_to(&t, sword), Some(obj(ko)));
     assert_eq!(t.pt(ko), (4, 2));
