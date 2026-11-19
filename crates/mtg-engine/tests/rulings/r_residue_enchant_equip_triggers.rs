@@ -23,7 +23,8 @@ use mtg_engine::*;
 const SHADOW: &str = "Shadow of the Second Sun";
 
 /// Shadow of the Second Sun enchanting P0, and the game in the precombat main phase of
-/// P0's second turn (the starting player skips only the draw of their first turn).
+/// P0's second turn (the first is in
+/// `shadow_of_the_second_sun_in_the_starting_players_first_turn`).
 fn shadowed() -> TestGame {
     supported(SHADOW);
     let mut t = TestGame::new(2);
@@ -42,8 +43,16 @@ fn shadow_of_the_second_sun_triggers_without_an_attack() {
     );
     let mut t = shadowed();
     let steps = steps_of_this_turn(&mut t);
-    assert_eq!(count(&steps, Step::Upkeep), 1 + 1, "{steps:?} {}", t.dump_log());
-    let main2 = steps.iter().position(|s| *s == Step::PostcombatMain).unwrap();
+    assert_eq!(
+        count(&steps, Step::Upkeep),
+        1 + 1,
+        "{steps:?} {}",
+        t.dump_log()
+    );
+    let main2 = steps
+        .iter()
+        .position(|s| *s == Step::PostcombatMain)
+        .unwrap();
     assert_eq!(steps[main2 + 1], Step::Untap, "{steps:?}");
 }
 
@@ -71,7 +80,10 @@ fn shadow_of_the_second_sun_with_an_added_combat_and_more_main_phases() {
     cast_new(&mut t, P0, "Relentless Assault", &[]);
     t.resolve_all();
     let steps = steps_of_this_turn(&mut t);
-    let main2 = steps.iter().position(|s| *s == Step::PostcombatMain).unwrap();
+    let main2 = steps
+        .iter()
+        .position(|s| *s == Step::PostcombatMain)
+        .unwrap();
     assert_eq!(steps[main2 + 1], Step::BeginningOfCombat, "{steps:?}");
     assert_eq!(count(&steps, Step::PostcombatMain), 2, "{steps:?}");
     // Two additional beginning phases, both after the added combat.
@@ -80,7 +92,12 @@ fn shadow_of_the_second_sun_with_an_added_combat_and_more_main_phases() {
         .iter()
         .rposition(|s| *s == Step::BeginningOfCombat)
         .unwrap();
-    let first_extra_untap = steps.iter().skip(1).position(|s| *s == Step::Untap).unwrap() + 1;
+    let first_extra_untap = steps
+        .iter()
+        .skip(1)
+        .position(|s| *s == Step::Untap)
+        .unwrap()
+        + 1;
     assert!(first_extra_untap > combat2, "{steps:?}");
 }
 
@@ -92,20 +109,58 @@ fn shadow_of_the_second_sun_extra_beginning_phase_is_a_real_one() {
         "During the untap step, permanents will phase in or out as appropriate and they'll untap their tapped permanents. Anything they control that triggers \"at the beginning of your upkeep\" or similar will trigger during their upkeep step, and they'll eventually draw a card for their draw step."
     );
     supported("Phyrexian Arena");
+    supported("Breezekeeper");
     let mut t = shadowed();
     t.battlefield(P0, "Phyrexian Arena");
     let land = t.battlefield(P0, "Forest");
+    // Breezekeeper ("Phasing"), phased in.
+    let phaser = t.battlefield(P0, "Breezekeeper");
     t.set_step(P0, Step::PrecombatMain);
     t.advance_to(P0, Step::PostcombatMain);
     t.resolve_all();
     t.g.obj_mut(land).tapped = true;
+    assert!(!t.obj_now(phaser).phased_out);
     let (hand, life) = (t.hand_size(P0), t.life(P0));
     t.advance_to(P0, Step::End);
+    // In the additional untap step, the land untapped and Breezekeeper phased out;
     // Phyrexian Arena ("At the beginning of your upkeep, you draw a card and you lose 1
     // life") and the draw step: two cards.
     assert!(!t.obj_now(land).tapped);
+    assert!(t.obj_now(phaser).phased_out);
     assert_eq!(t.hand_size(P0), hand + 2, "{}", t.dump_log());
     assert_eq!(t.life(P0), life - 1);
+}
+
+#[test]
+fn shadow_of_the_second_sun_in_the_starting_players_first_turn() {
+    cr!("103.8a", "500.8", "504.1");
+    interp!("first-turn-skips-one-draw-step");
+    ruling!(
+        "Shadow of the Second Sun",
+        "they'll eventually draw a card for their draw step"
+    );
+    // The starting player's first turn, from its upkeep: its draw step is skipped (CR
+    // 103.8a), the draw step of the additional beginning phase isn't.
+    supported(SHADOW);
+    let mut t = TestGame::new(2);
+    aura_on(&mut t, P1, SHADOW, P0);
+    assert_eq!((t.g.turn.number, t.g.turn.starting_player), (1, P0));
+    t.set_step(P0, Step::Upkeep);
+    let hand = t.hand_size(P0);
+    t.advance_to(P0, Step::PrecombatMain);
+    assert_eq!(t.hand_size(P0), hand, "{}", t.dump_log());
+    assert!(!t.g.turn.step_log.contains(&Step::Draw));
+    let steps = steps_of_this_turn(&mut t);
+    let main2 = steps
+        .iter()
+        .position(|s| *s == Step::PostcombatMain)
+        .unwrap();
+    assert_eq!(
+        &steps[main2..main2 + 4],
+        &[Step::PostcombatMain, Step::Untap, Step::Upkeep, Step::Draw],
+        "{steps:?}"
+    );
+    assert_eq!(t.hand_size(P0), hand + 1, "{}", t.dump_log());
 }
 
 // --- The Masamune -------------------------------------------------------------------------
@@ -137,7 +192,12 @@ fn the_masamune_leaves_the_battlefield_triggers_twice_when_dying() {
     let mut t = TestGame::new(2);
     let tusk = t.battlefield(P0, "Thragtusk");
     attach_new(&mut t, P0, MASAMUNE, tusk);
-    t.g.move_object(tusk, Zone::Exile, mtg_engine::events::MoveCause::Effect, None);
+    t.g.move_object(
+        tusk,
+        Zone::Exile,
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
     t.g.flush_events();
     t.settle();
     t.resolve_all();
@@ -150,7 +210,12 @@ fn the_masamune_leaves_the_battlefield_triggers_twice_when_dying() {
     t.g.destroy_all(vec![artist, bears], None, false);
     t.g.flush_events();
     t.settle();
-    assert_eq!(crate::r_s14_common::triggers_from(&t, artist), 4, "{}", t.dump_log());
+    assert_eq!(
+        crate::r_s14_common::triggers_from(&t, artist),
+        4,
+        "{}",
+        t.dump_log()
+    );
 }
 
 #[test]
@@ -196,7 +261,12 @@ fn two_masamunes_on_one_creature_trigger_three_times() {
     assert_eq!(t.named_on_battlefield(MASAMUNE).len(), 2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     destroy(&mut t, bears);
-    assert_eq!(crate::r_s14_common::triggers_from(&t, artist), 3, "{}", t.dump_log());
+    assert_eq!(
+        crate::r_s14_common::triggers_from(&t, artist),
+        3,
+        "{}",
+        t.dump_log()
+    );
     // Equipped to two creatures: an emblem P0 owns (with Blood Artist's ability) triggers
     // three times, not four.
     let mut t = TestGame::new(2);
@@ -218,7 +288,7 @@ fn two_masamunes_on_one_creature_trigger_three_times() {
 
 #[test]
 fn curse_of_shaken_faith_counts_spells_cast_before_it_arrived() {
-    cr!("603.2", "700.14");
+    cr!("603.2");
     ruling!(
         "Curse of Shaken Faith",
         "If a player who has already cast a spell this turn becomes enchanted by Curse of Shaken Faith, casting more spells the same turn will cause the ability to trigger."
@@ -241,7 +311,7 @@ fn curse_of_shaken_faith_counts_spells_cast_before_it_arrived() {
 
 #[test]
 fn shah_of_naar_isle_paying_zero_with_thick_skinned_goblin_is_paying_echo() {
-    cr!("702.30a", "118.9", "603.2");
+    cr!("702.30a", "118.7", "603.2");
     ruling!(
         "Shah of Naar Isle",
         "If you use Thick-Skinned Goblin’s ability to pay {0} instead of Shah of Naar Isle’s echo cost, the Shah’s last ability will trigger."
@@ -258,8 +328,28 @@ fn shah_of_naar_isle_paying_zero_with_thick_skinned_goblin_is_paying_echo() {
     t.set_step(P1, Step::End);
     t.advance_to(P0, Step::Upkeep);
     t.settle();
+    // The Goblin's "pay {0} rather than pay the echo cost" applies to the echo payment
+    // (paid as one of the Goblin's {0} or the echo cost).
+    assert!(t
+        .g
+        .statics
+        .customs
+        .iter()
+        .any(|(_, ctl, n)| *ctl == P0 && n.as_str() == mtg_engine::kw::echo::ECHO_FOR_ZERO));
+    let from = t.asked().len();
     t.resolve_all();
-    assert_eq!(t.named_on_battlefield("Shah of Naar Isle").len(), 1, "{}", t.dump_log());
+    assert!(
+        t.asked()[from..].iter().any(|(p, d)| *p == P0
+            && matches!(d, Decision::YesNo { prompt, .. } if prompt.contains("OneOf"))),
+        "{:?}",
+        &t.asked()[from..]
+    );
+    assert_eq!(
+        t.named_on_battlefield("Shah of Naar Isle").len(),
+        1,
+        "{}",
+        t.dump_log()
+    );
     assert_eq!(t.hand_size(P1), hand + 3, "{}", t.dump_log());
 }
 
@@ -364,7 +454,11 @@ fn plunge_into_darkness_entwined_order_and_choices_on_resolution() {
     t.g.players[0].life = 2;
     let a = t.battlefield(P0, "Grizzly Bears");
     let b = t.battlefield(P0, "Grizzly Bears");
-    stack_library(&mut t, P0, &["Island", "Forest", "Swamp", "Plains", "Mountain"]);
+    stack_library(
+        &mut t,
+        P0,
+        &["Island", "Forest", "Swamp", "Plains", "Mountain"],
+    );
     t.lands(P0, "Swamp", 3);
     let plunge = t.hand(P0, "Plunge into Darkness");
     let hand = t.hand_size(P0);
@@ -419,7 +513,7 @@ fn grab_the_reins_entwined_sacrifices_the_stolen_creature_without_priority() {
 
 #[test]
 fn helm_of_kaldra_needs_all_three_as_it_resolves() {
-    cr!("608.2c", "603.4");
+    cr!("608.2c", "608.2h");
     ruling!(
         "Helm of Kaldra",
         "The token isn’t put onto the battlefield unless you control all three Equipment when the ability resolves."
@@ -435,11 +529,20 @@ fn helm_of_kaldra_needs_all_three_as_it_resolves() {
     t.lands(P0, "Wastes", 2);
     activate_containing(&mut t, P0, helm, "Kaldra, a legendary").expect("activate");
     // (Shield of Kaldra makes them indestructible: the Sword is bounced.)
-    t.g.move_object(sword, Zone::Hand(P0), mtg_engine::events::MoveCause::Effect, None);
+    t.g.move_object(
+        sword,
+        Zone::Hand(P0),
+        mtg_engine::events::MoveCause::Effect,
+        None,
+    );
     t.g.flush_events();
     t.settle();
     t.resolve_all();
-    assert!(t.named_on_battlefield("Kaldra").is_empty(), "{}", t.dump_log());
+    assert!(
+        t.named_on_battlefield("Kaldra").is_empty(),
+        "{}",
+        t.dump_log()
+    );
     // With all three: the token, with them attached.
     let sword = t.battlefield(P0, "Sword of Kaldra");
     activate_containing(&mut t, P0, helm, "Kaldra, a legendary").expect("activate");

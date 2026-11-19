@@ -21,9 +21,11 @@ use mtg_engine::*;
 /// Whether `id` (followed) is blocking now.
 fn blocking(t: &TestGame, id: ObjectId) -> bool {
     let id = t.g.current(id);
-    t.g.combat
-        .as_ref()
-        .is_some_and(|c| c.blockers.iter().any(|b| b.id == id && !b.blocking.is_empty()))
+    t.g.combat.as_ref().is_some_and(|c| {
+        c.blockers
+            .iter()
+            .any(|b| b.id == id && !b.blocking.is_empty())
+    })
 }
 
 /// What `id` (followed) is attacking now.
@@ -50,10 +52,7 @@ fn curse_of_hospitality_triggers_for_each_creature() {
     let a = t.battlefield(P0, "Grizzly Bears");
     let b = t.battlefield(P0, "Hill Giant");
     let lib = t.library_size(P1);
-    t.attack(
-        &[(a, Entity::Player(P1)), (b, Entity::Player(P1))],
-        &[],
-    );
+    t.attack(&[(a, Entity::Player(P1)), (b, Entity::Player(P1))], &[]);
     t.resolve_all();
     assert_eq!(t.life(P1), 15);
     assert_eq!(t.library_size(P1), lib - 2, "{}", t.dump_log());
@@ -112,9 +111,18 @@ fn errantry_attacks_alone_including_a_two_headed_giant_teammate() {
         mtg_engine::combat::attack_declaration_legal(&t.g, &options, decl)
     };
     assert!(legal(&[(bears, Entity::Player(P2))]));
-    assert!(legal(&[(mine, Entity::Player(P2)), (mate, Entity::Player(P2))]));
-    assert!(!legal(&[(bears, Entity::Player(P2)), (mine, Entity::Player(P2))]));
-    assert!(!legal(&[(bears, Entity::Player(P2)), (mate, Entity::Player(P2))]));
+    assert!(legal(&[
+        (mine, Entity::Player(P2)),
+        (mate, Entity::Player(P2))
+    ]));
+    assert!(!legal(&[
+        (bears, Entity::Player(P2)),
+        (mine, Entity::Player(P2))
+    ]));
+    assert!(!legal(&[
+        (bears, Entity::Player(P2)),
+        (mate, Entity::Player(P2))
+    ]));
 }
 
 // --- Farrel's Mantle ----------------------------------------------------------------------
@@ -123,7 +131,7 @@ const FARREL: &str = "Farrel's Mantle";
 
 #[test]
 fn farrels_mantle_no_combat_damage_is_not_prevention() {
-    cr!("510.1", "615.1");
+    cr!("510.1", "615.12");
     ruling!(
         "Farrel's Mantle",
         "If the enchanted creature’s controller chooses to have it deal no combat damage, that combat damage is not prevented. It’s simply not dealt. A creature whose damage can’t be prevented (such as Excruciator) would deal no combat damage this way."
@@ -149,34 +157,42 @@ fn farrels_mantle_two_mantles_one_use_is_enough() {
         "Farrel's Mantle",
         "If the same creature is enchanted with more than one Farrel’s Mantle, they’ll each trigger if that creature attacks and isn’t blocked."
     );
-    let mut t = TestGame::new(2);
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    aura_on(&mut t, P0, FARREL, bears);
-    aura_on(&mut t, P0, FARREL, bears);
-    let wall = t.battlefield(P1, "Wall of Stone");
-    t.answer_targets(P0, &[obj(wall)]);
-    t.answer_targets(P0, &[obj(wall)]);
-    t.answer_yes(P0, true);
-    t.answer_yes(P0, false);
-    let from = t.asked().len();
-    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
-    t.advance_to(P0, Step::EndOfCombat);
-    t.resolve_all();
-    // Both triggered (two choices), one was used: no combat damage.
-    let choices = t.asked()[from..]
-        .iter()
-        .filter(|(p, d)| *p == P0 && matches!(d, mtg_engine::decision::Decision::YesNo { .. }))
-        .count();
-    assert_eq!(choices, 2, "{}", t.dump_log());
-    assert_eq!(t.obj_now(wall).damage, 4, "{}", t.dump_log());
-    assert_eq!(t.life(P1), 20);
+    // Both trigger (two choices). Used once: no combat damage. Used twice: the damage is
+    // dealt twice, and still no combat damage.
+    for twice in [false, true] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        aura_on(&mut t, P0, FARREL, bears);
+        aura_on(&mut t, P0, FARREL, bears);
+        let wall = t.battlefield(P1, "Wall of Stone");
+        t.answer_targets(P0, &[obj(wall)]);
+        t.answer_targets(P0, &[obj(wall)]);
+        t.answer_yes(P0, true);
+        t.answer_yes(P0, twice);
+        let from = t.asked().len();
+        attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+        t.advance_to(P0, Step::EndOfCombat);
+        t.resolve_all();
+        let choices = t.asked()[from..]
+            .iter()
+            .filter(|(p, d)| *p == P0 && matches!(d, mtg_engine::decision::Decision::YesNo { .. }))
+            .count();
+        assert_eq!(choices, 2, "{}", t.dump_log());
+        if twice {
+            // 4 + 4 damage to the 0/8 Wall.
+            assert!(!t.on_battlefield(wall), "{}", t.dump_log());
+        } else {
+            assert_eq!(t.obj_now(wall).damage, 4, "{}", t.dump_log());
+        }
+        assert_eq!(t.life(P1), 20);
+    }
 }
 
 // --- Venom, Indrik Umbra, Infinite Authority, Godsend, Nuka-Nuke Launcher ------------------
 
 #[test]
 fn venom_moved_after_blocks_doesnt_affect_the_blockers() {
-    cr!("509.1", "603.2", "509.4");
+    cr!("509.3d", "603.2e");
     ruling!(
         "Venom",
         "If this Aura is moved onto a creature after blockers are declared, creatures blocking the newly-enchanted creature are not affected."
@@ -218,7 +234,7 @@ fn indrik_umbra_forces_only_creatures_able_to_block() {
 
 #[test]
 fn infinite_authority_one_counter_for_each_destroyed_creature() {
-    cr!("603.7", "509.1", "506.4");
+    cr!("603.7", "509.3d");
     ruling!(
         "Infinite Authority",
         "The enchanted creature gets a +1/+1 counter for each creature that triggers the ability."
@@ -240,13 +256,17 @@ fn infinite_authority_one_counter_for_each_destroyed_creature() {
     t.resolve_all();
     t.advance_to(P0, Step::End);
     t.resolve_all();
-    assert!(!t.on_battlefield(a) && !t.on_battlefield(b), "{}", t.dump_log());
+    assert!(
+        !t.on_battlefield(a) && !t.on_battlefield(b),
+        "{}",
+        t.dump_log()
+    );
     assert_eq!(t.counters(wurm, counters::PLUS1), 2);
 }
 
 #[test]
 fn godsend_triggers_once_however_many_blockers() {
-    cr!("509.2a", "603.2c");
+    cr!("509.3e", "509.3a", "509.3c");
     ruling!(
         "Godsend",
         "Godsend's triggered ability will trigger only once no matter how many creatures the equipped creature blocks or becomes blocked by."
@@ -268,22 +288,58 @@ fn godsend_triggers_once_however_many_blockers() {
 
 #[test]
 fn hedron_blade_blocked_by_one_or_more_triggers_once_if_one_matches() {
-    // The same trigger grammar as Godsend's: "becomes blocked by one or more colorless
-    // creatures" is one trigger per combat (CR 509.3c), not one per blocker (CR 509.3d).
-    cr!("509.3c", "603.4");
+    // "Becomes blocked by one or more colorless creatures" triggers once, as the creature
+    // first has a colorless blocker (CR 509.3e), not once for each (CR 509.3d).
+    cr!("509.3e", "509.3f");
     supported("Hedron Blade");
-    for (blockers, n) in [(["Ornithopter", "Ornithopter"], 1), (["Grizzly Bears", "Grizzly Bears"], 0)] {
+    for (blockers, n) in [
+        (["Ornithopter", "Ornithopter"], 1),
+        (["Grizzly Bears", "Ornithopter"], 1),
+        (["Grizzly Bears", "Grizzly Bears"], 0),
+    ] {
         let mut t = TestGame::new(2);
         t.set_step(P0, Step::BeginningOfCombat);
         let wurm = t.battlefield(P0, "Craw Wurm");
         attach_new(&mut t, P0, "Hedron Blade", wurm);
         let a = t.battlefield(P1, blockers[0]);
         let b = t.battlefield(P1, blockers[1]);
-        to_blockers(&mut t, &[(wurm, Entity::Player(P1))], &[(a, wurm), (b, wurm)]);
+        to_blockers(
+            &mut t,
+            &[(wurm, Entity::Player(P1))],
+            &[(a, wurm), (b, wurm)],
+        );
         assert_eq!(t.stack_len(), n, "{blockers:?}: {}", t.dump_log());
         t.resolve_all();
-        assert_eq!(has_kw(&t, wurm, mtg_engine::keywords::KeywordKind::Deathtouch), n == 1);
+        assert_eq!(
+            has_kw(&t, wurm, mtg_engine::keywords::KeywordKind::Deathtouch),
+            n == 1
+        );
     }
+    // Blocked by a green creature, then an effect has a colorless creature block it too:
+    // it triggers then (CR 509.3e); another colorless blocker doesn't trigger it again.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::BeginningOfCombat);
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    attach_new(&mut t, P0, "Hedron Blade", wurm);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let a = t.battlefield(P1, "Ornithopter");
+    let b = t.battlefield(P1, "Ornithopter");
+    to_blockers(&mut t, &[(wurm, Entity::Player(P1))], &[(bears, wurm)]);
+    assert_eq!(t.stack_len(), 0, "{}", t.dump_log());
+    assert!(mtg_engine::combat::block_by_effect(&mut t.g, a, wurm));
+    t.g.flush_events();
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "{}", t.dump_log());
+    t.resolve_all();
+    assert!(has_kw(
+        &t,
+        wurm,
+        mtg_engine::keywords::KeywordKind::Deathtouch
+    ));
+    assert!(mtg_engine::combat::block_by_effect(&mut t.g, b, wurm));
+    t.g.flush_events();
+    t.settle();
+    assert_eq!(t.stack_len(), 0, "{}", t.dump_log());
 }
 
 #[test]
@@ -317,7 +373,7 @@ fn godsend_exiled_land_card_can_still_be_played() {
 
 #[test]
 fn nuka_nuke_launcher_blocked_stays_blocked() {
-    cr!("509.1h", "506.4", "702.13b");
+    cr!("509.1h", "702.13b");
     ruling!(
         "Nuka-Nuke Launcher",
         "Once the equipped creature has been blocked, changing its color or the blocking creature’s color or stopping the blocking creature from being an artifact won’t cause the equipped creature to become unblocked."
@@ -345,7 +401,7 @@ fn nuka_nuke_launcher_blocked_stays_blocked() {
 
 #[test]
 fn ward_of_piety_redirected_combat_damage_is_still_combat_damage() {
-    cr!("615.1", "609.7", "510.2");
+    cr!("614.9", "510.2");
     ruling!(
         "Ward of Piety",
         "Redirected damage retains its information."
@@ -373,7 +429,7 @@ fn ward_of_piety_redirected_combat_damage_is_still_combat_damage() {
 
 #[test]
 fn hexplate_wallbreaker_no_main_phase_between_the_combats() {
-    cr!("500.8", "506.1", "307.1");
+    cr!("500.8", "602.5d", "307.1");
     ruling!(
         "Hexplate Wallbreaker",
         "There's no main phase between your combat phases, so you'll have no opportunity to cast spells or activate abilities that could only be activated any time you could cast a sorcery."
@@ -438,16 +494,18 @@ fn dire_blunderbuss_uses_the_power_as_the_reflexive_trigger_resolves() {
 
 #[test]
 fn indoraptor_lethal_damage_still_triggers_with_its_last_power() {
-    cr!("603.10a", "608.2h", "207.2c");
+    cr!("603.10", "704.5g", "608.2h");
     ruling!(
         "Indoraptor, the Perfect Hybrid",
         "If lethal damage is dealt to Indoraptor, its enrage ability triggers. Use Indoraptor's power from when it was last on the battlefield to determine how much damage it deals to the chosen player if they don't sacrifice a nontoken creature."
     );
     supported("Indoraptor, the Perfect Hybrid");
     let mut t = TestGame::new(2);
+    // A 5/3 Indoraptor is dealt 3 damage by P1's Rod of Ruin; P1 has only a token
+    // creature, so can't sacrifice a nontoken one: Indoraptor (gone) deals 5 damage.
     let raptor = t.battlefield(P0, "Indoraptor, the Perfect Hybrid");
     t.g.add_counters(obj(raptor), counters::PLUS1, 2, None);
-    let src = t.battlefield(P1, "Wall of Stone");
+    let src = t.battlefield(P1, "Rod of Ruin");
     create_token(&mut t, P1, "Soldier");
     damage(&mut t, src, 3, raptor);
     assert!(!t.on_battlefield(raptor));

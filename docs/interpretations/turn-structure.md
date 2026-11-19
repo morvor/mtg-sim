@@ -1,0 +1,17 @@
+# Turn structure
+
+Judgment calls about the start of the game's turns, phases and steps (CR 103.8, 500–514).
+Format and kinds: `docs/agents/items/interpretation-register.md`; index:
+`docs/INTERPRETATIONS.md`.
+
+## first-turn-skips-one-draw-step: The starting player skips only the first draw step of their first turn, not the draw step of an additional beginning phase
+- Kind: interpretation
+- Status: provisional
+- Rules: 103.8a "In a two-player game, the player who plays first skips the draw step (see rule 504, “Draw Step”) of their first turn." / 103.8b "In a Two-Headed Giant game, the team who plays first skips the draw step of their first turn." / 500.8 "Some effects can add phases to a turn. They do this by adding the phases directly after the specified phase. ..." / 614.10 "An effect that causes a player to skip an event, step, phase, or turn is a replacement effect. “Skip [something]” is the same as “Instead of doing [something], do nothing.” ..." / 614.10a "... If two effects each cause a player to skip their next occurrence, that player must skip the next two; one effect will be satisfied in skipping the first occurrence, while the other will remain until another occurrence can be skipped." / Shadow of the Second Sun ruling (2024-06-07; Sphinx of the Second Sun's of 2020-11-10 and Temple of Atropos's of 2023-10-13 say the same): "The enchanted player's additional beginning phase will be a lot like their normal beginning phase. During the untap step, permanents will phase in or out as appropriate and they'll untap their tapped permanents. Anything they control that triggers "at the beginning of your upkeep" or similar will trigger during their upkeep step, and they'll eventually draw a card for their draw step."
+- Question: An effect gives the starting player an additional beginning phase in their first turn (Shadow of the Second Sun, Sphinx of the Second Sun, Temple of Atropos), or a lone additional draw step (Untap, Upkeep, Draw). 103.8a has them skip "the draw step" of that turn, written for a turn with one draw step. Is the additional draw step skipped too?
+- Decision: No. 103.8a (and 103.8b for the team that plays first) skips one draw step: the first one that would begin in the starting player's first turn, the normal beginning phase's. A draw step added later in that turn happens, and the player draws. A "skip your next draw step" effect waits past the one 103.8a skips (614.10a), so it applies to the added one.
+- Alternatives: Every draw step of the starting player's first turn is skipped ("the draw step of their first turn" read as any draw step in that turn), as the engine did before Nov 19: the player wouldn't draw in an additional beginning phase of their first turn.
+- Why: 103.8a names one step ("the draw step") and, like a skip effect, is satisfied by skipping one occurrence (614.10, 614.10a); the rulings on additional beginning phases say the player draws in them, with no exception for the first turn.
+- Affects: Shadow of the Second Sun, Sphinx of the Second Sun, Temple of Atropos, Untap, Upkeep, Draw; any draw step added to the starting player's first turn of a two-player or Two-Headed Giant game.
+- Code: `crates/mtg-engine/src/turn.rs` (`Game::first_turn_draw_skipped`, `should_skip_step`, `TurnState::first_draw_skipped`).
+- Tests: `tests/rulings/r_residue_enchant_equip_triggers.rs` (`shadow_of_the_second_sun_in_the_starting_players_first_turn`).

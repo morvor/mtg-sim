@@ -53,13 +53,18 @@ fn mantle(t: &mut TestGame, host: ObjectId, cards: &[ObjectId]) -> ObjectId {
     t.answer_targets(P0, &targets);
     t.g.resolve_top();
     t.settle();
-    assert_eq!(triggers_on_stack(t, "return any number"), 1, "{}", t.dump_log());
+    assert_eq!(
+        triggers_on_stack(t, "return any number"),
+        1,
+        "{}",
+        t.dump_log()
+    );
     t.g.current(m)
 }
 
 #[test]
 fn mantle_of_the_ancients_targets_that_cant_be_attached_stay_in_the_graveyard() {
-    cr!("303.4i", "608.2b", "301.5c");
+    cr!("303.4i", "608.2c");
     ruling!(
         "Mantle of the Ancients",
         "any targets that couldn't be legally attached to the creature enchanted by Mantle of the Ancients stay in your graveyard."
@@ -73,7 +78,12 @@ fn mantle_of_the_ancients_targets_that_cant_be_attached_stay_in_the_graveyard() 
     let captured = t.graveyard(P0, "Captured by the Consulate");
     mantle(&mut t, bears, &[strength, captured]);
     t.resolve_all();
-    assert_eq!(attached_to(&t, strength), Some(obj(bears)), "{}", t.dump_log());
+    assert_eq!(
+        attached_to(&t, strength),
+        Some(obj(bears)),
+        "{}",
+        t.dump_log()
+    );
     assert!(in_zone(&t, captured, Zone::Graveyard(P0)));
     assert_eq!(t.pt(bears), (2 + 1 + 2, 2 + 2 + 2));
 }
@@ -97,7 +107,12 @@ fn mantle_of_the_ancients_uses_the_creature_it_enchants_as_the_trigger_resolves(
     assert!(t.g.attach(m, obj(bears)));
     t.g.recompute();
     t.resolve_all();
-    assert_eq!(attached_to(&t, strength), Some(obj(bears)), "{}", t.dump_log());
+    assert_eq!(
+        attached_to(&t, strength),
+        Some(obj(bears)),
+        "{}",
+        t.dump_log()
+    );
     assert!(in_zone(&t, animate, Zone::Graveyard(P0)));
 }
 
@@ -116,7 +131,12 @@ fn mantle_of_the_ancients_gone_uses_the_permanent_it_was_last_attached_to() {
     destroy(&mut t, m);
     assert!(!t.on_battlefield(t.g.current(m)));
     t.resolve_all();
-    assert_eq!(attached_to(&t, strength), Some(obj(bears)), "{}", t.dump_log());
+    assert_eq!(
+        attached_to(&t, strength),
+        Some(obj(bears)),
+        "{}",
+        t.dump_log()
+    );
 }
 
 // --- Reins of the Vinesteed ---------------------------------------------------------------
@@ -173,7 +193,11 @@ fn reins_of_the_vinesteed_triggers_whether_or_not_it_goes_too() {
         }
         t.settle();
         t.resolve_all();
-        assert_eq!(attached_to(&t, reins), Some(obj(other)), "together {together}");
+        assert_eq!(
+            attached_to(&t, reins),
+            Some(obj(other)),
+            "together {together}"
+        );
     }
 }
 
@@ -199,7 +223,10 @@ fn reins_of_the_vinesteed_doesnt_target_but_must_enchant_legally() {
     destroy(&mut t, wizard);
     t.resolve_all();
     let offered = chosen_among(&t, from);
-    assert!(offered.iter().any(|c| c.contains(&obj(shrouded))), "{offered:?}");
+    assert!(
+        offered.iter().any(|c| c.contains(&obj(shrouded))),
+        "{offered:?}"
+    );
     assert!(!offered.iter().any(|c| c.contains(&obj(crusader))));
     assert_eq!(attached_to(&t, reins), Some(obj(shrouded)));
 }
@@ -238,7 +265,7 @@ const PLAGUE: &str = "Necrotic Plague";
 
 #[test]
 fn necrotic_plague_sacrifice_happens_in_the_creature_controllers_upkeep() {
-    cr!("113.6", "503.1a", "109.5");
+    cr!("113.10", "503.1a", "109.5");
     ruling!(
         "Necrotic Plague",
         "it triggers at the beginning of the upkeep of the creature's controller (not necessarily Necrotic Plague's controller)."
@@ -279,7 +306,11 @@ fn necrotic_plague_returns_whenever_the_creature_dies() {
         t.g.flush_events();
         t.settle();
         t.resolve_all();
-        assert_eq!(attached_to(&t, plague), Some(obj(giant)), "together {together}");
+        assert_eq!(
+            attached_to(&t, plague),
+            Some(obj(giant)),
+            "together {together}"
+        );
     }
 }
 
@@ -310,7 +341,12 @@ fn necrotic_plague_returns_under_its_controller_when_the_creature_died() {
         .map(|(p, _)| *p)
         .collect();
     assert_eq!(asked, vec![P1]);
-    assert_eq!(attached_to(&t, plague), Some(obj(giant)), "{}", t.dump_log());
+    assert_eq!(
+        attached_to(&t, plague),
+        Some(obj(giant)),
+        "{}",
+        t.dump_log()
+    );
     assert_eq!(t.obj_now(plague).controller, P0);
     assert_eq!(t.obj_now(plague).owner, P1);
 }
@@ -370,7 +406,7 @@ fn flickerform_on_a_token_leaves_the_auras_in_exile() {
 
 #[test]
 fn flickerform_bestowed_auras_return_as_creatures() {
-    cr!("702.103f", "303.4h", "610.3c");
+    cr!("400.7", "303.4h", "610.3c");
     ruling!(
         "Flickerform",
         "If the enchanted creature was enchanted by any Auras with bestow or any Licids, those cards will return to the battlefield unattached as creatures."
@@ -390,7 +426,12 @@ fn flickerform_bestowed_auras_return_as_creatures() {
     assert_eq!(attached_to(&t, rollicker), Some(obj(bears)));
     flicker(&mut t, ff);
     let bears_now = t.named_on_battlefield("Grizzly Bears")[0];
-    assert_eq!(attached_to(&t, ff), Some(obj(bears_now)), "{}", t.dump_log());
+    assert_eq!(
+        attached_to(&t, ff),
+        Some(obj(bears_now)),
+        "{}",
+        t.dump_log()
+    );
     let r = t.g.current(rollicker);
     assert!(t.on_battlefield(r));
     assert_eq!(attached_to(&t, r), None);
@@ -473,7 +514,7 @@ const GHOSTFORM: &str = "Kaya's Ghostform";
 
 #[test]
 fn kayas_ghostform_card_that_left_its_new_zone_stays() {
-    cr!("400.7", "608.2b", "603.10a");
+    cr!("400.7", "603.10a");
     ruling!(
         "Kaya's Ghostform",
         "If the enchanted permanent is put into a graveyard or exile but leaves that zone before the last ability of Kaya’s Ghostform resolves, that card stays in its new zone"
@@ -590,7 +631,7 @@ fn shifting_shadow_gone_before_its_granted_trigger_resolves() {
 
 #[test]
 fn nettlevine_blight_is_controlled_by_the_enchanted_permanents_controller() {
-    cr!("113.6", "109.5", "701.3a");
+    cr!("113.10", "109.5", "701.3a");
     ruling!(
         "Nettlevine Blight",
         "Nettlevine Blight grants the triggered ability to the enchanted permanent, so “you” refers to that permanent’s controller. The ability will trigger at the end of that player’s turn, and that player chooses the new creature or land to attach Nettlevine Blight to. The player must choose a creature or land they control."
@@ -611,7 +652,12 @@ fn nettlevine_blight_is_controlled_by_the_enchanted_permanents_controller() {
     t.advance_to(P1, Step::End);
     t.resolve_all();
     assert!(!t.on_battlefield(bears));
-    assert_eq!(attached_to(&t, blight), Some(obj(theirs)), "{}", t.dump_log());
+    assert_eq!(
+        attached_to(&t, blight),
+        Some(obj(theirs)),
+        "{}",
+        t.dump_log()
+    );
     assert_eq!(t.obj_now(blight).controller, P0);
     let asked: Vec<(PlayerId, Vec<Entity>)> = t.asked()[from..]
         .iter()
@@ -669,7 +715,12 @@ fn songbirds_blessing_aura_doesnt_target_but_must_be_able_to_enchant() {
     t.answer_choose(P0, &[obj(giant)]);
     crate::r_s01_common::attack_with(&mut t, &[(bears, Entity::Player(P1))]);
     t.resolve_all();
-    assert_eq!(attached_to(&t, strength), Some(obj(giant)), "{}", t.dump_log());
+    assert_eq!(
+        attached_to(&t, strength),
+        Some(obj(giant)),
+        "{}",
+        t.dump_log()
+    );
     // Animate Wall can't enchant anything: it goes to the hand.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -702,7 +753,8 @@ fn curse_of_misfortunes_name_check_is_on_resolution_and_sees_earlier_resolutions
     t.library_top(P0, "Curse of Hospitality");
     t.library_top(P0, "Curse of Hospitality");
     t.library_top(P0, "Curse of Misfortunes");
-    respond(&mut t, P0, |g, d| match d {
+    respond(&mut t, P0, |g, d| {
+        match d {
         Decision::YesNo { .. } => Some(Answer::Bool(true)),
         Decision::ChooseEntities { candidates, .. } => candidates
             .iter()
@@ -710,6 +762,7 @@ fn curse_of_misfortunes_name_check_is_on_resolution_and_sees_earlier_resolutions
             .find(|e| matches!(e, Entity::Object(o) if g.obj(*o).chars.name == "Curse of Hospitality"))
             .map(|e| Answer::Entities(vec![e])),
         _ => None,
+    }
     });
     let from = t.asked().len();
     into_upkeep(&mut t, P0);
@@ -753,7 +806,7 @@ fn curse_of_unbinding_creature_enters_under_the_curse_controllers_control() {
 
 #[test]
 fn call_to_the_kindred_needs_only_one_shared_creature_type() {
-    cr!("205.3m", "700.13");
+    cr!("205.3m");
     ruling!(
         "Call to the Kindred",
         "The creature need only share one creature type with enchanted creature, not necessarily all of them."

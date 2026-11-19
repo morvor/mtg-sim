@@ -7,10 +7,10 @@ use crate::r_p212_common::boost;
 use crate::r_residue_enchant_equip_common::*;
 use crate::r_s01_common::*;
 use crate::r_s02_common::create_token;
+use crate::r_s03_common::respond;
 use crate::r_s06_common::*;
 use crate::r_s08_common::mana_value;
 use crate::r_s25_common::{cast_new, spell_copies};
-use crate::r_s03_common::respond;
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -113,17 +113,48 @@ fn infinite_reflection_and_clone_both_copy_the_enchanted_creature() {
         "No matter what order these effects are applied, the creature will be a copy of the enchanted creature when it enters."
     );
     supported("Clone");
-    let mut t = TestGame::new(2);
-    let giant = t.battlefield(P0, "Hill Giant");
-    reflection_on(&mut t, giant);
-    let angel = t.battlefield(P1, "Serra Angel");
-    // Clone's controller would have it copy the Angel.
-    t.answer_yes(P0, true);
-    t.answer_choose(P0, &[obj(angel)]);
-    let clone = t.enter(P0, "Clone");
-    t.settle();
-    assert_eq!(name(&t, clone), "Hill Giant", "{}", t.dump_log());
-    assert_eq!(t.pt(clone), (3, 3));
+    // P0 orders the two replacement effects (CR 616.1): Infinite Reflection's first (then
+    // Clone's no longer applies), or Clone's first (a copy of the Angel, then of the
+    // Giant).
+    for clone_first in [false, true] {
+        let mut t = TestGame::new(2);
+        let giant = t.battlefield(P0, "Hill Giant");
+        reflection_on(&mut t, giant);
+        let angel = t.battlefield(P1, "Serra Angel");
+        /// Applies the replacement effect whose description starts with `first` first.
+        fn order(d: &Decision, first: &str) -> Option<Answer> {
+            match d {
+                Decision::ChooseReplacement { options } => options
+                    .iter()
+                    .position(|o| o.starts_with(first))
+                    .map(Answer::Index),
+                _ => None,
+            }
+        }
+        if clone_first {
+            respond(&mut t, P0, |_, d| order(d, "Clone"));
+        } else {
+            respond(&mut t, P0, |_, d| order(d, "Infinite Reflection"));
+        }
+        // Clone's controller would have it copy the Angel.
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[obj(angel)]);
+        let from = t.asked().len();
+        let clone = t.enter(P0, "Clone");
+        t.settle();
+        let replacements = t.asked()[from..]
+            .iter()
+            .filter(|(_, d)| matches!(d, Decision::ChooseReplacement { .. }))
+            .count();
+        assert_eq!(replacements, 1, "{}", t.dump_log());
+        // Clone's choice was offered only when its effect applied first.
+        let angel_offered = t.asked()[from..].iter().any(|(_, d)| {
+            matches!(d, Decision::ChooseEntities { candidates, .. } if candidates.contains(&obj(angel)))
+        });
+        assert_eq!(angel_offered, clone_first);
+        assert_eq!(name(&t, clone), "Hill Giant", "{}", t.dump_log());
+        assert_eq!(t.pt(clone), (3, 3));
+    }
 }
 
 #[test]
@@ -181,7 +212,7 @@ fn infinite_reflection_printed_enters_replacements_do_not_apply() {
 
 #[test]
 fn metamorphic_alteration_cannot_choose_a_creature_entering_with_it() {
-    cr!("614.12", "614.1c", "303.4a");
+    cr!("614.12", "614.1c", "303.4f");
     ruling!(
         "Metamorphic Alteration",
         "it can't have the enchanted creature become a copy of that creature. You may choose only a creature that's already on the battlefield."
@@ -270,7 +301,7 @@ fn animated_village(t: &mut TestGame, p: PlayerId) -> ObjectId {
 
 #[test]
 fn metamorphic_alteration_copying_an_animated_land_falls_off() {
-    cr!("707.2", "704.5m", "303.4d");
+    cr!("707.2", "704.5m", "303.4c");
     ruling!(
         "Metamorphic Alteration",
         "the enchanted creature becomes a copy of that noncreature permanent. This causes Metamorphic Alteration to be illegally attached"
@@ -496,7 +527,12 @@ fn production(treasures: usize) -> (TestGame, ObjectId, ObjectId) {
     t.set_step(P1, Step::End);
     t.advance_to(P0, Step::Upkeep);
     t.settle();
-    assert_eq!(triggers_on_stack(&t, "copy of enchanted"), 1, "{}", t.dump_log());
+    assert_eq!(
+        triggers_on_stack(&t, "copy of enchanted"),
+        1,
+        "{}",
+        t.dump_log()
+    );
     (t, aura, thopter)
 }
 

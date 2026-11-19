@@ -12,6 +12,7 @@ use crate::r_s06_common::*;
 use crate::r_s25_common::cast_new;
 use crate::r_s26_common::modify_until_eot;
 use mtg_engine::ability::{Modification, Value};
+use mtg_engine::decision::Answer;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
@@ -25,23 +26,26 @@ const BLOSSOMBIND: &str = "Blossombind";
 
 #[test]
 fn blossombind_wither_and_infect_damage_has_no_effect_but_is_dealt() {
-    cr!("702.80c", "702.90c", "702.15b", "120.3d");
+    cr!("702.80a", "702.90c", "702.15b", "120.3d");
     ruling!(
         "Blossombind",
         "Damage from a source with wither or infect has no effect on a creature enchanted with Blossombind. No -1/-1 counters are put on it, and no damage is marked on it. The damage is still dealt for purposes of effects that care about damage, such as lifelink."
     );
     supported(BLOSSOMBIND);
-    supported("Glistener Elf");
-    let mut t = TestGame::new(2);
-    let giant = t.battlefield(P0, "Hill Giant");
-    aura_on(&mut t, P1, BLOSSOMBIND, giant);
-    let elf = t.battlefield(P1, "Glistener Elf");
-    grant(&mut t, elf, KeywordKind::Lifelink);
-    damage(&mut t, elf, 2, giant);
-    assert_eq!(t.counters(giant, counters::MINUS1), 0);
-    assert_eq!(t.obj_now(giant).damage, 0);
-    assert_eq!(t.pt(giant), (3, 3));
-    assert_eq!(t.life(P1), 22);
+    // Glistener Elf (infect) and Sickle Ripper (wither), each with lifelink.
+    for source in ["Glistener Elf", "Sickle Ripper"] {
+        supported(source);
+        let mut t = TestGame::new(2);
+        let giant = t.battlefield(P0, "Hill Giant");
+        aura_on(&mut t, P1, BLOSSOMBIND, giant);
+        let src = t.battlefield(P1, source);
+        grant(&mut t, src, KeywordKind::Lifelink);
+        damage(&mut t, src, 2, giant);
+        assert_eq!(t.counters(giant, counters::MINUS1), 0, "{source}");
+        assert_eq!(t.obj_now(giant).damage, 0, "{source}");
+        assert_eq!(t.pt(giant), (3, 3), "{source}");
+        assert_eq!(t.life(P1), 22, "{source}");
+    }
 }
 
 #[test]
@@ -66,7 +70,7 @@ fn blossombind_replacement_that_would_give_counters_gives_none() {
 
 #[test]
 fn blossombind_costs_that_untap_or_put_counters_cant_be_paid() {
-    cr!("118.3", "602.2b", "122.1");
+    cr!("118.3", "602.2b", "122.1", "101.2", "608.2c");
     ruling!(
         "Blossombind",
         "If the cost of an ability or an additional cost of a spell requires untapping or putting counters on a creature enchanted with Blossombind, that cost can't be paid."
@@ -80,6 +84,61 @@ fn blossombind_costs_that_untap_or_put_counters_cant_be_paid() {
     assert!(can_activate(&mut t, P0, druid));
     aura_on(&mut t, P1, BLOSSOMBIND, druid);
     assert!(!can_activate(&mut t, P0, druid));
+    // Hidden Strings: "You may tap or untap target permanent, then you may tap or untap
+    // another target permanent." P0 untaps both: only the other one untaps.
+    supported("Hidden Strings");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let giant = t.battlefield(P0, "Hill Giant");
+    let other = t.battlefield(P0, "Grizzly Bears");
+    t.g.obj_mut(giant).tapped = true;
+    t.g.obj_mut(other).tapped = true;
+    aura_on(&mut t, P1, BLOSSOMBIND, giant);
+    for _ in 0..2 {
+        t.answer_yes(P0, true);
+        t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    }
+    cast_new(&mut t, P0, "Hidden Strings", &[obj(giant), obj(other)]);
+    t.resolve_all();
+    assert!(t.obj_now(giant).tapped);
+    assert!(!t.obj_now(other).tapped, "{}", t.dump_log());
+    // Soldevi Golem: "At the beginning of your upkeep, you may untap target tapped
+    // creature an opponent controls. If you do, untap this creature." Aven Mimeomancer:
+    // "At the beginning of your upkeep, you may put a feather counter on target creature.
+    // If you do, that creature has base power and toughness 3/1 and has flying ...". P0
+    // can't choose to untap the enchanted Giant or put a counter on it, so neither "if
+    // you do" happens (without Blossombind, both do).
+    supported("Soldevi Golem");
+    supported("Aven Mimeomancer");
+    for bound in [false, true] {
+        let mut t = TestGame::new(2);
+        let golem = t.battlefield(P0, "Soldevi Golem");
+        t.battlefield(P0, "Aven Mimeomancer");
+        let giant = t.battlefield(P1, "Hill Giant");
+        t.g.obj_mut(golem).tapped = true;
+        t.g.obj_mut(giant).tapped = true;
+        if bound {
+            aura_on(&mut t, P0, BLOSSOMBIND, giant);
+        }
+        for _ in 0..2 {
+            t.answer_yes(P0, true);
+            t.answer_targets(P0, &[obj(giant)]);
+        }
+        t.set_step(P1, Step::End);
+        t.advance_to(P0, Step::Upkeep);
+        t.settle();
+        t.resolve_all();
+        assert_eq!(t.obj_now(giant).tapped, bound, "{}", t.dump_log());
+        assert_eq!(
+            t.obj_now(golem).tapped,
+            bound,
+            "bound {bound}: {}",
+            t.dump_log()
+        );
+        assert_eq!(t.counters(giant, "feather"), if bound { 0 } else { 1 });
+        assert_eq!(t.pt(giant), if bound { (3, 3) } else { (3, 1) });
+        assert_eq!(has_kw(&t, giant, KeywordKind::Flying), !bound);
+    }
 }
 
 // --- Overwhelming Splendor ----------------------------------------------------------------
@@ -200,7 +259,7 @@ fn overwhelming_splendor_mana_and_loyalty_abilities() {
 
 #[test]
 fn armament_of_nyx_checks_continuously_whether_the_creature_is_an_enchantment() {
-    cr!("611.3a", "615.1a", "702.4b");
+    cr!("611.3a", "615.1a");
     ruling!(
         "Armament of Nyx",
         "Armament of Nyx continuously checks to see whether the creature it's enchanting is an enchantment or not."
@@ -305,7 +364,7 @@ fn heliods_punishment_two_of_them_only_the_latest_ability() {
 
 #[test]
 fn heliods_punishment_star_power_is_zero() {
-    cr!("604.3", "613.1f", "208.2a");
+    cr!("604.3", "613.1f", "107.2", "208.2");
     ruling!(
         "Heliod's Punishment",
         "If the enchanted creature has an ability that defines a * in its power or toughness, that * is 0."
@@ -322,24 +381,44 @@ fn heliods_punishment_star_power_is_zero() {
 
 #[test]
 fn paralyze_has_the_upkeep_trigger_itself() {
-    cr!("113.6", "603.2");
+    cr!("603.3a", "613.1f", "113.10");
     ruling!(
         "Paralyze",
         "Paralyze itself has the last triggered ability, rather than granting that ability to the enchanted creature."
     );
     supported("Paralyze");
-    // The creature loses all abilities: P1 may still pay {4} to untap it.
+    // The creature has lost all abilities (for good, not until end of turn): Paralyze's
+    // own trigger, controlled by Paralyze's controller, still lets P1 pay {4} to untap it.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
-    aura_on(&mut t, P0, "Paralyze", bears);
+    let paralyze = aura_on(&mut t, P0, "Paralyze", bears);
     t.g.obj_mut(bears).tapped = true;
-    modify_until_eot(&mut t, bears, vec![Modification::RemoveAllAbilities]);
+    let mut ctx = mtg_engine::eval::Ctx::new(None, P1);
+    ctx.targets = vec![vec![obj(bears)]];
+    t.g.exec(
+        &mtg_engine::ability::Effect::Modify {
+            what: mtg_engine::ability::Sel::Target(0),
+            mods: vec![Modification::RemoveAllAbilities],
+            duration: mtg_engine::ability::Duration::Permanent,
+        },
+        &mut ctx,
+    );
+    t.g.recompute();
     t.lands(P1, "Wastes", 4);
     t.answer_yes(P1, true);
     t.set_step(P0, Step::End);
     t.advance_to(P1, Step::Upkeep);
     t.settle();
+    assert_eq!(
+        crate::r_s14_common::triggers_from(&t, paralyze),
+        1,
+        "{}",
+        t.dump_log()
+    );
+    let trigger = *t.g.stack.last().expect("the trigger");
+    assert_eq!(t.g.obj(trigger).controller, P0);
     t.resolve_all();
+    assert!(t.obj_now(bears).chars.abilities.is_empty());
     assert!(!t.obj_now(bears).tapped, "{}", t.dump_log());
 }
 
@@ -349,7 +428,7 @@ const CORONET: &str = "Daybreak Coronet";
 
 #[test]
 fn daybreak_coronet_falls_off_when_the_other_auras_go() {
-    cr!("303.4d", "704.5m");
+    cr!("303.4c", "704.5m");
     ruling!(
         "Daybreak Coronet",
         "If all other Auras attached to the enchanted creature stop enchanting it, Daybreak Coronet will be attached to an illegal permanent and will be put into its owner's graveyard."
@@ -382,7 +461,11 @@ fn daybreak_coronet_entering_with_another_aura_cant_enchant_an_unenchanted_creat
     cast_new(&mut t, P0, "Open the Vaults", &[]);
     t.resolve_all();
     assert_eq!(attached_to(&t, strength), Some(obj(bears)));
-    assert!(in_zone(&t, coronet, Zone::Graveyard(P0)), "{}", t.dump_log());
+    assert!(
+        in_zone(&t, coronet, Zone::Graveyard(P0)),
+        "{}",
+        t.dump_log()
+    );
 }
 
 #[test]
@@ -434,7 +517,7 @@ fn dream_leash_tapped_requirement_is_only_for_casting() {
 
 #[test]
 fn consecrate_land_entering_puts_the_other_auras_into_the_graveyard() {
-    cr!("303.4d", "704.5m");
+    cr!("303.4c", "704.5m");
     ruling!(
         "Consecrate Land",
         "If Consecrate Land enters attached to a land that's enchanted by other Auras, those Auras are put into their owners' graveyards."
@@ -450,10 +533,7 @@ fn consecrate_land_entering_puts_the_other_auras_into_the_graveyard() {
 #[test]
 fn animate_wall_enchants_only_a_wall() {
     cr!("303.4a", "702.5a");
-    ruling!(
-        "Animate Wall",
-        "Animate Wall can now enchant only a Wall."
-    );
+    ruling!("Animate Wall", "Animate Wall can now enchant only a Wall.");
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -471,7 +551,10 @@ fn animate_wall_enchants_only_a_wall() {
 #[test]
 fn goblin_caves_works_on_a_snow_covered_mountain() {
     cr!("205.4c", "205.3i");
-    ruling!("Goblin Caves", "Works if enchanting a Snow-Covered Mountain.");
+    ruling!(
+        "Goblin Caves",
+        "Works if enchanting a Snow-Covered Mountain."
+    );
     let mut t = TestGame::new(2);
     let land = t.battlefield(P0, "Snow-Covered Mountain");
     let goblin = t.battlefield(P1, "Goblin Piker");
@@ -481,7 +564,7 @@ fn goblin_caves_works_on_a_snow_covered_mountain() {
 
 #[test]
 fn forbidden_lore_ability_is_activated_by_the_lands_controller() {
-    cr!("113.6", "602.2");
+    cr!("113.10", "602.2");
     ruling!(
         "Forbidden Lore",
         "Forbidden Lore grants an activated ability to the enchanted land. Only that land’s controller can activate the ability."
@@ -576,7 +659,7 @@ fn wheel_of_sun_and_moon_simultaneous_cards_are_ordered_by_the_player() {
 
 #[test]
 fn strong_back_reduces_equip_and_aura_costs_targeting_the_creature() {
-    cr!("601.2f", "602.2b", "118.7d");
+    cr!("601.2f", "602.2b", "118.7a");
     ruling!(
         "Strong Back",
         "Strong Back’s abilities reduce only the amount of generic mana in equip abilities that target the enchanted creature and in the total cost of Aura spells that target the enchanted creature. For example, it will reduce the total cost of Animal Friend from {1}{G} to {G}."
@@ -639,6 +722,18 @@ fn infectious_curse_reduces_spells_targeting_the_player_not_abilities() {
     t.lands(P0, "Mountain", 1);
     let c = t.hand(P0, "Curse of Shaken Faith");
     t.cast(P0, c).target(Entity::Player(P1)).go();
+    // Hungry Flames ({2}{R}: 3 damage to target creature and 2 damage to target player or
+    // planeswalker) targeting a creature and P1, for {1}{R}.
+    let mut t = setup();
+    t.lands(P0, "Mountain", 2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let flames = t.hand(P0, "Hungry Flames");
+    t.cast(P0, flames)
+        .target(bears)
+        .target(Entity::Player(P1))
+        .go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
     // Rod of Ruin's ability ({3}, {T}) still costs {3}.
     let mut t = setup();
     t.lands(P0, "Wastes", 2);
@@ -651,7 +746,7 @@ fn infectious_curse_reduces_spells_targeting_the_player_not_abilities() {
 
 #[test]
 fn detention_vortex_any_opponent_may_activate() {
-    cr!("602.2", "102.2");
+    cr!("602.2", "806.1");
     ruling!(
         "Detention Vortex",
         "In a multiplayer game, any opponent may activate Detention Vortex's last ability, not just an opponent who controls the permanent that it is enchanting."
@@ -698,7 +793,7 @@ fn soul_ransom_any_opponent_activates_and_you_sacrifice_and_draw() {
 
 #[test]
 fn captured_by_the_consulate_target_stays_if_it_cant_change() {
-    cr!("115.7", "115.7d");
+    cr!("115.7", "115.7a");
     ruling!(
         "Captured by the Consulate",
         "If the spell can't target the enchanted creature, its target remains unchanged."
@@ -731,14 +826,19 @@ fn captured_by_the_consulate_target_stays_if_it_cant_change() {
     let hs = cast_new(&mut t, P1, "Holy Strength", &[obj(giant)]);
     t.settle();
     t.resolve_all();
-    assert_eq!(attached_to(&t, hs), Some(obj(enchanted)), "{}", t.dump_log());
+    assert_eq!(
+        attached_to(&t, hs),
+        Some(obj(enchanted)),
+        "{}",
+        t.dump_log()
+    );
 }
 
 // --- Ghastly Haunting, Halvar, Sword of the Meek, Heartseeker, Hammer of Nazahn ----------
 
 #[test]
 fn ghastly_haunting_counters_stay_and_dont_affect_the_creature() {
-    cr!("712.14", "122.1a");
+    cr!("712.18", "122.1a");
     ruling!(
         "Soul Seizer // Ghastly Haunting",
         "If Soul Seizer has any +1/+1 counters on it when it transforms, they remain on Ghastly Haunting. They won't affect the power or toughness of the enchanted creature, however."
@@ -762,7 +862,7 @@ fn ghastly_haunting_counters_stay_and_dont_affect_the_creature() {
 
 #[test]
 fn halvar_counts_auras_and_equipment_you_dont_control() {
-    cr!("303.4", "301.5", "702.4b");
+    cr!("303.4", "301.5");
     ruling!(
         "Halvar, God of Battle // Sword of the Realms",
         "A creature you control is enchanted or equipped if there's an Aura or an Equipment attached to it. You don't have to control that Aura or Equipment."
@@ -799,7 +899,7 @@ fn sword_of_the_meek_equips_any_creature() {
 
 #[test]
 fn heartseeker_ability_targets_protection_from_artifacts_unless_the_creature_is_one() {
-    cr!("702.16b", "113.7", "115.4");
+    cr!("702.16b", "113.7");
     ruling!(
         "Heartseeker",
         "Heartseeker grants an ability to the equipped creature. The ability can target a creature with protection from artifacts (unless the equipped creature is an artifact creature)."
@@ -808,14 +908,25 @@ fn heartseeker_ability_targets_protection_from_artifacts_unless_the_creature_is_
     for artifact in [false, true] {
         let mut t = TestGame::new(2);
         t.set_step(P0, Step::PrecombatMain);
-        let holder = t.battlefield(P0, if artifact { "Ornithopter" } else { "Grizzly Bears" });
+        let holder = t.battlefield(
+            P0,
+            if artifact {
+                "Ornithopter"
+            } else {
+                "Grizzly Bears"
+            },
+        );
         let chosen = t.battlefield(P1, "Tel-Jilad Chosen");
         attach_new(&mut t, P0, "Heartseeker", holder);
         t.answer_targets(P0, &[obj(chosen)]);
         let from = t.asked().len();
         activate_containing(&mut t, P0, holder, "Destroy target creature").expect("activate");
         let offered = target_candidates(&t, P0, from);
-        assert_eq!(offered[0].contains(&obj(chosen)), !artifact, "artifact {artifact}");
+        assert_eq!(
+            offered[0].contains(&obj(chosen)),
+            !artifact,
+            "artifact {artifact}"
+        );
         t.resolve_all();
         assert_eq!(t.on_battlefield(chosen), artifact);
     }
@@ -843,7 +954,7 @@ fn hammer_of_nazahn_moving_it_lets_marked_damage_kill() {
 
 #[test]
 fn conjurers_mantle_shares_a_type_with_one_in_common() {
-    cr!("700.13", "205.3m");
+    cr!("205.3m");
     ruling!(
         "Conjurer's Mantle",
         "A creature \"shares a creature type\" with the equipped creature if they have at least one creature type in common."

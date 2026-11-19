@@ -1627,7 +1627,11 @@ fn block_events(r: &str) -> Option<Parsed> {
         parts.extend(attacking);
         let attacker = Filter::and(parts);
         return Some((
-            TriggerCond::BlockedByN { attacker, n },
+            TriggerCond::BlockedByN {
+                attacker,
+                blocker: Filter::creature(),
+                n,
+            },
             Sel::TriggerObject,
             PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
         ));

@@ -137,9 +137,35 @@ impl Game {
                 ctx.prev_happened = yes;
                 if yes {
                     let it_before = ctx.vars.get(&vars::IT).cloned();
+                    // "You may untap target tapped creature an opponent controls. If you
+                    // do, untap this creature" (Soldevi Golem): a player can't choose to
+                    // untap a permanent that can't become untapped (Blossombind ruling),
+                    // so "if you do" follows whether it untapped. Only selections that
+                    // involve no choice are looked at.
+                    let untapping: Option<Vec<ObjectId>> = match &**effect {
+                        Effect::Untap {
+                            what:
+                                what @ (Sel::Target(_)
+                                | Sel::This
+                                | Sel::AttachedTo
+                                | Sel::TriggerObject
+                                | Sel::Var(_)),
+                        } => Some(
+                            self.resolve_objects(what, ctx)
+                                .into_iter()
+                                .filter(|o| self.obj(*o).tapped)
+                                .collect(),
+                        ),
+                        _ => None,
+                    };
                     // Effects that can fail to do what they say (sacrificing, paying,
                     // countering) record whether they did it ("if you do", "when you do").
                     self.exec(effect, ctx);
+                    if let Some(objs) = untapping {
+                        ctx.prev_happened = objs
+                            .iter()
+                            .any(|o| self.is_live(*o) && !self.obj(*o).tapped);
+                    }
                     // "You may put that card onto the battlefield. If you don't, put it
                     // into your hand": an Aura that couldn't enter stayed where it was (CR
                     // 303.4g) and is still the same object (CR 400.7), so "it" still means
