@@ -208,3 +208,15 @@ effects created by resolving spells and abilities (CR 603, 610, 611). Format and
 - Affects: Tunnel Ignus and Confounding Conundrum; Lictor entering together with an opponent's creature (Show and Tell); any intervening "if" or triggered-ability value that counts this turn's events, for occurrences that happen together.
 - Code: `crates/mtg-engine/src/triggers.rs` (`flush_events_now` fills `batch_ahead` with each batch and takes each event off its front as it's processed); `crates/mtg-engine/src/kw/value_results.rs` (`turn_events_indexed`).
 - Tests: `tests/rulings/r_p088_counters_draws.rs` (`tunnel_ignus_counts_lands_that_entered_earlier_or_together`, `lictor_sees_an_opponents_creature_entering_with_it`).
+
+## sequential-investigations-are-separate-events: Investigating several times creates each Clue by its own event, for "one or more" triggers too
+- Kind: interpretation
+- Status: decided
+- Rules: 701.16a "“Investigate” means “Create a Clue token.” See rule 111.10f." / 603.2c "An ability triggers only once each time its trigger event occurs. However, it can trigger repeatedly if one event contains multiple occurrences." / Tamiyo Meets the Story Circle ruling: "If you're instructed to investigate multiple times, those actions are sequential, meaning you'll create that many Clue tokens one at a time." / Valgavoth's Onslaught ruling (2024-09-20): "If an effect instructs a player to manifest multiple cards from their library, those cards are manifested one at a time. Players can't take actions in between. However, an ability that triggers "Whenever one or more creatures enter" would trigger once for each event."
+- Question: "Investigate twice for each card discarded this way" creates its Clues one at a time. Does an ability that triggers "whenever one or more tokens you control enter" (Cloakwood Swarmkeeper) trigger once for all of them, or once per Clue?
+- Decision: Once per Clue: each investigation is its own event (its own batch of events, `Event::BatchBoundary`), as the manifest ruling says for manifesting several cards one at a time.
+- Alternatives: One batch for the whole instruction (the engine's earlier behavior): contrary to "one at a time", and to how the engine already treats manifesting several cards.
+- Why: The Tamiyo ruling makes the Clues' creations separate actions; the manifest ruling gives the consequence for "one or more" triggers of actions done one at a time. Extends that ruling by analogy (no ruling names investigate and a "one or more" trigger together).
+- Affects: Tamiyo Meets the Story Circle and every "investigate N times" / "investigate twice" instruction; "whenever one or more tokens/artifacts you control enter" abilities (Cloakwood Swarmkeeper, Woodland Champion, Ingenious Artillerist, ...).
+- Code: `crates/mtg-engine/src/keyword_actions.rs` (`KeywordAction::Investigate`).
+- Tests: `tests/rulings/r_residue_keywords_triggers.rs` (`tamiyo_investigates_one_clue_at_a_time`).

@@ -249,29 +249,25 @@ fn lazav_doesnt_investigate_if_its_target_is_illegal() {
 
 #[test]
 fn tamiyo_investigates_one_clue_at_a_time() {
-    cr!("701.16a", "608.2c");
+    cr!("701.16a", "608.2c", "603.2c");
+    interp!("sequential-investigations-are-separate-events");
     ruling!(
         "Tamiyo Meets the Story Circle",
         "If you're instructed to investigate multiple times, those actions are sequential, meaning you'll create that many Clue tokens one at a time."
     );
     supported("Tamiyo Meets the Story Circle");
     let mut t = TestGame::new(2);
+    // Cloakwood Swarmkeeper: "Whenever one or more tokens you control enter, put a +1/+1
+    // counter on this creature." Two Clues one at a time: it triggers twice.
+    let sk = t.battlefield(P0, "Cloakwood Swarmkeeper");
     let saga = t.enter(P0, "Tamiyo Meets the Story Circle");
     t.resolve_all();
     let card = t.hand(P0, "Grizzly Bears");
     t.answer_choose(P0, &[obj(card)]);
-    let start = t.g.turn_events.len();
     crate::r_s19_common::add_lore(&mut t, saga, 1);
     t.resolve_all();
     assert_eq!(tokens_of(&t, P0, "Clue"), 2);
-    // Two separate creations, each its own event.
-    let created: Vec<usize> = t.g.turn_events[start..]
-        .iter()
-        .enumerate()
-        .filter(|(_, e)| matches!(e, mtg_engine::events::Event::TokenCreated { .. }))
-        .map(|(i, _)| i)
-        .collect();
-    assert_eq!(created.len(), 2, "{}", t.dump_log());
+    assert_eq!(p1(&t, sk), 2, "{}", t.dump_log());
 }
 
 #[test]

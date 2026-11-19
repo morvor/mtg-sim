@@ -33,6 +33,10 @@ pub fn perform(
         KeywordAction::Investigate => {
             for p in players {
                 for _ in 0..k {
+                    // Investigating several times is sequential: each Clue is created by
+                    // its own event, so "whenever one or more tokens enter" triggers once
+                    // per Clue (Tamiyo Meets the Story Circle's ruling; CR 603.2c).
+                    g.end_event_batch();
                     // "Whenever you investigate": each time (Erdwal Illuminator).
                     g.emit(crate::events::Event::Custom {
                         name: INVESTIGATED.into(),

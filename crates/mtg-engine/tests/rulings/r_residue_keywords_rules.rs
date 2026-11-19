@@ -613,3 +613,31 @@ fn prison_barricade_kicked_attacks_until_it_leaves() {
     assert!(can_attack(&mut t, b));
     assert!(has(&mut t, b, KeywordKind::Defender));
 }
+
+#[test]
+fn coastal_breach_cost_stays_once_determined() {
+    cr!("601.2f", "601.2g", "605.1a", "702.125a", "800.4a");
+    ruling!(
+        "Coastal Breach",
+        "Causing an opponent to lose the game after you’ve announced that you’re casting a spell with undaunted and determined its total cost won’t cause you to have to pay more mana."
+    );
+    supported("Coastal Breach");
+    // Four players: Coastal Breach ({6}{U}, undaunted) costs {3}{U}. P0 has exactly four
+    // mana sources, one of which (a custom land: "{T}: Add {C}. [P3] loses the game.")
+    // makes P3 lose the game as P0 pays.
+    let mut t = TestGame::new(4);
+    t.lands(P0, "Island", 3);
+    let spring = t.custom(
+        P0,
+        crate::r_s17_undaunted::doom_spring(P3),
+        Zone::Battlefield,
+    );
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let cb = t.hand(P0, "Coastal Breach");
+    let spell = t.cast(P0, cb).go();
+    assert!(!t.g.player(P3).in_game());
+    assert!(t.obj(spring).tapped);
+    assert_eq!(t.zone(spell), Zone::Stack);
+    t.resolve_all();
+    assert_eq!(t.zone(bears), Zone::Hand(P1));
+}
