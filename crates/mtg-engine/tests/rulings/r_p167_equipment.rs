@@ -521,3 +521,262 @@ fn fighter_class_reduces_generic_equip_costs_per_class_down_to_zero() {
     mana(&mut t, P0, ManaType::W, 1);
     equip(&mut t, P0, sword, bears).expect("for {W}");
 }
+
+// ---------------------------------------------------------------------------------------
+// Counts taken as a spell or ability resolves (CR 608.2h), last known information
+// ---------------------------------------------------------------------------------------
+
+#[test]
+fn wyleth_counts_attachments_on_resolution_or_as_it_last_existed() {
+    cr!("608.2h", "113.7a");
+    ruling!(
+        "Wyleth, Soul of Steel",
+        "The number of Auras and Equipment attached to Wyleth is determined as its triggered ability resolves. If Wyleth is no longer on the battlefield at that time, its last existence on the battlefield is checked to determine the number of Auras and Equipment attached to it."
+    );
+    // (what happens in response, cards drawn)
+    for (response, drawn) in [("attach", 3), ("destroy", 2), ("none", 2)] {
+        let mut t = TestGame::new(2);
+        let w = t.battlefield(P0, "Wyleth, Soul of Steel");
+        attach_new(&mut t, P0, "Bonesplitter", w);
+        attach_new(&mut t, P0, "Holy Strength", w);
+        attack_with(&mut t, &[(w, Entity::Player(P1))]);
+        assert_eq!(t.stack_len(), 1);
+        match response {
+            "attach" => {
+                attach_new(&mut t, P0, "Leonin Scimitar", w);
+            }
+            "destroy" => destroy(&mut t, w),
+            _ => {}
+        }
+        let hand = t.hand_size(P0);
+        t.resolve_all();
+        assert_eq!(t.hand_size(P0), hand + drawn, "{response}");
+    }
+}
+
+#[test]
+fn kemba_counts_equipment_on_resolution_or_as_it_last_existed() {
+    cr!("608.2h", "113.7a");
+    ruling!(
+        "Kemba, Kha Regent",
+        "The number of Equipment attached to Kemba is determined as the ability resolves. If Kemba is no longer on the battlefield at that time, its last existence on the battlefield is checked to determine the number of Equipment attached to it."
+    );
+    for (response, cats) in [("attach", 2), ("destroy", 1), ("unattach", 0)] {
+        let mut t = TestGame::new(2);
+        let k = t.battlefield(P0, "Kemba, Kha Regent");
+        let sword = attach_new(&mut t, P0, "Bonesplitter", k);
+        next_upkeep(&mut t, P0);
+        assert_eq!(t.stack_len(), 1);
+        match response {
+            "attach" => {
+                attach_new(&mut t, P0, "Leonin Scimitar", k);
+            }
+            "destroy" => destroy(&mut t, k),
+            _ => destroy(&mut t, sword),
+        }
+        t.resolve_all();
+        assert_eq!(
+            crate::r_s05_common::tokens_with_subtype(&t, P0, "Cat").len(),
+            cats,
+            "{response}"
+        );
+    }
+}
+
+#[test]
+fn judgment_bolt_slash_of_light_and_barret_count_as_they_resolve() {
+    cr!("608.2h");
+    ruling!(
+        "Judgment Bolt",
+        "The value of X is calculated only once, as Judgment Bolt resolves."
+    );
+    ruling!(
+        "Slash of Light",
+        "Use the number of creatures you control and the number of Equipment you control when Slash of Light resolves to determine how much damage is dealt."
+    );
+    ruling!(
+        "Barret Wallace",
+        "Use the number of equipped creatures you control at the time Barret Wallace's last ability resolves to determine how much damage to deal."
+    );
+    // Judgment Bolt: one Equipment as it's cast, two as it resolves.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Bonesplitter");
+    let giant = t.battlefield(P1, "Craw Wurm");
+    let bolt = t.hand(P0, "Judgment Bolt");
+    give_mana_for(&mut t, P0, "Judgment Bolt");
+    t.cast(P0, bolt).target(obj(giant)).go();
+    t.battlefield(P0, "Leonin Scimitar");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert!(!t.on_battlefield(giant));
+    // Slash of Light: 1 creature + 1 Equipment cast, 2 creatures + 2 Equipment resolving.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Bonesplitter");
+    let wurm = t.battlefield(P1, "Colossal Dreadmaw");
+    let slash = t.hand(P0, "Slash of Light");
+    give_mana_for(&mut t, P0, "Slash of Light");
+    t.cast(P0, slash).target(obj(wurm)).go();
+    t.battlefield(P0, "Hill Giant");
+    t.battlefield(P0, "Leonin Scimitar");
+    t.resolve_all();
+    assert_eq!(t.obj_now(wurm).damage, 4);
+    // Barret Wallace: one equipped creature as it attacks, two as the trigger resolves.
+    let mut t = TestGame::new(2);
+    let barret = t.battlefield(P0, "Barret Wallace");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attach_new(&mut t, P0, "Bonesplitter", bears);
+    attack_with(&mut t, &[(barret, Entity::Player(P1))]);
+    assert_eq!(t.stack_len(), 1);
+    attach_new(&mut t, P0, "Leonin Scimitar", barret);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+}
+
+// ---------------------------------------------------------------------------------------
+// Statics that care about Equipment
+// ---------------------------------------------------------------------------------------
+
+#[test]
+fn equipment_statics_table() {
+    cr!("613.4c", "301.5");
+    ruling!(
+        "Stone Haven Outfitter",
+        "The bonuses gained from Stone Haven Outfitter's abilities are in addition to any bonuses given by the Equipment."
+    );
+    ruling!(
+        "Weapons Trainer",
+        "Weapons Trainer's ability applies even if the Equipment you control isn't attached to any creature."
+    );
+    ruling!(
+        "Weapons Trainer",
+        "Weapons Trainer's ability gives just +1/+0, no matter how many Equipment you control beyond the first."
+    );
+    // Stone Haven Outfitter + Bonesplitter on Grizzly Bears: 2/2 + 2/0 + 1/1.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Stone Haven Outfitter");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attach_new(&mut t, P0, "Bonesplitter", bears);
+    assert_eq!(t.pt(bears), (5, 3));
+    // Weapons Trainer with (n) unattached Equipment: Grizzly Bears' power.
+    for (n, power) in [(0, 2), (1, 3), (2, 3)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Weapons Trainer");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        for _ in 0..n {
+            t.battlefield(P0, "Leonin Scimitar");
+        }
+        assert_eq!(t.pt(bears), (power, 2), "{n}");
+    }
+}
+
+#[test]
+fn strength_of_arms_token_table() {
+    cr!("608.2c", "115.1");
+    ruling!(
+        "Strength of Arms",
+        "The Human Soldier token that you'll create can't be the target to get +2/+2."
+    );
+    ruling!(
+        "Strength of Arms",
+        "You'll create a Human Soldier token if you control any Equipment, not just one attached to the target creature, or even to any creature at all."
+    );
+    ruling!(
+        "Strength of Arms",
+        "You'll create only one token, no matter how many Equipment you control beyond the first."
+    );
+    // (Equipment: none / attached to another creature / unattached x2, tokens)
+    for (setup, tokens) in [("none", 0), ("other", 1), ("loose2", 1)] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        match setup {
+            "other" => {
+                let giant = t.battlefield(P0, "Hill Giant");
+                attach_new(&mut t, P0, "Bonesplitter", giant);
+            }
+            "loose2" => {
+                t.battlefield(P0, "Bonesplitter");
+                t.battlefield(P0, "Leonin Scimitar");
+            }
+            _ => {}
+        }
+        let s = t.hand(P0, "Strength of Arms");
+        give_mana_for(&mut t, P0, "Strength of Arms");
+        t.cast(P0, s).target(obj(bears)).go();
+        t.resolve_all();
+        let made = crate::r_s05_common::tokens_with_subtype(&t, P0, "Soldier");
+        assert_eq!(made.len(), tokens, "{setup}");
+        for tok in made {
+            assert_eq!(t.pt(tok), (1, 1), "the token didn't get +2/+2");
+        }
+        assert_eq!(t.pt(bears).1, 4);
+    }
+}
+
+#[test]
+fn warchanter_skald_has_no_way_to_tap_itself() {
+    cr!("603.2e", "508.1f");
+    ruling!(
+        "Warchanter Skald",
+        "Warchanter Skald’s triggered ability doesn’t allow you to tap it. You have to find some other way to tap it. You could attack with it, I suppose?"
+    );
+    let mut t = TestGame::new(2);
+    let skald = t.battlefield(P0, "Warchanter Skald");
+    attach_new(&mut t, P0, "Short Sword", skald);
+    assert!(!crate::r_s02_common::can_activate(&mut t, P0, skald));
+    attack_with(&mut t, &[(skald, Entity::Player(P1))]);
+    assert!(t.obj_now(skald).tapped);
+    t.resolve_all();
+    assert_eq!(
+        crate::r_s05_common::tokens_with_subtype(&t, P0, "Dwarf").len(),
+        1
+    );
+}
+
+#[test]
+fn stoneforge_mystic_puts_any_equipment_from_hand_unattached() {
+    cr!("110.2", "301.5c");
+    ruling!(
+        "Stoneforge Mystic",
+        "When Stoneforge Mystic's second ability resolves, you may put any Equipment card from your hand onto the battlefield, not just the one you searched for with its first ability. The Equipment is put onto the battlefield unattached."
+    );
+    let mut t = TestGame::new(2);
+    let sm = t.battlefield(P0, "Stoneforge Mystic");
+    let hammer = t.hand(P0, "Loxodon Warhammer");
+    t.lands(P0, "Plains", 2);
+    t.answer_choose(P0, &[obj(hammer)]);
+    t.answer_yes(P0, true);
+    t.activate(P0, sm, 0, &[]).unwrap();
+    t.resolve_all();
+    let h = t.named_on_battlefield("Loxodon Warhammer");
+    assert_eq!(h.len(), 1);
+    assert_eq!(t.g.obj(h[0]).attached_to, None);
+}
+
+#[test]
+fn godo_adds_a_combat_phase_right_after_this_one() {
+    cr!("500.8", "505.1a");
+    ruling!(
+        "Godo, Bandit Warlord",
+        "Unlike many effects that grant additional combat phases, you don't get an additional main phase with Godo, Bandit Warlord's ability. The additional combat phase happens immediately after the first combat phase."
+    );
+    use mtg_engine::turn::Step;
+    let mut t = TestGame::new(2);
+    let godo = t.battlefield(P0, "Godo, Bandit Warlord");
+    attack_with(&mut t, &[(godo, Entity::Player(P1))]);
+    t.resolve_all();
+    assert!(!t.obj_now(godo).tapped, "untapped");
+    block_and_finish(&mut t, P1, &[]);
+    // The next step is the beginning of combat of the added phase, not a main phase.
+    let ok = t.g.run_until(1000, |g| g.turn.step != Step::EndOfCombat);
+    assert!(ok);
+    assert_eq!(t.g.turn.step, Step::BeginningOfCombat);
+    let mains = t
+        .g
+        .turn
+        .schedule
+        .iter()
+        .filter(|s| s.is_main())
+        .count();
+    assert_eq!(mains, 1, "only the normal postcombat main phase");
+}
