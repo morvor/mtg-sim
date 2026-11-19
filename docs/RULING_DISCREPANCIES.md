@@ -340,6 +340,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: as the ruling says, for Moria Marauder: a card exiled by its trigger is played with the normal timing rules, and a spell's costs are paid.
 - Recorded: test `tests/rulings/r_s23_timing.rs` (`moria_marauder_cards_follow_normal_timing_and_spells_cost_their_costs`), citing it under Moria Marauder, which the data also attaches it to (a citation covers the text on every card it's attached to); Mount Doom has no ability that could take part.
 
+### Fang, Fearless l'Cie: Vanille, Cheerful l'Cie's ruling about its meld trigger
+- Kind: misattached
+- Status: open for review
+- Ruling, Fang, Fearless l'Cie (2025-06-06): "Vanille's second ability checks the battlefield at the moment it would trigger to see if you own and control Vanille and a creature named Fang, Fearless l'Cie. If you don't, the ability won't trigger at all. If it does trigger, the ability will check again as it tries to resolve. If you don't control both Fang and Vanille at that time, the ability won't resolve, you won't have the opportunity to pay {3}{B}{G}, and none of the ability's other effects will happen."
+- Conflicts with: Fang has no meld ability and nothing that checks the battlefield: "Whenever one or more cards leave your graveyard, you draw a card and you lose 1 life. This ability triggers only once each turn. / (Melds with Vanille, Cheerful l'Cie.)" The ruling names and describes Vanille, Cheerful l'Cie's second ability: "At the beginning of your first main phase, if you both own and control Vanille and a creature named Fang, Fearless l'Cie, you may pay {3}{B}{G}. If you do, exile them, then meld them into Ragnarok, Divine Deliverance."
+- Evidence: Fang, Vanille and Ragnarok, Divine Deliverance share the meld pair's general notes in the data (all dated 2025-06-06, FINAL FANTASY); this one, specific to Vanille's ability, is only under Fang, Vanille's meld partner, beside Fang's own note ("If multiple cards leave your graveyard at the same time, Fang's ability will trigger only once."). Vanille has no note of its own in the data. Found in work item rulings-P093.
+- Engine: as the ruling says, for Vanille: an intervening "if" clause checked when the ability would trigger and again on resolution (CR 603.4); with Fang gone by then, nothing is paid or melded.
+- Recorded: test `tests/rulings/r_p093_misc.rs` (`vanilles_meld_trigger_checks_on_trigger_and_on_resolution`), citing it under Fang, which takes part as Vanille's meld partner (and, controlled but not owned, as the Fang that doesn't count).
+
 ## Outdated rulings
 
 ### Souls of the Faultless: "you may choose either member of the attacking team"
