@@ -706,21 +706,47 @@ fn p_reveal(l: &str, b: &mut Builder) -> Option<Effect> {
         (Some(o), w) if format!("{o:?}") == format!("{w:?}") => {}
         _ => return None,
     }
-    let e = Effect::seq(vec![
-        Effect::Store {
+    let reveal = Effect::Custom(SmolStr::new(if matches!(c.qty, Qty::AnyNumber) {
+        crate::kw::reveal_from_hand::REVEAL_CHOSEN_ANY
+    } else {
+        crate::kw::reveal_from_hand::REVEAL_CHOSEN
+    }));
+    let mut steps = vec![];
+    // "You may reveal X black cards in your hand. If you do, ... -X/-X" (Nightshade
+    // Assassin): nothing defines X, so the player chooses it as the ability resolves (CR
+    // 107.3f): they choose any number of those cards, and X is that number for the rest
+    // of the resolution.
+    if matches!(&c.qty, Qty::Exactly(Value::X))
+        && matches!(who, PlayerRef::You)
+        && !super::tokens_x_x::x_defined(b)
+    {
+        b.named
+            .push((super::tokens_x_x::X_DEFINED.to_string(), Sel::None));
+        let any = Cards {
+            qty: Qty::AnyNumber,
+            ..c.clone()
+        };
+        steps.push(Effect::Store {
+            var: crate::kw::reveal_from_hand::REVEALED,
+            sel: selection(&any, who),
+        });
+        steps.push(Effect::SetX {
+            value: Value::CountSel(Box::new(Sel::Var(
+                crate::kw::reveal_from_hand::REVEALED,
+            ))),
+        });
+    } else {
+        steps.push(Effect::Store {
             var: crate::kw::reveal_from_hand::REVEALED,
             sel: selection(&c, who),
-        },
-        Effect::Custom(SmolStr::new(if matches!(c.qty, Qty::AnyNumber) {
-            crate::kw::reveal_from_hand::REVEAL_CHOSEN_ANY
-        } else {
-            crate::kw::reveal_from_hand::REVEAL_CHOSEN
-        })),
-        Effect::Store {
-            var: vars::IT,
-            sel: Sel::Var(crate::kw::reveal_from_hand::REVEALED),
-        },
-    ]);
+        });
+    }
+    steps.push(reveal);
+    steps.push(Effect::Store {
+        var: vars::IT,
+        sel: Sel::Var(crate::kw::reveal_from_hand::REVEALED),
+    });
+    let e = Effect::seq(steps);
     Some(record(e, b))
 }
 

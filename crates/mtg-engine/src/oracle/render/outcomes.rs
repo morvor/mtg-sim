@@ -682,13 +682,42 @@ impl Renderer<'_> {
     /// revealed.
     fn reveal_part(&mut self, v: &[Effect], i: usize) -> Option<(usize, String)> {
         use crate::kw::reveal_from_hand::{REVEALED, REVEAL_CHOSEN, REVEAL_CHOSEN_ANY};
-        let (Effect::Store { var: REVEALED, sel }, Some(Effect::Custom(c))) = (&v[i], v.get(i + 1))
+        // "You may reveal X black cards in your hand" with X chosen by the cards chosen
+        // (CR 107.3f): any number of them, then X set to their number.
+        let chosen_x = matches!(
+            v.get(i + 1),
+            Some(Effect::SetX { value: Value::CountSel(s) }) if matches!(**s, Sel::Var(REVEALED))
+        );
+        let reveal_at = if chosen_x { i + 2 } else { i + 1 };
+        let (Effect::Store { var: REVEALED, sel }, Some(Effect::Custom(c))) =
+            (&v[i], v.get(reveal_at))
         else {
             return None;
         };
         if c != REVEAL_CHOSEN && c != REVEAL_CHOSEN_ANY {
             return None;
         }
+        let x_sel;
+        let sel = match sel {
+            Sel::Choose {
+                chooser,
+                filter,
+                up_to: true,
+                store,
+                ..
+            } if chosen_x => {
+                x_sel = Sel::Choose {
+                    chooser: chooser.clone(),
+                    filter: filter.clone(),
+                    count: Value::X,
+                    up_to: false,
+                    store: *store,
+                };
+                &x_sel
+            }
+            _ if chosen_x => return None,
+            other => other,
+        };
         let text = match sel {
             Sel::Choose { chooser, .. } => {
                 let c = self.player(chooser, Case::Subj);
@@ -762,7 +791,7 @@ impl Renderer<'_> {
                 format!("reveal {s}")
             }
         };
-        Some((2, text))
+        Some((reveal_at - i + 1, text))
     }
 
     /// At `v[i]` of a sequence: renders a part of an outcome condition, returning how many
