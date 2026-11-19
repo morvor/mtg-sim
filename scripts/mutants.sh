@@ -7,9 +7,10 @@
 #   RERUN=1 ONLY='mana.rs:1019' scripts/mutants.sh mana   # only the survivors matching
 #   SAMPLE=1 scripts/mutants.sh trigger_timing   # every mutant instead of a 1-in-N sample
 #   FULL=1 scripts/mutants.sh permissions        # the same: every mutant (a full run)
-#   FULL=1 RESUME=1 scripts/mutants.sh permissions   # continue an interrupted run: cargo-mutants
-#                                                # --iterate skips the mutants already caught
-#                                                # (the old mutants.out is kept as mutants.out.bak)
+#   FULL=1 RESUME=1 REV=<commit> scripts/mutants.sh permissions   # continue an interrupted run
+#                                                # of commit REV (default HEAD): every mutant with an
+#                                                # outcome is skipped (cargo-mutants --iterate); the
+#                                                # earlier outcomes stay in mutants.out.bak.<n>
 #   TIMEOUT=900 scripts/mutants.sh layers        # a longer test timeout per mutant (default 600 s;
 #                                                # the unmutated mtg-engine suite takes ~290 s)
 #
@@ -35,7 +36,7 @@ for stem in "$@"; do
   # left a mutation behind; uncommitted work in progress must not break the baseline).
   # -m: fresh mtimes, so cargo rebuilds rather than reusing the last mutant's binaries.
   find "$MS" -mindepth 1 -maxdepth 1 ! -name target -exec rm -rf {} +
-  git -C "$WT" archive HEAD | tar -C "$MS" -xmf -
+  git -C "$WT" archive "${REV:-HEAD}" | tar -C "$MS" -xmf -
   file=crates/mtg-engine/src/$stem.rs
   n=$(cd "$MS" && cargo mutants --list -f "$file" | wc -l)
   k=$SAMPLE
@@ -134,8 +135,14 @@ PY
     args+=(--shard "0/$k" --sharding round-robin)
   fi
   if [[ -n "${RESUME:-}" && -d "$dest/mutants.out" ]]; then
-    rm -rf "$dest/mutants.out.bak"
-    cp -a "$dest/mutants.out" "$dest/mutants.out.bak"
+    # --iterate skips the names in caught, unviable and previously_caught.txt: list every
+    # mutant with an outcome there, so the survivors aren't tested again either.
+    i=1
+    while [[ -e "$dest/mutants.out.bak.$i" ]]; do i=$((i + 1)); done
+    cp -a "$dest/mutants.out" "$dest/mutants.out.bak.$i"
+    (cd "$dest/mutants.out" && cat caught.txt missed.txt timeout.txt unviable.txt \
+      previously_caught.txt 2>/dev/null | sort -u >previously_caught.new &&
+      mv previously_caught.new previously_caught.txt)
     args+=(--iterate)
   fi
   args+=(-o "$dest")
