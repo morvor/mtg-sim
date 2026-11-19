@@ -57,7 +57,7 @@ fn fated_firepower_and_a_prevention_shield_are_ordered_by_the_damaged_player() {
 
 #[test]
 fn fated_firepower_adds_after_trample_damage_is_divided() {
-    cr!("510.1c", "702.19b", "616.1");
+    cr!("510.1c", "702.19b", "614.1a");
     ruling!(
         "Fated Firepower",
         "divide the original amount before adding the number of fire counters on Fated Firepower"
@@ -133,7 +133,7 @@ fn ojer_axonil_raises_divided_damage_after_the_division() {
 
 #[test]
 fn protean_hydra_prevents_all_damage_even_with_too_few_counters() {
-    cr!("615.1a", "122.1");
+    cr!("615.1a", "609.3");
     ruling!(
         "Protean Hydra",
         "All damage that would be dealt to Protean Hydra is prevented, even if it doesn’t have that many +1/+1 counters on it."
@@ -162,7 +162,7 @@ fn protean_hydra_prevents_all_damage_even_with_too_few_counters() {
 
 #[test]
 fn protean_hydra_still_loses_counters_to_unpreventable_damage() {
-    cr!("615.12", "609.3");
+    cr!("615.12");
     ruling!(
         "Protean Hydra",
         "If unpreventable damage is dealt to Protean Hydra, the Hydra’s second ability will try to prevent it and fail"

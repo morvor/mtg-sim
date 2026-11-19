@@ -87,7 +87,7 @@ fn pelt_collector_dies_with_a_larger_creature_dealt_lethal_damage_at_once() {
 
 #[test]
 fn pelt_collector_with_negative_power_triggers_for_a_zero_power_creature() {
-    cr!("603.4", "208.3");
+    cr!("603.4", "107.1b");
     ruling!(
         "Pelt Collector",
         "If Pelt Collector’s power becomes less than 0, a creature with 0 power"
@@ -304,7 +304,7 @@ fn botanical_brawler_triggers_for_a_permanent_entering_with_counters() {
 
 #[test]
 fn iridescent_hornbeetle_counts_counters_put_before_it_and_on_creatures_since_gone() {
-    cr!("603.2", "122.6");
+    cr!("122.6", "608.2h");
     ruling!(
         "Iridescent Hornbeetle",
         "even if that happened before Iridescent Hornbeetle was on the battlefield, and even if those creatures are no longer on the battlefield or under your control"

@@ -290,7 +290,7 @@ fn hallar_in_two_headed_giant_costs_the_opposing_team_two_per_counter() {
 
 #[test]
 fn shaile_counts_a_creature_that_entered_under_your_control_now_controlled_by_another() {
-    cr!("603.10a", "122.6");
+    cr!("608.2c", "122.6");
     ruling!(
         "Shaile, Dean of Radiance // Embrose, Dean of Shadow",
         "If a creature entered the battlefield under your control this turn but is controlled by a different player when Shaile’s activated ability resolves, it will still get a +1/+1 counter."

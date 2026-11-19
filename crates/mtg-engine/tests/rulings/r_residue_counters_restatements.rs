@@ -339,7 +339,7 @@ fn restatement_rulings() {
         }),
         // iridescent hornbeetle that left doesnt trigger
         ("Iridescent Hornbeetle", || {
-            cr!("603.2");
+            cr!("113.6");
             ruling!(
                 "Iridescent Hornbeetle",
                 "If Iridescent Hornbeetle leaves the battlefield before your end step, its ability won’t trigger at all."

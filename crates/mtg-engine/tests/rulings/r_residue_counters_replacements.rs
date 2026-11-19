@@ -44,7 +44,7 @@ fn searches(t: &TestGame) -> (usize, usize) {
 
 #[test]
 fn archmage_ascension_ignores_cards_put_into_hand_without_drawing() {
-    cr!("121.2", "614.11");
+    cr!("121.6", "614.11");
     ruling!(
         "Archmage Ascension",
         "If a spell or ability causes you to put cards in your hand without specifically using the word “draw,” Archmage Ascension’s abilities ignore it."
@@ -72,7 +72,7 @@ fn archmage_ascension_ignores_cards_put_into_hand_without_drawing() {
 
 #[test]
 fn archmage_ascension_replaces_each_draw_of_several_one_at_a_time() {
-    cr!("121.2", "614.11", "616.1");
+    cr!("121.2", "614.11");
     ruling!(
         "Archmage Ascension",
         "each individual draw may be replaced by Archmage Ascension’s effect. Process the draws one at a time."
@@ -107,7 +107,7 @@ fn archmage_ascension_replaces_each_draw_of_several_one_at_a_time() {
 
 #[test]
 fn archmage_ascensions_replacing_one_draw_apply_only_once() {
-    cr!("616.1", "616.1e", "614.5");
+    cr!("616.1", "616.1e", "616.1f");
     ruling!(
         "Archmage Ascension",
         "if you control more than one Archmage Ascension with six quest counters on it and you would draw a card, each Archmage Ascension’s replacement effect could apply. Once you use one, the rest are no longer applicable."
@@ -202,7 +202,7 @@ fn combine_guildmage_does_nothing_if_either_target_is_illegal() {
 
 #[test]
 fn two_high_scores_each_add_one_counter() {
-    cr!("616.1", "614.1a");
+    cr!("616.1f", "614.1a");
     ruling!(
         "High Score",
         "In the case where you control more than one High Score, each one you control will increase the number of +1/+1 counters placed on a creature you control by one."

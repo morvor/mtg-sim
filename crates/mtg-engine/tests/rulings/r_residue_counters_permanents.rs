@@ -53,7 +53,7 @@ fn quarantine_field_returns_cards_when_its_owner_leaves_the_game() {
 
 #[test]
 fn quarantine_field_returns_cards_before_state_based_actions() {
-    cr!("610.3c", "704.3");
+    cr!("610.3", "704.3");
     ruling!(
         "Quarantine Field",
         "The exiled cards return to the battlefield immediately after Quarantine Field leaves the battlefield. Nothing happens between the two events, including state-based actions."
@@ -203,7 +203,7 @@ fn daxos_spirit_copies_have_its_power_and_toughness_ability() {
 
 #[test]
 fn rikku_doesnt_unblock_a_creature_already_blocked() {
-    cr!("509.1h", "506.4");
+    cr!("509.1h", "506.4a");
     ruling!(
         "Rikku, Resourceful Guardian",
         "Once a creature has been blocked, Rikku's first ability won't cause it to become unblocked."

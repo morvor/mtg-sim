@@ -225,7 +225,9 @@ fn dyadrine_cast_without_paying_its_mana_cost_enters_without_counters() {
     t.set_step(P0, Step::PrecombatMain);
     t.battlefield(P0, "Omniscience");
     let d = t.hand(P0, "Dyadrine, Synthesis Amalgam");
-    t.cast(P0, d).method(CastMethod::Free).go();
+    // X = 3 is announced, but the only legal value is 0.
+    let spell = t.cast(P0, d).method(CastMethod::Free).x(3).go();
+    assert_eq!(crate::r_s25_common::x_of(&t, spell).unwrap_or(0), 0);
     t.resolve_all();
     let all = t.named_on_battlefield("Dyadrine, Synthesis Amalgam");
     assert_eq!(all.len(), 1);
