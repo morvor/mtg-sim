@@ -9,13 +9,58 @@ use crate::types::*;
 /// one or more times ("If you would copy a spell one or more times, instead copy it that
 /// many times plus an additional time. You may choose new targets for the additional
 /// copy."): each is put onto the stack with new targets allowed. None for an ability.
+///
+/// One instruction's copies of one spell for one player are one copy event, however it's
+/// worded: "copy it twice", "copy it for each ..." (CR 707.10d), or "for each of those
+/// creatures, copy that spell" (an instruction performed for each of several objects,
+/// CR 608.2f). So the added copies are made once for it (CR 614.5): while a copy event is
+/// open ([`begin_copy_event`]) they're only noted, and made as it ends
+/// ([`end_copy_event`]), which returns them.
 pub fn additional_copies(g: &mut Game, spell: ObjectId, controller: PlayerId) -> Vec<ObjectId> {
     if g.obj(spell).kind == ObjKind::StackAbility {
         return vec![];
     }
+    if let Some(noted) = g.kw_state.copy_event.as_mut() {
+        if !noted.contains(&(spell, controller)) {
+            noted.push((spell, controller));
+        }
+        return vec![];
+    }
+    make_additional_copies(g, spell, controller)
+}
+
+fn make_additional_copies(g: &mut Game, spell: ObjectId, controller: PlayerId) -> Vec<ObjectId> {
     let n = crate::kw::additional_spell_copies(g, controller);
     (0..n)
         .filter_map(|_| copy_spell(g, spell, controller, true))
+        .collect()
+}
+
+/// Opens a copy event for an instruction performed for each of several objects that
+/// copies a spell ("for each of those creatures, copy that spell. The copy targets that
+/// creature.", Feather, Radiant Arbiter): see [`additional_copies`]. Returns whether it
+/// opened one (an enclosing instruction's event is already open otherwise, and ends with
+/// it); pass that to [`end_copy_event`].
+pub fn begin_copy_event(g: &mut Game) -> bool {
+    if g.kw_state.copy_event.is_some() {
+        return false;
+    }
+    g.kw_state.copy_event = Some(vec![]);
+    true
+}
+
+/// Ends the copy event [`begin_copy_event`] opened (`opened`): the copies effects add to
+/// each spell copied in it, by each player who copied it, are made now, once, and
+/// returned (put onto the stack with the event's other copies, in the order their
+/// controller chooses: [`order_copies`]).
+pub fn end_copy_event(g: &mut Game, opened: bool) -> Vec<ObjectId> {
+    if !opened {
+        return vec![];
+    }
+    let noted = g.kw_state.copy_event.take().unwrap_or_default();
+    noted
+        .into_iter()
+        .flat_map(|(spell, p)| make_additional_copies(g, spell, p))
         .collect()
 }
 
@@ -221,10 +266,10 @@ pub fn add_copy_exceptions(
 
 /// Set (to nothing) in the context while an instruction that copies a spell for each of
 /// several objects runs ("for each of those creatures, copy that spell", Feather, Radiant
-/// Arbiter): all of its copies, with those an effect adds to each (Twinning Staff), are
-/// put onto the stack at the same time, and it orders them all ([`order_copies`],
-/// CR 405.3), so each copy instruction inside it leaves the order of its own to it and
-/// the controller is asked once.
+/// Arbiter): all of its copies, with those an effect adds to the copy event they make
+/// (Twinning Staff, once: [`begin_copy_event`]), are put onto the stack at the same time,
+/// and it orders them all ([`order_copies`], CR 405.3), so each copy instruction inside
+/// it leaves the order of its own to it and the controller is asked once.
 pub const ORDERED_BY_ENCLOSING: crate::ability::Var = crate::ability::vars::USER + 5121;
 
 /// CR 405.3: several copies put on the stack at the same time by one effect are put
