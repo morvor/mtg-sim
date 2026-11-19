@@ -88,7 +88,13 @@ impl Game {
             let p = self.affected_player(&ReplEvent::Move(moves[*i].clone()));
             apnap.iter().position(|x| *x == p).unwrap_or(usize::MAX)
         });
-        for (i, m) in order.into_iter().map(|i| (i, &moves[i])) {
+        // CR 616.1f–g: a player's permanents entering together have their replacement
+        // effects applied in the order that player chooses, where it can matter; which
+        // effects apply to each is determined as the event is proposed (CR 614.12).
+        let mut chosen = crate::entry_replacement_order::EntryOrder::new(self, &moves, &order);
+        for slot in order {
+            let i = chosen.pick(self, &moves, slot);
+            let m = &moves[i];
             if !self.can_move(m.obj) {
                 continue;
             }
@@ -97,7 +103,7 @@ impl Game {
             if m.to == Zone::Battlefield && self.cant_enter(m) || self.move_forbidden(m) {
                 continue;
             }
-            for e in self.replace(ReplEvent::Move(m.clone())) {
+            for e in self.replace_entering(ReplEvent::Move(m.clone()), chosen.snapshot(i)) {
                 // An object that can't enter the battlefield stays where it is. This also
                 // covers moves a replacement effect redirected to the battlefield, and
                 // entries a replacement modified (CR 614.17d: check the permanent as it

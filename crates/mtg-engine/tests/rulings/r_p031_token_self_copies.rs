@@ -414,7 +414,11 @@ fn the_token_is_a_copy_of_what_the_permanent_became() {
     swarm_fire(&mut t, src);
     become_copy(&mut t, src, giant);
     t.resolve_all();
-    assert_eq!(named(&t, P0, "Hill Giant").len(), 1, "only the Swarm itself");
+    assert_eq!(
+        named(&t, P0, "Hill Giant").len(),
+        1,
+        "only the Swarm itself"
+    );
     assert_eq!(named(&t, P0, "Insect Token").len(), 1);
 }
 
@@ -450,7 +454,10 @@ fn shredder_attacks(t: &mut TestGame, shredder: ObjectId) -> Vec<ObjectId> {
 #[test]
 fn shredder_s_token_copies_have_its_abilities() {
     cr!("707.2", "707.9b");
-    ruling!("Shredder, Shadow Master", "The token copies will have Shredder's abilities.");
+    ruling!(
+        "Shredder, Shadow Master",
+        "The token copies will have Shredder's abilities."
+    );
     supported("Shredder, Shadow Master");
     let mut t = TestGame::new(4);
     let s = t.battlefield(P0, "Shredder, Shadow Master");
@@ -470,10 +477,14 @@ fn shredder_s_token_copies_have_its_abilities() {
 #[test]
 fn shredder_s_tokens_copy_what_it_s_copying() {
     cr!("707.2", "707.3", "707.9b");
+    interp!("ruling-contradicting-oracle-gives-way");
     ruling!(
         "Shredder, Shadow Master",
         "In the unusual case where Shredder becomes a copy of something else while his last ability is on the stack but before it resolves, the tokens will enter as a copy of whatever Shredder is copying."
     );
+    // The ruling's "his last ability" is the ability that makes the tokens, his first by
+    // the Oracle text (that part is exempt, docs/rulings-exemptions/rulings-P031.tsv,
+    // docs/RULING_DISCREPANCIES.md): it's on the stack as Shredder becomes a Hill Giant.
     let mut t = TestGame::new(3);
     let s = t.battlefield(P0, "Shredder, Shadow Master");
     let giant = t.battlefield(P1, "Hill Giant");
@@ -496,7 +507,10 @@ fn shredder_s_tokens_copy_what_it_s_copying() {
 #[test]
 fn bloodforged_battle_axe_s_token_is_unattached_and_makes_more() {
     cr!("707.2", "301.5b");
-    ruling!("Bloodforged Battle-Axe", "The token enters the battlefield unattached.");
+    ruling!(
+        "Bloodforged Battle-Axe",
+        "The token enters the battlefield unattached."
+    );
     ruling!(
         "Bloodforged Battle-Axe",
         "The token has all three of Bloodforged Battle-Axe's abilities, including the one that creates more tokens."
@@ -513,7 +527,10 @@ fn bloodforged_battle_axe_s_token_is_unattached_and_makes_more() {
     assert_eq!(tok.len(), 1);
     assert_eq!(crate::r_s06_common::attached_to(&t, tok[0]), None);
     assert_eq!(t.pt(bears), (4, 2), "the token isn't attached to the Bears");
-    assert_eq!(t.obj_now(tok[0]).chars.abilities.len(), t.obj_now(axe).chars.abilities.len());
+    assert_eq!(
+        t.obj_now(tok[0]).chars.abilities.len(),
+        t.obj_now(axe).chars.abilities.len()
+    );
     // Next turn, both Axes on one creature: each makes a token.
     t.advance_to(P1, Step::PrecombatMain);
     t.advance_to(P0, Step::PrecombatMain);
@@ -660,7 +677,11 @@ fn vaultborn_tyrant_copying_something_else_makes_that() {
     let o = t.obj_now(tok[0]);
     assert!(o.is(CardType::Artifact) && o.is(CardType::Creature));
     assert_eq!(t.pt(tok[0]), (3, 3));
-    assert_eq!(abilities_with(&t, tok[0], "dies"), 0, "the granted ability isn't copied");
+    assert_eq!(
+        abilities_with(&t, tok[0], "dies"),
+        0,
+        "the granted ability isn't copied"
+    );
 }
 
 #[test]
