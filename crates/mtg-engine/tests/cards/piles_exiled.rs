@@ -656,7 +656,9 @@ fn bend_or_break_each_players_pile_is_chosen_by_an_opponent_of_their_choice() {
     // Your piles: you pick P2 to choose; P2 chooses the Forest pile.
     t.answer_choose(P0, &[Entity::Player(P2)]);
     t.answer(P2, DecisionKind::Option, Answer::Index(0));
-    // P1's piles: P1 picks you (the first candidate); you choose the Swamp pile.
+    // P1's piles: P1 picks you (P2, the next opponent in turn order, is the default:
+    // register `controller-picks-the-choosing-opponent`); you choose the Swamp pile.
+    t.answer_choose(P1, &[Entity::Player(P0)]);
     t.answer(P0, DecisionKind::Option, Answer::Index(1));
     // P2's piles: P2 picks you; you choose the empty pile.
     t.answer(P0, DecisionKind::Option, Answer::Index(0));

@@ -62,21 +62,21 @@ impl KeywordRules for Demonstrate {
             return true;
         }
         crate::copy::additional_copies(g, spell, you);
-        let opponents: Vec<Entity> = g
+        let opponents: Vec<PlayerId> = g
             .opponents(you)
             .into_iter()
             .filter(|o| crate::multiplayer::range::player_in_range(g, you, *o))
-            .map(Entity::Player)
             .collect();
-        let chosen = g.ask_entities(
+        // The opponent who copies it (`choosing_opponent`).
+        let chosen = crate::choosing_opponent::pick(
+            g,
             you,
             Some(spell),
+            &opponents,
             "Demonstrate: choose an opponent to copy the spell",
-            opponents,
-            1,
-            1,
+            true,
         );
-        if let Some(Entity::Player(opp)) = chosen.first().copied() {
+        if let Some(opp) = chosen {
             g.log(|g| format!("{opp} copies {}", g.describe(spell)));
             if crate::copy::copy_spell(g, spell, opp, true).is_some() {
                 crate::copy::additional_copies(g, spell, opp);

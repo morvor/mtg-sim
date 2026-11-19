@@ -599,14 +599,14 @@ fn realm_razer_leaving_first_exiles_the_lands_forever() {
 #[test]
 fn chaotic_transformation_handles_each_exiled_permanent_of_a_player_in_turn() {
     cr!("608.2c", "608.2f", "608.2h", "701.20a");
-    // Chaotic Transformation's ruling on this (2022-09-09: "If a player controls multiple
-    // permanents that were exiled this way, that player first chooses which target
-    // they're considering, ...") is left uncited: it has that player choose the order,
-    // where CR 608.2f has "the player who controls the resolving spell or ability", and
-    // the engine asks neither (docs/RULING_DISCREPANCIES.md, Inconsistent rulings; register
-    // `per-object-actions-in-given-order`, provisional, for the user: ruling-conflicts-10).
-    // What both agree on is pinned here: each permanent's process in turn, by its types
-    // as it last existed on the battlefield.
+    // Who orders one player's permanents (Chaotic Transformation's ruling, 2022-09-09:
+    // "If a player controls multiple permanents that were exiled this way, that player
+    // first chooses which target they're considering, ...", against CR 608.2f's "the
+    // player who controls the resolving spell or ability") is pinned in
+    // `per_object_order.rs` (register `per-object-actions-in-given-order`, decided by the
+    // user on Nov 19: the ruling is followed, an inconsistency with the CR;
+    // docs/RULING_DISCREPANCIES.md). What both agree on is pinned here: each permanent's
+    // process in turn, by its types as it last existed on the battlefield.
     supported("Chaotic Transformation");
     let mut t = TestGame::new(2);
     let ring = t.battlefield(P1, "Sol Ring");
