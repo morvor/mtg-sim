@@ -172,6 +172,12 @@ player's results from another's.
   review (Lore Broker, "each player draws a card, then discards a card": a chosen discard
   after the winning draw) also passes with the mutant, so the claim holds for the cards
   tried.
+  **Overturned in the second round** (`149:31` in the Nov 2026 full run, see "Second round,
+  Nov 2026"): **(b)**. Planned instructions don't go through `Game::exec`, and a planned
+  instruction that asks nothing (a sacrifice of "all creatures they control") is performed
+  after the game has ended; the Lore Broker discard was skipped only because the draw that
+  won had already ended the game before anyone was asked. Killed by
+  `a_win_while_each_player_draws_ends_the_game_before_anyone_sacrifices` in the same file.
 - `simultaneous.rs:224:20: replace == with != in updates_number::reads`: **(b) missing
   test, not killed**. The mutant makes every instruction that stores a number count as one
   whose number is shared by all players. The cards whose per-player "that many" goes
@@ -185,6 +191,15 @@ player's results from another's.
   next instruction; the actions still happen in the same order for each player, and only
   the trigger checks between the two instructions move (to after the second one). No
   observable case was found with today's cards.
+  **Overturned in the second round** (`314:17` in the Nov 2026 full run): **(b)**. A
+  trailing "if" goes into the previous instruction's `post`, which interleaves the players
+  (Kwain, Itinerant Meddler: draw P0, gain P0, draw P1, ... instead of all the draws
+  first), and a single-"if" body is performed in turn instead of planned (Borderland
+  Explorer's searches stop being simultaneous). Killed by
+  `kwain_every_player_draws_before_any_player_gains_life`
+  (`tests/cards/followups_each_player.rs`) and
+  `borderland_explorer_players_discard_then_search_together`
+  (`tests/rulings/r_s33_each_player_searches.rs`).
 - `simultaneous.rs:262:9: delete match arm Effect::Choose{..} in makes_choice`: **(b)
   missing test**. A "choose a creature type" became its own instruction, so all players
   chose before anyone acted and every player's action read the last choice. Killed by
@@ -193,6 +208,10 @@ player's results from another's.
 - `simultaneous.rs:283:9: delete match arm Sel::Union(v) in choosers`: **(b) not killed**:
   needs an each-player move of "this and that" where another player chooses one of the
   parts; no such card was found.
+  Second round (`349:9`): killed by
+  `highcliff_felidar_no_opponent_is_recorded_as_choosing` (`r_p138_apnap_choices.rs`): the
+  Union's chooser is the resolving player, whose choice for each opponent was recorded as
+  the opponent's.
 - `simultaneous.rs:552:5: replace plannable -> bool with true`, `557:41: replace && with
   || in plannable` (an "if" counts as plannable when only one branch is): **(b) not
   killed**. They plan actions whose choices another player makes (or "if/otherwise" with an
@@ -201,6 +220,9 @@ player's results from another's.
   part depends on what an earlier player's part already did, chosen by a third player.
   The re-run (2026-10-21) found `plannable -> true` **killed** by tests added since by
   other work; the `&&`/`||` one still survives.
+  Second round (`700:41`): **(c)**, HEAD was the one breaking CR 101.4 (an "if" after a
+  choice was performed in turn, so the conditions weren't settled first and the sacrifices
+  weren't simultaneous); fixed by making every "if" plannable, see "Second round".
 - `simultaneous.rs:664:46: replace match guard plannable(g, e, ctx, p) with false in plan`
   (sacrificing chosen objects, "sacrifices the rest", in turn instead of together):
   **(b) not killed**. Simultaneous sacrifice is observable with a "whenever another
@@ -215,17 +237,35 @@ player's results from another's.
   effect's source when they enter the battlefield, CR 607.1d): **(b) not killed**: no card
   puts a permanent onto the battlefield with an "each player" move whose abilities refer to
   the card linked to the object that put it there.
+  Second round (`948:38`): killed by the hand-built
+  `creatures_each_player_puts_onto_the_battlefield_are_put_there_with_the_source`
+  (`tests/cr/r608_002f_planned_actions.rs`, CR 607.2c).
 - `simultaneous.rs:766:17: replace && with || in plan` (a search that shuffles is performed
   in turn instead of planned): **(a) equivalent for the cards that reach it**. The
   "each player may search ... put onto the battlefield, then shuffle" cards (Veteran
   Explorer, Old-Growth Dryads) find basic lands, which make no choices as they enter, so the
   lands entering one player at a time inside one batch looks the same.
   Investigating it found a real bug in the other multi-player search path, see below.
+  **Overturned in the second round** (`1090:17`, with `1090:28`, `1091:17` and `1086:14`
+  → `false`): **(b)**. Performed in turn, each opponent searches, puts the card onto the
+  battlefield and shuffles before the next one searches: the shuffles interleave (Old-Growth
+  Dryads, `old_growth_dryads_opponents_search_then_shuffle_in_turn_order`,
+  `r_s33_each_player_searches.rs`) and a Clone one opponent finds can copy a creature another
+  found (Boldwyr Heavyweights,
+  `boldwyr_heavyweights_a_clone_one_opponent_finds_cant_copy_what_another_finds`,
+  `r701_023i_each_player_searches_then_cards_move.rs`); "for the cards that reach it" isn't
+  (a) anyway.
 - `simultaneous.rs:1061:21: delete match arm Event::Damage{source, target, ..} in record`,
   `1081:47: delete ! in record`: **(b) not killed**. They change a player's "damage dealt
   this way" total and "creatures dealt damage this way" when several players' parts deal
   damage from the same source; no card in the pool reads those results after an
   "each player" damage instruction.
+  Second round (`1701:21`, `1725:43`): Spiteful Repossession now compiles and reads the
+  total (`spiteful_repossession_counts_each_opponents_damage_once`,
+  `tests/cards/referents_this_way.rs`); the players dealt damage this way are pinned by the
+  hand-built
+  `a_player_dealt_damage_by_two_sources_at_once_is_dealt_damage_this_way_once`
+  (`tests/cr/r608_002f_individual_processes.rs`).
 
 **(c) engine bug found**: `Effect::Search` with several searchers ("Each player searches
 their library for ... puts them onto the battlefield", Incoming!) let all players choose
@@ -944,3 +984,143 @@ killed (**82.4%**), 3 equivalent survivors; the other 38 remain to be tested.
 2026-11-12: `zones.rs` was sampled for the first time, during the `engine-audit-1/zones-lki`
 audit (see "zones.rs" above): 29 of 29 sampled mutants tested, 19 killed and 1 timeout
 (**76.9%**), 6 survivors: 2 killed by review tests (**84.6%**), 4 equivalent.
+
+## Second round, Nov 2026
+
+The `mutation-2` item (`docs/agents/items/mutation-2.md`): full runs (every mutant, `FULL=1`
+in `scripts/mutants.sh`) of the weakest core files, then fresh 1-in-10 samples of the rest.
+Kill rate as above: (caught + timeout) / (caught + missed + timeout).
+
+| File | Mutants | Caught | Missed | Timeout | Unviable | Kill rate | After new tests |
+|---|---|---|---|---|---|---|---|
+| simultaneous.rs (full run) | 279 | 191 | 75 | 0 | 13 | 71.8% (191/266) | 98.5% (262/266): the 4 survivors left are equivalent |
+
+### simultaneous.rs (full run)
+
+A full run (`FULL=1 scripts/mutants.sh simultaneous`) of the file at `e08e631`: all 279
+mutants. The machine restarted after 87 of them, and the run was resumed with `FULL=1
+RESUME=1` (which skips the mutants already tested and merges the results). About five
+minutes per mutant (an incremental build, then the ~290 s `mtg-engine` suite), about 16 hours
+in all. 191 caught, 75 missed, 0 timeouts, 13 unviable: kill rate **71.8%** (191/266).
+
+The 75 survivors were classified from the code in six batches, which proposed tests T1–T37
+and found ten engine problems (C1–C10, and the `any_player_may_have_damage` bug) and seven
+latent ones (L1–L7). Every test was checked by hand to fail with its mutant applied to the
+source (before the engine fixes) and to pass without it. Then the engine was fixed (commit
+`cad08da`, with the tests) and the 75 survivors were re-run (`RERUN=1 scripts/mutants.sh
+simultaneous`, about 3.5 hours): the 75 names matched 70 distinct mutants of today's file
+(see "Gone with the fixes" for the five that two survivors shared), 64 caught and 6 missed.
+Two of the six were killable after all: the fixes' "search the same library again" check
+had made the T24 search row blind to them (`773:17`, today's `764:17`, and `1099:14`,
+`1086:14` → `true`); a test added for them
+(`each_player_searches_once_for_each_opponent`, below) and a second re-run
+(`RERUN=1 ONLY=...`, commit `e4adbed`) caught both. Final: **66 caught, 4 missed** (all
+four equivalent), kill rate after the new tests **98.5%** (262/266, counting the seven
+survivors whose code the fixes removed as killed).
+
+Line numbers below are the run's (`e08e631`); the fixes moved the code by 4 to 80 lines.
+
+**Survivors killed by new tests (b)** (test file in brackets; the real-card ones first):
+
+- `149:31` `||`→`&&` in `run` (keep performing the body's instructions after the game ended):
+  a planned instruction is performed after a win. T3, `a_win_while_each_player_draws_ends_the_game_before_anyone_sacrifices` (`tests/cr/r104_001_game_ends_during_each_player.rs`). Overturns October's (a) for `100:31`.
+- `314:17`, `315:17` `&&`→`||` in `records_decision` (every "if" a choice): Kwain's draws and life gains interleave, Borderland Explorer's searches stop being simultaneous. `kwain_every_player_draws_before_any_player_gains_life` (`tests/cards/followups_each_player.rs`), `borderland_explorer_players_discard_then_search_together` (`tests/rulings/r_s33_each_player_searches.rs`, which also cites Borderland Explorer's ruling), `a_decision_made_with_an_action_is_an_instruction_everyone_performs_first`. Overturns October's `249:17`.
+- `346:9`, `349:9` (delete `Sel::Choose`/`Sel::Union` in `choosers`), `356:5` (`chosen_by` → `true`), `1441:24` (`&&`→`||` in `record_choice`): Highcliff Felidar's choices for each opponent recorded as the opponents' (CR 101.4b). `highcliff_felidar_no_opponent_is_recorded_as_choosing` (`tests/rulings/r_p138_apnap_choices.rs`); `345:5` (`choosers` → `()`), `346:9` and `356:5` also by the three tests of `tests/cr/r608_002f_one_player_chooses_for_each.rs`.
+- `762:9` (delete the `Search` arm of `plannable`), `763:56`, `1086:14` (guard → `false`), `1090:17`, `1090:28`, `1091:17` (the "shuffle and put on top" test): opponents' searches performed in turn. `old_growth_dryads_opponents_search_then_shuffle_in_turn_order`, `borderland_explorer_players_discard_then_search_together` (`r_s33`), `boldwyr_heavyweights_a_clone_one_opponent_finds_cant_copy_what_another_finds` (`tests/cr/r701_023i_each_player_searches_then_cards_move.rs`, Clone's ruling). Overturns October's (a) for `766:17`.
+- `803:55` `&&`→`||` in `choice_cost_candidates` (a creature that can't be sacrificed offered to pay "unless that player sacrifices a creature"): `acererak_the_equipped_creature_cant_pay_for_the_zombie` (`r_p138_apnap_choices.rs`, Assault Suit's ruling).
+- `1037:49` `&&`→`||` (a planned discard ignores its filter): `flux_each_player_discards_the_cards_they_chose` (`tests/rulings/gap_simultaneity.rs`, Flux's ruling).
+- `1175:55` (other players' life payments count against yours): `killing_wave_another_players_payment_doesnt_count_against_yours` (`tests/rulings/r_p137_resolution.rs`, Killing Wave's ruling).
+- `1414:17`, `1414:63` (`>=`), `1423:5` (→ `1`), `1426:14` (guard → `false`): one action with what records it counted as a process, each player's part its own event. `browbeat_damage_to_every_player_who_takes_it_is_one_event` (`tests/cards/grant_targets.rs`: Master of Barbs triggers once), and `an_action_then_a_permission_and_what_records_it_is_one_action` (hand-built, `tests/cr/r608_002f_individual_processes.rs`), which also kills `1424:9` and `1425:9` (delete the `Seq` / `GrantPlayPermission` arms of `process_steps`).
+- `1514:16` delete `!` (Opposition Agent never applies to a planned search): `an_opponents_cards_found_in_an_each_player_search_are_exiled` (`tests/cards/m_opposition_agent.rs`, Natural Balance).
+- `1701:21`, `1702:64` (each part's "damage dealt this way" includes the others'): `spiteful_repossession_counts_each_opponents_damage_once` (`tests/cards/referents_this_way.rs`).
+- `148:22` `-=`→`+=`, `/=` (`batch_hold` never released): `valgavoths_onslaught_manifests_one_at_a_time_after_an_each_player_spell` (`tests/rulings/r_p218_manifest.rs`, after Exhume).
+- Hand-built bodies (no card in the pool reaches them), in `tests/cr/`:
+  `r608_002e_each_player_instruction_parts.rs`: `139:14` (`==`, `<`: no trigger check between instructions; Archfiend of Ifnir sees the discards before it's sacrificed), `168:27` ("create a Treasure and a Clue" split; Ingenious Artillerist triggers once), `266:13`, `271:13` (a running count over coin flips / "may" not shared), `520:38`, `611:13` ("the life lost this way");
+  `r101_004_each_player_simultaneous.rs`: `180:31` (`true`, `false`), `310:9`, `313:37`, `314:49`, `315:20`, `315:43`, `317:9`, `319:57`, `319:17`, `330:9` (how choices, records and recorded decisions are split into instructions; CR 101.4, 101.4c, 608.2e);
+  `r608_002f_one_player_chooses_for_each.rs`: `928:38`, `953:14`, `984:46`, `1002:53`, `1026:14`, `1086:14` (`true`), `1052:54`, `1204:50`, `1204:74`, `764:17`, `345:5` (after the fixes, `764:17` and `1086:14` → `true` only by `each_player_searches_once_for_each_opponent`: "for each opponent, each player searches ...") ("for each opponent, you [act on an object you choose]" planned: the same object chosen twice, choices recorded as the opponents', damage counted twice; register `choices-for-each-player-made-in-turn`, provisional); `r701_023h_one_search_for_each_object.rs` also kills `764:17`;
+  `r608_002f_planned_actions.rs`: `994:65` ("sacrifice ~" by a player who doesn't control it), `1100:17` ("if they do" after a planned search), `948:38` (CR 607.2c link);
+  `r608_002f_individual_processes.rs`: `1374:23` (a step before every part after a process: the other players' single actions split; register `mixed-each-player-instruction`, provisional), `1725:36` (`==`, `<`), `1725:40`, `1725:43` ("players dealt damage this way");
+  `r608_each_player_control.rs`: `each_chooser_knows_the_earlier_players_choices_of_what_to_gain_control_of` (`345:5`'s control record, CR 101.4b).
+
+**Engine bugs (c)**, each fixed generally, with a regression test that fails before the fix:
+
+- `any_player_may_have_damage` (Browbeat, Book Burning, Breaking Point, Vexing Devil; CR
+  101.4, Vexing Devil's ruling "If any of them do, you sacrifice Vexing Devil."): the note
+  that a player took the damage was each player's own, so an earlier player's choice was lost
+  when the last one declined (Browbeat's target still drew; Vexing Devil wasn't sacrificed).
+  The note now reads the flag it sets, so it is shared. `any_player_may_have_damage_an_earlier_players_choice_counts` (`tests/cards/grant_targets.rs`).
+- C10 (the same cards; CR 101.4, 120.3f, 608.2f): each accepting player's damage was dealt
+  in its own `deal_damage_batch`, so a source with lifelink gained life once per player.
+  `plan` now plans a part that is one action and what records it as that action (`Plan::Then`),
+  so the damage is dealt at once. `vexing_devil_with_lifelink_dealing_damage_to_two_opponents_is_one_life_gain` (Whip of Erebos, Ajani's Pridemate).
+- C1 (`729:62`, `1233:14`; Parallel Evolution; CR 608.2f, 614.12, Squad Captain's ruling):
+  token copies of objects nobody chooses were created one player at a time. Every token copy
+  is now planned and created together; a copy choice is recorded under its real chooser.
+  `parallel_evolution_creates_all_its_copies_at_the_same_time` (`tests/rulings/r_p200_creatures.rs`).
+- C5 (outside this file, `resolve.rs`; Clone Legion, Doppelgang, Hate Mirage; Clone Legion's
+  ruling "The token creatures all enter the battlefield at the same time."): each source's
+  token copies were created in a separate event. `clone_legion_creates_all_its_copies_at_the_same_time`.
+- C2, C3, C6 (`705:33` and `919:47`, `700:41`, `882:45`; no compiled card; CR 101.4,
+  608.2e): "choose one", an "if" and "[that player] may" were settled player by player
+  (after the earlier players had acted) when the action after them couldn't be planned or a
+  choice came before them. They are now always plannable (their actions still fall back to
+  being performed in turn). `each_player_chooses_one_before_anyone_creates_a_token`,
+  `conditions_are_settled_for_every_player_before_anyone_sacrifices`,
+  `each_controllers_you_may_is_asked_before_any_of_them_acts` (`r101_004_each_player_simultaneous.rs`).
+- C4 (`764:17`; Krenko's Buzzcrusher; CR 701.23i, 608.2f): the controllers of the destroyed
+  lands searched, put the land onto the battlefield and shuffled one after another. Searches
+  of object frames are now planned when they have one searcher; a second search of a library
+  the same player already searched in the instruction waits for the first one's cards to
+  move (CR 701.23h), and a planned search reads "their library" as the searcher's, as
+  `Game::exec` does. `krenkos_buzzcrusher_the_controllers_search_then_shuffle_in_turn_order`, `a_player_searching_once_for_each_of_two_objects_finds_two_cards`.
+- C8 (Identity Thief, Ugin's Labyrinth, Spell Queller's family; CR 607.2a, 400.7): "return the
+  exiled card" read every object linked to the source in any zone, including the creature an
+  earlier end step returned (linked as put onto the battlefield with it). It reads only cards
+  still in exile now. `identity_thief_returns_only_the_card_it_exiled` (`tests/rulings/r_p024_misc.rs`).
+- C9 (Old-Growth Dryads, Boldwyr Heavyweights, Tempt with Discovery, Hired Giant; Stranglehold's
+  ruling "your opponents can’t choose to search, so they won’t shuffle"): an opponent who
+  can't search was offered the search and then shuffled. The opt-in of "each opponent may
+  search ..." is now offered only to a player who can search.
+  `old_growth_dryads_an_opponent_who_cant_search_isnt_offered_it_and_doesnt_shuffle`.
+- L5 (latent, but cheap; CR 614.6): a planned move onto the battlefield that a replacement sent
+  elsewhere (Containment Priest) still counted as done ("if they do", "it").
+  `a_card_put_into_exile_instead_of_onto_the_battlefield_wasnt_returned`.
+
+**Not engine bugs, or not fixed:**
+
+- C7 (a design question): instructions whose choices someone other than the frame's player
+  makes are performed for each frame in turn. Kept, register
+  `choices-for-each-player-made-in-turn` (provisional).
+- L1, L2 (`Frames::finish`): a part's "that many" is detected by a change of value, so a part
+  setting it to the value it had drops out of the total, and with no part setting it the total
+  is the stale number from before. No compiled card has a number-setting instruction before a
+  conditional each-player life change. Not fixed (needs a "number was set" flag in `Ctx`).
+- L3: two parts planning the same (source, recipient) damage each count both events (no card).
+- L4: the planned `Exile` skips some checks `Game::exec`'s `Exile` makes (the "can't cause you
+  to exile" restriction, `found_after_move`, the face-down `looked_then_exiled`,
+  `note_source_moved`, `set_dug`); no card reaches it.
+- L6: in an instruction mixing processes and single actions, the first process's events share
+  the single actions' batch (no card).
+- L7: "dealt damage this way" isn't combined across the players after an each-player damage
+  instruction, and a part's "excess damage" counts every part's (no card reads them).
+- The other `Sel::Linked` readers without an exile filter (`r700_exiled_piles`,
+  `gains_suspend(Sel::Linked)`) were left as they are (C8's note).
+
+**Equivalent (a)**, still missed by the re-run:
+
+- `139:14` `>`→`>=` in `run`: the extra boundary before the first instruction sees nothing new
+  (`Game::exec` has just flushed; the state triggers were checked).
+- `973:25` (delete `link` from the planned exile's `EtbInfo`): `move_objects` reads it as
+  `unwrap_or(current_link)`, and `current_link == ctx.link` there.
+- `1533:19` (guard `!found.is_empty()` → `true`): an empty search adds no move and its
+  `enter`/`leave` pair writes back what it read.
+- `1725:36` `>`→`>=`: no `Event::Damage` has amount 0 (CR 120.8).
+
+**Gone with the fixes**: `700:41`, `705:33`, `729:62` (the `plannable` arms are now `true`),
+`882:45`, `919:47`, `1117:14` (equivalent in the run: `plannable(GainControl)` was always
+true), `1233:14` (the guards are gone). The re-run script matches each survivor to the most
+similar mutant of today's file; for these seven it found only unrelated ones (diff similarity
+0.0–0.44: `700:41`, `705:33` → `755:17`, `729:62` → `752:59`, `882:45` → `1015:53`, `919:47` →
+`941:38`, `1117:14` → `966:14`, `1233:14` → `1099:14`), so their re-run lines are those
+mutants', not theirs. The new code (`Plan::Then`, the search check, the `process_steps` "if"
+arm) hasn't had its own mutants run; a later full run of the file would.
