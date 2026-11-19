@@ -23,7 +23,7 @@ fn attack_player(t: &mut TestGame, attacker: ObjectId, targets: &[Entity]) {
 
 #[test]
 fn a_short_library_is_milled_as_far_as_it_goes() {
-    cr!("701.17b", "121.4");
+    cr!("701.17b");
     ruling!(
         "Millstone",
         "Can be used on a player with less than 2 cards in their library. It will remove 0 or 1 cards if that is all that is available."
@@ -135,6 +135,39 @@ fn reveal_until_lands_takes_the_whole_library_when_it_runs_out() {
     assert_eq!(t.graveyard_size(P1), 5);
 }
 
+/// Regression: Mirko Vosk's "until they reveal four land cards, then puts those cards into
+/// their graveyard" put only the four lands there; "those cards" are every card revealed.
+#[test]
+fn mirko_vosk_mills_every_card_revealed_up_to_the_fourth_land() {
+    cr!("701.20a", "608.2c");
+    supported("Mirko Vosk, Mind Drinker");
+    let mut t = TestGame::new(2);
+    let lib = stack_library(
+        &mut t,
+        P1,
+        &[
+            "Grizzly Bears",
+            "Island",
+            "Hill Giant",
+            "Forest",
+            "Shock",
+            "Swamp",
+            "Mountain",
+            "Ornithopter",
+        ],
+    );
+    let mirko = t.battlefield(P0, "Mirko Vosk, Mind Drinker");
+    attack_player(&mut t, mirko, &[]);
+    for c in &lib[..7] {
+        assert_eq!(t.zone(*c), Zone::Graveyard(P1));
+    }
+    assert_eq!(
+        t.zone(lib[7]),
+        Zone::Library(P1),
+        "revealed after the fourth land"
+    );
+}
+
 #[test]
 fn balustrade_spy_mills_the_revealed_land_too() {
     cr!("701.20a");
@@ -161,7 +194,7 @@ fn balustrade_spy_mills_the_revealed_land_too() {
 
 #[test]
 fn sire_of_stagnation_with_one_or_no_cards_in_the_library() {
-    cr!("701.17b", "704.5b");
+    cr!("609.3", "608.2c");
     ruling!(
         "Sire of Stagnation",
         "If that player has one card in their library when Sire of Stagnation’s triggered ability resolves, that card will be exiled. If their library has zero cards, no cards are exiled. In both cases, you’ll still draw two cards."
@@ -189,10 +222,7 @@ fn sire_of_stagnation_with_one_or_no_cards_in_the_library() {
 /// The names in P1's graveyard after `act` mills Grizzly Bears then Hill Giant (the top
 /// two cards of P1's library), P1 answering the order with `order`; and whether P1 (and
 /// only P1, among the asked) chose the order.
-fn milled_in_order(
-    act: fn(&mut TestGame),
-    order: Vec<usize>,
-) -> (Vec<String>, Vec<PlayerId>) {
+fn milled_in_order(act: fn(&mut TestGame), order: Vec<usize>) -> (Vec<String>, Vec<PlayerId>) {
     let mut t = TestGame::new(2);
     library_of(&mut t, P1, "Island", 2);
     stack_library(&mut t, P1, &["Grizzly Bears", "Hill Giant"]);
@@ -373,7 +403,9 @@ fn two_fleet_swallowers_halve_the_library_one_after_the_other() {
     t.attack(&[(a, pl(P1)), (b, pl(P1))], &[]);
     t.resolve_all();
     let offered = crate::r_s02_common::target_candidates(&t, P0, from);
-    assert!(offered.iter().all(|c| c.contains(&pl(P0)) && c.contains(&pl(P2))));
+    assert!(offered
+        .iter()
+        .all(|c| c.contains(&pl(P0)) && c.contains(&pl(P2))));
     // 15 -> mill 8 -> 7 -> mill 4 -> 3.
     assert_eq!(t.graveyard_size(P2), 12);
     assert_eq!(t.library_size(P2), 3);
@@ -382,7 +414,7 @@ fn two_fleet_swallowers_halve_the_library_one_after_the_other() {
 
 #[test]
 fn psychic_spiral_shuffles_and_doesnt_count_itself() {
-    cr!("608.2k", "701.24a");
+    cr!("608.2n", "701.24a");
     ruling!(
         "Psychic Spiral",
         "If you cast Psychic Spiral when there are no cards in your graveyard, you’ll still shuffle your library."
@@ -418,7 +450,7 @@ fn psychic_spiral_shuffles_and_doesnt_count_itself() {
 
 #[test]
 fn enter_the_god_eternals_deals_all_4_and_gains_4() {
-    cr!("120.3", "120.4a");
+    cr!("120.3e", "601.2c");
     ruling!(
         "Enter the God-Eternals",
         "If the target creature has less than 4 toughness, Enter the God-Eternals still deals 4 damage to it and you'll gain 4 life."

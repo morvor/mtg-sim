@@ -22,7 +22,7 @@ fn mill(t: &mut TestGame, p: PlayerId, n: u32) {
 
 #[test]
 fn chronic_flooding_needs_the_land_to_become_tapped() {
-    cr!("603.2e", "303.4a");
+    cr!("603.2e");
     ruling!(
         "Chronic Flooding",
         "Chronic Flooding becoming attached to a tapped land won’t cause its ability to immediately trigger. That land must go from untapped to tapped."
@@ -44,7 +44,7 @@ fn chronic_flooding_needs_the_land_to_become_tapped() {
 
 #[test]
 fn drowned_secrets_triggers_only_on_the_battlefield_and_resolves_first() {
-    cr!("603.6a", "603.3", "601.2i");
+    cr!("113.6", "603.3", "601.2i");
     ruling!(
         "Drowned Secrets",
         "Drowned Secrets has to be on the battlefield for its ability to trigger. Casting it won’t trigger its own ability."
@@ -60,23 +60,36 @@ fn drowned_secrets_triggers_only_on_the_battlefield_and_resolves_first() {
     t.settle();
     assert_eq!(t.stack_len(), 1);
     t.resolve_all();
-    // A blue spell: the trigger goes on the stack above it.
+    // A blue spell: the trigger goes on the stack above it and resolves first.
     t.answer_targets(P0, &[pl(P1)]);
     let opt = cast_new(&mut t, P0, "Opt", &[]);
     t.settle();
     assert_eq!(t.stack_len(), 2);
-    // P1 counters Opt; the trigger still resolves.
+    t.resolve();
+    assert_eq!(t.graveyard_size(P1), 2);
+    assert!(on_stack(&t, opt), "Opt hasn't resolved yet");
+    t.resolve_all();
+    assert!(resolved(&t, opt));
+    // Another blue spell, which P1 counters: the trigger still resolves.
+    t.answer_targets(P0, &[pl(P1)]);
+    let opt = cast_new(&mut t, P0, "Opt", &[]);
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
     cast_new(&mut t, P1, "Counterspell", &[obj(opt)]);
     t.resolve();
     assert_eq!(t.zone(opt), Zone::Graveyard(P0));
     t.resolve_all();
     assert!(!resolved(&t, opt));
-    assert_eq!(t.graveyard_size(P1), 3, "two milled cards and Counterspell");
+    assert_eq!(
+        t.graveyard_size(P1),
+        2 + 2 + 1,
+        "four milled cards and Counterspell"
+    );
 }
 
 #[test]
 fn duskmantle_guildmage_each_activation_is_its_own_delayed_trigger() {
-    cr!("603.7a", "603.7c", "603.2c");
+    cr!("603.7a", "603.7b", "603.2c");
     ruling!(
         "Duskmantle Guildmage",
         "Each time the first ability resolves, a delayed triggered ability is created. Whenever a card is put into an opponent’s graveyard that turn, each of those abilities will trigger."
@@ -103,7 +116,7 @@ fn duskmantle_guildmage_each_activation_is_its_own_delayed_trigger() {
 
 #[test]
 fn duskmantle_guildmage_tokens_dont_count_and_every_opponent_does() {
-    cr!("603.7c", "111.7", "102.2");
+    cr!("603.7b", "108.2b", "102.3");
     ruling!(
         "Duskmantle Guildmage",
         "The delayed triggered ability created won’t trigger if a token permanent is put into an opponent’s graveyard."
@@ -183,7 +196,7 @@ fn draw_triggers_trigger_per_card_after_the_spell_and_not_without_draw() {
 
 #[test]
 fn circu_triggers_twice_for_a_blue_and_black_spell() {
-    cr!("603.2", "105.2", "115.3");
+    cr!("603.2", "105.2", "603.3d");
     ruling!(
         "Circu, Dimir Lobotomist",
         "If you cast a blue and black spell, both of Circu's triggered abilities trigger. You can target two different players or target the same player twice."
@@ -326,7 +339,10 @@ fn scavengers_talent_sees_itself_sacrificed_with_others() {
     t.resolve();
     assert!(!t.on_battlefield(talent) && !t.on_battlefield(bears));
     // Two sacrifice triggers (and level 1's Food trigger for the Bears dying).
-    assert_eq!(triggers_on_stack(&t, "Whenever you sacrifice a permanent"), 2);
+    assert_eq!(
+        triggers_on_stack(&t, "Whenever you sacrifice a permanent"),
+        2
+    );
     t.resolve_all();
     assert_eq!(t.graveyard_size(P1), 4);
 }
@@ -362,7 +378,7 @@ fn scavengers_talent_may_return_a_creature_it_just_sacrificed() {
 
 #[test]
 fn masters_councillors_triggers_on_the_second_draw_only() {
-    cr!("603.2c", "603.2h", "121.2");
+    cr!("603.2", "603.2c", "121.2");
     ruling!(
         "Master's Councillors",
         "The triggered ability can trigger only once each turn. It doesn't matter whether Master's Councillors was on the battlefield when the first card was drawn. If it's not on the battlefield when the second card is drawn, the ability can't trigger at all that turn. It won't trigger when the third or fourth card is drawn."
@@ -488,12 +504,13 @@ fn mystic_redaction_in_cleanup_gets_priority_then_another_cleanup() {
     let cleanups = |g: &mtg_engine::game::Game| {
         g.turn_events
             .iter()
-            .filter(|e| matches!(e, Event::StepBegan { step: Step::Cleanup, active } if *active == P0))
+            .filter(
+                |e| matches!(e, Event::StepBegan { step: Step::Cleanup, active } if *active == P0),
+            )
             .count()
     };
-    let ok = t
-        .g
-        .run_until(10_000, |g| g.turn.active == P0 && cleanups(g) >= 2);
+    let ok =
+        t.g.run_until(10_000, |g| g.turn.active == P0 && cleanups(g) >= 2);
     assert!(ok, "no second cleanup step");
     assert_eq!(t.g.turn.active, P0);
     assert_eq!(t.hand_size(P0), 7);
@@ -531,7 +548,7 @@ fn necromaster_dragon_pays_two_once_per_trigger() {
 
 #[test]
 fn smeagol_needn_t_have_seen_the_creature_die() {
-    cr!("603.4", "603.6a");
+    cr!("603.4", "700.4");
     ruling!(
         "Sméagol, Helpful Guide",
         "Sméagol, Helpful Guide doesn't need to have been on the battlefield when the creature died."
@@ -559,7 +576,12 @@ fn enter_the_god_eternals_triggers_wait_until_it_finishes() {
     // Ajani's Pridemate triggers on the life gain; Doomed Dissenter dies to the damage.
     t.battlefield(P0, "Ajani's Pridemate");
     let dissenter = t.battlefield(P1, "Doomed Dissenter");
-    let spell = cast_new(&mut t, P0, "Enter the God-Eternals", &[obj(dissenter), pl(P1)]);
+    let spell = cast_new(
+        &mut t,
+        P0,
+        "Enter the God-Eternals",
+        &[obj(dissenter), pl(P1)],
+    );
     t.g.resolve_top();
     // The spell finished (the Army has its counters) before anything was put on the
     // stack; the Dissenter hasn't died yet (state-based actions).

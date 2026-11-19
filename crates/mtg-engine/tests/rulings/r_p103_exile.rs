@@ -150,7 +150,7 @@ fn grimoire_thief_counters_both_halves_of_a_split_card_name() {
 
 #[test]
 fn grimoire_thiefs_new_controller_may_look_and_lookers_keep_looking() {
-    cr!("406.3", "406.3b", "607.2a");
+    cr!("406.3", "607.2a");
     ruling!(
         "Grimoire Thief",
         "Once a player gains control of Grimoire Thief, that player can look at all cards it exiled, even if those cards were exiled while someone else controlled Grimoire Thief."
@@ -217,7 +217,7 @@ fn a_new_mindreaver_doesnt_know_the_old_ones_cards() {
 
 #[test]
 fn memory_vessel_plays_only_cards_exiled_from_libraries() {
-    cr!("601.3", "406.3");
+    cr!("601.3", "101.2");
     ruling!(
         "Memory Vessel",
         "players can play only cards they exiled from their library during the effect of the activated ability, not the Memory Vessel that was exiled to activate the ability."
@@ -262,7 +262,7 @@ fn precognition_field_lets_you_look_at_the_top_card_any_time() {
 
 #[test]
 fn precognition_field_exiles_whatever_is_on_top_as_it_resolves() {
-    cr!("608.2h", "401.1");
+    cr!("608.2h");
     ruling!(
         "Precognition Field",
         "The card you’ll exile from the top of your library is determined as Precognition Field’s last ability resolves. This might not be the card that was on top of your library when you activated that ability."
@@ -349,7 +349,7 @@ fn precognition_field_casts_pay_all_costs_or_alternative_ones() {
 
 #[test]
 fn sanity_grinding_with_a_short_library_reveals_and_reorders_it_all() {
-    cr!("207.2c", "701.17b");
+    cr!("609.3", "701.20a");
     ruling!(
         "Sanity Grinding",
         "If there are fewer than ten cards in your library, reveal them all. For each blue mana symbol in those cards’ mana costs, the targeted opponent puts the top card of their library into their graveyard. Then you reorder your entire library as you choose."
@@ -364,8 +364,7 @@ fn sanity_grinding_with_a_short_library_reveals_and_reorders_it_all() {
     t.resolve_all();
     assert_eq!(t.graveyard_size(P1), 3);
     assert_eq!(t.library_size(P0), 3);
-    let names = library_names(&t, P0);
-    assert_ne!(names, vec!["Counterspell", "Island", "Opt"], "reordered");
+    assert_eq!(library_names(&t, P0), vec!["Opt", "Island", "Counterspell"]);
 }
 
 // --- Thieves' Guild Enforcer ------------------------------------------------------------
@@ -403,7 +402,7 @@ fn thieves_guild_enforcer_deathtouch_gained_after_damage_doesnt_apply() {
 
 #[test]
 fn szadek_and_a_prevention_shield_the_player_chooses_the_order() {
-    cr!("616.1", "616.1a", "615.7");
+    cr!("616.1", "616.1e", "616.1f", "615.7");
     ruling!(
         "Szadek, Lord of Secrets",
         "If another effect would prevent Szadek's combat damage from being dealt to the defending player or replace it with something else, that player chooses which effect applies first. For example, the player can choose to first have Mending Hands prevent 4 of the damage and then apply Szadek's ability so that it gets only one counter."
@@ -429,7 +428,30 @@ fn szadek_and_a_prevention_shield_the_player_chooses_the_order() {
     assert_eq!(asked[0].0, P1);
     assert_eq!(t.life(P1), 20);
     assert_eq!(t.counters(szadek, "+1/+1"), 1);
-    assert_eq!(t.graveyard_size(P1), 1 + 1, "Mending Hands and one milled card");
+    assert_eq!(
+        t.graveyard_size(P1),
+        1 + 1,
+        "Mending Hands and one milled card"
+    );
+    // P1 applies Szadek's replacement first instead: all five damage becomes counters and
+    // milled cards, and the shield is left for later damage.
+    let mut t = TestGame::new(2);
+    let szadek = t.battlefield(P0, "Szadek, Lord of Secrets");
+    cast_new(&mut t, P1, "Mending Hands", &[pl(P1)]);
+    t.resolve_all();
+    prefer_replacement(&mut t, P1, "Szadek");
+    t.attack(&[(szadek, pl(P1))], &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    assert_eq!(t.counters(szadek, "+1/+1"), 5);
+    assert_eq!(
+        t.graveyard_size(P1),
+        1 + 5,
+        "Mending Hands and five milled cards"
+    );
+    cast_new(&mut t, P0, "Shock", &[pl(P1)]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20, "the shield prevents the Shock's damage");
 }
 
 // --- Chains of Mephistopheles -----------------------------------------------------------

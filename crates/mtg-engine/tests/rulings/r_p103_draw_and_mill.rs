@@ -41,7 +41,9 @@ fn milling_yourself_then_drawing_follows_the_written_order() {
         let top = stack_library(
             &mut t,
             P0,
-            &["Island", "Forest", "Swamp", "Mountain", "Plains", "Wastes", "Island"],
+            &[
+                "Island", "Forest", "Swamp", "Mountain", "Plains", "Wastes", "Island",
+            ],
         );
         if name.starts_with("Jace") {
             let jace = t.battlefield(P0, name);
@@ -67,7 +69,7 @@ fn milling_yourself_then_drawing_follows_the_written_order() {
 
 #[test]
 fn jace_cant_win_against_platinum_angel_but_the_draw_is_still_replaced() {
-    cr!("614.1a", "104.3c", "121.4", "101.2");
+    cr!("614.1a", "614.6", "121.4", "104.2b", "101.2");
     ruling!(
         "Jace, Wielder of Mysteries",
         "If for some reason you can’t win the game (because your opponent controls Platinum Angel, for example), you won’t lose for having tried to draw a card from a library with no cards in it. The draw was still replaced."
@@ -93,7 +95,7 @@ fn jace_cant_win_against_platinum_angel_but_the_draw_is_still_replaced() {
 
 #[test]
 fn with_two_jaces_the_active_player_draws_and_wins_first() {
-    cr!("101.4", "614.1a", "104.2b", "121.2");
+    cr!("101.4", "614.1a", "104.2b", "104.1");
     ruling!(
         "Jace, Wielder of Mysteries",
         "If two or more players control Jace, Wielder of Mysteries and each player is instructed to draw a number of cards, first the player whose turn it is draws that many cards. If this causes that player to win the game instead, the game is immediately over."
@@ -110,7 +112,8 @@ fn with_two_jaces_the_active_player_draws_and_wins_first() {
     cast_new(&mut t, P0, "Vision Skeins", &[]);
     t.resolve();
     assert_eq!(t.g.result, Some(GameResult::Win(vec![P1])));
-    // P1 has a card: P1 draws it and one more (replaced: P1 wins).
+    // On P0's turn P0 draws first and wins at once: P1, with a card left in its library,
+    // never draws.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Jace, Wielder of Mysteries");
     t.battlefield(P1, "Jace, Wielder of Mysteries");
@@ -118,14 +121,13 @@ fn with_two_jaces_the_active_player_draws_and_wins_first() {
     library_of(&mut t, P1, "Island", 1);
     cast_new(&mut t, P0, "Vision Skeins", &[]);
     t.resolve();
-    // It's P0's turn: P0 draws first, and wins.
     assert_eq!(t.g.result, Some(GameResult::Win(vec![P0])));
     assert_eq!(t.library_size(P1), 1, "P1 never drew");
 }
 
 #[test]
 fn jaces_ultimate_wins_even_after_jace_left_and_the_library_ran_out() {
-    cr!("608.2c", "704.3", "104.2b", "121.4");
+    cr!("608.2c", "104.3c", "704.3", "104.2b", "121.4");
     ruling!(
         "Jace, Wielder of Mysteries",
         "If your library has fewer than seven cards in it while resolving Jace’s last ability, and Jace has already left the battlefield, you’ll draw as many cards as you can and then win the game before state-based actions would cause you to lose the game for trying to draw from an empty library."

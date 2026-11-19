@@ -75,7 +75,7 @@ fn glacierwood_siege_sultai_doesnt_allow_activating_from_the_graveyard() {
 
 #[test]
 fn glacierwood_siege_without_a_choice_has_neither_ability() {
-    cr!("614.12");
+    cr!("614.12", "707.2");
     ruling!(
         "Glacierwood Siege",
         "If you somehow control Glacierwood Siege and no choice was made for it (perhaps because another permanent on the battlefield became a copy of it), it has neither of the two abilities."
@@ -104,22 +104,52 @@ fn glacierwood_siege_without_a_choice_has_neither_ability() {
     siege(&mut t, 1);
     let forest = t.graveyard(P0, "Forest");
     assert!(can_play_land(&mut t, P0, forest));
+    // The ruling's case: P0's Mirage Mirror ("{2}: This artifact becomes a copy of target
+    // artifact, creature, enchantment, or land until end of turn.") becomes a copy of P1's
+    // Siege. P1's choice isn't a copiable value (CR 707.2), so the copy has neither
+    // ability, whichever P1 chose.
+    supported("Mirage Mirror");
+    for mode in [0, 1] {
+        let mut t = TestGame::new(2);
+        t.answer(P1, DecisionKind::Option, Answer::Index(mode));
+        let original = t.enter(P1, "Glacierwood Siege");
+        t.g.flush_events();
+        t.settle();
+        let mirror = t.battlefield(P0, "Mirage Mirror");
+        t.lands(P0, "Wastes", 2);
+        t.activate(P0, mirror, 0, &[obj(original)]).unwrap();
+        t.resolve_all();
+        assert_eq!(
+            t.obj_now(mirror).chars.name.to_string(),
+            "Glacierwood Siege"
+        );
+        let forest = t.graveyard(P0, "Forest");
+        assert!(!can_play_land(&mut t, P0, forest), "{mode}");
+        cast_new(&mut t, P0, "Opt", &[]);
+        t.settle();
+        assert_eq!(t.stack_len(), 1, "{mode}: no Temur trigger");
+    }
 }
 
 // --- Ashiok, Dream Render ---------------------------------------------------------------
 
 #[test]
 fn ashiok_minus_one_exiles_the_cards_it_milled() {
-    cr!("608.2c", "701.17a");
+    cr!("608.2c", "701.17a", "603.3", "603.6");
     ruling!(
         "Ashiok, Dream Render",
-        "If Ashiok’s last ability targets an opponent, the cards put into their graveyard will be among the cards exiled by the ability."
+        "If Ashiok’s last ability targets an opponent, the cards put into their graveyard will be among the cards exiled by the ability. No player may take any actions between the time the cards are put into a graveyard and the time your opponents’ graveyards are all exiled."
     );
     supported("Ashiok, Dream Render");
+    supported("Narcomoeba");
     let mut t = TestGame::new(2);
     let ashiok = t.battlefield(P0, "Ashiok, Dream Render");
     let old = t.graveyard(P1, "Grizzly Bears");
-    let top = stack_library(&mut t, P1, &["Island", "Forest", "Swamp", "Mountain"]);
+    // Narcomoeba: "When this card is put into your graveyard from your library, you may
+    // put it onto the battlefield." Its trigger waits until the ability has finished, and
+    // by then Narcomoeba has been exiled: it stays there.
+    let top = stack_library(&mut t, P1, &["Narcomoeba", "Forest", "Swamp", "Mountain"]);
+    t.answer_yes(P1, true);
     t.activate(P0, ashiok, 0, &[pl(P1)]).unwrap();
     t.resolve_all();
     assert_eq!(t.graveyard_size(P1), 0);
@@ -304,7 +334,7 @@ fn relic_golem_stays_in_combat_when_the_graveyard_shrinks() {
 
 #[test]
 fn dread_summons_counts_cards_put_into_graveyards() {
-    cr!("614.6", "603.6a", "701.17c");
+    cr!("614.6", "603.6", "701.17c");
     ruling!(
         "Dread Summons",
         "If a creature card has an ability that replaces going to the graveyard with moving somewhere else \"instead,\" that card won't count toward the number of Zombies you get. Conversely, creature cards with a triggered ability that removes them from the graveyard when they're put there from anywhere (or your library) will count toward that number."
@@ -327,7 +357,7 @@ fn dread_summons_counts_cards_put_into_graveyards() {
 
 #[test]
 fn crumbling_sanctuary_with_an_empty_library_makes_damage_do_nothing() {
-    cr!("614.1a", "120.3");
+    cr!("614.1a", "614.6");
     ruling!(
         "Crumbling Sanctuary",
         "If you have no cards in your library, then damage done to you will have no effect since it will get changed into a removal that can’t happen."

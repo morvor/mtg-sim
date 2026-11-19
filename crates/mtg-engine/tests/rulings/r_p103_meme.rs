@@ -22,7 +22,7 @@ fn wurm_offers(t: &TestGame, from: usize) -> usize {
 
 #[test]
 fn panglacial_wurm_only_while_searching_your_own_library() {
-    cr!("701.23a", "701.23b");
+    cr!("701.23a");
     ruling!(
         "Panglacial Wurm",
         "Panglacial Wurm's ability works only while you're searching your own library. The effect that caused you to search needs to say \"search\" and \"library,\" and you need to be looking through your own library for this to work."
@@ -35,10 +35,14 @@ fn panglacial_wurm_only_while_searching_your_own_library() {
         ("Rampant Growth", |_| vec![], true),
         ("Gifts Ungiven", |_| vec![pl(P1)], true),
         // Bribery searches an opponent's library.
-        ("Bribery", |t| {
-            t.library_top(P1, "Grizzly Bears");
-            vec![pl(P1)]
-        }, false),
+        (
+            "Bribery",
+            |t| {
+                t.library_top(P1, "Grizzly Bears");
+                vec![pl(P1)]
+            },
+            false,
+        ),
         // Sage Owl looks at the top of your library without searching it.
         ("Sage Owl", |_| vec![], false),
     ];
@@ -69,7 +73,13 @@ fn panglacial_wurm_search_keeps_the_library_order() {
     stack_library(
         &mut t,
         P0,
-        &["Grizzly Bears", "Panglacial Wurm", "Forest", "Hill Giant", "Island"],
+        &[
+            "Grizzly Bears",
+            "Panglacial Wurm",
+            "Forest",
+            "Hill Giant",
+            "Island",
+        ],
     );
     let before = t.g.player(P0).library.clone();
     let seen = crate::r_s01_common::watch(
@@ -98,7 +108,13 @@ fn fact_or_fiction_piles_may_be_empty() {
     let cards = stack_library(
         &mut t,
         P0,
-        &["Grizzly Bears", "Hill Giant", "Shock", "Island", "Ornithopter"],
+        &[
+            "Grizzly Bears",
+            "Hill Giant",
+            "Shock",
+            "Island",
+            "Ornithopter",
+        ],
     );
     // P1 puts all five cards in one pile; P0 takes the other (empty) pile.
     t.answer_choose(P1, &cards.iter().map(|c| obj(*c)).collect::<Vec<_>>());
@@ -135,12 +151,23 @@ fn bone_flute_affects_only_creatures_there_as_it_resolves() {
 
 /// P0 casts Twiddle at `target`; returns the number of Twiddle's tap/untap choices asked
 /// before it resolves and after.
-fn twiddle(t: &mut TestGame, target: ObjectId, choice: usize, between: fn(&mut TestGame)) -> (usize, usize) {
+fn twiddle(
+    t: &mut TestGame,
+    target: ObjectId,
+    choice: usize,
+    between: fn(&mut TestGame),
+) -> (usize, usize) {
     supported("Twiddle");
     let options = |t: &TestGame, from: usize| {
         t.asked()[from..]
             .iter()
-            .filter(|(p, d)| *p == P0 && matches!(d, Decision::ChooseOption { .. } | Decision::ChooseModes { .. }))
+            .filter(|(p, d)| {
+                *p == P0
+                    && matches!(
+                        d,
+                        Decision::ChooseOption { .. } | Decision::ChooseModes { .. }
+                    )
+            })
             .count()
     };
     let from = t.asked().len();

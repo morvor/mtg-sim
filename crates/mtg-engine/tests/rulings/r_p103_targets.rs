@@ -73,12 +73,11 @@ fn fear_of_impostors_manifests_dread_for_an_uncounterable_spell() {
     t.answer_targets(P0, &[obj(decay)]);
     t.resolve();
     assert!(on_stack(&t, decay));
-    let face_down: Vec<ObjectId> = t
-        .g
-        .permanents()
-        .filter(|o| o.controller == P1 && o.face_down)
-        .map(|o| o.id)
-        .collect();
+    let face_down: Vec<ObjectId> =
+        t.g.permanents()
+            .filter(|o| o.controller == P1 && o.face_down)
+            .map(|o| o.id)
+            .collect();
     assert_eq!(face_down.len(), 1);
     assert_eq!(t.pt(face_down[0]), (2, 2));
     assert_eq!(t.graveyard_size(P1), 1);
@@ -132,13 +131,17 @@ fn spells_whose_creature_target_is_gone_do_nothing() {
         t.resolve();
         assert!(!resolved(&t, spell), "{name}");
         assert_eq!(t.graveyard_size(P1), 0, "{name}");
-        assert_eq!(t.g.permanents().filter(|o| o.face_down).count(), 0, "{name}");
+        assert_eq!(
+            t.g.permanents().filter(|o| o.face_down).count(),
+            0,
+            "{name}"
+        );
     }
 }
 
 #[test]
 fn grisly_spectacle_uses_the_destroyed_creatures_last_power() {
-    cr!("608.2h", "113.7a");
+    cr!("608.2h");
     ruling!(
         "Grisly Spectacle",
         "Use the creature’s power the last time it was on the battlefield to determine how many cards its controller puts into their graveyard."
@@ -164,7 +167,7 @@ fn hexproof(t: &mut TestGame, p: PlayerId) {
 
 #[test]
 fn spells_whose_player_target_became_illegal_dont_draw() {
-    cr!("608.2b", "702.11b");
+    cr!("608.2b", "702.11c");
     ruling!(
         "Thought Scour",
         "If the target player is an illegal target when Thought Scour tries to resolve, it won't resolve and none of its effects will happen. You won't draw a card."
@@ -188,7 +191,7 @@ fn spells_whose_player_target_became_illegal_dont_draw() {
 
 #[test]
 fn jaces_plus_one_with_an_illegal_target_doesnt_draw() {
-    cr!("608.2b", "606.3");
+    cr!("608.2b", "702.11c", "606.4");
     ruling!(
         "Jace, Wielder of Mysteries",
         "If the target player is an illegal target when Jace’s first loyalty ability tries to resolve, it doesn’t resolve. You won’t draw a card."
