@@ -283,6 +283,19 @@ impl Game {
         // `flush_events`.
     }
 
+    /// The trigger event's information as the ability triggers on it, with how many of
+    /// this turn's events have happened by then: the recorded ones, the trigger event
+    /// among them, and the rest of its batch of simultaneous events (`batch_ahead`, which
+    /// counts as having happened, interpretation
+    /// `simultaneous-events-count-as-an-ability-triggers`). "If it's the first time ...
+    /// this turn" is about the trigger event, and it's checked again as the ability
+    /// resolves against these events only (CR 603.4; interpretation
+    /// `first-time-is-about-the-trigger-event`).
+    fn seen_as_triggered(&self, mut info: EventInfo) -> EventInfo {
+        info.turn_events_seen = Some(self.turn_events.len() + self.batch_ahead.len());
+        info
+    }
+
     /// Marks the end of a group of simultaneous events (see [`Event::BatchBoundary`]).
     pub fn end_event_batch(&mut self) {
         if self.batch_hold == 0
@@ -611,6 +624,7 @@ impl Game {
                     // rulings).
                     let times =
                         crate::trigger_limits::allowed(self, src, a.uid, t.limit, 1 + extra);
+                    let info = self.seen_as_triggered(info);
                     for _ in 0..times {
                         self.trigger_order += 1;
                         found.push(PendingTrigger {
@@ -919,6 +933,7 @@ impl Game {
                 // would trigger, additional times included (Acrobatic Cheerleader's
                 // rulings).
                 let times = crate::trigger_limits::allowed(self, src, a.uid, t.limit, times);
+                let info = self.seen_as_triggered(info);
                 for _ in 0..times {
                     self.trigger_order += 1;
                     found.push(PendingTrigger {

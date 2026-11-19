@@ -76,6 +76,7 @@ pub mod dungeons;
 pub mod duration_refs;
 pub mod end_turn;
 pub mod entry_costs;
+pub mod entry_replacement_order;
 pub mod eval;
 pub mod event_causes;
 pub mod event_feed;

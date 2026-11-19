@@ -2066,6 +2066,14 @@ pub enum HistoryWindow {
     /// "this game": the events of the whole game kept for such queries (spells cast,
     /// cards cycled, damage dealt; `turn_start::kept_for_game`).
     ThisGame,
+    /// "this turn" in "if it's the first time [the trigger event] this turn" (Botanical
+    /// Brawler, Captain America, Living Legend): this turn's events up to the one the
+    /// ability triggered on, and those simultaneous with it (`EventInfo::turn_events_seen`).
+    /// The condition is about the trigger event, so what happens later doesn't change it
+    /// as the ability resolves (CR 603.4; interpretation
+    /// `first-time-is-about-the-trigger-event`). Without a trigger event (or as the ability
+    /// triggers), this turn's events so far, as [`Value::EventsThisTurn`] counts them.
+    ThisTurnUntilTriggered,
 }
 
 /// What [`Value::AsTurnBegan`] reads of a player's state as the turn began.

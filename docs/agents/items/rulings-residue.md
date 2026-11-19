@@ -73,12 +73,16 @@ named reason in docs/rulings-uncovered.tsv. Report counts: cited, exempt, uncove
 
   Settling it needs a register entry (a reasonable judge could go either way: provisional) and
   the three patterns made to agree, with tests of the in-between event for each wording.
+  **Taken up by item ruling-conflicts-12** (see its STATUS): all the patterns now read the
+  condition as about the trigger event (provisional `first-time-is-about-the-trigger-event`).
 - **Several permanents entering at once apply their "as [this] enters" replacement effects in the
   order the moves are given** (per player, APNAP; `Game::move_objects` in actions.rs), not in an
   order their controller chooses. Thief of Blood's ruling lets the controller apply any of the
   entering Thieves' effects first; for identical Thieves every choice gives the same game (their
   timestamp order is still the player's choice, CR 613.7m), so its test doesn't pin the order,
   but for different permanents whose "as enters" effects interact the choice would matter.
+  **Taken up by item ruling-conflicts-12** (see its STATUS): the controller now chooses where
+  the order can matter (decided `simultaneous-entries-ordered-by-controller`).
 - **A creature type added to a noncreature, once a later effect makes it a creature** (found by
   `rulings-residue-type-change`'s review, Nov 19; pre-existing behavior, no test pins it).
   Shadow Puppeteers' trigger resolving for a creature that Swift Reconfiguration made a

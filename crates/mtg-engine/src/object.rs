@@ -384,6 +384,13 @@ pub struct EventInfo {
     /// condition ("enters or attacks", "enters, if ...").
     #[serde(default)]
     pub triggered_by: Option<crate::events::TriggeringEvent>,
+    /// For a triggered ability: how many of this turn's events (`Game::turn_events`) had
+    /// happened when it triggered, its trigger event and the events simultaneous with it
+    /// included. "If it's the first time ... this turn" is about the trigger event, which
+    /// later events don't change ([`crate::ability::HistoryWindow::ThisTurnUntilTriggered`];
+    /// interpretation `first-time-is-about-the-trigger-event`).
+    #[serde(default)]
+    pub turn_events_seen: Option<usize>,
 }
 
 /// The kind of object on the stack.
