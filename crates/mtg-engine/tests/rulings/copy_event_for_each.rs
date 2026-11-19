@@ -36,8 +36,7 @@ fn new_target_questions(t: &TestGame, from: usize, p: PlayerId) -> usize {
     t.asked()[from..]
         .iter()
         .filter(|(q, d)| {
-            *q == p
-                && matches!(d, Decision::YesNo { prompt, .. } if prompt.contains("new targets"))
+            *q == p && matches!(d, Decision::YesNo { prompt, .. } if prompt.contains("new targets"))
         })
         .count()
 }
@@ -104,11 +103,15 @@ fn feathers_copies_for_each_creature_are_one_copy_event() {
         let spell = t.cast(P0, gg).go();
         t.settle();
         let from = t.asked().len();
-        t.resolve(); // Feather's trigger
-        // One copy event of two copies: one additional copy for each Staff, not one for
-        // each Staff and each creature.
+        // Feather's trigger: one copy event of two copies, so one additional copy for each
+        // Staff, not one for each Staff and each creature.
+        t.resolve();
         let copies = 2 + staves;
-        assert_eq!(spell_copies_on_stack(&t), copies as usize, "{staves} staves");
+        assert_eq!(
+            spell_copies_on_stack(&t),
+            copies as usize,
+            "{staves} staves"
+        );
         assert_eq!(t.g.stack[0], spell, "{staves} staves");
         // Only the additional copies may get new targets (Feather's copies target their
         // creatures, CR 707.10e).
@@ -126,7 +129,11 @@ fn feathers_copies_for_each_creature_are_one_copy_event() {
         t.resolve_all();
         // The original and every additional copy but the first grow Feather.
         let feather_growth = 1 + (staves - 1).max(0);
-        assert_eq!(t.pt(feather), grown(pts[0], feather_growth), "{staves} staves");
+        assert_eq!(
+            t.pt(feather),
+            grown(pts[0], feather_growth),
+            "{staves} staves"
+        );
         assert_eq!(t.pt(bears), grown(pts[1], 1), "{staves} staves");
         assert_eq!(t.pt(giant), grown(pts[2], 1), "{staves} staves");
         let ogre_growth = if staves > 0 { 1 } else { 0 };
@@ -166,7 +173,16 @@ fn zevlors_copies_for_each_other_opponent_are_one_copy_event() {
         let from = t.asked().len();
         t.resolve(); // Zevlor's delayed trigger
         let copies = 2 + staves;
-        assert_eq!(spell_copies_on_stack(&t), copies as usize, "{staves} staves");
+        assert_eq!(
+            spell_copies_on_stack(&t),
+            copies as usize,
+            "{staves} staves"
+        );
+        // "You control each of the copies": Zevlor's and Twinning Staff's alike.
+        for c in t.g.stack[1..].iter() {
+            assert_eq!(t.g.obj(*c).kind, ObjKind::SpellCopy, "{staves} staves");
+            assert_eq!(t.g.obj(*c).controller, P0, "{staves} staves");
+        }
         assert_eq!(
             new_target_questions(&t, from, P0),
             staves as usize,
@@ -181,6 +197,55 @@ fn zevlors_copies_for_each_other_opponent_are_one_copy_event() {
         assert_eq!(t.life(P1), 17 - 3 * staves, "{staves} staves");
         assert_eq!((t.life(P2), t.life(P3)), (17, 17), "{staves} staves");
     }
+}
+
+#[test]
+fn separate_copy_instructions_are_separate_copy_events() {
+    // The entry's other half: copies that separate instructions make are separate copy
+    // events, each given Twinning Staff's copy (CR 614.5: one opportunity per event). Two
+    // Reverberates ("Copy target instant or sorcery spell. You may choose new targets for
+    // the copy.") on one Lightning Bolt make two copies and two additional ones, also right
+    // after a "for each" copy event (Feather's) has ended: none is left open to fold
+    // later copies into.
+    cr!("614.5", "707.10");
+    interp!("copy-for-each-one-copy-event");
+    for name in ["Feather, Radiant Arbiter", "Twinning Staff", "Reverberate"] {
+        supported(name);
+    }
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Twinning Staff");
+    let feather = t.battlefield(P0, "Feather, Radiant Arbiter");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let (feather_pt, bears_pt) = (t.pt(feather), t.pt(bears));
+    t.lands(P0, "Forest", 3);
+    // Giant Growth on Feather, the Bears chosen ({2}): Feather's copy at the Bears and
+    // Twinning Staff's, which keeps Feather as its target.
+    t.answer_targets(P0, &[Entity::Object(feather)]);
+    t.answer_yes(P0, true); // you may choose creatures
+    t.answer_choose(P0, &[Entity::Object(bears)]);
+    t.answer_yes(P0, true); // pay {2}
+    let gg = t.hand(P0, "Giant Growth");
+    t.cast(P0, gg).go();
+    t.settle();
+    t.resolve(); // Feather's trigger
+    assert_eq!(spell_copies_on_stack(&t), 2);
+    t.resolve_all();
+    assert_eq!(t.pt(feather), grown(feather_pt, 2));
+    assert_eq!(t.pt(bears), grown(bears_pt, 1));
+    // Lightning Bolt at P1, then two Reverberates on it.
+    t.lands(P0, "Mountain", 5);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    let spell = t.cast(P0, bolt).target(P1).go();
+    for _ in 0..2 {
+        let rev = t.hand(P0, "Reverberate");
+        t.cast(P0, rev).target(spell).go();
+    }
+    t.settle();
+    t.resolve(); // the second Reverberate: its copy and Twinning Staff's
+    assert_eq!(spell_copies_on_stack(&t), 2);
+    t.resolve_all();
+    // Five Bolts: the original, and two from each Reverberate.
+    assert_eq!(t.life(P1), 20 - 3 * 5);
 }
 
 #[test]
