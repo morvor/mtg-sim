@@ -211,17 +211,32 @@ fn a_card_that_cant_be_cast_stays_in_its_owners_graveyard() {
         "Wrexial, the Risen Deep",
         "If you are unable to cast the targeted card (there are no legal targets for the spell, for example), nothing happens when the ability resolves, and the card remains in its owner's graveyard."
     );
-    // Shatter with no artifact on the battlefield.
+    // Shatter with no artifact on the battlefield (with P1's Bone Saw there, it's cast).
     for wrex in [false, true] {
-        let mut t = TestGame::new(2);
-        let shatter = t.graveyard(P1, "Shatter");
-        if wrex {
-            wrexial(&mut t, shatter);
-        } else {
-            memory_plunder(&mut t, shatter);
+        for artifact in [false, true] {
+            let mut t = TestGame::new(2);
+            let shatter = t.graveyard(P1, "Shatter");
+            let saw = artifact.then(|| t.battlefield(P1, "Bone Saw"));
+            if wrex {
+                wrexial(&mut t, shatter);
+            } else {
+                memory_plunder(&mut t, shatter);
+            }
+            let what = format!("wrexial={wrex} artifact={artifact}");
+            assert_eq!(casts(&t, "Shatter").len(), usize::from(artifact), "{what}");
+            match saw {
+                Some(saw) => {
+                    assert_eq!(t.zone(saw), Zone::Graveyard(P1), "{what}");
+                    let gone_to = if wrex {
+                        Zone::Exile
+                    } else {
+                        Zone::Graveyard(P1)
+                    };
+                    assert_eq!(t.zone(shatter), gone_to, "{what}");
+                }
+                None => assert_eq!(t.zone(shatter), Zone::Graveyard(P1), "{what}"),
+            }
         }
-        assert_eq!(t.zone(shatter), Zone::Graveyard(P1), "wrexial={wrex}");
-        assert!(casts(&t, "Shatter").is_empty());
     }
 }
 
@@ -251,6 +266,12 @@ fn casting_during_resolution_ignores_type_timing_but_not_other_restrictions() {
     memory_plunder(&mut t, cry);
     assert_eq!(t.zone(cry), Zone::Graveyard(P1));
     assert!(casts(&t, "Gorilla War Cry").is_empty());
+    // (In P0's beginning of combat step, before blockers, it is cast.)
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::BeginningOfCombat);
+    let cry = t.graveyard(P1, "Gorilla War Cry");
+    memory_plunder(&mut t, cry);
+    assert_eq!(casts(&t, "Gorilla War Cry").len(), 1, "{}", t.dump_log());
     // Wrexial in the combat damage step: Divination is cast (and exiled); Gorilla War Cry
     // isn't, blockers having been declared.
     let mut t = TestGame::new(2);
@@ -641,14 +662,33 @@ fn spellweaver_helix_copy_needs_targets_and_permission_to_cast() {
         "Spellweaver Helix",
         "You can’t cast the copy if an effect prevents you from casting sorceries or from casting that particular sorcery."
     );
-    // Flame Slash ("Flame Slash deals 4 damage to target creature.") with no creature.
-    let mut t = TestGame::new(2);
-    helix(&mut t, "Divination", "Flame Slash");
-    cast_divination(&mut t);
-    t.resolve_all();
-    assert!(casts(&t, "Flame Slash").is_empty());
-    assert!(t.in_exile("Flame Slash"));
-    assert_eq!(t.g.exile.len(), 2);
+    // Flame Slash ("Flame Slash deals 4 damage to target creature.") with no creature
+    // (with P1's Grizzly Bears there, the copy is cast).
+    for creature in [false, true] {
+        let mut t = TestGame::new(2);
+        helix(&mut t, "Divination", "Flame Slash");
+        let bears = creature.then(|| t.battlefield(P1, "Grizzly Bears"));
+        let d = t.hand(P0, "Divination");
+        mana(&mut t, P0, "2U");
+        t.answer_yes(P0, true);
+        t.answer_yes(P0, true);
+        if let Some(b) = bears {
+            t.answer_targets(P0, &[obj(b)]);
+        }
+        t.cast(P0, d).go();
+        t.settle();
+        t.resolve_all();
+        assert_eq!(
+            casts(&t, "Flame Slash").len(),
+            usize::from(creature),
+            "creature={creature}"
+        );
+        assert!(t.in_exile("Flame Slash"));
+        assert_eq!(t.g.exile.len(), 2, "no copy left: creature={creature}");
+        if let Some(b) = bears {
+            assert_eq!(t.zone(b), Zone::Graveyard(P1));
+        }
+    }
     // Meddling Mage naming Lava Spike ("Spells with the chosen name can't be cast.").
     let mut t = TestGame::new(2);
     helix(&mut t, "Divination", "Lava Spike");
