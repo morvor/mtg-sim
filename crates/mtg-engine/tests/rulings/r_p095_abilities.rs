@@ -585,3 +585,24 @@ fn nameless_race_has_no_creature_type() {
     assert!(chars.card_types.contains(CardType::Creature));
     assert!(chars.subtypes.is_empty());
 }
+
+#[test]
+fn thraben_doomsayer_token_enters_as_a_3_3() {
+    cr!("613.4c", "603.6a", "611.3c");
+    ruling!(
+        "Thraben Doomsayer",
+        "If Thraben Doomsayer's activated ability resolves while you have 5 or less life, the creature token will be 3/3 as it enters."
+    );
+    supported("Thraben Doomsayer");
+    // Garruk's Packleader: "Whenever another creature you control with power 3 or greater
+    // enters, you may draw a card." It sees the token's power as it enters.
+    let mut t = TestGame::new(2);
+    set_life(&mut t, P0, 5);
+    let doomsayer = t.battlefield(P0, "Thraben Doomsayer");
+    let packleader = t.battlefield(P0, "Garruk's Packleader");
+    t.activate(P0, doomsayer, 0, &[]).unwrap();
+    t.resolve();
+    let token = crate::r_s01_common::tokens(&t, P0)[0];
+    assert_eq!(t.pt(token), (3, 3));
+    assert_eq!(abilities_from(&t, packleader), 1);
+}
