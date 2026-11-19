@@ -82,7 +82,6 @@ fn high_ground_allows_overlapping_blocks_and_the_defender_divides_damage() {
     let blocks = [(x, a), (x, b), (y, b), (y, c), (z, c)];
     attack_with(&mut t, &[(a, pl(P1)), (b, pl(P1)), (c, pl(P1))]);
     assert!(legal_blocks(&mut t, P1, &blocks));
-    // Without High Ground, it isn't legal.
     // The Craw Wurm (6 power) blocking the Elves and the Hill Giant: P1 puts 1 on the
     // Elves and 5 on the Giant.
     t.answer(P1, DecisionKind::Blockers, Answer::Blockers(blocks.to_vec()));
@@ -107,6 +106,7 @@ fn high_ground_allows_overlapping_blocks_and_the_defender_divides_damage() {
         .filter(|(_, cr)| [x, y, z].contains(cr))
         .all(|(p, _)| *p == P1));
     assert!(!t.on_battlefield(b) && !t.on_battlefield(c));
+    // Without High Ground, a creature blocking two isn't legal.
     let mut t2 = TestGame::new(2);
     let a = t2.battlefield(P0, "Grizzly Bears");
     let b = t2.battlefield(P0, "Llanowar Elves");
