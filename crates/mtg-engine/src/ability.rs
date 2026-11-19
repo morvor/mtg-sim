@@ -1392,9 +1392,9 @@ pub enum PlayerFilter {
     /// A player who has max speed: their speed is 4 (CR 702.179e).
     MaxSpeed,
     /// In the vote the ability triggered on ("whenever players finish voting", CR
-    /// 701.38): a player who voted for a choice you voted for (`true`), or who voted only
-    /// for choices you didn't vote for (`false`; Grudge Keeper's rulings). See
-    /// `kwa::vote::voted_like`.
+    /// 701.38): a player who voted for a choice you voted for (`true`), or for a choice
+    /// you didn't vote for (`false`); a player with several votes can be both (Erestor of
+    /// the Council's ruling). See `kwa::vote::voted_like`.
     VotedLikeYou(bool),
     /// A player who chose this word for the source ("players who chose war", "each
     /// opponent who chose silence"): that player's own choice among the source's

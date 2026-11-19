@@ -495,9 +495,7 @@ impl Game {
             PlayerFilter::Chose(w) => self
                 .source_choices(ctx)
                 .is_some_and(|ch| crate::choices::player_choice_matches(ch, p, w)),
-            PlayerFilter::VotedLikeYou(like) => {
-                crate::kwa::vote::voted_like(self, ctx, p) == Some(*like)
-            }
+            PlayerFilter::VotedLikeYou(like) => crate::kwa::vote::voted_like(self, ctx, p, *like),
             // Twice the life total against the starting life total: no rounding.
             PlayerFilter::HalfStartingLife(cmp) => cmp.eval(
                 2 * self.player(p).life as i64,
