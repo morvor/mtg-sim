@@ -4263,10 +4263,19 @@ pub fn combat_trigger_matches(
                 })
                 .collect(),
         ),
-        (TriggerCond::BlockedByN { attacker, n }, Event::BlockersDeclared { blocks }) => {
+        (
+            TriggerCond::BlockedByN {
+                attacker,
+                blocker,
+                n,
+            },
+            Event::BlockersDeclared { blocks },
+        ) => {
             let mut per: BTreeMap<ObjectId, Vec<ObjectId>> = BTreeMap::new();
             for (b, a) in blocks {
-                per.entry(*a).or_default().push(*b);
+                if g.matches(*b, blocker, ctx) {
+                    per.entry(*a).or_default().push(*b);
+                }
             }
             Some(
                 per.into_iter()
@@ -4333,14 +4342,24 @@ pub fn combat_trigger_matches(
                     },
                 ),
                 // CR 509.3e: effects that add blockers can make the count reach N.
-                TriggerCond::BlockedByN { attacker, n } => {
+                TriggerCond::BlockedByN {
+                    attacker,
+                    blocker,
+                    n,
+                } => {
                     let count = g
                         .combat
                         .as_ref()
-                        .map(|c| c.blockers_of(a).len() as u32)
+                        .map(|c| {
+                            c.blockers_of(a)
+                                .into_iter()
+                                .filter(|x| g.matches(*x, blocker, ctx))
+                                .count() as u32
+                        })
                         .unwrap_or(0);
                     Some(
-                        if count >= *n
+                        if g.matches(b, blocker, ctx)
+                            && count >= *n
                             && count.saturating_sub(1) < *n
                             && g.matches(a, attacker, ctx)
                         {
