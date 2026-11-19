@@ -4,7 +4,6 @@
 //! from exile, tapping artifacts for a cost, and Background-granted triggers.
 
 use crate::r_p115_common::*;
-use crate::r_s01_common::watch;
 use crate::r_s02_common::can_play_land;
 use crate::r_s04_common::add_mana;
 use crate::r_s06_common::activate_containing;
@@ -21,7 +20,7 @@ fn attack_target(t: &TestGame, a: ObjectId) -> Option<Entity> {
 
 #[test]
 fn gut_you_choose_what_the_skeleton_attacks() {
-    cr!("508.4", "508.4a");
+    cr!("508.4");
     ruling!(
         "Gut, True Soul Zealot",
         "You choose the player or planeswalker the Skeleton is attacking."
@@ -78,7 +77,7 @@ fn the_first_doctor_targets_before_cascade_reveals() {
 
 #[test]
 fn tormod_makes_one_zombie_per_event() {
-    cr!("603.2c", "603.10a");
+    cr!("603.2c");
     ruling!(
         "Tormod, the Desecrator",
         "You create one Zombie token each time Tormod, the Desecrator's ability resolves, no matter how many cards left your graveyard."
@@ -106,7 +105,7 @@ fn tormod_makes_one_zombie_per_event() {
 
 #[test]
 fn amber_gristle_discards_on_resolution_even_an_empty_hand() {
-    cr!("608.2c", "608.2d");
+    cr!("608.2c", "608.2d", "117.3d");
     ruling!(
         "Amber Gristle O'Maul",
         "You decide whether to discard your hand as Amber Gristle O'Maul's ability resolves. No player may respond after you have decided to discard your hand but before you have drawn cards."
@@ -122,22 +121,46 @@ fn amber_gristle_discards_on_resolution_even_an_empty_hand() {
         for _ in 0..in_hand {
             t.hand(P0, "Grizzly Bears");
         }
+        // When P0 decides, and P1's priority: when, the stack's size and P0's hand size.
+        let decided = watch(
+            &mut t,
+            P0,
+            |d| matches!(d, Decision::YesNo { .. }),
+            |_| next_seq(),
+        );
+        let prio = watch(
+            &mut t,
+            P1,
+            |d| matches!(d, Decision::Priority { .. }),
+            |g| (next_seq(), g.stack.len(), g.player(P0).hand.len()),
+        );
+        t.answer_yes(P0, true);
         attack_with(&mut t, &[(amber, pl(P1))]);
         assert_eq!(t.stack_len(), 1);
-        let from = t.asked().len();
-        t.answer_yes(P0, true);
-        t.resolve();
-        // Decided as it resolved, then drew one (one player attacked), with no priority
-        // in between.
-        let asked = asked_since(&t, from);
-        let yes = asked
-            .iter()
-            .position(|(_, d)| matches!(d, Decision::YesNo { .. }))
-            .expect("asked on resolution");
-        assert!(!asked[yes..]
-            .iter()
-            .any(|(_, d)| matches!(d, Decision::Priority { .. })));
-        assert_eq!(t.hand_size(P0), 1, "{in_hand}");
+        assert!(
+            decided.lock().unwrap().is_empty(),
+            "decided only as it resolves"
+        );
+        // Through the real priority loop: both pass, it resolves, both pass again.
+        pass_until_step_ends(&mut t);
+        let decided = decided.lock().unwrap().clone();
+        assert_eq!(decided.len(), 1, "{in_hand}");
+        let prio = prio.lock().unwrap().clone();
+        // P1 could respond to the trigger; the next time P1 had priority, after P0
+        // decided, P0 had discarded and drawn one (one player attacked).
+        assert!(
+            prio.iter()
+                .any(|&(s, stack, _)| s < decided[0] && stack == 1),
+            "{prio:?}"
+        );
+        let after: Vec<_> = prio.iter().filter(|(s, ..)| *s > decided[0]).collect();
+        assert!(!after.is_empty(), "{prio:?}");
+        assert!(
+            after
+                .iter()
+                .all(|&&(_, stack, hand)| stack == 0 && hand == 1),
+            "{in_hand}: {prio:?}"
+        );
         assert!(!t.in_hand(P0, "Grizzly Bears"));
         assert_eq!(t.graveyard_size(P0), in_hand);
     }
@@ -202,7 +225,10 @@ fn silas_renns_permission_outlasts_it_and_allows_alternative_costs() {
     t.set_step(P0, Step::PostcombatMain);
     kill(&mut t, silas_id);
     t.g.turn.priority = Some(P0);
-    assert!(t.g.cast_spell(P0, stone, CastMethod::Normal).is_err(), "unpaid");
+    assert!(
+        t.g.cast_spell(P0, stone, CastMethod::Normal).is_err(),
+        "unpaid"
+    );
     add_mana(&mut t, P0, ManaType::C, 2);
     t.g.turn.priority = Some(P0);
     t.g.cast_spell(P0, stone, CastMethod::Normal)
@@ -217,13 +243,12 @@ fn silas_renns_permission_outlasts_it_and_allows_alternative_costs() {
     add_mana(&mut t, P0, ManaType::C, 1);
     t.answer_choose(P0, &[obj(island)]);
     t.g.turn.priority = Some(P0);
-    let alt = t
-        .g
-        .cast_options(P0, post)
-        .into_iter()
-        .map(|o| o.method)
-        .find(|m| matches!(m, CastMethod::Alternative(_)))
-        .expect("the alternative cost is offered from the graveyard");
+    let alt =
+        t.g.cast_options(P0, post)
+            .into_iter()
+            .map(|o| o.method)
+            .find(|m| matches!(m, CastMethod::Alternative(_)))
+            .expect("the alternative cost is offered from the graveyard");
     t.g.cast_spell(P0, post, alt).expect("alternative cost");
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Mistvein Borderpost").len(), 1);
@@ -277,9 +302,9 @@ fn yasmin_khans_card_follows_normal_costs_and_timing() {
     assert!(can_play_land(&mut t, P0, forest));
     t.play_land(P0, forest).expect("play the land");
     // A spell exiled this way still costs its mana.
-    let yasmin2 = t.battlefield(P0, "Yasmin Khan");
+    t.g.objects[yasmin.0 as usize].tapped = false;
     let bears = t.library_top(P0, "Grizzly Bears");
-    t.activate(P0, yasmin2, 0, &[]).expect("activate");
+    t.activate(P0, yasmin, 0, &[]).expect("activate");
     t.resolve_all();
     let bears = t.g.current(bears);
     assert_eq!(t.zone(bears), Zone::Exile);

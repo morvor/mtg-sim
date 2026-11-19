@@ -101,7 +101,7 @@ fn three_left() -> TestGame {
 
 #[test]
 fn chittering_witch_counts_only_opponents_still_in_the_game() {
-    cr!("800.4a");
+    cr!("800.4", "102.1");
     ruling!(
         "Chittering Witch",
         "In a multiplayer game, opponents who have left the game aren't counted by Chittering Witch's triggered ability."
@@ -131,7 +131,7 @@ fn chittering_witch_can_sacrifice_itself() {
 
 #[test]
 fn benediction_of_moons_counts_players_in_the_game() {
-    cr!("102.2", "800.4a", "810.2", "801.2");
+    cr!("102.1", "800.4", "810.1", "810.9", "801.2", "801.2b", "801.11");
     ruling!(
         "Benediction of Moons",
         "\"For each player\" means for each player currently in the game, which is normally two. A Two-Headed Giant game has four players. In a Free-for-All multiplayer game, players who have been eliminated or who are outside your range of influence don't count toward the total."
@@ -162,7 +162,7 @@ fn benediction_of_moons_counts_players_in_the_game() {
 
 #[test]
 fn furious_spinesplitter_counts_damage_dealt_before_it_arrived() {
-    cr!("513.1", "603.2");
+    cr!("603.2", "603.2b");
     ruling!(
         "Furious Spinesplitter",
         "Furious Spinesplitter doesn't need to have been on the battlefield when the damage was dealt."
@@ -196,12 +196,11 @@ fn galvanoth_casts_an_x_spell_with_x_zero() {
     to_upkeep(&mut t, P0);
     t.resolve_all();
     assert_eq!(t.zone(geyser), Zone::Graveyard(P0));
-    let cast = t
-        .g
-        .history
-        .spells_cast
-        .iter()
-        .any(|(p, s)| *p == P0 && t.g.obj(*s).chars.name == "Volcanic Geyser");
+    let cast =
+        t.g.history
+            .spells_cast
+            .iter()
+            .any(|(p, s)| *p == P0 && t.g.obj(*s).chars.name == "Volcanic Geyser");
     assert!(cast);
     assert_eq!(t.life(P1), 20);
 }
@@ -242,7 +241,7 @@ fn killer_instinct_leaves_a_noncreature_card_on_top() {
 
 #[test]
 fn visions_with_fewer_than_five_cards() {
-    cr!("401.2", "121.1", "704.5b", "701.24a");
+    cr!("121.1", "704.5b", "701.24a");
     ruling!(
         "Visions",
         "If there are less than 5 cards in the library, you look at whatever ones remain and you still get the option to shuffle."
@@ -323,7 +322,7 @@ fn transform(t: &mut TestGame, id: ObjectId) {
 
 #[test]
 fn corruption_of_towashi_stops_triggering_once_you_draw() {
-    cr!("603.2", "603.4");
+    cr!("603.2", "603.2h");
     ruling!(
         "Corruption of Towashi",
         "Once you've chosen to draw a card because of the last ability"

@@ -19,7 +19,7 @@ fn walker(t: &mut TestGame, name: &str, loyalty: u32) -> ObjectId {
 
 #[test]
 fn arlinn_gives_one_counter_to_wolves_and_werewolves() {
-    cr!("614.1c", "122.6");
+    cr!("614.1c");
     ruling!(
         "Arlinn, Voice of the Pack",
         "A creature that’s a Wolf or Werewolf enters the battlefield with one +1/+1 counter if it would otherwise enter with no +1/+1 counters."
@@ -137,7 +137,7 @@ fn tibalt_stops_set_life_totals_from_raising_an_opponents_life() {
 
 #[test]
 fn tibalt_lets_life_gaining_spells_do_everything_else() {
-    cr!("101.2", "608.2c");
+    cr!("101.2", "609.3");
     ruling!(
         "Tibalt, Rakish Instigator",
         "Spells and abilities that cause opponents to gain life still resolve while Tibalt is on the battlefield. No opponent will gain life, but any other effects of that spell or ability will happen."

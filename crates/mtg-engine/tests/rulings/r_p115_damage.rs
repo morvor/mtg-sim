@@ -135,7 +135,7 @@ fn ancient_hellkite_pings_only_while_attacking() {
 
 #[test]
 fn raging_regisaurs_trigger_damage_isnt_combat_damage() {
-    cr!("510.2", "615.1");
+    cr!("120.2a", "120.2b", "615.1");
     ruling!(
         "Raging Regisaur",
         "Damage dealt by Raging Regisaur's triggered ability isn't combat damage."
@@ -256,6 +256,10 @@ fn attack_trigger_candidates(t: &mut TestGame, attacker: ObjectId, target: Entit
 #[test]
 fn hellkite_whelp_defending_player_is_the_planeswalkers_controller() {
     cr!("508.5", "802.2a");
+    // Cited for planeswalkers. Its "or battle" part, "that permanent's controller", isn't
+    // followed: a battle's protector is the defending player (CR 310.9d, 508.5), as
+    // `hellkite_whelp_attacking_a_siege_targets_its_protectors_creatures` checks
+    // (docs/RULING_DISCREPANCIES.md, inconsistent rulings).
     ruling!(
         "Hellkite Whelp",
         "If a creature attacks a planeswalker or battle, that permanent's controller is the defending player."
@@ -273,9 +277,33 @@ fn hellkite_whelp_defending_player_is_the_planeswalkers_controller() {
     assert!(!cands.contains(&obj(p1s)));
 }
 
+/// Three players: P2 controls a Siege that P1 protects. Returns it, P1's and P2's
+/// Savannah Lions.
+fn siege(t: &mut TestGame) -> (ObjectId, ObjectId, ObjectId) {
+    let battle = t.battlefield(P2, "Invasion of Azgol");
+    t.g.objects[battle.0 as usize].choices.player = Some(P1);
+    t.g.dirty = true;
+    let p1s = t.battlefield(P1, "Savannah Lions");
+    let p2s = t.battlefield(P2, "Savannah Lions");
+    (battle, p1s, p2s)
+}
+
+#[test]
+fn hellkite_whelp_attacking_a_siege_targets_its_protectors_creatures() {
+    cr!("310.9d", "508.5", "802.2a");
+    // Hellkite Whelp's ruling says "that permanent's controller" for a battle too; the
+    // rules make the protector the defending player (docs/RULING_DISCREPANCIES.md).
+    let mut t = TestGame::new(3);
+    let whelp = t.battlefield(P0, "Hellkite Whelp");
+    let (battle, p1s, p2s) = siege(&mut t);
+    let cands = attack_trigger_candidates(&mut t, whelp, obj(battle));
+    assert_eq!(cands, vec![obj(p1s)], "{cands:?}");
+    assert!(!cands.contains(&obj(p2s)));
+}
+
 #[test]
 fn heart_piercer_bow_defending_player_is_the_battles_protector() {
-    cr!("508.5", "802.2a", "310.9e");
+    cr!("508.5", "802.2a", "310.9d");
     ruling!(
         "Heart-Piercer Bow",
         "If a creature is attacking a battle, the protector of that battle is the defending player."
@@ -291,11 +319,7 @@ fn heart_piercer_bow_defending_player_is_the_battles_protector() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     let bow = t.battlefield(P0, "Heart-Piercer Bow");
     assert!(t.g.attach(bow, obj(bears)));
-    let battle = t.battlefield(P2, "Invasion of Azgol");
-    t.g.objects[battle.0 as usize].choices.player = Some(P1);
-    t.g.dirty = true;
-    let p1s = t.battlefield(P1, "Savannah Lions");
-    let p2s = t.battlefield(P2, "Savannah Lions");
+    let (battle, p1s, p2s) = siege(&mut t);
     let cands = attack_trigger_candidates(&mut t, bears, obj(battle));
     assert_eq!(cands, vec![obj(p1s)], "{cands:?}");
     assert!(!cands.contains(&obj(p2s)));
@@ -330,7 +354,10 @@ fn hellkite_whelp_in_two_headed_giant_targets_only_the_attacked_players_creature
 #[test]
 fn rocket_launcher_can_target_differently_each_time() {
     cr!("602.2b", "601.2c");
-    ruling!("Rocket Launcher", "You can choose different targets for each use.");
+    ruling!(
+        "Rocket Launcher",
+        "You can choose different targets for each use."
+    );
     supported("Rocket Launcher");
     let mut t = TestGame::new(2);
     let launcher = t.battlefield(P0, "Rocket Launcher");

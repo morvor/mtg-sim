@@ -25,6 +25,29 @@ fn bridge_from_below_must_be_in_the_graveyard_as_it_triggers_and_resolves() {
     assert_eq!(t.stack_len(), 0);
     t.resolve_all();
     assert_eq!(tokens_of(&t, P0, "Zombie"), 0);
+    // Destroyed together with a creature (Akroma's Vengeance): Bridge was on the
+    // battlefield immediately before the creature died, so it doesn't trigger, although
+    // it's in the graveyard right after (the game looks back in time, CR 603.10a). P1's
+    // creature dying with them doesn't exile it either.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Bridge from Below");
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Llanowar Elves");
+    cast_at(&mut t, P0, "Akroma's Vengeance", &[]);
+    t.resolve();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(tokens_of(&t, P0, "Zombie"), 0);
+    assert!(t.in_graveyard(P0, "Bridge from Below"));
+    assert!(t.in_graveyard(P1, "Llanowar Elves"));
+    // Already in the graveyard as they die together, it does trigger (the control).
+    let mut t = TestGame::new(2);
+    t.graveyard(P0, "Bridge from Below");
+    t.battlefield(P0, "Grizzly Bears");
+    cast_at(&mut t, P0, "Akroma's Vengeance", &[]);
+    t.resolve();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(tokens_of(&t, P0, "Zombie"), 1);
     // In the graveyard: it triggers; exiled in response, no token.
     for exile_first in [false, true] {
         let mut t = TestGame::new(2);
@@ -70,7 +93,7 @@ fn bridge_from_below_simultaneous_deaths_let_you_make_the_token_first() {
 
 #[test]
 fn bridge_from_below_cares_about_the_graveyard_not_the_controller() {
-    cr!("603.10a", "400.3");
+    cr!("603.6c", "400.3");
     ruling!(
         "Bridge from Below",
         "Neither ability cares who controlled the creature that died, only which graveyard it was put into."

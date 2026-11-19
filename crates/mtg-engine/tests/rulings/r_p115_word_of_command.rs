@@ -2,18 +2,11 @@
 //! chosen card (CR 723), which cards can be chosen, and what "play" means (CR 305).
 
 use crate::r_p115_common::*;
-use crate::r_s01_common::watch;
 use mtg_engine::decision::Decision;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
-
-static SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
-fn next_seq() -> usize {
-    SEQ.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-}
 
 /// P0 casts Word of Command targeting P1 (choosing `chosen`, if any, as it resolves);
 /// both players pass, so it resolves through the priority loop.
@@ -32,7 +25,7 @@ fn word_of_command(t: &mut TestGame, chosen: Option<ObjectId>) -> ObjectId {
 
 #[test]
 fn word_of_command_can_be_responded_to_and_chooses_on_resolution() {
-    cr!("608.2c", "117.3c");
+    cr!("608.2d", "117.1a");
     ruling!(
         "Word of Command",
         "Since this spell is an instant, your opponent gets a chance to respond to it as normal. Once this spell resolves, you look at your opponent's hand and choose a card."
@@ -130,7 +123,7 @@ fn word_of_command_can_make_the_player_play_a_land() {
 
 #[test]
 fn word_of_command_lets_the_player_counter_the_forced_spell() {
-    cr!("723.2", "117.3b");
+    cr!("723.2", "117.3d");
     ruling!(
         "Word of Command",
         "Your opponent can't counter the Word of Command after letting you look at their hand, but they can attempt to counter the spell you force them to cast."
@@ -144,7 +137,14 @@ fn word_of_command_lets_the_player_counter_the_forced_spell() {
         &mut t,
         P1,
         |d| matches!(d, Decision::Priority { .. }),
-        |g| (next_seq(), g.stack.iter().any(|s| g.obj(*s).chars.name == "Word of Command")),
+        |g| {
+            (
+                next_seq(),
+                g.stack
+                    .iter()
+                    .any(|s| g.obj(*s).chars.name == "Word of Command"),
+            )
+        },
     );
     let choice = watch(
         &mut t,
@@ -166,7 +166,10 @@ fn word_of_command_lets_the_player_counter_the_forced_spell() {
     let chose = choice.lock().unwrap()[0];
     let prio = prio.lock().unwrap().clone();
     assert!(prio.iter().any(|(_, woc)| *woc), "P1 could respond before");
-    assert!(prio.iter().all(|(seq, woc)| !woc || *seq < chose), "{prio:?}");
+    assert!(
+        prio.iter().all(|(seq, woc)| !woc || *seq < chose),
+        "{prio:?}"
+    );
     // P1 counters their own creature spell.
     let spell = t.g.stack[0];
     cast_at(&mut t, P1, "Counterspell", &[obj(spell)]);
@@ -231,11 +234,10 @@ fn word_of_command_can_require_a_pitch_spells_alternative_cost() {
     t.answer_targets(P0, &[pl(P1)]);
     word_of_command(&mut t, Some(blast));
     t.resolve_all();
-    let mountains = t
-        .g
-        .permanents()
-        .filter(|o| o.controller == P1 && o.chars.name == "Mountain")
-        .count();
+    let mountains =
+        t.g.permanents()
+            .filter(|o| o.controller == P1 && o.chars.name == "Mountain")
+            .count();
     assert_eq!(mountains, 4);
     assert_eq!(t.life(P1), 16);
 }

@@ -1,11 +1,11 @@
 //! Rulings batch P115 — cards that name a card after looking at or revealing a hand
 //! (Anointed Peacekeeper, Alhammarret, High Arbiter, Thought Hemorrhage, Brain Pry) and
-//! Quash's search for every card with the countered spell's name (CR 201.3, 701.23).
+//! Quash's search for every card with the countered spell's name (CR 201.4, 701.23).
 
 use crate::r_p115_common::*;
-use crate::r_s01_common::watch;
+use crate::r_s02_common::create_token;
 use crate::r_s04_common::add_mana;
-use mtg_engine::decision::Decision;
+use mtg_engine::decision::{Action, Decision};
 use mtg_engine::events::Event;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::mana::ManaType;
@@ -27,7 +27,13 @@ fn peacekeeper(t: &mut TestGame, card: &str) -> ObjectId {
 
 /// Whether `p` can activate the `index`th activated ability of `src` with exactly
 /// `generic` colorless mana (plus one of each color for colored costs) in their pool.
-fn activates_with(t: &mut TestGame, p: PlayerId, src: ObjectId, index: usize, generic: u32) -> bool {
+fn activates_with(
+    t: &mut TestGame,
+    p: PlayerId,
+    src: ObjectId,
+    index: usize,
+    generic: u32,
+) -> bool {
     t.g.players[p.idx()].mana_pool = Default::default();
     add_mana(t, p, ManaType::C, generic);
     let ok = t.activate(p, src, index, &[]).is_ok();
@@ -56,7 +62,8 @@ fn anointed_peacekeeper_taxes_activated_abilities_not_triggered_or_mana_abilitie
     let split = t.battlefield(P0, "Bonesplitter");
     let bears = t.battlefield(P0, "Grizzly Bears");
     add_mana(&mut t, P0, ManaType::C, 3);
-    t.activate(P0, split, 0, &[obj(bears)]).expect("equip for {3}");
+    t.activate(P0, split, 0, &[obj(bears)])
+        .expect("equip for {3}");
     t.resolve_all();
     assert_eq!(t.pt(bears), (4, 2));
     // Mind Stone's mana ability is untaxed: it still adds {C} for {T}.
@@ -88,7 +95,11 @@ fn anointed_peacekeeper_taxes_abilities_in_every_zone() {
         peacekeeper(&mut t, "Krosan Tusker");
         let tusker = t.hand(P0, "Krosan Tusker");
         add_mana(&mut t, P0, ManaType::G, 1);
-        assert_eq!(activates_with_keep(&mut t, P0, tusker, generic), ok, "{generic}");
+        assert_eq!(
+            activates_with_keep(&mut t, P0, tusker, generic),
+            ok,
+            "{generic}"
+        );
     }
     // Unearth from the graveyard: Hellspark Elemental's unearth {1}{R} costs {3}{R}.
     for (generic, ok) in [(1u32, false), (3, true)] {
@@ -96,7 +107,11 @@ fn anointed_peacekeeper_taxes_abilities_in_every_zone() {
         peacekeeper(&mut t, "Hellspark Elemental");
         let elemental = t.graveyard(P0, "Hellspark Elemental");
         add_mana(&mut t, P0, ManaType::R, 1);
-        assert_eq!(activates_with_keep(&mut t, P0, elemental, generic), ok, "{generic}");
+        assert_eq!(
+            activates_with_keep(&mut t, P0, elemental, generic),
+            ok,
+            "{generic}"
+        );
     }
 }
 
@@ -117,14 +132,23 @@ fn anointed_peacekeepers_spell_tax_applies_to_every_opponent() {
     peacekeeper(&mut t, "Grizzly Bears");
     for p in [P1, P2] {
         let bears = t.hand(p, "Grizzly Bears");
+        // (Making `p` the active player is a test shortcut so that the creature spell's
+        // timing is legal and only its cost decides.)
+        t.g.turn.active = p;
+        t.g.turn.priority = Some(p);
+        // {1}{G} costs {3}{G}: {1}{G} isn't enough, {3}{G} is.
         add_mana(&mut t, p, ManaType::G, 1);
         add_mana(&mut t, p, ManaType::C, 1);
-        t.g.turn.priority = Some(p);
-        assert!(t.g.cast_spell(p, bears, CastMethod::Normal).is_err(), "{p:?}");
+        assert!(
+            t.g.cast_spell(p, bears, CastMethod::Normal).is_err(),
+            "{p:?}"
+        );
         add_mana(&mut t, p, ManaType::C, 2);
-        // (Casting at instant speed is a test shortcut; the cost is what's checked.)
-        t.g.turn.active = p;
-        assert!(t.g.cast_spell(p, bears, CastMethod::Normal).is_ok(), "{p:?}");
+        t.g.turn.priority = Some(p);
+        assert!(
+            t.g.cast_spell(p, bears, CastMethod::Normal).is_ok(),
+            "{p:?}"
+        );
         t.resolve_all();
         t.g.turn.active = P0;
     }
@@ -137,7 +161,7 @@ fn anointed_peacekeepers_spell_tax_applies_to_every_opponent() {
 
 #[test]
 fn anointed_peacekeeper_names_any_card_but_not_a_token_only_name() {
-    cr!("201.3");
+    cr!("201.4", "111.4");
     ruling!(
         "Anointed Peacekeeper",
         "You can choose any card name, even if that card doesn’t normally have an activated ability. You’re not limited to the names of cards you saw in the opponent’s hand."
@@ -154,21 +178,44 @@ fn anointed_peacekeeper_names_any_card_but_not_a_token_only_name() {
         t.obj_now(pk).choices.card_name.as_deref(),
         Some("Grizzly Bears")
     );
-    // "Treasure" is only a token's name: it can't be chosen (nothing is named).
+    // A Clue token is named "Clue Token" (CR 111.4, 111.10f), the name of no card: it can't
+    // be chosen, so the token's "{2}, Sacrifice this token: Draw a card." costs only {2}.
     let mut t = TestGame::new(2);
-    let pk = peacekeeper(&mut t, "Treasure");
+    let pk = peacekeeper(&mut t, "Clue Token");
+    let clue = create_token(&mut t, P0, "Clue");
+    assert_eq!(t.obj_now(clue).chars.name, "Clue Token");
     assert_ne!(
         t.obj_now(pk).choices.card_name.as_deref(),
-        Some("Treasure")
+        Some("Clue Token")
     );
-    // A Treasure token's sacrifice ability isn't taxed.
-    let treasure = crate::r_s02_common::create_token(&mut t, P0, "Treasure");
-    assert!(activates_with(&mut t, P0, treasure, 0, 0));
+    assert!(activates_with(&mut t, P0, clue, 0, 2));
+    // A token with a card's name can be named: a token copy of Mogg Fanatic (Cackling
+    // Counterpart) is named Mogg Fanatic, and its ability costs {2} more.
+    let mut t = TestGame::new(2);
+    peacekeeper(&mut t, "Mogg Fanatic");
+    let fanatic = t.battlefield(P0, "Mogg Fanatic");
+    cast_at(&mut t, P0, "Cackling Counterpart", &[obj(fanatic)]);
+    t.resolve_all();
+    let copy =
+        t.g.permanents()
+            .find(|o| o.is_token() && o.chars.name == "Mogg Fanatic")
+            .map(|o| o.id)
+            .expect("the token copy");
+    t.answer_targets(P0, &[pl(P1)]);
+    assert!(!activates_with(&mut t, P0, copy, 0, 1));
+    assert!(t.on_battlefield(copy));
+    t.answer_targets(P0, &[pl(P1)]);
+    assert!(activates_with(&mut t, P0, copy, 0, 2));
 }
 
 /// Alhammarret enters under P0's control; P0 chooses `card` (from P1's revealed hand).
 fn alhammarret(t: &mut TestGame, card: &str) -> ObjectId {
-    let c = t.g.player(P1).hand.iter().copied().find(|c| t.g.obj(*c).chars.name == card);
+    let c =
+        t.g.player(P1)
+            .hand
+            .iter()
+            .copied()
+            .find(|c| t.g.obj(*c).chars.name == card);
     if let Some(c) = c {
         t.answer_choose(P0, &[obj(c)]);
     }
@@ -181,20 +228,65 @@ fn alhammarret(t: &mut TestGame, card: &str) -> ObjectId {
 
 #[test]
 fn alhammarrets_name_is_chosen_as_it_enters_with_no_window() {
-    cr!("614.1c", "614.12");
+    cr!("614.1c", "614.12", "117.3d");
     ruling!(
         "Alhammarret, High Arbiter",
         "No one can cast spells or activate abilities between the time a card is named and the time that Alhammarret's last ability starts to work."
     );
     supported("Alhammarret, High Arbiter");
+    // Through the real priority loop: P0 casts Alhammarret; P1, holding Shock and mana,
+    // passes while it's on the stack and tries to cast Shock the next time it gets
+    // priority. That is after Alhammarret has entered and Shock has been named, so the
+    // attempt fails (with a window between them, as an "enters" trigger naming the card
+    // would leave, Shock would be cast).
+    let mut t = TestGame::new(2);
+    let shock = t.hand(P1, "Shock");
+    lots(&mut t, P1);
+    t.answer(P1, DecisionKind::Priority, Answer::Action(Action::Pass));
+    t.answer(
+        P1,
+        DecisionKind::Priority,
+        Answer::Action(Action::Cast {
+            card: shock,
+            method: CastMethod::Normal,
+        }),
+    );
+    t.answer_targets(P1, &[pl(P0)]);
+    t.answer_choose(P0, &[obj(shock)]);
+    name(&mut t, P0, "Shock");
+    t.answer(P0, DecisionKind::Option, Answer::Text("Shock".into()));
+    // P1's priority: the stack's size and whether Alhammarret is on the battlefield.
+    let prio = watch(
+        &mut t,
+        P1,
+        |d| matches!(d, Decision::Priority { .. }),
+        |g| {
+            (
+                g.stack.len(),
+                g.permanents()
+                    .any(|o| o.chars.name == "Alhammarret, High Arbiter"),
+            )
+        },
+    );
+    lots(&mut t, P0);
+    let card = t.hand(P0, "Alhammarret, High Arbiter");
+    t.cast(P0, card).go();
+    pass_until_step_ends(&mut t);
+    assert_eq!(t.named_on_battlefield("Alhammarret, High Arbiter").len(), 1);
+    let prio = prio.lock().unwrap().clone();
+    // P1 could respond to the spell; then, with Alhammarret on the battlefield, P1 tried
+    // Shock (refused) and was asked again.
+    assert!(prio.contains(&(1, false)), "{prio:?}");
+    assert!(
+        prio.iter().filter(|&&(n, on)| n == 0 && on).count() >= 2,
+        "{prio:?}"
+    );
+    assert_eq!(t.zone(shock), Zone::Hand(P1));
+    assert_eq!(t.life(P0), 20);
+    // The prohibition applies to the named card only.
     let mut t = TestGame::new(2);
     let bears = t.hand(P1, "Grizzly Bears");
-    let from = t.asked().len();
     alhammarret(&mut t, "Grizzly Bears");
-    // No priority was given while it entered; the prohibition applies at once.
-    assert!(!asked_since(&t, from)
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::Priority { .. })));
     lots(&mut t, P1);
     t.g.turn.priority = Some(P1);
     t.g.turn.active = P1;
@@ -249,22 +341,22 @@ fn alhammarret_doesnt_stop_face_down_spells_or_manifest() {
     t.library_top(P1, "Exalted Angel");
     cast_at(&mut t, P1, "Soul Summons", &[]);
     t.resolve_all();
-    let face_down = t
-        .g
-        .permanents()
-        .filter(|o| o.controller == P1 && o.face_down)
-        .count();
+    let face_down =
+        t.g.permanents()
+            .filter(|o| o.controller == P1 && o.face_down)
+            .count();
     assert_eq!(face_down, 2);
 }
 
 #[test]
 fn thought_hemorrhage_damage_is_one_instance() {
-    cr!("608.2h");
+    cr!("609.7", "609.7a", "615.1");
     ruling!(
         "Thought Hemorrhage",
         "the damage dealt by Thought Hemorrhage is all considered to be the same instance of damage"
     );
     supported("Thought Hemorrhage");
+    supported("Circle of Protection: Red");
     let mut t = TestGame::new(2);
     t.hand(P1, "Grizzly Bears");
     t.hand(P1, "Grizzly Bears");
@@ -281,11 +373,27 @@ fn thought_hemorrhage_damage_is_one_instance() {
         })
         .collect();
     assert_eq!(hits, vec![6]);
+    // The ruling's example: one effect preventing "the next time a source would deal
+    // damage" prevents all of it. P1 answers with Circle of Protection: Red, choosing the
+    // spell on the stack as the source; with 3 damage dealt twice, it would stop only 3.
+    let mut t = TestGame::new(2);
+    t.hand(P1, "Grizzly Bears");
+    t.hand(P1, "Grizzly Bears");
+    let circle = t.battlefield(P1, "Circle of Protection: Red");
+    name(&mut t, P0, "Grizzly Bears");
+    let spell = cast_at(&mut t, P0, "Thought Hemorrhage", &[pl(P1)]);
+    lots(&mut t, P1);
+    t.answer_choose(P1, &[obj(spell)]);
+    t.activate(P1, circle, 0, &[])
+        .expect("Circle of Protection: Red");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
+    assert!(!t.in_hand(P1, "Grizzly Bears"));
 }
 
 #[test]
 fn naming_happens_as_the_spell_resolves() {
-    cr!("608.2c", "201.3");
+    cr!("608.2c", "608.2d", "117.3d");
     ruling!(
         "Thought Hemorrhage",
         "The card is named as Thought Hemorrhage resolves. Spells and abilities can’t be cast or activated between the time a card is named and the time that Thought Hemorrhage has the rest of its effect."
@@ -298,28 +406,55 @@ fn naming_happens_as_the_spell_resolves() {
     for spell in ["Thought Hemorrhage", "Brain Pry"] {
         let mut t = TestGame::new(2);
         t.hand(P1, "Grizzly Bears");
-        // The stack as P0 names the card, and whether anyone got priority after.
-        let seen = watch(
+        // When P0 names the card, and P1's priority: when, whether the spell is still on
+        // the stack and whether the Bears are still in P1's hand.
+        let named = watch(
             &mut t,
             P0,
             |d| matches!(d, Decision::NameCard { .. }),
-            |g| g.stack.len(),
+            |_| next_seq(),
+        );
+        let prio = watch(
+            &mut t,
+            P1,
+            |d| matches!(d, Decision::Priority { .. }),
+            |g| {
+                (
+                    next_seq(),
+                    !g.stack.is_empty(),
+                    g.player(P1)
+                        .hand
+                        .iter()
+                        .any(|c| g.obj(*c).chars.name == "Grizzly Bears"),
+                )
+            },
         );
         name(&mut t, P0, "Grizzly Bears");
         cast_at(&mut t, P0, spell, &[pl(P1)]);
-        assert!(seen.lock().unwrap().is_empty(), "{spell}: named on casting");
-        let from = t.asked().len();
-        t.resolve();
-        assert_eq!(seen.lock().unwrap().len(), 1, "{spell}");
-        let asked = asked_since(&t, from);
-        let named = asked
-            .iter()
-            .position(|(_, d)| matches!(d, Decision::NameCard { .. }))
-            .unwrap();
-        assert!(!asked[named..]
-            .iter()
-            .any(|(_, d)| matches!(d, Decision::Priority { .. })));
-        // The card left P1's hand in the same resolution.
+        assert!(
+            named.lock().unwrap().is_empty(),
+            "{spell}: named on casting"
+        );
+        // Through the real priority loop: both pass, it resolves, both pass again.
+        pass_until_step_ends(&mut t);
+        let named = named.lock().unwrap().clone();
+        assert_eq!(named.len(), 1, "{spell}");
+        let prio = prio.lock().unwrap().clone();
+        // P1 could respond before it resolved; the next time P1 had priority, after the
+        // card was named, the spell had finished and the Bears were gone.
+        assert!(
+            prio.iter()
+                .any(|&(s, on_stack, _)| s < named[0] && on_stack),
+            "{spell}: {prio:?}"
+        );
+        let after: Vec<_> = prio.iter().filter(|(s, ..)| *s > named[0]).collect();
+        assert!(!after.is_empty(), "{spell}: {prio:?}");
+        assert!(
+            after
+                .iter()
+                .all(|&&(_, on_stack, bears)| !on_stack && !bears),
+            "{spell}: {prio:?}"
+        );
         assert!(!t.in_hand(P1, "Grizzly Bears"), "{spell}");
     }
 }
@@ -384,12 +519,11 @@ fn quash_exiles_the_countered_spell_and_the_other_copies() {
     assert_eq!(in_zones(&t, Zone::Graveyard), 0);
     assert_eq!(in_zones(&t, Zone::Hand), 0);
     assert_eq!(in_zones(&t, Zone::Library), 0);
-    let exiled = t
-        .g
-        .exile
-        .iter()
-        .filter(|c| t.g.obj(**c).chars.name == "Lightning Bolt")
-        .count();
+    let exiled =
+        t.g.exile
+            .iter()
+            .filter(|c| t.g.obj(**c).chars.name == "Lightning Bolt")
+            .count();
     assert_eq!(exiled, 4);
 }
 
@@ -414,18 +548,17 @@ fn quash_still_searches_when_the_spell_cant_be_countered() {
         .count();
     assert_eq!(gy, 1);
     assert!(!t.in_hand(P1, "Abrupt Decay"));
-    let exiled = t
-        .g
-        .exile
-        .iter()
-        .filter(|c| t.g.obj(**c).chars.name == "Abrupt Decay")
-        .count();
+    let exiled =
+        t.g.exile
+            .iter()
+            .filter(|c| t.g.obj(**c).chars.name == "Abrupt Decay")
+            .count();
     assert_eq!(exiled, 2);
 }
 
 #[test]
 fn quash_exiles_only_the_base_spells_name_when_text_is_spliced() {
-    cr!("702.47c", "201.2");
+    cr!("702.47c", "201.2a");
     ruling!(
         "Quash",
         "If Quash counters a spell that has had text spliced onto it, only the base spell may be exiled."
