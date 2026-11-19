@@ -547,6 +547,7 @@ fn wild_evocation_pays_a_mandatory_additional_cost_if_able() {
         "Wild Evocation",
         "If casting the revealed card involves paying a mandatory additional cost (such as the one Fling has), the player casting that card must pay that cost if able. If they can't, the card remains uncast in their hand. If the mandatory additional cost includes a mana payment, the situation is more complex. If the player has enough unspent mana to pay the cost, that player must do so. If the player can't possibly pay the cost, the card remains uncast in their hand. However, if the player has the means to produce enough mana to pay the cost, then they have a choice: The player may cast the card, produce mana, and pay the cost. Or the player may choose to activate no mana abilities, thus making the card impossible to cast because the additional mana can't be paid."
     );
+    interp!("cast-if-able-mana-abilities-default");
     supported("Fling");
     // Fling with a creature to sacrifice: cast, the creature sacrificed.
     let (mut t, _) = evocation_with("Fling", |t| {
@@ -561,6 +562,49 @@ fn wild_evocation_pays_a_mandatory_additional_cost_if_able() {
     let (mut t, _) = evocation_with("Fling", |_| {});
     t.resolve_all();
     assert!(t.in_hand(P0, "Fling"));
+    // Thunderherd Migration: "As an additional cost to cast this spell, reveal a Dinosaur
+    // card from your hand or pay {1}." With no Dinosaur, the cost includes {1}.
+    supported("Thunderherd Migration");
+    let asked_to_tap = |t: &TestGame, from: usize| {
+        t.asked()[from..].iter().any(|(p, d)| {
+            *p == P0
+                && matches!(d, Decision::YesNo { prompt, .. } if prompt.contains("mana abilities"))
+        })
+    };
+    // Unspent mana in the pool: it must be spent; the spell is cast.
+    let (mut t, _) = evocation_with("Thunderherd Migration", |_| {});
+    add_mana(&mut t, P0, &[mtg_engine::mana::ManaType::C], 1);
+    let from = t.asked().len();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Thunderherd Migration"));
+    assert!(!asked_to_tap(&t, from));
+    // No way to pay: it stays in hand.
+    let (mut t, _) = evocation_with("Thunderherd Migration", |_| {});
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Thunderherd Migration"));
+    // A land that could pay: the player chooses. Declining to activate mana abilities
+    // leaves the card in hand and the land untapped ...
+    let (mut t, _) = evocation_with("Thunderherd Migration", |t| {
+        t.lands(P0, "Wastes", 1);
+    });
+    let from = t.asked().len();
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    assert!(asked_to_tap(&t, from));
+    assert!(t.in_hand(P0, "Thunderherd Migration"));
+    assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 0);
+    // ... and agreeing (also the default answer) casts it, the land tapped for the {1}.
+    for answer in [Some(true), None] {
+        let (mut t, _) = evocation_with("Thunderherd Migration", |t| {
+            t.lands(P0, "Wastes", 1);
+        });
+        if let Some(yes) = answer {
+            t.answer_yes(P0, yes);
+        }
+        t.resolve_all();
+        assert!(t.in_graveyard(P0, "Thunderherd Migration"), "{answer:?}");
+        assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 1);
+    }
 }
 
 // ---------------------------------------------------------------------------------

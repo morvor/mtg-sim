@@ -510,6 +510,44 @@ pub fn may_decline_cast_if_able(g: &mut Game, p: PlayerId, card: ObjectId) -> bo
         )
 }
 
+/// For a spell `p` is casting "if able" while an effect resolves (Wild Evocation): when
+/// its total cost has a mana payment the mana in their pool doesn't cover but their mana
+/// abilities could, whether they activate them (CR 601.2g). The ruling of Wild Evocation:
+/// "if the player has the means to produce enough mana to pay the cost, then they have a
+/// choice: The player may cast the card, produce mana, and pay the cost. Or the player may
+/// choose to activate no mana abilities, thus making the card impossible to cast". Mana
+/// already in the pool must be spent; a cost no mana ability could pay isn't asked about.
+/// By default the player activates them (`cast-if-able-mana-abilities-default`).
+pub fn agrees_to_activate_mana_abilities(
+    g: &mut Game,
+    p: PlayerId,
+    spell: ObjectId,
+    total: &Cost,
+    spend: &crate::mana::SpendContext,
+) -> bool {
+    if g.special.casting_if_able != Some(p) {
+        return true;
+    }
+    let Some(m) = total.mana.as_ref().filter(|m| !m.is_zero()) else {
+        return true;
+    };
+    if crate::mana_abilities::pool_pays(g, p, m, spend)
+        || crate::mana_abilities::plan_payment(g, p, m, spend, Some(spell)).is_none()
+    {
+        return true;
+    }
+    !matches!(
+        g.ask(
+            p,
+            Decision::YesNo {
+                source: Some(spell),
+                prompt: "Activate mana abilities to pay for this spell?".into(),
+            },
+        ),
+        Answer::Bool(false)
+    )
+}
+
 /// Whether `p` may spend mana of any type to cast `spell` (CR 118.14): an effect allowed
 /// it for the card the spell was cast from.
 pub fn may_spend_any_type(g: &Game, p: PlayerId, spell: ObjectId) -> bool {

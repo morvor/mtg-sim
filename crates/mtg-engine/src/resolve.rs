@@ -2577,13 +2577,19 @@ impl Game {
                         }
                         only = Some(f);
                     }
-                    if let Ok(spell) = crate::casting::cast_during_resolution_as(
+                    let prev = std::mem::replace(
+                        &mut self.special.casting_if_able,
+                        (!*optional).then_some(p),
+                    );
+                    let r = crate::casting::cast_during_resolution_as(
                         self,
                         p,
                         o,
                         method,
                         only.as_deref(),
-                    ) {
+                    );
+                    self.special.casting_if_able = prev;
+                    if let Ok(spell) = r {
                         spent += self.mana_value_of(spell) as i64;
                         cast.push(Entity::Object(spell));
                     }

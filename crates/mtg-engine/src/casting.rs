@@ -2292,6 +2292,11 @@ impl Game {
         // and a payment that removed such a permanent anyway (sacrificing it to another
         // permanent's mana ability) can't be made. The spell's own costs may still
         // sacrifice it: those are paid together with the tapping (CR 601.2h).
+        // A spell cast "if able" during a resolution: activating mana abilities for it is
+        // still the player's choice (CR 601.2g).
+        if !crate::cost_rules::agrees_to_activate_mana_abilities(self, p, id, &total, &spend) {
+            return Err(Illegal("declined to activate mana abilities".into()));
+        }
         let prev_otherwise = std::mem::replace(&mut self.paid_otherwise, paid_otherwise.clone());
         let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx);
         self.paid_otherwise = prev_otherwise;
