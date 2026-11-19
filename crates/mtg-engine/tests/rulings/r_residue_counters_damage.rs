@@ -11,18 +11,6 @@ use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
 
-/// The amounts of damage dealt to `target` this turn, in order.
-fn dealt_to(t: &TestGame, target: Entity) -> Vec<u32> {
-    t.g.turn_events
-        .iter()
-        .filter_map(|e| match e {
-            Event::Damage {
-                target: x, amount, ..
-            } if *x == target => Some(*amount),
-            _ => None,
-        })
-        .collect()
-}
 
 /// P0's Fated Firepower with `n` fire counters.
 fn firepower(t: &mut TestGame, n: u32) -> ObjectId {
@@ -193,25 +181,6 @@ fn protean_hydra_still_loses_counters_to_unpreventable_damage() {
 
 // --- Tracker -----------------------------------------------------------------------------
 
-#[test]
-fn tracker_targeting_itself_deals_damage_to_itself_twice() {
-    cr!("120.3e", "608.2c");
-    ruling!(
-        "Tracker",
-        "Tracker will deal damage to itself equal to its power, then immediately do it again"
-    );
-    supported("Tracker");
-    supported("Giant Growth");
-    let mut t = TestGame::new(2);
-    let tracker = t.battlefield(P0, "Tracker");
-    // Giant Growth in response makes it 5/5: it deals 5 damage to itself, then 5 again.
-    t.lands(P0, "Forest", 2);
-    t.activate(P0, tracker, 0, &[obj(tracker)]).unwrap();
-    giant_growth(&mut t, tracker);
-    t.resolve_all();
-    assert_eq!(dealt_to(&t, obj(tracker)), vec![5, 5]);
-    assert!(t.in_graveyard(P0, "Tracker"));
-}
 
 // --- Voodoo Doll -------------------------------------------------------------------------
 

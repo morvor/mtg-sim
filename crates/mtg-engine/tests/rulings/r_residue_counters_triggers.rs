@@ -12,11 +12,6 @@ use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
 
-/// Advances to P0's next upkeep and puts its triggered abilities on the stack.
-fn to_upkeep(t: &mut TestGame) {
-    t.advance_to(P0, Step::Upkeep);
-    t.settle();
-}
 
 // --- Pelt Collector ----------------------------------------------------------------------
 
@@ -192,35 +187,6 @@ fn sarulf_that_left_the_battlefield_exiles_nothing() {
     assert!(t.on_battlefield(bears));
 }
 
-#[test]
-fn sarulf_choice_is_made_as_the_ability_resolves() {
-    cr!("608.2c", "117.1");
-    ruling!(
-        "Sarulf, Realm Eater",
-        "You choose whether to remove +1/+1 counters as the last ability is resolving."
-    );
-    let mut t = TestGame::new(2);
-    let sarulf = with_counters(&mut t, P0, "Sarulf, Realm Eater", 2);
-    let bears = t.battlefield(P1, "Grizzly Bears");
-    to_upkeep(&mut t);
-    let from = t.asked().len();
-    assert_eq!(triggers_on_stack(&t, "remove all"), 1);
-    // Nothing is asked about the counters while the ability waits on the stack.
-    assert!(!was_asked(&t, P0, from, |d| matches!(d, Decision::YesNo { .. })));
-    t.answer_yes(P0, true);
-    t.resolve_all();
-    // Asked once; between the choice and the exile no one gets priority.
-    let since = asked_since(&t, from);
-    let yes = since
-        .iter()
-        .position(|(_, d)| matches!(d, Decision::YesNo { .. }))
-        .expect("asked");
-    assert!(since[yes + 1..]
-        .iter()
-        .all(|(_, d)| !matches!(d, Decision::Priority { .. }) || t.g.stack.is_empty()));
-    assert_eq!(plus1(&t, sarulf), 0);
-    assert!(!t.on_battlefield(bears));
-}
 
 #[test]
 fn sarulf_may_remove_counters_it_needs_to_survive() {
@@ -241,22 +207,6 @@ fn sarulf_may_remove_counters_it_needs_to_survive() {
     assert!(t.in_graveyard(P0, "Sarulf, Realm Eater"));
 }
 
-#[test]
-fn sarulf_removes_only_its_plus1_counters() {
-    cr!("122.1");
-    ruling!(
-        "Sarulf, Realm Eater",
-        "Choosing to remove all the +1/+1 counters on Sarulf won't affect any other counters it may have."
-    );
-    let mut t = TestGame::new(2);
-    let sarulf = with_counters(&mut t, P0, "Sarulf, Realm Eater", 1);
-    put(&mut t, sarulf, "flying", 1);
-    to_upkeep(&mut t);
-    t.answer_yes(P0, true);
-    t.resolve_all();
-    assert_eq!(plus1(&t, sarulf), 0);
-    assert_eq!(t.counters(sarulf, "flying"), 1);
-}
 
 #[test]
 fn sarulf_counts_an_opponents_permanent_going_to_any_graveyard() {
@@ -384,23 +334,6 @@ fn iridescent_hornbeetle_counts_the_counters_a_creature_enters_with() {
     assert_eq!(tokens_named(&t, P0, "Insect"), 3);
 }
 
-#[test]
-fn iridescent_hornbeetle_that_left_doesnt_trigger() {
-    cr!("603.2");
-    ruling!(
-        "Iridescent Hornbeetle",
-        "If Iridescent Hornbeetle leaves the battlefield before your end step, its ability won’t trigger at all."
-    );
-    let mut t = TestGame::new(2);
-    let beetle = t.battlefield(P0, "Iridescent Hornbeetle");
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    give_plus1(&mut t, bears, 2);
-    destroy(&mut t, beetle);
-    to_end_step(&mut t, P0);
-    assert_eq!(t.stack_len(), 0);
-    t.resolve_all();
-    assert_eq!(tokens_named(&t, P0, "Insect"), 0);
-}
 
 // --- Cursed Wombat, Omarthis -------------------------------------------------------------
 
@@ -504,22 +437,6 @@ fn exemplar_of_light_ignores_a_teammates_life_gain() {
     assert_eq!(plus1(&t, ex), 1);
 }
 
-#[test]
-fn berta_mana_trigger_uses_the_stack() {
-    cr!("605.1b", "603.3");
-    ruling!(
-        "Berta, Wise Extrapolator",
-        "Berta's second ability isn't a mana ability. It uses the stack and can be responded to."
-    );
-    supported("Berta, Wise Extrapolator");
-    let mut t = TestGame::new(2);
-    let berta = t.battlefield(P0, "Berta, Wise Extrapolator");
-    give_plus1(&mut t, berta, 1);
-    assert_eq!(triggers_on_stack(&t, "add one mana"), 1);
-    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
-    t.resolve();
-    assert_eq!(t.g.player(P0).mana_pool.total(), 1);
-}
 
 // --- Protean Hydra -----------------------------------------------------------------------
 

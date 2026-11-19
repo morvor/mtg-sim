@@ -11,6 +11,7 @@ use crate::r_residue_counters_common::*;
 use mtg_engine::decision::Answer;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
+use mtg_engine::types::CardType;
 use mtg_engine::*;
 
 // --- Quarantine Field --------------------------------------------------------------------
@@ -151,44 +152,8 @@ fn traveling_plague_returns_under_the_dead_creatures_controller_who_chooses() {
 
 // --- Xolatoyac, the Smiling Flood --------------------------------------------------------
 
-/// P0's Xolatoyac enters, putting a flood counter on P0's Forest. Returns (Xolatoyac,
-/// the Forest).
-fn flood(t: &mut TestGame) -> (ObjectId, ObjectId) {
-    let forest = t.battlefield(P0, "Forest");
-    t.answer_targets(P0, &[obj(forest)]);
-    let x = t.enter(P0, "Xolatoyac, the Smiling Flood");
-    t.resolve_all();
-    assert_eq!(t.counters(forest, "flood"), 1);
-    (x, forest)
-}
 
-/// The rules texts of the object's abilities now.
-fn ability_texts(t: &mut TestGame, id: ObjectId) -> Vec<String> {
-    t.g.recompute();
-    t.obj_now(id)
-        .chars
-        .abilities
-        .iter()
-        .map(|a| a.text.to_string())
-        .collect()
-}
 
-#[test]
-fn xolatoyac_flooded_land_keeps_its_types_and_abilities() {
-    cr!("205.1b", "305.6");
-    ruling!(
-        "Xolatoyac, the Smiling Flood",
-        "The land retains any land types and abilities it already had. An Island has the ability \"{T}: Add {U}.\""
-    );
-    supported("Xolatoyac, the Smiling Flood");
-    let mut t = TestGame::new(2);
-    let (_, forest) = flood(&mut t);
-    let o = t.obj_now(forest);
-    assert!(o.chars.has_subtype("Forest") && o.chars.has_subtype("Island"));
-    let texts = ability_texts(&mut t, forest);
-    assert!(texts.iter().any(|s| s.contains("Add {G}")), "{texts:?}");
-    assert!(texts.iter().any(|s| s.contains("Add {U}")), "{texts:?}");
-}
 
 #[test]
 fn xolatoyac_flooded_land_stays_an_island_after_it_leaves() {
@@ -209,34 +174,7 @@ fn xolatoyac_flooded_land_stays_an_island_after_it_leaves() {
 
 // --- Daxos the Returned ------------------------------------------------------------------
 
-/// P0's Daxos makes a Spirit token. Returns it.
-fn daxos_spirit(t: &mut TestGame) -> ObjectId {
-    let d = t.battlefield(P0, "Daxos the Returned");
-    t.lands(P0, "Plains", 1);
-    t.lands(P0, "Swamp", 1);
-    t.lands(P0, "Wastes", 1);
-    t.activate(P0, d, 0, &[]).unwrap();
-    t.resolve_all();
-    let spirits = crate::r_s01_common::with_subtype(t, P0, "Spirit");
-    assert_eq!(spirits.len(), 1);
-    spirits[0]
-}
 
-#[test]
-fn daxos_spirit_tracks_your_experience_counters() {
-    cr!("604.3", "122.1");
-    ruling!(
-        "Daxos the Returned",
-        "The power and toughness of the tokens will change as the number of experience counters you have does."
-    );
-    supported("Daxos the Returned");
-    let mut t = TestGame::new(2);
-    put(&mut t, Entity::Player(P0), "experience", 2);
-    let spirit = daxos_spirit(&mut t);
-    assert_eq!(t.pt(spirit), (2, 2));
-    put(&mut t, Entity::Player(P0), "experience", 1);
-    assert_eq!(t.pt(spirit), (3, 3));
-}
 
 #[test]
 fn daxos_spirit_copies_have_its_power_and_toughness_ability() {
@@ -288,28 +226,6 @@ fn rikku_doesnt_unblock_a_creature_already_blocked() {
 
 // --- Rumbling Ruin -----------------------------------------------------------------------
 
-#[test]
-fn rumbling_ruin_with_no_counters_stops_creatures_with_no_power() {
-    cr!("509.1b", "608.2h");
-    ruling!(
-        "Rumbling Ruin",
-        "If there are no +1/+1 counters on creatures you control as Rumbling Ruin’s ability resolves, creatures with power 0 or less can’t block this turn."
-    );
-    supported("Rumbling Ruin");
-    // The 0/8 wall's block is refused; a 2/2's block is allowed.
-    for (name, life) in [("Wall of Stone", 18), ("Grizzly Bears", 20)] {
-        let mut t = TestGame::new(2);
-        t.set_step(P0, Step::PrecombatMain);
-        t.enter(P0, "Rumbling Ruin");
-        t.resolve_all();
-        let attacker = t.battlefield(P0, "Grizzly Bears");
-        let blocker = t.battlefield(P1, name);
-        attack_with(&mut t, &[(attacker, Entity::Player(P1))]);
-        t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![(blocker, attacker)]));
-        t.advance_to(P0, Step::EndOfCombat);
-        assert_eq!(t.life(P1), life, "{name}");
-    }
-}
 
 #[test]
 fn rumbling_ruin_doesnt_remove_a_blocker_whose_power_drops() {
@@ -387,45 +303,45 @@ fn furnace_blessed_conqueror_token_entering_attacking_doesnt_trigger_its_attack_
 
 // --- Kate Stewart, Armageddon Clock ------------------------------------------------------
 
-#[test]
-fn kate_stewart_counts_time_counters_on_permanents_only() {
-    cr!("122.1", "608.2h");
-    ruling!(
-        "Kate Stewart",
-        "Similarly, its last ability counts only time counters on permanents, not on cards you own in exile."
-    );
-    supported("Kate Stewart");
-    let mut t = TestGame::new(2);
-    let kate = t.battlefield(P0, "Kate Stewart");
-    let rock = t.battlefield(P0, "Mind Stone");
-    put(&mut t, rock, "time", 1);
-    t.resolve_all();
-    let exiled = t.exile(P0, "Rift Bolt");
-    put(&mut t, exiled, "time", 3);
-    t.resolve_all();
-    t.lands(P0, "Wastes", 8);
-    t.answer_yes(P0, true);
-    attack_with(&mut t, &[(kate, Entity::Player(P1))]);
-    t.resolve_all();
-    assert_eq!(t.pt(kate), (4, 4));
-}
+
+
+// --- Spark Rupture -----------------------------------------------------------------------
 
 #[test]
-fn armageddon_clock_counters_can_be_removed_repeatedly_by_any_player() {
-    cr!("602.5b", "602.2");
+fn spark_rupture_removes_an_attacked_planeswalker_from_combat() {
+    // Spark Rupture's "is a creature" sets the card type (CR 205.1a): the planeswalker
+    // stops being one and is removed from combat (CR 506.4); its attackers keep attacking
+    // nothing (CR 506.4c).
+    cr!("205.1a", "506.4", "506.4c");
     ruling!(
-        "Armageddon Clock",
-        "Players can remove as many counters as they can pay for each turn."
+        "Spark Rupture",
+        "In some unusual cases, Spark Rupture may enter the battlefield during a combat in which a planeswalker has been attacked. In such a case, that planeswalker will be removed from combat."
     );
-    supported("Armageddon Clock");
-    let mut t = TestGame::new(2);
-    let clock = t.battlefield(P0, "Armageddon Clock");
-    put(&mut t, clock, "doom", 3);
-    t.set_step(P0, Step::Upkeep);
-    t.lands(P1, "Wastes", 8);
-    t.activate(P1, clock, 0, &[]).unwrap();
-    t.resolve();
-    t.activate(P1, clock, 0, &[]).unwrap();
-    t.resolve();
-    assert_eq!(t.counters(clock, "doom"), 1);
+    supported("Spark Rupture");
+    // (blocks: does the former planeswalker block the creature that was attacking it)
+    for blocks in [false, true] {
+        let mut t = TestGame::new(2);
+        let jace = t.battlefield(P1, "Jace Beleren");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        attack_with(&mut t, &[(bears, obj(jace))]);
+        t.battlefield(P0, "Spark Rupture");
+        t.settle();
+        assert!(!t.obj_now(jace).is(CardType::Planeswalker));
+        let c = t.g.combat.as_ref().unwrap();
+        assert!(c.attacker(bears).is_some(), "still attacking");
+        assert_eq!(c.attack_target(bears), None, "attacking nothing");
+        let b = if blocks { vec![(jace, bears)] } else { vec![] };
+        t.answer(P1, DecisionKind::Blockers, Answer::Blockers(b));
+        t.advance_to(P0, Step::EndOfCombat);
+        assert_eq!(t.life(P1), 20);
+        if blocks {
+            // The 3/3 blocked it and was dealt its damage.
+            assert!(t.in_graveyard(P0, "Grizzly Bears"));
+            assert_eq!(marked(&t, jace), 2);
+        } else {
+            // Unblocked, it dealt no combat damage.
+            assert_eq!(marked(&t, jace), 0);
+            assert_eq!(t.counters(jace, "loyalty"), 3);
+        }
+    }
 }

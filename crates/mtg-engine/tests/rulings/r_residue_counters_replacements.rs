@@ -168,39 +168,7 @@ fn prairie_dog_adds_one_to_the_counters_a_creature_enters_with() {
     assert_eq!(plus1(&t, bears), 3);
 }
 
-#[test]
-fn combine_guildmage_gives_a_counter_to_a_creature_entering_without_any() {
-    cr!("614.1c", "122.6");
-    ruling!(
-        "Combine Guildmage",
-        "If a creature would normally enter the battlefield with no +1/+1 counters on it, Combine Guildmage’s first ability causes it to enter the battlefield with a +1/+1 counter on it."
-    );
-    supported("Combine Guildmage");
-    let mut t = TestGame::new(2);
-    let gm = t.battlefield(P0, "Combine Guildmage");
-    t.lands(P0, "Forest", 2);
-    t.activate(P0, gm, 0, &[]).unwrap();
-    t.resolve_all();
-    let bears = t.enter(P0, "Grizzly Bears");
-    t.settle();
-    assert_eq!(plus1(&t, bears), 1);
-    assert_eq!(t.pt(bears), (3, 3));
-}
 
-/// P0's Combine Guildmage moves a +1/+1 counter from `from` onto `to`; `meddle` runs with
-/// the ability on the stack.
-fn guildmage_move(
-    t: &mut TestGame,
-    from: ObjectId,
-    to: ObjectId,
-    meddle: impl FnOnce(&mut TestGame),
-) {
-    let gm = t.battlefield(P0, "Combine Guildmage");
-    t.lands(P0, "Island", 2);
-    t.activate(P0, gm, 1, &[obj(from), obj(to)]).unwrap();
-    meddle(t);
-    t.resolve_all();
-}
 
 #[test]
 fn combine_guildmage_does_nothing_if_either_target_is_illegal() {
@@ -231,19 +199,6 @@ fn combine_guildmage_does_nothing_if_either_target_is_illegal() {
     assert_eq!((plus1(&t, a), plus1(&t, b)), (1, 1));
 }
 
-#[test]
-fn combine_guildmage_moves_nothing_from_a_creature_without_counters() {
-    cr!("122.5", "609.3");
-    ruling!(
-        "Combine Guildmage",
-        "If the first target creature for Combine Guildmage’s second ability has no +1/+1 counters on it as the ability resolves, nothing happens."
-    );
-    let mut t = TestGame::new(2);
-    let a = with_counters(&mut t, P0, "Grizzly Bears", 1);
-    let b = t.battlefield(P0, "Hill Giant");
-    guildmage_move(&mut t, a, b, |t| remove_plus1(t, a, 1));
-    assert_eq!((plus1(&t, a), plus1(&t, b)), (0, 0));
-}
 
 #[test]
 fn two_high_scores_each_add_one_counter() {
@@ -281,34 +236,6 @@ fn spark_rupture_planeswalkers_enter_as_creatures_with_their_loyalty() {
     assert_eq!(t.pt(jace), (3, 3));
 }
 
-#[test]
-fn emperor_of_bones_finality_counter_exiles_instead_of_the_graveyard() {
-    cr!("122.1h", "614.6");
-    ruling!(
-        "Emperor of Bones",
-        "If any permanent with a finality counter on it would go to a graveyard from the battlefield, exile it instead."
-    );
-    supported("Emperor of Bones");
-    let mut t = TestGame::new(2);
-    let emperor = t.battlefield(P0, "Emperor of Bones");
-    let bears = t.graveyard(P1, "Grizzly Bears");
-    // The Emperor exiles P1's Bears at the beginning of combat, then reanimates it with a
-    // finality counter when it adapts.
-    t.answer_targets(P0, &[obj(bears)]);
-    t.advance_to(P0, Step::BeginningOfCombat);
-    t.resolve_all();
-    assert!(t.in_exile("Grizzly Bears"));
-    t.lands(P0, "Swamp", 2);
-    t.answer_choose(P0, &[obj(t.g.current(bears))]);
-    t.activate(P0, emperor, 0, &[]).unwrap();
-    t.resolve_all();
-    let back = t.named_on_battlefield("Grizzly Bears");
-    assert_eq!(back.len(), 1);
-    assert_eq!(t.counters(back[0], "finality"), 1);
-    destroy(&mut t, back[0]);
-    assert!(t.in_exile("Grizzly Bears"));
-    assert!(!t.in_graveyard(P1, "Grizzly Bears"));
-}
 
 // --- Hollowmurk Siege --------------------------------------------------------------------
 

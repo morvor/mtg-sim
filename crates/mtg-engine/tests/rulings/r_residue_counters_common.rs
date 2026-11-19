@@ -4,7 +4,10 @@
 
 #![allow(dead_code)]
 
-use mtg_engine::decision::Decision;
+use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::events::Event;
+use mtg_engine::object::Zone;
+use mtg_engine::turn::Step;
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
@@ -40,4 +43,107 @@ pub fn remove(t: &mut TestGame, id: ObjectId, kind: &str, n: u32) {
 /// Whether a decision of the given kind was asked of `p` since decision `from`.
 pub fn was_asked(t: &TestGame, p: PlayerId, from: usize, kind: fn(&Decision) -> bool) -> bool {
     t.asked()[from..].iter().any(|(q, d)| *q == p && kind(d))
+}
+
+/// The amounts of damage dealt to `target` this turn, in order.
+pub fn dealt_to(t: &TestGame, target: Entity) -> Vec<u32> {
+    t.g.turn_events
+        .iter()
+        .filter_map(|e| match e {
+            Event::Damage {
+                target: x, amount, ..
+            } if *x == target => Some(*amount),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Advances to P0's next upkeep and puts its triggered abilities on the stack.
+pub fn to_upkeep(t: &mut TestGame) {
+    t.advance_to(P0, Step::Upkeep);
+    t.settle();
+}
+
+/// P0 casts Dismantle on `target`; the counters go on P0's Mind Stone (as +1/+1 counters
+/// unless `charge`). Returns the Mind Stone.
+pub fn dismantle(t: &mut TestGame, target: ObjectId, meddle: impl FnOnce(&mut TestGame)) -> ObjectId {
+    let stone = t.battlefield(P0, "Mind Stone");
+    t.set_step(P0, Step::PrecombatMain);
+    cast_new(t, P0, "Dismantle", &[obj(target)]);
+    meddle(t);
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.answer_choose(P0, &[obj(stone)]);
+    t.answer_targets(P0, &[obj(stone)]);
+    t.resolve_all();
+    stone
+}
+
+/// The +1/+1 and charge counters on the object.
+pub fn dismantled(t: &TestGame, id: ObjectId) -> u32 {
+    plus1(t, id) + t.counters(id, "charge")
+}
+
+/// P0's Nissa with `loyalty` loyalty counters activates her 0 ability with `top` on top of
+/// P0's library. Returns (Nissa, the top card, the index of the first decision asked).
+pub fn nissa_zero(t: &mut TestGame, loyalty: u32, top: &str) -> (ObjectId, ObjectId, usize) {
+    t.set_step(P0, Step::PrecombatMain);
+    let n = t.battlefield(P0, "Nissa, Steward of Elements");
+    t.g.objects[n.0 as usize]
+        .counters
+        .insert("loyalty".into(), loyalty);
+    t.g.dirty = true;
+    let card = t.library_top(P0, top);
+    let from = t.asked().len();
+    t.activate(P0, n, 1, &[]).unwrap();
+    (n, card, from)
+}
+
+/// P0's Xolatoyac enters, putting a flood counter on P0's Forest. Returns (Xolatoyac,
+/// the Forest).
+pub fn flood(t: &mut TestGame) -> (ObjectId, ObjectId) {
+    let forest = t.battlefield(P0, "Forest");
+    t.answer_targets(P0, &[obj(forest)]);
+    let x = t.enter(P0, "Xolatoyac, the Smiling Flood");
+    t.resolve_all();
+    assert_eq!(t.counters(forest, "flood"), 1);
+    (x, forest)
+}
+
+/// The rules texts of the object's abilities now.
+pub fn ability_texts(t: &mut TestGame, id: ObjectId) -> Vec<String> {
+    t.g.recompute();
+    t.obj_now(id)
+        .chars
+        .abilities
+        .iter()
+        .map(|a| a.text.to_string())
+        .collect()
+}
+
+/// P0's Daxos makes a Spirit token. Returns it.
+pub fn daxos_spirit(t: &mut TestGame) -> ObjectId {
+    let d = t.battlefield(P0, "Daxos the Returned");
+    t.lands(P0, "Plains", 1);
+    t.lands(P0, "Swamp", 1);
+    t.lands(P0, "Wastes", 1);
+    t.activate(P0, d, 0, &[]).unwrap();
+    t.resolve_all();
+    let spirits = crate::r_s01_common::with_subtype(t, P0, "Spirit");
+    assert_eq!(spirits.len(), 1);
+    spirits[0]
+}
+
+/// P0's Combine Guildmage moves a +1/+1 counter from `from` onto `to`; `meddle` runs with
+/// the ability on the stack.
+pub fn guildmage_move(
+    t: &mut TestGame,
+    from: ObjectId,
+    to: ObjectId,
+    meddle: impl FnOnce(&mut TestGame),
+) {
+    let gm = t.battlefield(P0, "Combine Guildmage");
+    t.lands(P0, "Island", 2);
+    t.activate(P0, gm, 1, &[obj(from), obj(to)]).unwrap();
+    meddle(t);
+    t.resolve_all();
 }
