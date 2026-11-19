@@ -62,7 +62,7 @@ fn enters_rider(x: &str) -> Option<(Effect, bool)> {
     ]
     .iter()
     .find_map(|p| x.strip_prefix(p))?;
-    let (mut parts, tapped) = if r == "tapped" {
+    let (parts, tapped) = if r == "tapped" {
         (vec![Effect::EnterTapped], true)
     } else {
         let r = r.strip_prefix("with ")?;
