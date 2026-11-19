@@ -153,12 +153,12 @@ index: `docs/INTERPRETATIONS.md`.
 - Status: decided
 - Rules: 118.12 "... “[A player] may [do something]. If [that player] [does, doesn’t, or can’t], [effect].” The action [do something] is a cost, paid when the spell or ability resolves. ..." / 608.2c "The controller of the spell or ability follows its instructions in the order written. ..." / Dominus of Fealty ("At the beginning of your upkeep, you may gain control of target permanent until end of turn. If you do, untap it and it gains haste until end of turn.") ruling (2008-08-01): "If you already control the targeted permanent when the ability resolves, you still need to choose whether or not to apply the effect. If you choose to apply it, the permanent untaps and gains haste. If you don’t, it doesn’t."
 - Question: Gaining control of a permanent you already control changes nothing (no control-change event). Does "If you do" then hold?
-- Decision: Yes: after "you may gain control of ...", "If you do" holds when the player chose to apply the effect, whether or not control changed (as the engine already did for "you may draw" and "you may exile your hand").
+- Decision: Yes: after "you may gain control of [target permanent]", "If you do" (and "When you do") holds when the player chose to apply the effect and now controls the permanent, whether or not control changed. A target that is gone (illegal) as it resolves gives nothing to control, so it doesn't hold (Iroh, Tea Master ruling, 2025-10-02: "If either the opponent or the permanent you control becomes an illegal target ..., the ability does nothing and you cannot choose to have the opponent gain control of the permanent.").
 - Alternatives: "If you do" holds only when control actually changed: Dominus of Fealty on your own tapped permanent wouldn't untap it or give it haste, against its ruling.
 - Why: Dominus of Fealty's ruling states it; the same words on the other cards ("you may gain control of target ... defending player controls. If you do, ...": Kukemssa Pirates, Orcish Squatters) are read alike, though there the target is never already yours.
-- Affects: Dominus of Fealty (Kukemssa Pirates and Orcish Squatters in principle).
+- Affects: Dominus of Fealty, Iroh, Tea Master ("When you do"; Kukemssa Pirates and Orcish Squatters in principle).
 - Code: `crates/mtg-engine/src/resolve.rs` (`Effect::May`).
-- Tests: `tests/rulings/r_p191_interactions.rs` (`dominus_of_fealty_on_your_own_permanent_still_asks`).
+- Tests: `tests/rulings/r_p191_interactions.rs` (`dominus_of_fealty_on_your_own_permanent_still_asks`); `tests/rulings/r_p128_reflexive.rs` (`iroh_gifts_return_when_the_opponent_leaves_and_need_legal_targets`).
 
 ## player-chosen-before-targets: Lodestone Bauble's "a player" is chosen as its targets are chosen, before them, among the players in range
 - Kind: interpretation

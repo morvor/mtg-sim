@@ -164,9 +164,23 @@ impl Game {
                     }
                     // "You may gain control of target permanent ... If you do, untap it":
                     // choosing to apply the effect to a permanent you already control still
-                    // counts (Dominus of Fealty ruling).
-                    if matches!(**effect, Effect::GainControl { .. }) {
-                        ctx.prev_happened = true;
+                    // counts (Dominus of Fealty ruling); one that's gone (an illegal target)
+                    // doesn't (Iroh, Tea Master ruling).
+                    if let Effect::GainControl {
+                        what: what @ Sel::Target(_),
+                        who,
+                        ..
+                    } = &**effect
+                    {
+                        let gainer = self.eval_player(who, ctx);
+                        let objs = self.resolve_objects(what, ctx);
+                        if !objs.is_empty()
+                            && objs.iter().all(|o| {
+                                self.is_live(*o) && Some(self.obj(*o).controller) == gainer
+                            })
+                        {
+                            ctx.prev_happened = true;
+                        }
                     }
                 }
                 // Set after the offered instruction ran, so a "you may" inside it doesn't

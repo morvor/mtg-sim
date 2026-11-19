@@ -784,6 +784,7 @@ fn the_fire_nation_drill_strips_indestructible_from_damaged_creatures_but_not_ne
 #[test]
 fn iroh_gifts_return_when_the_opponent_leaves_and_need_legal_targets() {
     cr!("800.4a", "608.2b", "603.12");
+    interp!("may-gain-control-if-you-do-follows-the-choice");
     ruling!(
         "Iroh, Tea Master",
         "If an opponent leaves the game, all permanents you gave to them will return to your control."
