@@ -626,6 +626,22 @@ impl Game {
                         n.attached_to = Some(to);
                     }
                 }
+                // Copy effects a later "enter as a copy" replacement overrode
+                // (`EtbInfo::earlier_copies`), applied before the one it enters with.
+                for (_, values, exceptions, id) in m.etb.earlier_copies.iter().cloned() {
+                    let ts = self.obj(new_id).timestamp;
+                    self.effects.push(ContinuousEffect {
+                        id,
+                        source: Some(new_id),
+                        controller,
+                        timestamp: ts,
+                        duration: Duration::Permanent,
+                        affected: Affected::Objects(vec![new_id]),
+                        mods: vec![],
+                        layer1: Some(Layer1::Copy { values, exceptions }),
+                        created_turn: self.turn.number,
+                    });
+                }
                 let mut copy_effect = None;
                 if let Some(src) = m.etb.copy_of {
                     let values = Box::new(m.etb.copied_values(self, src).clone());
@@ -669,6 +685,18 @@ impl Game {
                         layer1: Some(Layer1::Copiable(m.etb.copiable_mods.clone())),
                         created_turn: self.turn.number,
                     });
+                }
+                // Effects its "as this enters" abilities created as it entered apply to
+                // the permanent, from whatever zone it entered (CR 614.1c, 614.12), after
+                // the copy effect it enters with (a token copy of Cursed Mirror becomes a
+                // copy of the creature it chose, CR 613.2a, 613.7b).
+                for mut e in m.etb.as_enters_effects.iter().cloned() {
+                    e.affected = Affected::Objects(vec![new_id]);
+                    if e.source == Some(old_id) {
+                        e.source = Some(new_id);
+                    }
+                    e.timestamp = self.new_timestamp();
+                    self.effects.push(e);
                 }
                 self.battlefield.push(new_id);
                 if from == Zone::Stack {

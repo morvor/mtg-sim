@@ -49,3 +49,33 @@ changes, and log any new copying error in docs/RULING_DISCREPANCIES.md.
 DONE per item when every ruling of its batches is CITED, EXEMPT with a reason or UNCOVERED with a
 named reason in docs/rulings-uncovered.tsv. Report counts: cited, exempt, uncovered, bugs fixed
 (each with its rule), interactions against restatements; and the row in docs/agents/yield.tsv.
+
+## Open questions the items found (for the coordinator)
+
+- **"If it's the first time ... this turn" checked again on resolution** (found by
+  `rulings-residue-counters`, Nov 19; no reading chosen yet, and no test pins either). CR 603.4
+  checks an intervening "if" again as the ability resolves; neither the CR nor any ruling says
+  whether "it's the first time [something happened to] that permanent this turn" can stop being
+  true once the event that triggered the ability was the first one. The engine reads the same
+  wording two ways:
+  - Stalwart Successor (`oracle/patterns/history_conditions_4.rs`, `first_time_counters`) makes
+    it part of the trigger (`TriggerCond::FirstTimeEachTurn`), checked only as the ability
+    triggers: the triggering event stays "the first time" as it resolves. Vengevine's "if it's
+    the second creature spell you cast this turn" behaves the same way (a third creature spell
+    cast in response doesn't stop it from returning).
+  - Botanical Brawler (`oracle/patterns/history_conditions.rs`, `nth_time_counters`) and Captain
+    America, Living Legend (`history_conditions_4.rs`, `first_time_referent`) count this turn's
+    events again as the ability resolves (`== 1`). With Cursed Wombat, a +1/+1 counter put on a
+    Grizzly Bears triggers Brawler and the Bears' Wombat-granted ability; if the Wombat ability
+    resolves first (a second counter on the Bears), Brawler's ability then does nothing, where
+    Stalwart Successor's in the same spot still puts its counter. Captain America's ability
+    doesn't untap a creature that was untapped and tapped again while it waited on the stack.
+
+  Settling it needs a register entry (a reasonable judge could go either way: provisional) and
+  the three patterns made to agree, with tests of the in-between event for each wording.
+- **Several permanents entering at once apply their "as [this] enters" replacement effects in the
+  order the moves are given** (per player, APNAP; `Game::move_objects` in actions.rs), not in an
+  order their controller chooses. Thief of Blood's ruling lets the controller apply any of the
+  entering Thieves' effects first; for identical Thieves every choice gives the same game (their
+  timestamp order is still the player's choice, CR 613.7m), so its test doesn't pin the order,
+  but for different permanents whose "as enters" effects interact the choice would matter.

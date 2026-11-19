@@ -379,6 +379,13 @@ impl Game {
                     if self.is_live(*t) {
                         let before = self.objects[t.0 as usize].chars.clone();
                         let mut c = before.clone();
+                        // A double-faced token copy's copy exceptions (CR 707.8a) are
+                        // applied this way: the characteristic-defining abilities of what
+                        // it copies that define a characteristic they set aren't copied
+                        // (CR 707.9d; a 1/1 Soul Separator copy of Sage of Ancient Lore).
+                        if crate::copy_rules::is_double_faced_token(self, *t) {
+                            crate::copy::drop_overridden_cdas(&mut c, mods);
+                        }
                         for m in mods {
                             apply_mod(&mut c, m, self, &ctx, *t);
                         }
@@ -1588,6 +1595,7 @@ impl Game {
                         ctl,
                         p.clone(),
                         crate::kw::once_each_turn_cast::once_slot(s),
+                        a.link,
                     )),
                     StaticEffect::FlashPermission { who, what } => {
                         st.flash_permissions.push((id, ctl, *who, what.clone()))
@@ -1630,7 +1638,7 @@ impl Game {
                         .map(|_| smol_str::SmolStr::from(format!("effect {}", e.id)));
                     for p in &e.players {
                         st.play_permissions
-                            .push((src, *p, pp.clone(), once.clone()));
+                            .push((src, *p, pp.clone(), once.clone(), 0));
                     }
                 }
                 // "You may cast sorcery spells this turn as though they had flash."
