@@ -256,10 +256,12 @@ fn attack_trigger_candidates(t: &mut TestGame, attacker: ObjectId, target: Entit
 #[test]
 fn hellkite_whelp_defending_player_is_the_planeswalkers_controller() {
     cr!("508.5", "802.2a");
-    // Cited for planeswalkers. Its "or battle" part, "that permanent's controller", isn't
-    // followed: a battle's protector is the defending player (CR 310.9d, 508.5), as
+    // Cited for planeswalkers. Its "or battle" part, "that permanent's controller", gives
+    // way to the CR (the user's policy of Nov 19, register
+    // `pre-battle-rulings-give-way-to-the-cr`; exempt as outdated): a battle's protector is
+    // the defending player (CR 310.9d, 508.5), as
     // `hellkite_whelp_attacking_a_siege_targets_its_protectors_creatures` checks
-    // (docs/RULING_DISCREPANCIES.md, inconsistent rulings).
+    // (docs/RULING_DISCREPANCIES.md, outdated rulings).
     ruling!(
         "Hellkite Whelp",
         "If a creature attacks a planeswalker or battle, that permanent's controller is the defending player."
@@ -291,8 +293,10 @@ fn siege(t: &mut TestGame) -> (ObjectId, ObjectId, ObjectId) {
 #[test]
 fn hellkite_whelp_attacking_a_siege_targets_its_protectors_creatures() {
     cr!("310.9d", "508.5", "802.2a");
+    interp!("pre-battle-rulings-give-way-to-the-cr");
     // Hellkite Whelp's ruling says "that permanent's controller" for a battle too; the
-    // rules make the protector the defending player (docs/RULING_DISCREPANCIES.md).
+    // rules make the protector the defending player, and the CR decides
+    // (docs/RULING_DISCREPANCIES.md, outdated rulings).
     let mut t = TestGame::new(3);
     let whelp = t.battlefield(P0, "Hellkite Whelp");
     let (battle, p1s, p2s) = siege(&mut t);

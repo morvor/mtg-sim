@@ -1889,6 +1889,12 @@ impl Game {
         for c in crate::splice::offer_splices(self, p, id, &opt, &extra) {
             add_cost(&mut extra, &c);
         }
+        // The additional costs announced so far count as X is announced: a reduction for
+        // each time one is paid ("This spell costs {2} less to cast for each card exiled
+        // this way") bounds the X the mana available could pay for (CR 601.2b, 601.2f).
+        if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
+            si.cast.paid = cast_info.paid.clone();
+        }
         let base_cost_has_x = match &opt.alt_cost {
             // CR 107.3a: an X in any part of an alternative cost ("Flashback—{1}{U}, Exile
             // X blue cards from your graveyard").
@@ -1961,7 +1967,22 @@ impl Game {
                     .as_ref()
                     .is_some_and(|c| c.mana.as_ref().is_some_and(|m| m.has_x()));
             let mut max = if mana_x {
-                self.max_mana_available(p) as i64
+                // Cost reductions can let X exceed the mana available ("This spell costs
+                // {2} less to cast for each card exiled this way", CR 601.2f): the greatest
+                // X whose total cost that mana could still cover (looked for up to 64 more
+                // than the mana available; the feasibility check below narrows it).
+                let avail = self.max_mana_available(p) as i64;
+                let total = |n: i64| {
+                    self.total_cost_with(p, id, &chars, opt, n as u32, &extra)
+                        .mana
+                        .as_ref()
+                        .map_or(0, |m| m.mana_value()) as i64
+                };
+                let mut m = avail;
+                while m < avail + 64 && total(m + 1) <= avail {
+                    m += 1;
+                }
+                m
             } else {
                 let mut parts: Vec<&CostPart> = extra.parts.iter().collect();
                 if let Some(c) = &opt.alt_cost {
