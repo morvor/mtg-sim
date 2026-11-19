@@ -993,7 +993,7 @@ Kill rate as above: (caught + timeout) / (caught + missed + timeout).
 
 | File | Mutants | Caught | Missed | Timeout | Unviable | Kill rate | After new tests |
 |---|---|---|---|---|---|---|---|
-| simultaneous.rs (full run) | 279 | 191 | 75 | 0 | 13 | 71.8% (191/266) | 98.5% (262/266): the 4 survivors left are equivalent |
+| simultaneous.rs (full run) | 279 | 191 | 75 | 0 | 13 | 71.8% (191/266) | 98.1% (261/266): the 5 survivors not killed are equivalent (one, `1117:14`, in code the fixes removed) |
 
 ### simultaneous.rs (full run)
 
@@ -1008,15 +1008,17 @@ and found ten engine problems (C1–C10, and the `any_player_may_have_damage` bu
 latent ones (L1–L7). Every test was checked by hand to fail with its mutant applied to the
 source (before the engine fixes) and to pass without it. Then the engine was fixed (commit
 `cad08da`, with the tests) and the 75 survivors were re-run (`RERUN=1 scripts/mutants.sh
-simultaneous`, about 3.5 hours): the 75 names matched 70 distinct mutants of today's file
-(see "Gone with the fixes" for the five that two survivors shared), 64 caught and 6 missed.
-Two of the six were killable after all: the fixes' "search the same library again" check
-had made the T24 search row blind to them (`773:17`, today's `764:17`, and `1099:14`,
-`1086:14` → `true`); a test added for them
+simultaneous`, about 3.5 hours): the 75 names matched 70 distinct mutants of the file at
+`cad08da` (see "Gone with the fixes" for the five that two survivors shared), 64 caught and
+6 missed. Two of the six were killable after all: the fixes' "search the same library
+again" check had made the T24 search row blind to them (`764:17`, the re-run's `773:17`,
+and `1086:14` → `true`, the re-run's `1099:14`); a test added for them
 (`each_player_searches_once_for_each_opponent`, below) and a second re-run
 (`RERUN=1 ONLY=...`, commit `e4adbed`) caught both. Final: **66 caught, 4 missed** (all
-four equivalent), kill rate after the new tests **98.5%** (262/266, counting the seven
-survivors whose code the fixes removed as killed).
+four equivalent). Of the seven survivors whose code the fixes removed, six were engine
+problems the fixes replaced (counted as killed) and `1117:14` was equivalent in the run, so
+the kill rate after the new tests is **98.1%** (261/266: 191 + 64 + 6), with 5 equivalent
+survivors.
 
 Line numbers below are the run's (`e08e631`); the fixes moved the code by 4 to 80 lines.
 
@@ -1067,12 +1069,17 @@ Line numbers below are the run's (`e08e631`); the fixes moved the code by 4 to 8
   being performed in turn). `each_player_chooses_one_before_anyone_creates_a_token`,
   `conditions_are_settled_for_every_player_before_anyone_sacrifices`,
   `each_controllers_you_may_is_asked_before_any_of_them_acts` (`r101_004_each_player_simultaneous.rs`).
-- C4 (`764:17`; Krenko's Buzzcrusher; CR 701.23i, 608.2f): the controllers of the destroyed
-  lands searched, put the land onto the battlefield and shuffled one after another. Searches
-  of object frames are now planned when they have one searcher; a second search of a library
-  the same player already searched in the instruction waits for the first one's cards to
-  move (CR 701.23h), and a planned search reads "their library" as the searcher's, as
-  `Game::exec` does. `krenkos_buzzcrusher_the_controllers_search_then_shuffle_in_turn_order`, `a_player_searching_once_for_each_of_two_objects_finds_two_cards`.
+- C4 (`764:17`; Krenko's Buzzcrusher, From the Ashes, Wave of Vitriol; CR 701.23i, 608.2f):
+  the controllers of the destroyed lands searched, put the land onto the battlefield and
+  shuffled one after another. Searches of object frames are now planned when they have one
+  searcher, and a planned search reads "their library" (and looks for the cards) as the
+  searcher, as `Game::exec` does. A player who searches the same library again in the
+  instruction (two of their lands destroyed) continues the same search, one search for all
+  those cards (CR 701.23h): a card found for one land isn't offered for the next, the cards
+  found move together and the library is shuffled once (the review's version; see
+  "Review"). `krenkos_buzzcrusher_the_controllers_search_then_shuffle_in_turn_order`,
+  `a_player_searching_once_for_each_of_two_objects_finds_two_cards`,
+  `searching_for_each_of_two_objects_then_shuffling_is_one_search_and_one_shuffle`.
 - C8 (Identity Thief, Ugin's Labyrinth, Spell Queller's family; CR 607.2a, 400.7): "return the
   exiled card" read every object linked to the source in any zone, including the creature an
   earlier end step returned (linked as put onto the battlefield with it). It reads only cards
@@ -1117,10 +1124,35 @@ Line numbers below are the run's (`e08e631`); the fixes moved the code by 4 to 8
 - `1725:36` `>`→`>=`: no `Event::Damage` has amount 0 (CR 120.8).
 
 **Gone with the fixes**: `700:41`, `705:33`, `729:62` (the `plannable` arms are now `true`),
-`882:45`, `919:47`, `1117:14` (equivalent in the run: `plannable(GainControl)` was always
-true), `1233:14` (the guards are gone). The re-run script matches each survivor to the most
-similar mutant of today's file; for these seven it found only unrelated ones (diff similarity
+`882:45`, `919:47`, `1117:14` (equivalent in the run, so counted as (a): `plannable(GainControl)`
+was always true), `1233:14` (the guards are gone). The re-run script matches each survivor to
+the most similar mutant of the file at `cad08da`; for these seven it found only unrelated ones (diff similarity
 0.0–0.44: `700:41`, `705:33` → `755:17`, `729:62` → `752:59`, `882:45` → `1015:53`, `919:47` →
 `941:38`, `1117:14` → `966:14`, `1233:14` → `1099:14`), so their re-run lines are those
-mutants', not theirs. The new code (`Plan::Then`, the search check, the `process_steps` "if"
-arm) hasn't had its own mutants run; a later full run of the file would.
+mutants', not theirs. The new code (`Plan::Then`, the continued search, the `process_steps`
+"if" arm, the shuffles of `perform_plans`) hasn't had its own mutants run; a later full run
+of the file would.
+
+**Review.** Every engine fix's regression test was checked again to fail with its fix
+reverted (`any_player_may_have_damage`, C1, C2/C3/C6, C4, C5, C8, C9, C10, L5). Changes:
+
+- The merge with upstream's `per_object_order` (the order of one player's objects chosen
+  as the instruction resolves, CR 608.2f): `choose_next_object` rotates the frames, plans and
+  outcomes of a group, and now each part's `Plan::Then` records with them, so they stay with
+  their part.
+- C4's repeated search: the implementer had a player's second search of the same library
+  wait until the first one's cards had moved; with "then shuffle" after each search that's a
+  new search after the shuffle, so two searches and two shuffles, against CR 701.23h ("The
+  player searches that library only once"). It now continues the same search
+  (`library::search_excluding`: the cards found for the earlier parts can't be found again),
+  all the found cards move together and the library is shuffled once
+  (`searching_for_each_of_two_objects_then_shuffling_is_one_search_and_one_shuffle`, which
+  fails with the implementer's version: two searches, two shuffles).
+- The register entry `choices-for-each-player-made-in-turn` names its exceptions ("choose
+  one", conditions and "[that player]", token copies, searches), quotes 701.23h, and names
+  the compiled cards its search part affects (From the Ashes, Wave of Vitriol, Krenko's
+  Buzzcrusher); the item had "no compiled card".
+- Tests: Old-Growth Dryads with Stranglehold cited 701.23a and 118.12b, but the card has
+  no "if they do" clause: now 101.2 and 608.2d (a player can't choose to search when they
+  can't); the Krenko's Buzzcrusher test quoted its lands as targets (they aren't).
+- `1117:14` (equivalent in the run, code removed) counted as equivalent, not killed: 98.1%.

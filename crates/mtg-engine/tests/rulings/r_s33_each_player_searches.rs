@@ -278,7 +278,7 @@ fn old_growth_dryads_opponents_search_then_shuffle_in_turn_order() {
 
 #[test]
 fn old_growth_dryads_an_opponent_who_cant_search_isnt_offered_it_and_doesnt_shuffle() {
-    cr!("701.23a", "118.12b");
+    cr!("101.2", "608.2d");
     ruling!(
         "Stranglehold",
         "your opponents can’t choose to search, so they won’t shuffle."

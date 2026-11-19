@@ -77,11 +77,11 @@ fn boldwyr_heavyweights_a_clone_one_opponent_finds_cant_copy_what_another_finds(
 fn krenkos_buzzcrusher_the_controllers_search_then_shuffle_in_turn_order() {
     cr!("701.23i", "608.2f", "101.4");
     assert!(card("Krenko's Buzzcrusher").is_fully_supported());
-    // "When this creature enters, for each player, destroy up to one target nonbasic land
-    // that player controls. For each land destroyed this way, its controller may search
-    // their library for a basic land card, put it onto the battlefield tapped, then
-    // shuffle." Both players' lands are destroyed and both search: they search, then the
-    // lands enter together and they shuffle, in turn order.
+    // "When this creature enters, for each player, destroy up to one nonbasic land that
+    // player controls. For each land destroyed this way, its controller may search their
+    // library for a basic land card, put it onto the battlefield tapped, then shuffle."
+    // Both players' lands are destroyed and both search: they search, then the lands enter
+    // together and they shuffle, in turn order.
     let mut t = TestGame::new(2);
     let mine = t.battlefield(P0, "Ancient Tomb");
     let theirs = t.battlefield(P1, "Ancient Tomb");

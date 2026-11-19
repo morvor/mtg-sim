@@ -23,7 +23,8 @@
 //!   life gain event (CR 120.3f, 608.2f);
 //! * a search: each searches, then the cards found are moved together (also "for each land
 //!   destroyed this way, its controller may search ...": a player searching the same
-//!   library again does so once the first search's cards have moved, CR 701.23h);
+//!   library again continues the same search, one search for all those cards, then shuffles
+//!   that library once, CR 701.23h);
 //! * life gained or lost: each amount is determined before anyone's life total changes;
 //! * control changes: every player's objects are determined (and chosen, by whoever
 //!   chooses them, each chooser knowing the earlier choices) before any control changes,
@@ -1122,26 +1123,36 @@ fn plan(
                 return Plan::Exec(e.clone());
             }
             let searcher = g.eval_player(who, ctx).unwrap_or(ctx.controller);
-            // Whose library: "their library" is the searcher's, as `Game::exec` reads it.
+            // Whose library: "their library" is the searcher's, as `Game::exec` reads it
+            // (and the cards are looked for as that player's).
             let mut c = ctx.clone();
             c.iter_player = Some(searcher);
             let owner = g.eval_player(whose, &c).unwrap_or(searcher);
             // A player searching the same library again in this instruction ("for each land
-            // destroyed this way, its controller may search ...", two of theirs): one search
-            // for all those cards (CR 701.23h), so the second is made once the cards the
-            // first found have moved.
-            let again = earlier.iter().flatten().any(|pl| {
-                matches!(pl, Plan::Search { searcher: s, owner: o, .. } if *s == searcher && *o == owner)
-            });
-            if again {
-                return Plan::Exec(e.clone());
-            }
+            // destroyed this way, its controller may search ...", two of theirs) continues
+            // the same search: it's one search for all those cards (CR 701.23h), so a card
+            // found for an earlier part can't be found again, and the cards found move
+            // together (and the library is shuffled once, `perform_plans`).
+            let taken: Vec<ObjectId> = earlier
+                .iter()
+                .flatten()
+                .filter_map(|pl| match pl {
+                    Plan::Search {
+                        searcher: s,
+                        owner: o,
+                        found,
+                        ..
+                    } if *s == searcher && *o == owner => Some(found.clone()),
+                    _ => None,
+                })
+                .flatten()
+                .collect();
             let n = g.eval_value(count, ctx).max(0) as u32;
             // CR 118.12b: whether the player searched.
             let searched =
                 !g.player_restricted(searcher, |r| matches!(r, Restriction::CantSearch(_)));
             // CR 701.23i: the players search, then the found cards move.
-            let found = crate::library::search(g, searcher, owner, filter, n, ctx);
+            let found = crate::library::search_excluding(g, searcher, owner, filter, n, &taken, &c);
             Plan::Search {
                 searched,
                 owner,
@@ -1721,14 +1732,22 @@ fn perform_plans(
             out[i].moved = res[r].to_vec();
         }
     }
+    // Then the searchers shuffle, in APNAP order (CR 701.23i), each library they searched
+    // once: a player who searched the same library again in this instruction made one
+    // search (CR 701.23h).
+    let mut shuffled: Vec<(PlayerId, PlayerId)> = Vec::new();
     for plan in plans.iter().flatten() {
         if let Plan::Search {
+            searcher,
             owner,
             shuffle: true,
             ..
         } = plan
         {
-            g.shuffle_library(*owner);
+            if !shuffled.contains(&(*searcher, *owner)) {
+                shuffled.push((*searcher, *owner));
+                g.shuffle_library(*owner);
+            }
         }
     }
     // Tokens: created at the same time (CR 101.4, 614.12).
