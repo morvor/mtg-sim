@@ -1701,22 +1701,27 @@ impl Game {
             } => {
                 let targets = target.as_ref().map(|t| self.resolve_sel(t, ctx));
                 for o in self.resolve_objects(what, ctx) {
-                    let made = match &targets {
+                    let mut made: Vec<ObjectId> = match &targets {
                         Some(ts) => {
                             crate::copy_rules::copy_with_target(self, o, ctx.controller, ts.clone())
                                 .into_iter()
-                                .count()
+                                .collect()
                         }
                         None => crate::copy_rules::copy_for_each_target(
                             self,
                             o,
                             ctx.controller,
                             among.as_ref().map(|f| (f, &*ctx)),
-                        )
-                        .len(),
+                        ),
                     };
-                    if made > 0 {
-                        crate::copy::additional_copies(self, o, ctx.controller);
+                    if !made.is_empty() {
+                        let more = crate::copy::additional_copies(self, o, ctx.controller);
+                        // CR 405.3: copies an effect adds are put onto the stack with
+                        // these at the same time, in the order their controller chooses.
+                        if !more.is_empty() {
+                            made.extend(more);
+                            crate::copy::order_copies(self, ctx.controller, &made);
+                        }
                     }
                 }
             }
