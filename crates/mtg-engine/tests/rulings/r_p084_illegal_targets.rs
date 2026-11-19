@@ -201,10 +201,34 @@ fn activated_graveyard_hate_with_an_illegal_target_does_nothing() {
         "The creature card in a graveyard is exiled as part of the activated ability's effect, not as a cost. If that card has left the graveyard by the time the ability would resolve, the ability doesn't resolve and you don't get a Zombie token."
     );
     for (src, needle, cost, card, counter) in [
-        ("Grave Robbers", "Exile target artifact", "B", "Ornithopter", "-"),
-        ("Conversion Chamber", "Exile target artifact", "2", "Ornithopter", "charge"),
-        ("Necrogenesis", "Exile target creature", "2", "Grizzly Bears", "-"),
-        ("Cemetery Reaper", "Exile target creature", "2B", "Grizzly Bears", "-"),
+        (
+            "Grave Robbers",
+            "Exile target artifact",
+            "B",
+            "Ornithopter",
+            "-",
+        ),
+        (
+            "Conversion Chamber",
+            "Exile target artifact",
+            "2",
+            "Ornithopter",
+            "charge",
+        ),
+        (
+            "Necrogenesis",
+            "Exile target creature",
+            "2",
+            "Grizzly Bears",
+            "-",
+        ),
+        (
+            "Cemetery Reaper",
+            "Exile target creature",
+            "2B",
+            "Grizzly Bears",
+            "-",
+        ),
     ] {
         supported(src);
         for gone in [false, true] {
@@ -303,7 +327,11 @@ fn armored_scrapgorger_trigger_with_an_illegal_target_adds_no_oil() {
             exile_now(&mut t, card);
         }
         t.resolve_all();
-        assert_eq!(t.counters(gorger, "oil"), if gone { 0 } else { 1 }, "gone={gone}");
+        assert_eq!(
+            t.counters(gorger, "oil"),
+            if gone { 0 } else { 1 },
+            "gone={gone}"
+        );
     }
 }
 
@@ -341,7 +369,14 @@ fn verdant_command_does_what_it_can_with_one_illegal_target() {
     let mut t = TestGame::new(2);
     let card = t.graveyard(P1, "Grizzly Bears");
     // Exile target card from a graveyard; target player gains 3 life.
-    cast_modes(&mut t, P0, "Verdant Command", "1G", &[2, 3], &[&[obj(card)], &[pl(P0)]]);
+    cast_modes(
+        &mut t,
+        P0,
+        "Verdant Command",
+        "1G",
+        &[2, 3],
+        &[&[obj(card)], &[pl(P0)]],
+    );
     exile_now(&mut t, card);
     t.resolve_all();
     assert_eq!(t.life(P0), 23);

@@ -17,15 +17,14 @@ fn can_activate_containing(t: &mut TestGame, p: PlayerId, source: ObjectId, need
     t.g.turn.priority = Some(p);
     t.g.recompute();
     let s = t.g.current(source);
-    let uid = t
-        .g
-        .obj(s)
-        .chars
-        .abilities
-        .iter()
-        .find(|a| matches!(a.kind, AbilityKind::Activated(_)) && a.text.contains(needle))
-        .map(|a| a.uid)
-        .expect("no such activated ability");
+    let uid =
+        t.g.obj(s)
+            .chars
+            .abilities
+            .iter()
+            .find(|a| matches!(a.kind, AbilityKind::Activated(_)) && a.text.contains(needle))
+            .map(|a| a.uid)
+            .expect("no such activated ability");
     t.g.legal_actions(p)
         .iter()
         .any(|a| matches!(a, Action::Activate { source: x, ability } if *x == s && *ability == uid))
@@ -131,9 +130,19 @@ fn selesnya_eulogist_needs_a_creature_card_in_a_graveyard() {
     t.graveyard(P1, "Lightning Bolt");
     t.graveyard(P0, "Forest");
     mana(&mut t, P0, "2G");
-    assert!(!can_activate_containing(&mut t, P0, e, "Exile target creature"));
+    assert!(!can_activate_containing(
+        &mut t,
+        P0,
+        e,
+        "Exile target creature"
+    ));
     t.graveyard(P1, "Grizzly Bears");
-    assert!(can_activate_containing(&mut t, P0, e, "Exile target creature"));
+    assert!(can_activate_containing(
+        &mut t,
+        P0,
+        e,
+        "Exile target creature"
+    ));
 }
 
 #[test]
@@ -171,7 +180,14 @@ fn spelltwine_with_one_illegal_target_still_exiles_and_copies_the_other() {
     let mut t = TestGame::new(2);
     let mine = t.graveyard(P0, "Divination");
     let theirs = t.graveyard(P1, "Divination");
-    cast_modes(&mut t, P0, "Spelltwine", "5U", &[], &[&[obj(mine)], &[obj(theirs)]]);
+    cast_modes(
+        &mut t,
+        P0,
+        "Spelltwine",
+        "5U",
+        &[],
+        &[&[obj(mine)], &[obj(theirs)]],
+    );
     let hand = t.hand_size(P0);
     exile_now(&mut t, theirs);
     t.resolve_all();
@@ -320,7 +336,9 @@ fn ruin_rat_can_exile_a_creature_that_died_with_it() {
     let card = t.g.current(bears);
     let c = target_candidates(&t, P0, from);
     let [ref only] = c[..] else { panic!("{c:?}") };
-    let [Entity::Object(target)] = only[..] else { panic!("{c:?}") };
+    let [Entity::Object(target)] = only[..] else {
+        panic!("{c:?}")
+    };
     // The target was the Bears card in the graveyard, now exiled.
     assert_eq!(t.g.current(target), card);
     assert_eq!(t.zone(card), Zone::Exile);
@@ -344,7 +362,9 @@ fn rotfeaster_maggot_must_target_your_own_creature_card_if_it_is_the_only_one() 
     let asked: Vec<(Vec<Entity>, u32)> = t.asked()[from..]
         .iter()
         .filter_map(|(_, d)| match d {
-            Decision::ChooseTargets { candidates, min, .. } => Some((candidates.clone(), *min)),
+            Decision::ChooseTargets {
+                candidates, min, ..
+            } => Some((candidates.clone(), *min)),
             _ => None,
         })
         .collect();

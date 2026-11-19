@@ -26,10 +26,9 @@ pub fn exile_now(t: &mut TestGame, card: ObjectId) {
 pub fn move_to_library(t: &mut TestGame, card: ObjectId) -> ObjectId {
     let c = t.g.current(card);
     let owner = t.g.obj(c).owner;
-    let new = t
-        .g
-        .move_object(c, Zone::Library(owner), events::MoveCause::Effect, None)
-        .expect("moved");
+    let new =
+        t.g.move_object(c, Zone::Library(owner), events::MoveCause::Effect, None)
+            .expect("moved");
     t.g.flush_events();
     new
 }
@@ -70,7 +69,10 @@ pub fn shuffles_since(t: &TestGame, p: PlayerId, from: usize) -> usize {
 
 /// The number of cards in exile owned by `p`.
 pub fn exile_count(t: &TestGame, p: PlayerId) -> usize {
-    t.g.exile.iter().filter(|&&id| t.g.obj(id).owner == p).count()
+    t.g.exile
+        .iter()
+        .filter(|&&id| t.g.obj(id).owner == p)
+        .count()
 }
 
 /// A snapshot of the outcomes a graveyard-hate effect can have: each player's life, P0's
