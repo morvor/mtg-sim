@@ -138,11 +138,14 @@ impl Game {
                 if yes {
                     let it_before = ctx.vars.get(&vars::IT).cloned();
                     // "You may untap target tapped creature an opponent controls. If you
-                    // do, untap this creature" (Soldevi Golem): a player can't choose to
-                    // untap a permanent that can't become untapped (Blossombind ruling),
-                    // so "if you do" follows whether it untapped. Only selections that
-                    // involve no choice are looked at.
-                    let untapping: Option<Vec<ObjectId>> = match &**effect {
+                    // do, untap this creature" (Soldevi Golem): the untapping is a cost
+                    // paid as the ability resolves, and "if you do" checks whether the
+                    // player chose to pay it (CR 118.12). A player can't pay it for a
+                    // permanent that can't become untapped (CR 118.3; Blossombind ruling)
+                    // or isn't tapped (CR 701.26b); one whose untapping a stun counter
+                    // replaces still pays it (CR 122.1d; Stall for Time ruling). Only
+                    // selections that involve no choice are looked at.
+                    let could_untap = match &**effect {
                         Effect::Untap {
                             what:
                                 what @ (Sel::Target(_)
@@ -150,21 +153,23 @@ impl Game {
                                 | Sel::AttachedTo
                                 | Sel::TriggerObject
                                 | Sel::Var(_)),
-                        } => Some(
-                            self.resolve_objects(what, ctx)
-                                .into_iter()
-                                .filter(|o| self.obj(*o).tapped)
-                                .collect(),
-                        ),
+                        } => Some(self.resolve_objects(what, ctx).into_iter().any(|o| {
+                            let x = self.obj(o);
+                            x.tapped
+                                && !x.phased_out
+                                && !crate::prohibitions::object_cant(
+                                    self,
+                                    o,
+                                    ObjectAction::Untapped,
+                                )
+                        })),
                         _ => None,
                     };
                     // Effects that can fail to do what they say (sacrificing, paying,
                     // countering) record whether they did it ("if you do", "when you do").
                     self.exec(effect, ctx);
-                    if let Some(objs) = untapping {
-                        ctx.prev_happened = objs
-                            .iter()
-                            .any(|o| self.is_live(*o) && !self.obj(*o).tapped);
+                    if let Some(could) = could_untap {
+                        ctx.prev_happened = could;
                     }
                     // "You may put that card onto the battlefield. If you don't, put it
                     // into your hand": an Aura that couldn't enter stayed where it was (CR

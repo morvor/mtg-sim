@@ -1537,8 +1537,12 @@ fn block_events(r: &str) -> Option<Parsed> {
         };
         if many {
             // "Whenever equipped creature blocks or becomes blocked by one or more
-            // creatures" (Godsend): once per combat (CR 509.3a, 509.3c), if any of those
-            // creatures matches; not once for each of them.
+            // creatures" (Godsend): once per combat (CR 509.3a, 509.3c), not once for each
+            // of them. Only with no quality: "one or more black creatures" would also
+            // trigger when an effect adds the first black one to a block (CR 509.3e).
+            if end(o) != "one or more creatures" {
+                return None;
+            }
             return Some((
                 TriggerCond::Where {
                     trigger: Box::new(TriggerCond::BlocksOrBecomesBlocked(f)),

@@ -70,7 +70,7 @@ fn blossombind_replacement_that_would_give_counters_gives_none() {
 
 #[test]
 fn blossombind_cant_untap_or_get_counters_for_a_cost_or_a_resolving_choice() {
-    cr!("118.3", "602.2b", "122.1", "101.2", "608.2c");
+    cr!("118.3", "602.2b", "122.1", "118.12", "122.1d");
     ruling!(
         "Blossombind",
         "If the cost of an ability or an additional cost of a spell requires untapping or putting counters on a creature enchanted with Blossombind, that cost can't be paid."
@@ -105,20 +105,28 @@ fn blossombind_cant_untap_or_get_counters_for_a_cost_or_a_resolving_choice() {
     // Soldevi Golem: "At the beginning of your upkeep, you may untap target tapped
     // creature an opponent controls. If you do, untap this creature." Aven Mimeomancer:
     // "At the beginning of your upkeep, you may put a feather counter on target creature.
-    // If you do, that creature has base power and toughness 3/1 and has flying ...". P0
-    // can't choose to untap the enchanted Giant or put a counter on it, so neither "if
-    // you do" happens (without Blossombind, both do).
+    // If you do, that creature has base power and toughness 3/1 and has flying ...". The
+    // untapping and the counter are costs paid as the abilities resolve (CR 118.12): P0
+    // can't choose to pay them for the enchanted Giant (CR 118.3), so neither "if you do"
+    // happens. Without Blossombind both do; with a stun counter instead, the Giant stays
+    // tapped (CR 122.1d) but P0 chose to pay, so the Golem untaps.
     supported("Soldevi Golem");
     supported("Aven Mimeomancer");
-    for bound in [false, true] {
+    for case in ["free", "bound", "stunned"] {
         let mut t = TestGame::new(2);
         let golem = t.battlefield(P0, "Soldevi Golem");
         t.battlefield(P0, "Aven Mimeomancer");
         let giant = t.battlefield(P1, "Hill Giant");
         t.g.obj_mut(golem).tapped = true;
         t.g.obj_mut(giant).tapped = true;
-        if bound {
-            aura_on(&mut t, P0, BLOSSOMBIND, giant);
+        match case {
+            "bound" => {
+                aura_on(&mut t, P0, BLOSSOMBIND, giant);
+            }
+            "stunned" => {
+                t.g.add_counters(obj(giant), counters::STUN, 1, None);
+            }
+            _ => {}
         }
         for _ in 0..2 {
             t.answer_yes(P0, true);
@@ -128,16 +136,22 @@ fn blossombind_cant_untap_or_get_counters_for_a_cost_or_a_resolving_choice() {
         t.advance_to(P0, Step::Upkeep);
         t.settle();
         t.resolve_all();
-        assert_eq!(t.obj_now(giant).tapped, bound, "{}", t.dump_log());
+        let bound = case == "bound";
         assert_eq!(
-            t.obj_now(golem).tapped,
-            bound,
-            "bound {bound}: {}",
+            t.obj_now(giant).tapped,
+            case != "free",
+            "{case}: {}",
             t.dump_log()
         );
-        assert_eq!(t.counters(giant, "feather"), if bound { 0 } else { 1 });
-        assert_eq!(t.pt(giant), if bound { (3, 3) } else { (3, 1) });
-        assert_eq!(has_kw(&t, giant, KeywordKind::Flying), !bound);
+        assert_eq!(t.counters(giant, counters::STUN), 0, "{case}");
+        assert_eq!(t.obj_now(golem).tapped, bound, "{case}: {}", t.dump_log());
+        assert_eq!(
+            t.counters(giant, "feather"),
+            if bound { 0 } else { 1 },
+            "{case}"
+        );
+        assert_eq!(t.pt(giant), if bound { (3, 3) } else { (3, 1) }, "{case}");
+        assert_eq!(has_kw(&t, giant, KeywordKind::Flying), !bound, "{case}");
     }
 }
 
