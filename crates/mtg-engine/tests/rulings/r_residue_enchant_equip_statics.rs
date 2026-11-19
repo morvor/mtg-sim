@@ -69,7 +69,7 @@ fn blossombind_replacement_that_would_give_counters_gives_none() {
 }
 
 #[test]
-fn blossombind_costs_that_untap_or_put_counters_cant_be_paid() {
+fn blossombind_cant_untap_or_get_counters_for_a_cost_or_a_resolving_choice() {
     cr!("118.3", "602.2b", "122.1", "101.2", "608.2c");
     ruling!(
         "Blossombind",
