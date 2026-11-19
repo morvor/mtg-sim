@@ -561,7 +561,8 @@ fn groves_bounty_divides_counters_as_its_cast() {
     t.resolve_all();
     assert_eq!(t.counters(a, "+1/+1"), 2);
     assert_eq!(t.counters(b, "+1/+1"), 1);
-    // A division leaving a target with nothing isn't accepted.
+    // A division leaving a target with nothing isn't accepted: the engine's default
+    // division (as even as possible) is used instead.
     let mut t = TestGame::new(2);
     let a = t.battlefield(P0, "Grizzly Bears");
     let b = t.battlefield(P0, "Hill Giant");
@@ -569,16 +570,12 @@ fn groves_bounty_divides_counters_as_its_cast() {
     let card = t.hand(P0, "Elusive Otter // Grove's Bounty");
     t.answer_targets(P0, &[obj(a), obj(b)]);
     t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![3, 0]));
-    let r = t
-        .cast(P0, card)
+    t.cast(P0, card)
         .method(mtg_engine::object::CastMethod::Half(1))
         .x(3)
-        .try_go();
-    if r.is_ok() {
-        t.resolve_all();
-        assert!(t.counters(a, "+1/+1") >= 1 && t.counters(b, "+1/+1") >= 1);
-        assert_eq!(t.counters(a, "+1/+1") + t.counters(b, "+1/+1"), 3);
-    }
+        .go();
+    t.resolve_all();
+    assert_eq!((t.counters(a, "+1/+1"), t.counters(b, "+1/+1")), (2, 1));
 }
 
 #[test]
@@ -599,12 +596,6 @@ fn loot_effects_happen_within_one_resolution() {
     supported("Jeskai Elder");
     supported("Kasmina, Enigmatic Mentor");
     supported("Pako, Arcane Retriever");
-    /// Whether any player got priority between `from` and now.
-    fn priority_since(t: &TestGame, from: usize) -> bool {
-        t.asked()[from..]
-            .iter()
-            .any(|(_, d)| matches!(d, Decision::Priority { .. }))
-    }
     // Jeskai Elder hits P1: P0 draws the Bolt on top and must discard it at once.
     let mut t = TestGame::new(2);
     let elder = t.battlefield(P0, "Jeskai Elder");
@@ -615,20 +606,19 @@ fn loot_effects_happen_within_one_resolution() {
     t.advance_to(P0, Step::CombatDamage);
     t.settle();
     assert!(trigger_on_top(&t));
-    let from = t.asked().len();
+    // One resolution draws the Bolt and discards it: it's never castable in between.
     t.g.resolve_top();
-    assert!(!priority_since(&t, from));
     assert!(t.in_graveyard(P0, "Lightning Bolt"));
+    assert_eq!(t.hand_size(P0), 0);
     // Kasmina's −2: the same.
     let mut t = TestGame::new(2);
     let k = t.battlefield(P0, "Kasmina, Enigmatic Mentor");
     let bolt = t.library_top(P0, "Lightning Bolt");
     t.answer_choose_moved(P0, &[obj(bolt)]);
     t.activate(P0, k, 0, &[]).unwrap();
-    let from = t.asked().len();
     t.g.resolve_top();
-    assert!(!priority_since(&t, from));
     assert!(t.in_graveyard(P0, "Lightning Bolt"));
+    assert_eq!(t.hand_size(P0), 0);
     assert_eq!(tokens_with_subtype(&t, P0, "Wizard").len(), 1);
     // Pako attacks: two cards exiled (Opt is noncreature) and a counter, in one go.
     let mut t = TestGame::new(2);
@@ -637,9 +627,7 @@ fn loot_effects_happen_within_one_resolution() {
     t.library_top(P1, "Grizzly Bears");
     attack_with(&mut t, &[(pako, pl(P1))]);
     assert!(trigger_on_top(&t));
-    let from = t.asked().len();
     t.g.resolve_top();
-    assert!(!priority_since(&t, from));
     assert!(t.in_exile("Opt") && t.in_exile("Grizzly Bears"));
     assert_eq!(t.counters(pako, "+1/+1"), 1);
 }

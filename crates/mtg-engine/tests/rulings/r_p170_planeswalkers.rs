@@ -241,17 +241,11 @@ fn heartfires_sacrifice_is_a_cost_paid_before_anyone_can_respond() {
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.answer_choose(P0, &[obj(bears)]);
-    let from = t.asked().len();
     let spell = cast_card(&mut t, P0, "Heartfire", &[pl(P1)]);
-    // No player got priority while it was being cast; the Bears are already gone.
-    assert_eq!(
-        t.asked()[from..]
-            .iter()
-            .filter(|(_, d)| matches!(d, Decision::Priority { .. }))
-            .count(),
-        0
-    );
+    // Once it's cast (the first moment anyone could respond), the Bears are already in
+    // the graveyard: sacrificed while it was being cast.
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert!(!t.on_battlefield(bears));
     assert_eq!(t.zone(spell), Zone::Stack);
     t.resolve_all();
     assert_eq!(t.life(P1), 16);

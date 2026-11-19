@@ -242,9 +242,10 @@ fn feathers_copies_copy_kicker_without_paying_it() {
     t.resolve_all();
     assert_eq!(t.pt(f), (8, 7));
     assert_eq!(t.pt(bears), (6, 6));
-    assert!(
-        count_asked(&t, from, |d| matches!(d, Decision::OptionalCost { .. })) <= 1,
-        "no additional cost offered for the copy"
+    assert_eq!(
+        count_asked(&t, from, |d| matches!(d, Decision::OptionalCost { .. })),
+        1,
+        "kicker offered for the original only"
     );
     // Not kicked: the copy isn't either.
     let mut t = TestGame::new(2);
