@@ -928,13 +928,13 @@ inventory::submit! { EffectPattern { name: "restriction grammar: objects [restri
 
 /// Whether a filter describes a class of objects a rule-modifying effect can keep
 /// applying to (CR 611.2c): qualities, and players fixed as the effect begins
-/// ("creatures target player controls", "creatures the active player controls", see
-/// `bind_target_players` in `resolve.rs`).
+/// ("creatures target player controls", "creatures the active player controls",
+/// "creatures defending player controls", see `bind_target_players` in `resolve.rs`).
 pub(crate) fn restriction_class(f: &Filter) -> bool {
     match f {
         Filter::And(v) | Filter::Or(v) => v.iter().all(restriction_class),
         Filter::Not(x) => restriction_class(x),
-        Filter::ControlledBy(PlayerRel::Target(_))
+        Filter::ControlledBy(PlayerRel::Target(_) | PlayerRel::Defending)
         | Filter::ControlledByPlayer(_)
         | Filter::Named(_)
         | Filter::Other => true,

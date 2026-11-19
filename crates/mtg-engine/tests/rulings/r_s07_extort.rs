@@ -45,11 +45,15 @@ fn extort_doesnt_target() {
 
 #[test]
 fn extort_is_paid_at_most_once_per_trigger_as_it_resolves() {
-    cr!("702.101a", "702.101b");
+    cr!("702.101a", "702.101b", "107.4e");
     ruling!(
         "Syndicate Heavy",
-        "You may pay {W}{B} a maximum of one time for each extort triggered ability. You decide whether to pay when the ability resolves."
+        "a maximum of one time for each extort triggered ability. You decide whether to pay when the ability resolves."
     );
+    // The ruling's "You may pay {W}{B}" is extort's {W/B}, one white or one black mana
+    // (the hybrid symbol written as two symbols; docs/RULING_DISCREPANCIES.md): one Plains
+    // pays it.
+    interp!("ruling-contradicting-oracle-gives-way");
     supported("Syndicate Heavy");
     // Syndicate Heavy: extort. One spell, one trigger: with plenty of mana, it's paid once.
     let mut t = TestGame::new(2);

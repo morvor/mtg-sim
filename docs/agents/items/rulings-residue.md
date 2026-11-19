@@ -83,3 +83,15 @@ named reason in docs/rulings-uncovered.tsv. Report counts: cited, exempt, uncove
   but for different permanents whose "as enters" effects interact the choice would matter.
   **Taken up by item ruling-conflicts-12** (see its STATUS): the controller now chooses where
   the order can matter (decided `simultaneous-entries-ordered-by-controller`).
+- **A creature type added to a noncreature, once a later effect makes it a creature** (found by
+  `rulings-residue-type-change`'s review, Nov 19; pre-existing behavior, no test pins it).
+  Shadow Puppeteers' trigger resolving for a creature that Swift Reconfiguration made a
+  noncreature Vehicle makes it only red: its ruling says "Since it's not a creature, it won't
+  gain the Dragon subtype, and it won't have base power and toughness 4/4." Crewed later that
+  turn, it's a 4/4 (CR 208.3a says so for the base power and toughness) and, in the engine, a
+  Dragon too: layer 4 drops the subtypes that don't match the card types only after applying
+  every type-changing effect (`layers.rs`, CR 205.3d), as Terror of Towashi's ruling wants for
+  a type given while it *was* a creature. Applying 205.3d as each effect applies in timestamp
+  order (the crew effect is later) would leave it no Dragon. `tests/rulings/
+  r_residue_type_change_layers.rs` (`shadow_puppeteers_on_a_creature_that_stopped_being_a_creature`)
+  asserts the 4/4 but not the Dragon. Settling it needs a register entry (provisional).

@@ -494,6 +494,9 @@ impl Game {
                     BatchPer::OtherController => {
                         i.other.map(|o| Entity::Player(self.obj(o).controller))
                     }
+                    BatchPer::ObjectController => {
+                        i.object.map(|o| Entity::Player(self.obj(o).controller))
+                    }
                 };
                 let mut groups: Vec<Vec<EventInfo>> = Vec::new();
                 let mut group_extra: Vec<usize> = Vec::new();
@@ -534,6 +537,17 @@ impl Game {
                         break;
                     }
                     let mut info = g[0].clone();
+                    // "One or more creatures an opponent controls ..., that opponent ...": the
+                    // opponent the group is for, whose creatures they were as it triggered
+                    // (`that-opponent-fixed-as-it-triggers`).
+                    let grouped_by = match per {
+                        BatchPer::OtherController => g[0].other,
+                        BatchPer::ObjectController => g[0].object,
+                        _ => None,
+                    };
+                    if let Some(o) = grouped_by {
+                        info.player = Some(self.obj(o).controller);
+                    }
                     // "That much"/"that many": the total amount (damage, life, ...), or the
                     // number of events for events without an amount (objects entering, ...).
                     info.amount = g.iter().map(|i| i.amount).sum();
