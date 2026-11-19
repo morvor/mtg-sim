@@ -119,10 +119,6 @@ fn disharmony_untaps_removes_from_combat_and_steals_until_end_of_turn() {
     );
     ruling!(
         "Disharmony",
-        "The creature untaps (if it was tapped) before you get control of it."
-    );
-    ruling!(
-        "Disharmony",
         "The current wording explicitly removes the creature from combat. It is no longer an attacking or blocking creature."
     );
     supported("Disharmony");
@@ -143,6 +139,30 @@ fn disharmony_untaps_removes_from_combat_and_steals_until_end_of_turn() {
         t.advance_to(P1, Step::Upkeep);
         assert_eq!(controller(&t, a), P0, "{name}: until end of turn");
     }
+}
+
+#[test]
+fn disharmony_untaps_the_creature_before_you_gain_control_of_it() {
+    // Servant of Tymaret's inspired ability ("Whenever this creature becomes untapped,
+    // each opponent loses 1 life. You gain life equal to the life lost this way.")
+    // triggers as Disharmony untaps it, while P0 still controls it: P0 controls the
+    // trigger (CR 603.3a), so P1, who cast Disharmony and now controls the Servant, is the
+    // one who loses the life.
+    cr!("608.2c", "603.3a");
+    ruling!(
+        "Disharmony",
+        "The creature untaps (if it was tapped) before you get control of it."
+    );
+    supported("Servant of Tymaret");
+    let mut t = TestGame::new(2);
+    let servant = t.battlefield(P0, "Servant of Tymaret");
+    attacks(&mut t, &[(servant, Entity::Player(P1))]);
+    assert!(tapped(&t, servant));
+    cast_card(&mut t, P1, "Disharmony", &[obj(servant)]).unwrap();
+    t.resolve_all();
+    assert_eq!(controller(&t, servant), P1);
+    assert!(!tapped(&t, servant));
+    assert_eq!((t.life(P0), t.life(P1)), (21, 19), "{}", t.dump_log());
 }
 
 #[test]
@@ -263,7 +283,7 @@ fn stalking_leonin_cant_target_a_creature_attacking_your_planeswalker() {
 
 #[test]
 fn stalking_leonin_returned_is_a_new_object_with_a_new_choice() {
-    cr!("400.7", "602.5b");
+    cr!("400.7");
     ruling!(
         "Stalking Leonin",
         "If Stalking Leonin leaves the battlefield and returns, it's considered a new object. You may choose a new opponent and you may activate its last ability again."
@@ -318,7 +338,7 @@ fn sandswirl_wanderglyph_restriction_ends_when_it_leaves() {
 
 #[test]
 fn trouble_in_pairs_triggers_in_each_combat() {
-    cr!("508.3a", "505.1");
+    cr!("508.3e", "500.8");
     ruling!(
         "Trouble in Pairs",
         "If an opponent attacks you with two or more creatures more than once in a turn (probably because they've generated extra combat phases), Trouble in Pairs's last ability will trigger each time that happens."
@@ -490,10 +510,13 @@ fn broken_visage_token_is_yours_with_the_attackers_last_power_and_toughness() {
 
 #[test]
 fn singing_tree_sets_base_power_and_later_pumps_still_count() {
+    // The ruling's "current power to zero" is outdated for a creature pumped before the
+    // ability resolves (docs/RULING_DISCREPANCIES.md; exempt in rulings-P079.tsv): see
+    // the next test. A creature not pumped before gets power 0, and a later pump counts.
     cr!("613.4b", "613.4c");
     ruling!(
         "Singing Tree",
-        "Changes creature's current power to zero (as opposed to giving it -X/-0, like before) but does not prevent raising it after the Tree has been used on it."
+        "does not prevent raising it after the Tree has been used on it"
     );
     let mut t = TestGame::new(2);
     let tree = t.battlefield(P1, "Singing Tree");
@@ -510,7 +533,11 @@ fn singing_tree_sets_base_power_and_later_pumps_still_count() {
 #[test]
 fn singing_tree_after_a_pump_sets_only_the_base_power() {
     // The Oracle text sets base power (layer 7b): a +3/+3 from before still applies
-    // (layer 7c), whatever the timestamps (CR 613.4b, 613.4c).
+    // (layer 7c), whatever the timestamps (CR 613.4b, 613.4c). The 2005 ruling's "Changes
+    // creature's current power to zero" was right under the layer rules of its time
+    // (sublayer 6b applied both effects in timestamp order) and is outdated since the
+    // M10 rules (effective 2009-07-11) put effects that set power before those that
+    // modify it.
     cr!("613.4b", "613.4c");
     let mut t = TestGame::new(2);
     let tree = t.battlefield(P1, "Singing Tree");

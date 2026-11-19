@@ -251,7 +251,7 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Status: decided
 - Rules: 905.2 "Some cards have abilities that function during the draft. ..." / 905.2b "... Players may also be instructed to note information. ..."
 - Question: "Reveal [this card] as you draft it. The player to your right chooses a color, you choose another color, then the player to your left chooses a third color." (Paliano, the High City; Regicide): the draft has no agents asking the three players; which colors are noted?
-- Decision: The program running the draft sets them in advance with `Draft::preset_colors(player, [right, own, left])` (three different colors); otherwise the three colors are different colors picked at random with the draft's seeded random generator.
+- Decision: The program running the draft sets them in advance with `Draft::preset_colors(player, [right, own, left])` (three different colors); otherwise, and when a preset repeats a color (an invalid answer: Regicide's ruling "The three chosen colors must be different from one another."), the three colors are different colors picked at random with the draft's seeded random generator.
 - Alternatives: Ask agents during the draft (the draft API has no agents); pick a fixed order (WUB), which would make every such draft the same.
 - Why: The rulings require three different colors; random choices keep simulated drafts varied and reproducible from the seed.
 - Affects: Paliano, the High City and Regicide (and any card with the same draft ability).

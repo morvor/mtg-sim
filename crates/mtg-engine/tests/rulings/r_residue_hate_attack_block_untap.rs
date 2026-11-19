@@ -41,7 +41,7 @@ fn ice_floe_doesnt_remove_the_attacker_from_combat() {
 
 #[test]
 fn ice_floe_follows_the_creature_to_a_new_controller() {
-    cr!("502.3", "611.2c");
+    cr!("502.3");
     ruling!(
         "Ice Floe",
         "Ice Floe doesn’t track the creature’s controller. If the affected creature changes controllers, Ice Floe will prevent it from being untapped during its new controller’s untap step."
@@ -51,7 +51,8 @@ fn ice_floe_follows_the_creature_to_a_new_controller() {
     no_blocks(&mut t, P1);
     t.advance_to(P0, Step::PostcombatMain);
     give_control(&mut t, giant, P1);
-    // P1 keeps Ice Floe tapped (the default while its effect lasts).
+    // P1 chooses not to untap Ice Floe.
+    t.answer_yes(P1, false);
     through_untap_of(&mut t, P1);
     assert!(tapped(&t, floe));
     assert!(tapped(&t, giant), "{}", t.dump_log());
@@ -81,7 +82,7 @@ fn ice_floe_effect_ends_when_it_untaps_or_leaves_without_untapping_the_creature(
 
 #[test]
 fn ice_floe_effect_continues_if_the_creature_later_gains_flying() {
-    cr!("608.2b", "611.2c");
+    cr!("608.2b", "611.2a");
     ruling!(
         "Ice Floe",
         "If the ability resolves, then the creature gains flying later, Ice Floe’s effect will not end. (The ability checks whether the creature has flying only at the time you activate it and the time it resolves.)"
@@ -94,13 +95,30 @@ fn ice_floe_effect_continues_if_the_creature_later_gains_flying() {
         .obj_now(giant)
         .has_keyword(mtg_engine::keywords::KeywordKind::Flying));
     no_blocks(&mut t, P1);
+    // P1 keeps Ice Floe tapped during their untap step.
+    t.answer_yes(P1, false);
     through_untap_of(&mut t, P0);
     assert!(tapped(&t, giant));
+    // Flying given in response, before the ability resolves: its target is illegal
+    // (CR 608.2b), so the Giant untaps as usual.
+    let mut t = TestGame::new(2);
+    let floe = t.battlefield(P1, "Ice Floe");
+    let giant = t.battlefield(P0, "Hill Giant");
+    attacks(&mut t, &[(giant, Entity::Player(P1))]);
+    t.activate(P1, floe, 0, &[obj(giant)]).unwrap();
+    cast_card(&mut t, P0, "Jump", &[obj(giant)]).unwrap();
+    t.resolve_all();
+    assert!(tapped(&t, floe) && tapped(&t, giant));
+    no_blocks(&mut t, P1);
+    t.answer_yes(P1, false);
+    through_untap_of(&mut t, P0);
+    assert!(tapped(&t, floe));
+    assert!(!tapped(&t, giant), "{}", t.dump_log());
 }
 
 #[test]
 fn ice_floe_effect_survives_the_creature_being_untapped_and_tapped_again() {
-    cr!("611.2c", "502.3");
+    cr!("611.2a", "502.3");
     ruling!(
         "Ice Floe",
         "If the affected creature is untapped by some other spell or ability, Ice Floe’s effect will not end. If you keep Ice Floe tapped, and that creature becomes tapped again, Ice Floe will continue to prevent it from being untapped during its controller’s untap step."
@@ -111,6 +129,8 @@ fn ice_floe_effect_survives_the_creature_being_untapped_and_tapped_again() {
     assert!(!tapped(&t, giant));
     tap(&mut t, giant);
     no_blocks(&mut t, P1);
+    // P1 keeps Ice Floe tapped during their untap step.
+    t.answer_yes(P1, false);
     through_untap_of(&mut t, P0);
     assert!(tapped(&t, giant));
 }
@@ -127,7 +147,7 @@ fn fog_after_attacks(t: &mut TestGame, spell: &str, attackers: &[ObjectId]) {
 
 #[test]
 fn spore_cloud_affects_only_creatures_already_attacking_or_blocking() {
-    cr!("611.2c", "502.3");
+    cr!("608.2h", "502.3");
     ruling!(
         "Spore Cloud",
         "Only makes attackers or blockers that have been declared before the spell is cast unable to untap as normal next turn. So, if used before attackers or blockers are declared, it is simply a Fog-like effect. If used after attackers are declared but before blockers are declared, it does the Fog effect and makes attackers not untap as normal. If done after blockers are declared, it has full effect."
@@ -181,7 +201,7 @@ fn spore_cloud_affects_only_creatures_already_attacking_or_blocking() {
 
 #[test]
 fn next_untap_step_effects_are_used_up_by_that_untap_step() {
-    cr!("502.3", "611.2c");
+    cr!("502.3", "611.2a");
     ruling!(
         "Spore Cloud",
         "If a creature affected by Spore Cloud is untapped at the time its controller’s next untap step begins, the “doesn’t untap” effect doesn’t do anything. It won’t apply at some later time when that creature is tapped."
@@ -200,7 +220,7 @@ fn next_untap_step_effects_are_used_up_by_that_untap_step() {
 
 #[test]
 fn next_untap_step_effects_follow_the_creature_to_a_new_controller() {
-    cr!("502.3", "611.2c");
+    cr!("502.3", "611.2a");
     ruling!(
         "Spore Cloud",
         "Spore Cloud doesn’t track the creatures’ controllers. If an affected creature changes controllers before its old controller’s next untap step, Spore Cloud will prevent it from being untapped during its new controller’s next untap step."
@@ -220,7 +240,7 @@ fn next_untap_step_effects_follow_the_creature_to_a_new_controller() {
 
 #[test]
 fn tangle_identifies_the_attackers_as_it_resolves() {
-    cr!("611.2c", "508.4");
+    cr!("608.2h", "508.4");
     ruling!(
         "Tangle",
         "It identifies the creatures that are not going to untap at the time this spell resolves."
@@ -261,7 +281,7 @@ fn ferrets_blocked_by(t: &mut TestGame, blocker: &str) -> (ObjectId, ObjectId) {
 
 #[test]
 fn joven_s_ferrets_must_survive_to_end_of_combat() {
-    cr!("511.1", "603.2");
+    cr!("511.2", "603.2");
     ruling!(
         "Joven's Ferrets",
         "The second ability will trigger only if Joven’s Ferrets is still on the battlefield at end of combat. If it’s been dealt lethal combat damage and destroyed during that combat (or has left the battlefield during that combat by any other means), its ability won’t trigger and the creatures that blocked it won’t be affected."
@@ -275,7 +295,7 @@ fn joven_s_ferrets_must_survive_to_end_of_combat() {
 
 #[test]
 fn joven_s_ferrets_untapped_blocker_isnt_affected_later() {
-    cr!("502.3", "611.2c");
+    cr!("502.3", "611.2a");
     ruling!(
         "Joven's Ferrets",
         "If a creature affected by the second ability is untapped at the time its controller’s next untap step begins, the “doesn’t untap” effect doesn’t do anything. It won’t apply at some later time when that creature is tapped."
@@ -292,7 +312,7 @@ fn joven_s_ferrets_untapped_blocker_isnt_affected_later() {
 
 #[test]
 fn joven_s_ferrets_follows_the_blocker_to_a_new_controller() {
-    cr!("502.3", "611.2c");
+    cr!("502.3");
     ruling!(
         "Joven's Ferrets",
         "The second ability doesn’t track the creatures’ controllers. If an affected creature changes controllers before its old controller’s next untap step, Joven’s Ferrets will prevent it from being untapped during its new controller’s next untap step."

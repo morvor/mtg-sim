@@ -3720,6 +3720,8 @@ fn add_block(g: &mut Game, blocker: ObjectId, attacker: ObjectId, entered: bool)
     let Some(c) = g.combat.as_mut() else { return };
     let was_blocking = c.blockers.iter().any(|b| b.id == blocker);
     let was_blocked = c.is_blocked(attacker);
+    let blocking_before = c.blocking(blocker);
+    let blockers_before = c.blockers_of(attacker);
     match c.blockers.iter_mut().find(|x| x.id == blocker) {
         Some(bi) => bi.blocking.push(attacker),
         None => c.blockers.push(BlockerInfo {
@@ -3738,6 +3740,8 @@ fn add_block(g: &mut Game, blocker: ObjectId, attacker: ObjectId, entered: bool)
         entered,
         was_blocking,
         was_blocked,
+        blocking_before,
+        blockers_before,
     });
     if !was_blocked {
         g.emit(Event::BecameBlocked {
@@ -4315,6 +4319,8 @@ pub fn combat_trigger_matches(
                 entered,
                 was_blocking,
                 was_blocked,
+                blocking_before,
+                blockers_before,
             },
         ) => {
             let (b, a) = (*b, *a);
@@ -4358,31 +4364,28 @@ pub fn combat_trigger_matches(
                         vec![]
                     },
                 ),
-                // CR 509.3e: effects that add blockers can make the count reach N.
+                // CR 509.3e: effects that add blockers can make the count reach N: this
+                // blocker brings the number of matching blockers from below N to N,
+                // counted as of this block (one effect may add several; the abilities
+                // trigger once, as the Nth is added).
                 TriggerCond::BlockedByN {
                     attacker,
                     blocker,
                     n,
                 } => {
-                    let count = g
-                        .combat
-                        .as_ref()
-                        .map(|c| {
-                            c.blockers_of(a)
-                                .into_iter()
-                                .filter(|x| g.matches(*x, blocker, ctx))
-                                .count() as u32
-                        })
-                        .unwrap_or(0);
+                    let before = blockers_before
+                        .iter()
+                        .filter(|x| g.matches(**x, blocker, ctx))
+                        .count() as u32;
                     Some(
                         if g.matches(b, blocker, ctx)
-                            && count >= *n
-                            && count.saturating_sub(1) < *n
+                            && before < *n
+                            && before + 1 >= *n
                             && g.matches(a, attacker, ctx)
                         {
                             vec![EventInfo {
                                 object: Some(a),
-                                amount: count as i32,
+                                amount: (before + 1) as i32,
                                 ..Default::default()
                             }]
                         } else {
@@ -4391,36 +4394,30 @@ pub fn combat_trigger_matches(
                     )
                 }
                 // CR 509.3e: an effect making it block one more matching attacker can
-                // make their number reach N; never when it enters blocking (as with
-                // "blocks", CR 509.3a–b).
+                // make their number reach N, counted as of this block as above; never
+                // when it enters blocking (it never "blocked", CR 509.4).
                 TriggerCond::BlocksN {
                     blocker,
                     attacker,
                     n,
                 } => {
-                    let blocked: Vec<ObjectId> = g
-                        .combat
-                        .as_ref()
-                        .and_then(|c| c.blockers.iter().find(|x| x.id == b))
-                        .map(|bi| {
-                            bi.blocking
-                                .iter()
-                                .copied()
-                                .filter(|x| g.matches(*x, attacker, ctx))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    let count = blocked.len() as u32;
+                    let mut blocked: Vec<ObjectId> = blocking_before
+                        .iter()
+                        .copied()
+                        .filter(|x| g.matches(*x, attacker, ctx))
+                        .collect();
+                    let before = blocked.len() as u32;
+                    blocked.push(a);
                     Some(
                         if !entered
                             && g.matches(a, attacker, ctx)
-                            && count >= *n
-                            && count.saturating_sub(1) < *n
+                            && before < *n
+                            && before + 1 >= *n
                             && g.matches(b, blocker, ctx)
                         {
                             vec![EventInfo {
                                 object: Some(b),
-                                amount: count as i32,
+                                amount: (before + 1) as i32,
                                 objects: blocked,
                                 ..Default::default()
                             }]

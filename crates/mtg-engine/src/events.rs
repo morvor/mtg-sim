@@ -276,6 +276,13 @@ pub enum Event {
         was_blocking: bool,
         /// The attacker was already a blocked creature.
         was_blocked: bool,
+        /// The attackers the blocker was blocking and the creatures blocking the attacker
+        /// just before this block: abilities that count them (CR 509.3e) count as of this
+        /// block, also when one effect adds several.
+        #[serde(default)]
+        blocking_before: Vec<ObjectId>,
+        #[serde(default)]
+        blockers_before: Vec<ObjectId>,
     },
     BecameTarget {
         target: Entity,

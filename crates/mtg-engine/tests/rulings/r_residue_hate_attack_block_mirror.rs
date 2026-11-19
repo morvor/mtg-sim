@@ -114,7 +114,7 @@ fn tokens_copy_only_the_printed_values() {
 
 #[test]
 fn doubled_tokens_all_block_and_are_all_exiled() {
-    cr!("509.4", "614.1a", "603.7c");
+    cr!("509.4", "614.1a", "603.7");
     ruling!(
         "Mirror Match",
         "If Mirror Match creates more than one token for any given attacking creature (due to an effect such as the one Doubling Season creates), each of those tokens will enter the battlefield blocking the creature it’s a copy of. All of those tokens will be exiled by the delayed triggered ability."

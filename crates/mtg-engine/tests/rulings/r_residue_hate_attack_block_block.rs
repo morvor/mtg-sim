@@ -38,7 +38,7 @@ fn fog(t: &mut TestGame) {
 
 #[test]
 fn the_wretched_takes_creatures_put_onto_the_battlefield_blocking_it() {
-    cr!("509.4", "611.2b");
+    cr!("509.4", "611.2c");
     ruling!(
         "The Wretched",
         "The ability grants you control of all creatures that are blocking it as the ability resolves. This will include any creatures that were put onto the battlefield blocking it."
@@ -59,7 +59,7 @@ fn the_wretched_takes_creatures_put_onto_the_battlefield_blocking_it() {
 
 #[test]
 fn the_wretched_must_survive_combat_damage() {
-    cr!("511.1", "603.2");
+    cr!("511.2", "603.2");
     ruling!(
         "The Wretched",
         "The Wretched’s ability triggers only if it’s still on the battlefield when the end of combat step begins (after the combat damage step). For example, if it’s blocked by a 7/7 creature and is destroyed, its ability won’t trigger at all."
@@ -75,7 +75,7 @@ fn the_wretched_must_survive_combat_damage() {
 
 #[test]
 fn the_wretched_regenerated_is_out_of_combat_and_takes_nothing() {
-    cr!("506.4", "701.19c");
+    cr!("506.4", "701.19a");
     ruling!(
         "The Wretched",
         "If The Wretched itself regenerated during combat, then it will have been removed from combat. Since it is no longer in combat, there cannot be any creatures blocking it, which means you won’t be able to gain control of any creatures."
@@ -154,7 +154,7 @@ fn the_wretched_keeps_permanents_that_stop_being_creatures() {
 
 #[test]
 fn kjeldoran_frostbeast_needs_to_survive_and_be_in_combat() {
-    cr!("511.1", "603.2", "506.4");
+    cr!("511.2", "603.2", "506.4");
     ruling!(
         "Kjeldoran Frostbeast",
         "Kjeldoran Frostbeast’s ability triggers only if it’s still on the battlefield when the end of combat step begins (after the combat damage step). For example, if it blocks a 7/7 creature and is destroyed, its ability won’t trigger at all. The 7/7 will remain on the battlefield."
@@ -264,16 +264,19 @@ fn neyith_doesnt_force_a_block_that_cant_be_made_or_costs_something() {
     tap(&mut t, wall);
     neyith_targets(&mut t, bears, &[bears]);
     assert!(legal_blocks(&mut t, &[]));
-    // Blocking costs {1} (War Cadence).
+    // Blocking costs {1} (War Cadence), which P1 could pay with a Forest: the Wall may
+    // block, paying it, but doesn't have to.
     let mut t = TestGame::new(2);
     let cadence = t.battlefield(P0, "War Cadence");
     let bears = t.battlefield(P0, "Grizzly Bears");
-    t.battlefield(P1, "Wall of Wood");
+    let wall = t.battlefield(P1, "Wall of Wood");
+    t.lands(P1, "Forest", 1);
     t.lands(P0, "Mountain", 2);
     t.answer(P0, DecisionKind::X, Answer::Number(1));
     t.activate(P0, cadence, 0, &[]).unwrap();
     t.resolve_all();
     neyith_targets(&mut t, bears, &[bears]);
+    assert!(legal_blocks(&mut t, &[(wall, bears)]));
     assert!(legal_blocks(&mut t, &[]), "{}", t.dump_log());
 }
 
@@ -634,5 +637,27 @@ fn regicide_copy_uses_its_controllers_drafted_colors() {
     t.resolve();
     t.resolve();
     assert!(t.g.stack.contains(&regicide));
+    assert!(t.on_battlefield(lions));
+    // P1 gains control of it (Aethersnatch): P1 drafted no Regicide, so it can't choose
+    // a new target, and the Lions aren't a legal target for P1's Regicide: it doesn't
+    // resolve.
+    supported("Aethersnatch");
+    let (mut t, lions, _, regicide) = setup();
+    cast_card(&mut t, P1, "Aethersnatch", &[obj(regicide)]).unwrap();
+    t.answer_yes(P1, true);
+    t.resolve();
+    assert_eq!(t.obj_now(regicide).controller, P1, "{}", t.dump_log());
+    t.resolve_all();
+    assert!(t.on_battlefield(lions), "{}", t.dump_log());
+    assert!(t.in_graveyard(P0, "Regicide"));
+    // P2 gains control of it and chooses a new target with P2's colors: the blue Looter.
+    let (mut t, lions, looter, regicide) = setup();
+    cast_card(&mut t, P2, "Aethersnatch", &[obj(regicide)]).unwrap();
+    t.answer_yes(P2, true);
+    t.answer_targets(P2, &[obj(looter)]);
+    t.resolve();
+    assert_eq!(t.obj_now(regicide).controller, P2);
+    t.resolve_all();
+    assert!(!t.on_battlefield(looter), "{}", t.dump_log());
     assert!(t.on_battlefield(lions));
 }
