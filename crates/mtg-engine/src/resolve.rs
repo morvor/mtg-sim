@@ -1289,11 +1289,13 @@ impl Game {
                 );
             }
             Effect::CounterSpell { what } => {
-                let mut any = false;
+                let mut countered = Vec::new();
                 let mut moved = Vec::new();
                 for o in self.resolve_objects(what, ctx) {
                     if self.counter_by(o, crate::event_causes::Cause::of(ctx)) {
-                        any = true;
+                        // "Each spell and ability countered this way": all of them, as
+                        // they last existed on the stack, wherever they went.
+                        countered.push(Entity::Object(o));
                         // CR 400.7j: other parts of the effect can find the countered card
                         // in the public zone it moved to ("exile it instead ... You may
                         // cast that card ...").
@@ -1305,7 +1307,8 @@ impl Game {
                         }
                     }
                 }
-                ctx.prev_happened = any;
+                ctx.prev_happened = !countered.is_empty();
+                ctx.set_var(crate::kw::value_results::COUNTERED, countered);
                 if !moved.is_empty() {
                     ctx.set_var(vars::IT, moved);
                 }

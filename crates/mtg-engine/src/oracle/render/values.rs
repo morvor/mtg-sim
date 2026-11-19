@@ -82,6 +82,14 @@ impl Renderer<'_> {
             {
                 "the number of those cards that are still exiled".into()
             }
+            // "for each spell and ability countered this way" (Glen Elendra's Answer):
+            // everything the counter instruction countered.
+            Value::CountSel(s)
+                if matches!(s.as_ref(), Sel::Var(v) if *v == crate::kw::value_results::COUNTERED)
+                    && self.this_way_of(s).is_some() =>
+            {
+                "the number of spells and abilities countered this way".into()
+            }
             Value::CountSel(s) if self.this_way_of(s).is_some() => {
                 let n = self.noun(&Filter::In(Box::new((**s).clone())), Num::Many);
                 format!("the number of {n}")

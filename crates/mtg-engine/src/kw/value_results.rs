@@ -136,6 +136,13 @@ fn matches_of(g: &Game, cond: &TriggerCond, ctx: &Ctx, ev: &Event) -> Vec<EventI
 /// CR 608.2h); `vars::IT` holds the cards they became.
 pub const DESTROYED: crate::ability::Var = crate::ability::vars::USER + 7520;
 
+/// The spells and abilities the latest counter instruction countered, as they last existed
+/// on the stack ("for each spell and ability countered this way", CR 608.2h): also a
+/// spell that a replacement effect put into a library or hand instead of a graveyard
+/// (Darksteel Colossus) and a countered ability, which no other instruction can find;
+/// `vars::IT` holds the countered cards in the public zones they went to (CR 400.7j).
+pub const COUNTERED: crate::ability::Var = crate::ability::vars::USER + 7526;
+
 pub fn events_this_turn(g: &Game, cond: &TriggerCond, tally: Tally, ctx: &Ctx) -> i64 {
     let mut n = 0i64;
     let mut players = BTreeSet::new();

@@ -408,7 +408,7 @@ pub(crate) fn count_ext(
     ] {
         if let Some(rest) = r.strip_prefix(p) {
             return Some((
-                Value::CountSel(Box::new(Sel::Before(Box::new(Sel::Var(vars::IT))))),
+                Value::CountSel(Box::new(Sel::Var(crate::kw::value_results::COUNTERED))),
                 rest.to_string(),
             ));
         }
