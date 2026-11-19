@@ -1384,11 +1384,7 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
         // for each player or object individually (CR 608.2f), one after another, so the
         // events of an earlier one happened before a later one began: a permanent put
         // onto the battlefield by a later one doesn't see an earlier one enter.
-        let individual = match &plans[i] {
-            Some(Plan::Exec(e)) => is_process(e),
-            None => ins.action.as_ref().is_some_and(is_process),
-            Some(_) => false,
-        };
+        let individual = performed_individually(&plans[i], ins);
         if individual && process_done {
             let hold = std::mem::replace(&mut g.batch_hold, 0);
             g.sequential_step();
@@ -1434,7 +1430,12 @@ fn choose_next_object(
     let Some(order) = &frames.order else {
         return;
     };
-    let alone = |p: &Option<Plan>| matches!(p, None | Some(Plan::Exec(_)));
+    // Only a process of several steps, which can't be processed simultaneously, is
+    // performed for one object after another; any other action is processed for all of
+    // them at the same time (608.2f: "In most cases, each such action is processed
+    // simultaneously"), so their order can't matter (Double Trouble's doubling, Canopy
+    // Gargantuan's counters), even where it's carried out one object at a time here.
+    let alone = |p: &Option<Plan>| performed_individually(p, ins);
     let entity = |f: &Frame| match f.item {
         Item::Object(_, e) => e,
         Item::Player(p) => Entity::Player(p),
@@ -1465,6 +1466,17 @@ fn choose_next_object(
     frames.frames[i..=j].rotate_right(1);
     plans[i..=j].rotate_right(1);
     outcomes[i..=j].rotate_right(1);
+}
+
+/// Whether one player's or object's part of `ins`, planned as `plan`, is a process of
+/// several steps, which can't be processed simultaneously with the others' (CR 608.2f; see
+/// [`perform_instruction`]).
+fn performed_individually(plan: &Option<Plan>, ins: &Instruction) -> bool {
+    match plan {
+        Some(Plan::Exec(e)) => is_process(e),
+        None => ins.action.as_ref().is_some_and(is_process),
+        Some(_) => false,
+    }
 }
 
 /// Whether `e` is a process of several steps performed by one player (see

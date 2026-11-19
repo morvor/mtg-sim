@@ -13,12 +13,16 @@
 //!   target they're considering"), ordering their own repetitions of it;
 //! * otherwise the player performing the instruction: the controller of the resolving
 //!   spell or ability (608.2f; Kaboom!, whose caster chooses the next target as it
-//!   resolves), or, inside "each player ...", that player.
+//!   resolves), or, inside "each player ...", that player. Such a player orders each
+//!   player's group in turn, the groups still in APNAP order.
 //!
-//! Nobody is asked when the order can't matter: when the instruction is the same for every
-//! object (it doesn't refer to the object beyond naming who performs it, as Divergent
-//! Transformations' "its controller reveals cards ... until they reveal a creature card"),
-//! or when it's performed for all of them at the same time. The default answer keeps the
+//! Nobody is asked when the order can't matter: when the action isn't a process of several
+//! steps, and so is processed for all the objects at the same time (608.2f: "In most
+//! cases, each such action is processed simultaneously"; doubling each creature's power,
+//! putting counters on each), even where the engine carries it out one object after
+//! another; or when the process is the same for every object (it doesn't refer to the
+//! object beyond naming who performs it, as Divergent Transformations' "its controller
+//! reveals cards ... until they reveal a creature card"). The default answer keeps the
 //! order given (register `default-order-as-listed`).
 
 use crate::ability::{Effect, PlayerRef, Var};
@@ -39,7 +43,8 @@ pub(crate) struct ObjectOrder {
 impl ObjectOrder {
     /// The groups of `objects` (each bound to `var`), as `simultaneous::for_each_object`
     /// sorts them: by the player `deciding` names for the object if the body names one
-    /// ("its controller ..."), otherwise by the object's controller (a player: itself).
+    /// for each object ("its controller ..."), otherwise by the object's controller (a
+    /// player: itself).
     pub fn new(
         g: &Game,
         objects: &[Entity],
@@ -49,6 +54,14 @@ impl ObjectOrder {
     ) -> ObjectOrder {
         let order = g.pregame_order_or_apnap();
         let pos = |p: PlayerId| order.iter().position(|x| *x == p).unwrap_or(usize::MAX);
+        let own = |e: Entity| match e {
+            Entity::Player(p) => pos(p),
+            Entity::Object(o) => g.try_obj(o).map_or(0, |x| pos(x.controller)),
+        };
+        // A player named once for all of the objects ("you ...") doesn't merge the players'
+        // groups: they order each of them.
+        let per_object =
+            deciding.is_some_and(|who| serde_json::to_value(who).is_ok_and(|j| mentions(&j, var)));
         let groups = objects
             .iter()
             .map(|&e| {
@@ -56,18 +69,15 @@ impl ObjectOrder {
                     Some(who) => {
                         let mut c = ctx.clone();
                         c.vars.insert(var, vec![e]);
-                        match g.eval_player(who, &c) {
-                            Some(p) => (pos(p), p),
-                            None => (usize::MAX, ctx.controller),
-                        }
-                    }
-                    None => {
-                        let key = match e {
-                            Entity::Player(p) => pos(p),
-                            Entity::Object(o) => g.try_obj(o).map_or(0, |x| pos(x.controller)),
+                        let p = g.eval_player(who, &c);
+                        let key = if per_object {
+                            p.map_or(usize::MAX, pos)
+                        } else {
+                            own(e)
                         };
-                        (key, ctx.controller)
+                        (key, p.unwrap_or(ctx.controller))
                     }
+                    None => (own(e), ctx.controller),
                 };
                 (e, key, chooser)
             })
@@ -84,22 +94,25 @@ impl ObjectOrder {
     }
 }
 
+/// Whether `j` (an ability AST as JSON) refers to variable `var`, other than in only
+/// storing or noting something.
+fn mentions(j: &serde_json::Value, var: Var) -> bool {
+    match j {
+        serde_json::Value::Object(m) => m.iter().any(|(k, x)| {
+            (k == "Var" && x.as_u64().is_some_and(|n| n == u64::from(var)))
+                || (!matches!(k.as_str(), "Store" | "StoreValue" | "Note") && mentions(x, var))
+        }),
+        serde_json::Value::Array(a) => a.iter().any(|x| mentions(x, var)),
+        _ => false,
+    }
+}
+
 /// Whether performing `e` for an object depends on which object it is (so the order of
 /// one player's objects can matter): `e` refers to the object's variable other than in
 /// naming who performs it or in only recording it ("flip a coin for each creature. Destroy
 /// each creature whose coin comes up tails", Rakdos, the Showstopper: the flips don't
 /// depend on the creature, which is only noted for the later destruction).
 pub(crate) fn depends_on(e: &Effect, var: Var) -> bool {
-    fn mentions(j: &serde_json::Value, var: Var) -> bool {
-        match j {
-            serde_json::Value::Object(m) => m.iter().any(|(k, x)| {
-                (k == "Var" && x.as_u64().is_some_and(|n| n == u64::from(var)))
-                    || (!matches!(k.as_str(), "Store" | "StoreValue" | "Note") && mentions(x, var))
-            }),
-            serde_json::Value::Array(a) => a.iter().any(|x| mentions(x, var)),
-            _ => false,
-        }
-    }
     match e {
         Effect::AsPlayer { effect, .. } => depends_on(effect, var),
         e => serde_json::to_value(e).is_ok_and(|j| mentions(&j, var)),

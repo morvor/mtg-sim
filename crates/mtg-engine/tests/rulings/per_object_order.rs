@@ -9,8 +9,10 @@
 //! within that group"). By default the order given is kept (`default-order-as-listed`).
 
 use crate::r_s01_common::supported;
+use mtg_engine::ability::{AbilityKind, Effect, PlayerRef};
 use mtg_engine::decision::Decision;
 use mtg_engine::object::Zone;
+use mtg_engine::turn::Step;
 use mtg_engine::testing::*;
 use mtg_engine::types::*;
 use mtg_engine::*;
@@ -186,4 +188,99 @@ fn kaboom_the_caster_chooses_the_next_target_as_it_resolves() {
     assert_eq!(t.life(P1), 18);
     assert!(!t.on_battlefield(jace));
     assert!(t.in_graveyard(P1, "Jace Beleren"));
+}
+
+#[test]
+fn an_action_processed_for_all_the_objects_at_once_asks_no_order() {
+    cr!("608.2f");
+    interp!("per-object-actions-in-given-order");
+    supported("Double Trouble");
+    supported("Canopy Gargantuan");
+    // "In most cases, each such action is processed simultaneously": an action that depends
+    // on the object but isn't a process of several steps is processed for all the objects
+    // at once, so nobody chooses the order of one player's objects. Double Trouble: "Double
+    // the power of each creature you control until end of turn."
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.lands(P0, "Mountain", 5);
+    let c = t.hand(P0, "Double Trouble");
+    t.cast(P0, c).go();
+    let before = t.asked().len();
+    t.resolve();
+    assert_eq!(t.pt(bears), (4, 2));
+    assert_eq!(t.pt(giant), (6, 3));
+    let asked = order_questions(&t, before);
+    assert!(asked.is_empty(), "{asked:?}");
+    // Canopy Gargantuan: "At the beginning of your upkeep, put a number of +1/+1 counters on
+    // each other creature you control equal to that creature's toughness."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Canopy Gargantuan");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let before = t.asked().len();
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.counters(bears, counters::PLUS1), 2);
+    assert_eq!(t.counters(giant, counters::PLUS1), 3);
+    let asked = order_questions(&t, before);
+    assert!(asked.is_empty(), "{asked:?}");
+}
+
+#[test]
+fn a_player_named_once_for_every_object_orders_each_players_group_in_apnap_order() {
+    cr!("608.2f");
+    interp!("per-object-actions-in-given-order");
+    // Kaboom!'s process as one the instruction names a single player to perform for every
+    // target ("For each of them, you reveal cards ..."; its compiled body wrapped in "you
+    // ..."): the groups are still the players' (608.2f: "APNAP order is used to make the
+    // primary determination of the order of those actions"), and the caster orders each
+    // of them. P0 targets P2, P1 and P1's Jace: P1's group comes first and its question
+    // offers only Jace and P1; P2 comes last.
+    let mut chars = card("Kaboom!").front().chars.clone();
+    let mut def = (*chars.abilities[0]).clone();
+    let AbilityKind::Spell(spell) = &mut def.kind else {
+        panic!("Kaboom! is a spell");
+    };
+    let Effect::ForEach { effect, .. } = &mut spell.body.effect else {
+        panic!("Kaboom!'s effect is a for-each instruction");
+    };
+    // Its process (compiled inside an "if" that always holds) performed as "you", the
+    // shape of "its controller reveals ..." (Chaotic Transformation) with one player named.
+    let Effect::If { then, .. } = std::mem::replace(effect.as_mut(), Effect::Noop) else {
+        panic!("Kaboom!'s process is compiled inside an \"if\"");
+    };
+    **effect = Effect::AsPlayer {
+        who: PlayerRef::You,
+        effect: then,
+    };
+    chars.abilities = vec![std::sync::Arc::new(def)];
+    chars.name = "Kaboom Performed by You".into();
+    let mut t = TestGame::new(3);
+    let jace = t.battlefield(P1, "Jace Beleren");
+    t.library_top(P0, "Hill Giant");
+    t.library_top(P0, "Grizzly Bears");
+    t.library_top(P0, "Shock");
+    t.lands(P0, "Mountain", 5);
+    let k = t.custom(P0, CardDef::custom(chars), Zone::Hand(P0));
+    t.cast(P0, k)
+        .targets(&[
+            Entity::Player(P2),
+            Entity::Object(jace),
+            Entity::Player(P1),
+        ])
+        .go();
+    let before = t.asked().len();
+    t.resolve();
+    let asked = order_questions(&t, before);
+    assert_eq!(asked.len(), 1, "{asked:?}");
+    assert_eq!(asked[0].0, P0);
+    assert_eq!(
+        candidates(&asked[0].1),
+        vec![Entity::Object(jace), Entity::Player(P1)]
+    );
+    // Jace is dealt Shock's 1, P1 Grizzly Bears' 2, and P2, last, Hill Giant's 4.
+    assert_eq!(t.counters(jace, counters::LOYALTY), 2);
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P2), 16);
 }
