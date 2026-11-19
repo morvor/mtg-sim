@@ -955,6 +955,8 @@ fn window_suffix(w: &Option<HistoryWindow>) -> &'static str {
         Some(HistoryWindow::SinceLastUpkeep(_)) => " since your last upkeep",
         Some(HistoryWindow::PlayersLastCombat(_)) => " during your last combat",
         Some(HistoryWindow::ThisGame) => " this game",
+        // Not read from a suffix: "this turn" of "if it's the first time ... this turn".
+        Some(HistoryWindow::ThisTurnUntilTriggered) => " this turn",
     }
 }
 
@@ -2095,7 +2097,10 @@ fn source_to_referent(c: &str, b: &mut Builder) -> Option<Condition> {
 
 /// "it's the first time +1/+1 counters have been put on that permanent this turn": the
 /// times counters of that kind were put on it this turn (each event one time), this one
-/// included.
+/// included. It's about the event that made the ability trigger, so the times counted are
+/// those up to that event, also as the ability resolves (CR 603.4;
+/// `HistoryWindow::ThisTurnUntilTriggered`, interpretation
+/// `first-time-is-about-the-trigger-event`).
 fn nth_time_counters(c: &str, b: &mut Builder) -> Option<Condition> {
     let r = c.strip_prefix("it's the ")?;
     let (w, r) = split_word(r);
@@ -2114,7 +2119,11 @@ fn nth_time_counters(c: &str, b: &mut Builder) -> Option<Condition> {
     }
     let cond = trigger_of(&format!("one or more {kind} counters are put on ~"))?;
     let cond = Condition::Compare(
-        Value::EventsThisTurn(Box::new(cond), Tally::Events),
+        Value::EventsDuring(
+            HistoryWindow::ThisTurnUntilTriggered,
+            Box::new(cond),
+            Tally::Events,
+        ),
         Cmp::Eq,
         Value::c(n),
     );

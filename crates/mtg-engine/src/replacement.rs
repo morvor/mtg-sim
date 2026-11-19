@@ -615,6 +615,24 @@ impl Game {
             .collect()
     }
 
+    /// The replacement effects that would modify how the object `m` moves onto the
+    /// battlefield enters, determined from it as it would exist there (CR 614.12), as the
+    /// event is proposed: each one's text and what it does (see
+    /// `entry_replacement_order.rs`).
+    pub(crate) fn entry_replacements(&mut self, m: &MoveEv) -> Vec<(String, ReplacementAction)> {
+        if m.to != Zone::Battlefield {
+            return vec![];
+        }
+        let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
+        let ev = ReplEvent::Move(m.clone());
+        self.with_hypothetical_entry(m, |g| {
+            g.replacement_candidates(&ev, &applied, CandScope::EntryOnly)
+        })
+        .into_iter()
+        .map(|c| (c.text, c.def.action))
+        .collect()
+    }
+
     /// Whether the proposed event can't happen: a mandatory replacement effect that applies
     /// to it prevents it ("~ can't have counters put on it", CR 113.6i, 614.1). Used to
     /// tell whether a player "can" do something before offering it.
