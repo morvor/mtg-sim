@@ -1702,6 +1702,18 @@ pub fn other_than_referent(f: Filter) -> Filter {
     other_than_it(f, &referent())
 }
 
+/// "Each legendary creature you control gets +1/+1 for each other legendary creature you
+/// control" (Heroes' Podium): with a group as the subject, "other" in what's counted means
+/// other than each affected object (as with a relational "that creature", Mirror Box),
+/// not other than the source. A count's top-level [`Filter::Other`] becomes "not the
+/// affected object".
+pub fn other_than_affected(v: Value) -> Value {
+    match v {
+        Value::Count(f) => Value::Count(other_than_it(f, &Sel::Var(vars::AFFECTED))),
+        v => v,
+    }
+}
+
 /// "that each have mana value X", "that each have mana value X or less" (after a plural
 /// description: Uncage the Menagerie, Ecological Appreciation): each object's own value.
 fn that_each_have<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {

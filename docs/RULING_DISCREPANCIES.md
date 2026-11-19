@@ -912,6 +912,28 @@ decides whether they become a conflict case.
   `two_target_destruction_with_one_target_left_affects_it`). Whether the Journey into Nyx
   release notes (2014; ormos mirror) have the same spelling wasn't checked. No kind fits a
   misspelled name.
+- **Heroes' Podium** (rulings-P168 review): "The bonus given by Heroes' Podium counts only
+  legendary creatures. It won't count itself unless some other effect causes it to be a
+  creature in addition to being a land (in which case it will also get the bonus)."
+  (2014-02-01) beside the card's type line and Oracle text, a Legendary Artifact (Born of
+  the Gods, its only set): "Each legendary creature you control gets +1/+1 for each other
+  legendary creature you control." Heroes' Podium isn't a land and nothing in its text
+  makes it one. Read literally, the ruling has it count itself only as a creature that's
+  also a land; by its Oracle text it counts itself, and gets the bonus, whenever it's a
+  legendary creature (an artifact creature under March of the Machines, for one). The Born
+  of the Gods Release Notes (ormos mirror,
+  `archive/en/articles/archive/2014/01/born-gods-release-notes-2014-01-17.md`, published
+  2014-01-22, Wayback capture 2022-01-23; read through a web-fetch tool that summarizes the
+  page, which quoted the note and confirmed it ends there) have the note without the
+  clause: "The bonus given by Heroes' Podium counts only legendary creatures. It won't
+  count itself." No ruling in the data has the clause's words ("causes it to be a creature
+  in addition to being a land"), so where it came from (perhaps "artifact" was meant)
+  wasn't found, and it isn't a word changed from the release notes' text (a copying error)
+  but a clause added to it. Left uncited for the coordinator to decide whether it becomes a
+  conflict case; the engine follows the Oracle text (`tests/rulings/r_p168_legends.rs`,
+  `heroes_podium_counts_itself_only_as_a_creature`: under March of the Machines the Podium,
+  a 5/5 artifact creature, counts as another legendary creature for Isamaru and gets +1/+1
+  for Isamaru).
 - Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (copying errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the
