@@ -23,6 +23,15 @@ fn obj(id: ObjectId) -> Entity {
     Entity::Object(id)
 }
 
+/// The permanents attached to `id`.
+fn attachments_of(t: &TestGame, id: ObjectId) -> Vec<ObjectId> {
+    let id = t.g.current(id);
+    t.g.permanents()
+        .filter(|o| o.attached_to == Some(Entity::Object(id)))
+        .map(|o| o.id)
+        .collect()
+}
+
 #[test]
 fn novice_knight_stays_in_combat_after_it_stops_being_equipped() {
     cr!("506.4", "702.3b");
@@ -779,4 +788,365 @@ fn godo_adds_a_combat_phase_right_after_this_one() {
         .filter(|s| s.is_main())
         .count();
     assert_eq!(mains, 1, "only the normal postcombat main phase");
+}
+
+// ---------------------------------------------------------------------------------------
+// Attaching: what an Equipment or Aura can legally be attached to (CR 301.5c, 303.4,
+// 701.3b)
+// ---------------------------------------------------------------------------------------
+
+#[test]
+fn one_last_job_attaches_only_where_legal() {
+    cr!("303.4f", "301.5c", "608.2c", "702.172a");
+    ruling!(
+        "One Last Job",
+        "The Aura or Equipment must be able to be legally attached to the creature you choose. You can’t return an Aura card to the battlefield if there’s nothing to enchant. However, if you control no creatures (and didn’t bring any back with the first two modes), you could return an Equipment card to the battlefield unattached to anything."
+    );
+    // An Aura with nothing to enchant stays in the graveyard.
+    let mut t = TestGame::new(2);
+    let aura = t.graveyard(P0, "Holy Strength");
+    let job = t.hand(P0, "One Last Job");
+    mana(&mut t, P0, ManaType::W, 1);
+    mana(&mut t, P0, ManaType::C, 3);
+    t.cast(P0, job).modes(&[2]).target(obj(aura)).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Holy Strength"));
+    // An Equipment with no creature enters unattached.
+    let mut t = TestGame::new(2);
+    let sword = t.graveyard(P0, "Bonesplitter");
+    let job = t.hand(P0, "One Last Job");
+    mana(&mut t, P0, ManaType::W, 1);
+    mana(&mut t, P0, ManaType::C, 3);
+    t.cast(P0, job).modes(&[2]).target(obj(sword)).go();
+    t.resolve_all();
+    let s = t.named_on_battlefield("Bonesplitter");
+    assert_eq!(s.len(), 1);
+    assert_eq!(t.g.obj(s[0]).attached_to, None);
+    // With a creature it can't be attached to (protection from artifacts) and one it can,
+    // it goes on the one it can.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Tel-Jilad Chosen");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let sword = t.graveyard(P0, "Bonesplitter");
+    let job = t.hand(P0, "One Last Job");
+    mana(&mut t, P0, ManaType::W, 1);
+    mana(&mut t, P0, ManaType::C, 3);
+    t.cast(P0, job).modes(&[2]).target(obj(sword)).go();
+    t.resolve_all();
+    let s = t.named_on_battlefield("Bonesplitter");
+    assert_eq!(t.g.obj(s[0]).attached_to, Some(obj(bears)));
+}
+
+#[test]
+fn one_last_job_chooses_the_creature_as_it_resolves() {
+    cr!("608.2c", "700.2", "301.7b");
+    ruling!(
+        "One Last Job",
+        "The creature that the Aura or Equipment card returned by the third mode will enter attached to isn’t a target of that mode and is chosen as One Last Job resolves. Notably, if you return a Vehicle with the second mode, you won’t have the opportunity to crew it before having to choose a creature for the third mode. In most cases, it won’t be a creature at that time."
+    );
+    // A creature returned by the first mode can be chosen; it has hexproof-like
+    // irrelevance: the choice isn't targeted. (Slippery Bogle has hexproof.)
+    let mut t = TestGame::new(2);
+    let bogle = t.graveyard(P0, "Slippery Bogle");
+    let sword = t.graveyard(P0, "Bonesplitter");
+    let job = t.hand(P0, "One Last Job");
+    mana(&mut t, P0, ManaType::W, 1);
+    mana(&mut t, P0, ManaType::C, 5);
+    t.cast(P0, job)
+        .modes(&[0, 2])
+        .targets(&[obj(bogle)])
+        .targets(&[obj(sword)])
+        .go();
+    t.resolve_all();
+    let s = t.named_on_battlefield("Bonesplitter")[0];
+    let b = t.named_on_battlefield("Slippery Bogle")[0];
+    assert_eq!(t.g.obj(s).attached_to, Some(obj(b)));
+    // A Vehicle returned by the second mode isn't a creature: the Equipment enters
+    // unattached.
+    let mut t = TestGame::new(2);
+    let copter = t.graveyard(P0, "Smuggler's Copter");
+    let sword = t.graveyard(P0, "Bonesplitter");
+    let job = t.hand(P0, "One Last Job");
+    mana(&mut t, P0, ManaType::W, 1);
+    mana(&mut t, P0, ManaType::C, 4);
+    t.cast(P0, job)
+        .modes(&[1, 2])
+        .targets(&[obj(copter)])
+        .targets(&[obj(sword)])
+        .go();
+    t.resolve_all();
+    let s = t.named_on_battlefield("Bonesplitter")[0];
+    assert_eq!(t.named_on_battlefield("Smuggler's Copter").len(), 1);
+    assert_eq!(t.g.obj(s).attached_to, None);
+}
+
+#[test]
+fn effects_cant_attach_equipment_where_it_cant_legally_be_attached() {
+    cr!("701.3b", "702.16c", "301.5c", "704.5n");
+    ruling!(
+        "Battlefield Improvisation",
+        "You can't try to attach an Equipment to the target creature if that Equipment can't legally be attached to it."
+    );
+    ruling!(
+        "Beatrix, Loyal General",
+        "You can't use Beatrix's last ability to try to attach an Equipment to a creature if that Equipment can't legally be attached to that creature."
+    );
+    ruling!(
+        "Barret, Avalanche Leader",
+        "You can't use Barret's last ability to try to attach an Equipment to a Rebel if that Equipment can't legally be attached to that Rebel."
+    );
+    ruling!(
+        "Yuffie, Materia Hunter",
+        "You can't use Yuffie's last ability to try to attach an Equipment to Yuffie if that Equipment can't legally be attached to Yuffie."
+    );
+    use crate::r_s20_common::to_beginning_of_combat;
+    // Battlefield Improvisation on an attacking Tel-Jilad Chosen (protection from
+    // artifacts): it gets +2/+2, the Equipment stays where it is.
+    let mut t = TestGame::new(2);
+    let chosen = t.battlefield(P0, "Tel-Jilad Chosen");
+    let holder = t.battlefield(P0, "Grizzly Bears");
+    let sword = attach_new(&mut t, P0, "Bonesplitter", holder);
+    let loose = t.battlefield(P0, "Leonin Scimitar");
+    attack_with(&mut t, &[(chosen, Entity::Player(P1))]);
+    let bi = t.hand(P0, "Battlefield Improvisation");
+    give_mana_for(&mut t, P0, "Battlefield Improvisation");
+    t.answer_choose(P0, &[obj(sword), obj(loose)]);
+    t.answer_yes(P0, true);
+    t.cast(P0, bi).target(obj(chosen)).go();
+    t.resolve_all();
+    assert_eq!(t.pt(chosen), (4, 3));
+    assert_eq!(attached_to(&t, sword), Some(obj(holder)));
+    assert_eq!(attached_to(&t, loose), None);
+    // Beatrix targeting Tel-Jilad Chosen.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Beatrix, Loyal General");
+    let chosen = t.battlefield(P0, "Tel-Jilad Chosen");
+    let holder = t.battlefield(P0, "Grizzly Bears");
+    let sword = attach_new(&mut t, P0, "Bonesplitter", holder);
+    to_beginning_of_combat(&mut t, P0);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.answer_targets(P0, &[obj(chosen)]);
+    t.answer_choose(P0, &[obj(sword)]);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(attached_to(&t, sword), Some(obj(holder)));
+    // Barret: an Equipment that's a creature (March of the Machines) can't equip the
+    // Rebel; it stays unattached.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Barret, Avalanche Leader");
+    t.battlefield(P0, "March of the Machines");
+    let rebel = t.battlefield(P0, "Barret Wallace");
+    let sword = t.battlefield(P0, "Bonesplitter");
+    assert!(is_creature(&t, sword));
+    t.answer_targets(P0, &[obj(sword)]);
+    t.answer_targets(P0, &[obj(rebel)]);
+    to_beginning_of_combat(&mut t, P0);
+    t.settle();
+    t.resolve_all();
+    assert_eq!(attached_to(&t, sword), None);
+    // Yuffie: the same.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "March of the Machines");
+    let sword = t.battlefield(P0, "Bonesplitter");
+    let relic = t.battlefield(P1, "Mind Stone");
+    t.answer_targets(P0, &[obj(relic)]);
+    t.answer_choose(P0, &[obj(sword)]);
+    t.answer_yes(P0, true);
+    let yuffie = enter(&mut t, P0, "Yuffie, Materia Hunter");
+    t.resolve_all();
+    assert_eq!(t.obj_now(relic).controller, P0);
+    assert_eq!(attached_to(&t, sword), None);
+    // ... while a noncreature Equipment does go on Yuffie.
+    let mut t2 = TestGame::new(2);
+    let sword2 = t2.battlefield(P0, "Bonesplitter");
+    let relic2 = t2.battlefield(P1, "Mind Stone");
+    t2.answer_targets(P0, &[obj(relic2)]);
+    t2.answer_choose(P0, &[obj(sword2)]);
+    t2.answer_yes(P0, true);
+    let yuffie2 = enter(&mut t2, P0, "Yuffie, Materia Hunter");
+    t2.resolve_all();
+    assert_eq!(attached_to(&t2, sword2), Some(obj(yuffie2)));
+    let _ = yuffie;
+}
+
+#[test]
+fn cass_cant_return_an_aura_that_cant_enchant_the_target() {
+    cr!("303.4a", "702.16b", "702.16c", "115.4");
+    ruling!(
+        "Cass, Hand of Vengeance",
+        "You can’t return Aura cards that can’t legally be attached to the target creature. For example, if the target creature has protection from red, you can’t return Grim Reaper’s Sprint to the battlefield with Cass’s last ability."
+    );
+    // A black Aura and a target with protection from black: the Aura stays in the
+    // graveyard; the Equipment is still attached.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Cass, Hand of Vengeance");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let knight = t.battlefield(P0, "White Knight");
+    let aura = attach_new(&mut t, P0, "Unholy Strength", bears);
+    let sword = attach_new(&mut t, P0, "Bonesplitter", bears);
+    t.answer_targets(P0, &[obj(knight)]);
+    // Choose to return the Aura card anyway, and the Equipment.
+    t.answer_choose_moved(P0, &[obj(aura)]);
+    t.answer_choose(P0, &[obj(sword)]);
+    destroy(&mut t, bears);
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Unholy Strength"));
+    assert_eq!(attached_to(&t, sword), Some(obj(knight)));
+    // The example: a creature with protection from red can't get Grim Reaper's Sprint
+    // (Cass's ability, from a red source, can't even target it).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Cass, Hand of Vengeance");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let walker = t.battlefield(P0, "Kor Firewalker");
+    attach_new(&mut t, P0, "Grim Reaper's Sprint", bears);
+    let from = t.asked().len();
+    destroy(&mut t, bears);
+    let offered = crate::r_s02_common::target_candidates(&t, P0, from);
+    assert!(!offered.is_empty());
+    assert!(offered.iter().all(|c| !c.contains(&obj(walker))));
+    t.resolve_all();
+    assert_eq!(attached_to(&t, walker), None);
+    assert!(attachments_of(&t, walker).is_empty());
+}
+
+#[test]
+fn reckless_crew_and_goldwardens_gambit_attach_one_equipment_per_token() {
+    cr!("701.3a", "701.3c", "608.2c");
+    ruling!(
+        "Reckless Crew",
+        "You can’t have more than one Equipment become attached to the same token."
+    );
+    ruling!(
+        "Goldwardens' Gambit",
+        "You choose which Equipment to attach to each token, then attach those Equipment all at once. You can't move the same Equipment around to each of the tokens as the ability resolves."
+    );
+    for (spell, equipment) in [("Reckless Crew", 3), ("Goldwardens' Gambit", 1)] {
+        let mut t = TestGame::new(2);
+        let eq: Vec<ObjectId> = ["Bonesplitter", "Leonin Scimitar", "Vulshok Morningstar"]
+            [..equipment]
+            .iter()
+            .map(|n| t.battlefield(P0, n))
+            .collect();
+        let s = t.hand(P0, spell);
+        mana(&mut t, P0, ManaType::R, 2);
+        mana(&mut t, P0, ManaType::C, 6);
+        // Try to put every Equipment on every token.
+        let all: Vec<Entity> = eq.iter().map(|e| obj(*e)).collect();
+        for _ in 0..5 {
+            t.answer_choose(P0, &all);
+            t.answer_yes(P0, true);
+        }
+        t.cast(P0, s).go();
+        let from = t.asked().len();
+        t.resolve_all();
+        for (p, d) in &t.asked()[from..] { eprintln!("ASK {p:?} {d:?}"); }
+        let toks = tokens(&t, P0);
+        assert_eq!(toks.len(), if equipment == 3 { 3 } else { 5 }, "{spell}");
+        for tok in &toks {
+            assert!(attachments_of(&t, *tok).len() <= 1, "{spell}");
+        }
+        let attached: Vec<_> = eq.iter().filter_map(|e| attached_to(&t, *e)).collect();
+        assert_eq!(attached.len(), equipment, "{spell}: every Equipment got a token");
+        let mut distinct = attached.clone();
+        distinct.dedup();
+        assert_eq!(distinct.len(), attached.len());
+    }
+}
+
+#[test]
+fn kor_outfitter_may_target_itself() {
+    cr!("115.1", "603.3d");
+    ruling!(
+        "Kor Outfitter",
+        "You may target Kor Outfitter with its ability."
+    );
+    let mut t = TestGame::new(2);
+    let sword = t.battlefield(P0, "Bonesplitter");
+    let from = t.asked().len();
+    t.answer_targets(P0, &[obj(sword)]);
+    // The creature target: the Outfitter itself (a new object once it entered).
+    let ko = enter(&mut t, P0, "Kor Outfitter");
+    let offered = crate::r_s02_common::target_candidates(&t, P0, from);
+    assert!(offered.iter().any(|c| c.contains(&obj(ko))), "{offered:?}");
+    t.clear_answers();
+    let mut t = TestGame::new(2);
+    let sword = t.battlefield(P0, "Bonesplitter");
+    t.answer_targets(P0, &[obj(sword)]);
+    let next = ObjectId(t.g.objects.len() as u32);
+    t.answer_targets(P0, &[obj(next)]);
+    t.answer_yes(P0, true);
+    let ko = enter(&mut t, P0, "Kor Outfitter");
+    assert_eq!(ko, next);
+    t.resolve_all();
+    assert_eq!(attached_to(&t, sword), Some(obj(ko)));
+    assert_eq!(t.pt(ko), (4, 2));
+}
+
+#[test]
+fn magnetic_snuffler_returns_an_equipment_it_cant_wear_unattached() {
+    cr!("301.5c", "303.4f", "608.2b");
+    ruling!(
+        "Magnetic Snuffler",
+        "You may target an Equipment card that can't legally be attached to Magnetic Snuffler with its first ability. If you do, it will enter the battlefield unattached."
+    );
+    for march in [true, false] {
+        let mut t = TestGame::new(2);
+        if march {
+            t.battlefield(P0, "March of the Machines");
+        }
+        let sword = t.graveyard(P0, "Bonesplitter");
+        t.answer_targets(P0, &[obj(sword)]);
+        let sn = enter(&mut t, P0, "Magnetic Snuffler");
+        assert_eq!(t.stack_len(), 1);
+        t.resolve_all();
+        let s = t.named_on_battlefield("Bonesplitter");
+        assert_eq!(s.len(), 1, "{march}");
+        let expected = if march { None } else { Some(obj(sn)) };
+        assert_eq!(t.g.obj(s[0]).attached_to, expected, "{march}");
+    }
+}
+
+#[test]
+fn armed_and_armored_locks_in_its_vehicles_and_needs_neither() {
+    cr!("611.2c", "608.2c", "609.3");
+    ruling!(
+        "Armed and Armored",
+        "The set of Vehicles affected by Armed and Armored is determined as the spell resolves. Vehicles you begin to control later in the turn won't automatically become creatures."
+    );
+    ruling!(
+        "Armed and Armored",
+        "You can cast Armed and Armored even if you don't control any Vehicles or Dwarves. Whatever part of the effect that can happen does, and the rest is ignored."
+    );
+    let mut t = TestGame::new(2);
+    let mine = t.battlefield(P0, "Smuggler's Copter");
+    let theirs = t.battlefield(P1, "Cultivator's Caravan");
+    let aa = t.hand(P0, "Armed and Armored");
+    give_mana_for(&mut t, P0, "Armed and Armored");
+    t.cast(P0, aa).go();
+    t.resolve_all();
+    assert!(is_creature(&t, mine));
+    give_control(&mut t, theirs, P0);
+    assert!(!is_creature(&t, theirs));
+    // No Vehicles, no Dwarves: it can be cast and does nothing.
+    let mut t = TestGame::new(2);
+    let sword = t.battlefield(P0, "Bonesplitter");
+    let aa = t.hand(P0, "Armed and Armored");
+    give_mana_for(&mut t, P0, "Armed and Armored");
+    t.cast(P0, aa).go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Armed and Armored"));
+    assert_eq!(attached_to(&t, sword), None);
+    // A Dwarf but no Vehicles: the Equipment is attached.
+    let mut t = TestGame::new(2);
+    let sword = t.battlefield(P0, "Bonesplitter");
+    let dwarf = t.battlefield(P0, "Sram, Senior Edificer");
+    let aa = t.hand(P0, "Armed and Armored");
+    give_mana_for(&mut t, P0, "Armed and Armored");
+    t.answer_choose(P0, &[obj(dwarf)]);
+    t.answer_choose(P0, &[obj(sword)]);
+    t.cast(P0, aa).go();
+    t.resolve_all();
+    assert_eq!(attached_to(&t, sword), Some(obj(dwarf)));
 }
