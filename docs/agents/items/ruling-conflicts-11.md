@@ -113,7 +113,7 @@ Recommendation: **(1)**. It is the reading under which every source fits without
 
 ### Skeptic's review (Nov 19)
 
-A separate adversarial skeptic tried to refute conclusion D and the engine change, re-checked every source against `data/` and the archives, searched again for a source that decides the case, then reviewed the engine change and the tests. **Result: D stands (no source decides it), and the lean to N + 1 is stronger than the investigation found.** The CR's own example of a "for each [player], [action]" instruction and five more rulings on "for each" instructions have the instruction done once, at once or as one event; no source makes one pass of a "for each" its own event. Recommendation (1) stands; the engine change is kept.
+A separate adversarial skeptic tried to refute conclusion D and the engine change, re-checked every source against `data/` and the archives, searched again for a source that decides the case, then reviewed the engine change and the tests. **Result: D stands (no source decides it), and the lean to N + 1 is stronger than the investigation found.** The CR's own example of a "for each [player], [action]" instruction and more rulings on "for each" instructions than the investigation had (Suffer the Past's, Wurmquake's, myriad's and three others) have the instruction done at once or as one event; no source makes one pass of a "for each" its own event. Recommendation (1) stands; the engine change is kept.
 
 **Re-checked, verbatim and dated.**
 - **CR**, against `data/` (effective 2026-09-25): 405.3, 603.2c, 608.2c, 608.2f with both examples, 609.3, 614.1, 614.1a, 614.5, 614.6, 616.1, 700.1, 707.10, 707.10c, 707.10d, 707.10e and 707.12, as quoted.
