@@ -15,6 +15,8 @@ use mtg_engine::*;
 
 pub use crate::r_p015_common::move_to;
 pub use crate::r_p127_common::is_in;
+pub use crate::r_s01_common::triggers_on_stack;
+pub use crate::r_s04_common::can_cycle;
 pub use crate::r_s04_common::untapped_lands;
 pub use crate::r_s06_common::{activate_containing, attach_new};
 

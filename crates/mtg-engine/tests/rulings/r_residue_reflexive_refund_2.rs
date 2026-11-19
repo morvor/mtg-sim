@@ -169,13 +169,10 @@ fn yannik_chooses_the_creature_on_resolution_then_distributes_by_its_last_known_
     t.answer_targets(P0, &[Entity::Player(P0)]);
     order_on_top(&mut t, P0, "Partner");
     t.settle();
-    assert_eq!(
-        crate::r_s01_common::triggers_on_stack(&t, "exile another creature"),
-        1
-    );
+    assert_eq!(triggers_on_stack(&t, "exile another creature"), 1);
     t.resolve();
     let first = top(&t);
-    assert!(crate::r_s01_common::triggers_on_stack(&t, "exile another creature") == 1);
+    assert!(triggers_on_stack(&t, "exile another creature") == 1);
     assert!(
         targets_of(&t, first).is_empty(),
         "no target for the creature exiled"
@@ -549,7 +546,7 @@ fn priority_boarding_reveals_for_the_roll_you_choose() {
     mtg_engine::dice::roll(&mut t.g, &roll, &mut ctx);
     t.g.flush_events();
     t.settle();
-    let triggers = crate::r_s01_common::triggers_on_stack(&t, "Whenever you roll a die");
+    let triggers = triggers_on_stack(&t, "Whenever you roll a die");
     assert_eq!(triggers, 2, "one trigger for each die");
     // Resolve them one by one: decline the 2, reveal for the 6.
     let mut revealed = false;

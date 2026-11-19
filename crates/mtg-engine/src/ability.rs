@@ -4600,6 +4600,11 @@ pub enum BatchPer {
     /// damage): "Whenever one or more creatures an opponent controls deal combat damage to
     /// you" triggers once for each opponent whose creatures dealt it.
     OtherController,
+    /// Once per controller of the objects the events are about (`EventInfo::object`):
+    /// "Whenever one or more creatures an opponent controls attack you and aren't
+    /// blocked" triggers once for each opponent whose creatures they are (with shared team
+    /// turns, several opponents attack at once; Coveted Jewel's ruling).
+    ObjectController,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

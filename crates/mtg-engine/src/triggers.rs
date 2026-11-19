@@ -481,6 +481,9 @@ impl Game {
                     BatchPer::OtherController => {
                         i.other.map(|o| Entity::Player(self.obj(o).controller))
                     }
+                    BatchPer::ObjectController => {
+                        i.object.map(|o| Entity::Player(self.obj(o).controller))
+                    }
                 };
                 let mut groups: Vec<Vec<EventInfo>> = Vec::new();
                 let mut group_extra: Vec<usize> = Vec::new();

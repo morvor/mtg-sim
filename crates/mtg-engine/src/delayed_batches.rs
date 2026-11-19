@@ -61,6 +61,7 @@ pub fn triggered_by_batch(
             BatchPer::Object => i.object.map(Entity::Object),
             BatchPer::Other => i.other.map(Entity::Object),
             BatchPer::OtherController => i.other.map(|o| Entity::Player(g.obj(o).controller)),
+            BatchPer::ObjectController => i.object.map(|o| Entity::Player(g.obj(o).controller)),
         };
         let mut groups: Vec<Vec<EventInfo>> = Vec::new();
         for info in infos {
