@@ -167,7 +167,7 @@ fn maelstrom_muse_reduces_only_generic_mana() {
         "Maelstrom Muse’s cost reduction can reduce only generic mana in a spell’s total cost. It can’t reduce colored mana requirements."
     );
     supported("Maelstrom Muse");
-    // (spell, its target, the mana available, castable)
+    // (spell, the mana available, castable)
     for (spell, mana_ty, ok) in [
         ("Lightning Bolt", None, false),
         ("Divination", Some(ManaType::U), true),
@@ -231,7 +231,8 @@ fn emrakul_counts_at_most_nine_card_types() {
     for (generic, ok) in [(3, false), (4, true)] {
         let mut t = TestGame::new(2);
         // Kindred enchantment, battle, artifact creature, basic land, instant, sorcery,
-        // planeswalker; plus a legendary creature and a second Faerie (nothing new).
+        // legendary planeswalker; plus another creature and another Faerie (nothing new).
+        // Supertypes (basic, legendary) and subtypes don't count: nine types, {4}.
         for name in [
             "Bitterblossom",
             "Invasion of Alara",
@@ -258,7 +259,7 @@ fn emrakul_counts_at_most_nine_card_types() {
 
 #[test]
 fn crackle_with_power_costs_three_per_x_and_hits_x_targets() {
-    cr!("107.3", "107.3a", "601.2b", "601.2f", "115.1d");
+    cr!("107.3", "107.3a", "601.2b", "601.2f", "115.1a");
     ruling!(
         "Crackle with Power",
         "If you choose 1 for the value of X, Crackle with Power will cost {3}{R}{R} to cast and deal five damage to a single target. If you choose 2 for the value of X, it will cost {6}{R}{R} to cast and deal ten damage to each of up to two targets, and so on."
@@ -330,50 +331,50 @@ fn rocco_cast_without_paying_its_mana_cost_has_x_zero() {
 // Brilliant Ultimatum: casting without paying the mana cost
 // ---------------------------------------------------------------------------------------
 
-/// P0 may cast `card` this turn without paying its mana cost.
-fn free(t: &mut TestGame, card: ObjectId) {
-    mtg_engine::casting::grant_play_permission(
-        &mut t.g,
-        P0,
-        vec![card],
-        mtg_engine::ability::Duration::EndOfTurn,
-        true,
-        None,
-    );
-}
-
 #[test]
-fn without_paying_its_mana_cost_allows_kicker_but_no_alternative_cost() {
-    cr!("118.9a", "118.9d", "601.2b", "702.33d");
+fn brilliant_ultimatum_casts_with_kicker_but_without_alternative_costs() {
+    cr!("118.9a", "118.9d", "608.2g", "702.33d");
     ruling!(
         "Brilliant Ultimatum",
         "If you cast a card “without paying its mana cost,” you can’t pay any alternative costs. You can pay additional costs, such as conspire costs and kicker costs."
     );
-    // Kicked Burst Lightning, cast without paying its mana cost: the kicker is paid.
-    let mut t = TestGame::new(2);
-    let burst = t.hand(P0, "Burst Lightning");
-    free(&mut t, burst);
-    mana(&mut t, P0, ManaType::C, 4);
-    t.cast(P0, burst)
-        .method(CastMethod::Free)
-        .kicked(true)
-        .target(pl(P1))
-        .go();
-    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
-    t.resolve_all();
-    assert_eq!(t.life(P1), 16);
-    // Fireblast cast without paying its mana cost: no Mountains are sacrificed.
+    supported("Brilliant Ultimatum");
+    // P1 puts Burst Lightning and Fireblast in the first pile; P0 takes it and casts both
+    // without paying their mana costs: Burst Lightning kicked (P0 pays the {4}), Fireblast
+    // without its alternative cost (no Mountains sacrificed).
     let mut t = TestGame::new(2);
     let mountains = t.lands(P0, "Mountain", 2);
-    let fireblast = t.hand(P0, "Fireblast");
-    free(&mut t, fireblast);
+    let lib = stack_library(
+        &mut t,
+        P0,
+        &[
+            "Burst Lightning",
+            "Fireblast",
+            "Grizzly Bears",
+            "Hill Giant",
+            "Ornithopter",
+        ],
+    );
+    let bu = t.hand(P0, "Brilliant Ultimatum");
+    mana(&mut t, P0, ManaType::W, 2);
+    mana(&mut t, P0, ManaType::U, 3);
+    mana(&mut t, P0, ManaType::B, 2);
+    mana(&mut t, P0, ManaType::C, 4);
+    t.answer_choose_moved(P1, &[obj(lib[0]), obj(lib[1])]);
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    t.answer_choose_moved(P0, &[obj(lib[0]), obj(lib[1])]);
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    t.answer_targets(P0, &[pl(P1)]);
+    t.answer_targets(P0, &[pl(P1)]);
     let from = t.asked().len();
-    t.cast(P0, fireblast)
-        .method(CastMethod::Free)
-        .target(pl(P1))
-        .go();
+    t.cast(P0, bu).go();
     t.resolve_all();
-    assert_eq!(t.life(P1), 16);
+    assert!(t.in_graveyard(P0, "Burst Lightning"));
+    assert!(t.in_graveyard(P0, "Fireblast"));
+    // Kicked Burst Lightning (4) and Fireblast (4).
+    assert_eq!(t.life(P1), 12);
+    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
     for m in mountains {
         assert!(t.on_battlefield(m));
     }
@@ -389,7 +390,7 @@ fn without_paying_its_mana_cost_allows_kicker_but_no_alternative_cost() {
 
 #[test]
 fn eris_counts_spells_cast_before_it_entered() {
-    cr!("603.2", "700.14");
+    cr!("603.2");
     ruling!(
         "Eris, Roar of the Storm",
         "Spells that were cast before Eris entered the battlefield count. If Eris was the first spell you cast this turn, the next spell you cast this turn is your second spell."
@@ -537,18 +538,27 @@ fn attackers_now(t: &TestGame) -> Vec<ObjectId> {
 #[test]
 fn norns_annex_lets_creatures_that_must_attack_stay_home() {
     cr!("508.1d", "508.1h");
+    interp!("default-combat-declarations");
     ruling!(
         "Norn's Annex",
         "If you control Norn's Annex, your opponents can choose not to attack with a creature with an ability that says it must attack."
     );
     supported("Bloodrock Cyclops");
-    let mut t = TestGame::new(2);
-    t.battlefield(P0, "Norn's Annex");
-    t.battlefield(P1, "Bloodrock Cyclops");
-    t.set_step(P1, Step::BeginningOfCombat);
-    t.advance_to(P1, Step::EndOfCombat);
-    assert_eq!(t.life(P0), 20);
-    assert_eq!(t.life(P1), 20);
+    // Without Norn's Annex the Cyclops attacks; with it, P1 may keep it home (P1 declares
+    // no attackers).
+    for annex in [false, true] {
+        let mut t = TestGame::new(2);
+        if annex {
+            t.battlefield(P0, "Norn's Annex");
+        }
+        let cyclops = t.battlefield(P1, "Bloodrock Cyclops");
+        t.set_step(P1, Step::BeginningOfCombat);
+        t.answer(P1, DecisionKind::Attackers, Answer::Attackers(vec![]));
+        t.advance_to(P1, Step::EndOfCombat);
+        assert_eq!(t.life(P0), if annex { 20 } else { 17 }, "annex: {annex}");
+        assert_eq!(t.life(P1), 20, "annex: {annex}");
+        assert_eq!(t.obj(cyclops).tapped, !annex, "annex: {annex}");
+    }
 }
 
 #[test]
@@ -562,15 +572,19 @@ fn norns_annex_each_attacker_and_each_annex_is_its_own_cost() {
         "Norn's Annex",
         "The controller of each creature attacking you or a planeswalker you control pays either {W} or 2 life as attackers are being declared."
     );
-    // Two Annexes, one attacker: {W} for one and 2 life for the other.
+    // Two Annexes, one attacker, two Plains: P1 pays {W} for one cost and 2 life for the
+    // other.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Norn's Annex");
     t.battlefield(P0, "Norn's Annex");
     let bears = t.battlefield(P1, "Grizzly Bears");
-    let plains = t.lands(P1, "Plains", 1)[0];
+    let plains = t.lands(P1, "Plains", 2);
+    // "How will you pay {W/P}?": 1 = with {W}, 2 = with 2 life.
+    pay_way(&mut t, P1, 1);
+    pay_way(&mut t, P1, 2);
     p1_attacks(&mut t, &[(bears, pl(P0))]);
     assert_eq!(attackers_now(&t), vec![bears]);
-    assert!(t.obj(plains).tapped);
+    assert_eq!(plains.iter().filter(|p| t.obj(**p).tapped).count(), 1);
     assert_eq!(t.life(P1), 18);
     // One Annex, two attackers (one at P0's planeswalker): two costs, paid with life.
     let mut t = TestGame::new(2);
@@ -578,6 +592,8 @@ fn norns_annex_each_attacker_and_each_annex_is_its_own_cost() {
     let jace = t.battlefield(P0, "Jace Beleren");
     let bears = t.battlefield(P1, "Grizzly Bears");
     let giant = t.battlefield(P1, "Hill Giant");
+    pay_way(&mut t, P1, 2);
+    pay_way(&mut t, P1, 2);
     p1_attacks(&mut t, &[(bears, pl(P0)), (giant, obj(jace))]);
     assert_eq!(attackers_now(&t).len(), 2);
     assert_eq!(t.life(P1), 16);

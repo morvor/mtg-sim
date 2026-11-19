@@ -170,4 +170,4 @@ index: `docs/INTERPRETATIONS.md`.
 - Why: The rulings' "apply as normal" points to the ordinary procedure of 616.1, and nothing makes compleated a self-replacement effect.
 - Affects: Jace, the Perfected Mind, Nissa, Ascended Animist, Vraska, Betrayal's Sting and the other compleated planeswalkers, with Doubling Season, Vorinclex, Monstrous Raider and the like.
 - Code: `crates/mtg-engine/src/kw/compleated.rs`; `crates/mtg-engine/src/replacement.rs` (the order chosen, CR 616.1).
-- Tests: `tests/rulings/r_p191_interactions.rs` (`compleated_and_other_loyalty_replacements_both_apply`).
+- Tests: `tests/rulings/r_p191_interactions.rs` (`compleated_and_other_loyalty_replacements_both_apply`); `tests/keywords/k702_150_compleated.rs` (`other_replacement_effects_apply_as_normal`, Vraska, Betrayal's Sting, which pinned the order choice before the entry was written).

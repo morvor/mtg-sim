@@ -57,7 +57,7 @@ fn another_round_with_x_zero_blinks_once() {
 
 #[test]
 fn another_round_returns_a_new_object() {
-    cr!("400.7", "303.4d", "301.5c", "704.5m", "704.5n");
+    cr!("400.7", "704.5m", "704.5n");
     ruling!(
         "Another Round",
         "Once an exiled creature returns, it’s considered a new object with no relation to the object that it was. Auras attached to the exiled creature will be put into their owners’ graveyards. Equipment attached to the exiled creature will become unattached and remain on the battlefield. Any counters on the exiled creature will cease to exist."
@@ -167,7 +167,7 @@ fn hour_of_eternity_tokens_copiable_values_are_black_zombie_four_four() {
 
 #[test]
 fn doppelgang_copies_copiable_values_only() {
-    cr!("707.2", "707.3", "707.4");
+    cr!("707.2", "707.3");
     ruling!(
         "Doppelgang",
         "If the copied permanent is copying something else, then the tokens enter the battlefield as whatever that permanent copied."
@@ -227,7 +227,7 @@ fn doppelgang_copies_copiable_values_only() {
 
 #[test]
 fn death_begets_life_counts_destroyed_permanents_wherever_they_go() {
-    cr!("701.8a", "701.8b", "702.12b");
+    cr!("701.8a", "701.8b", "702.12b", "122.1h");
     ruling!(
         "Death Begets Life",
         "If a permanent destroyed this way goes to a zone other than a graveyard (for example, if it has a finality counter on it), it still counts as being destroyed and you’ll still draw a card."
@@ -260,7 +260,7 @@ fn death_begets_life_counts_destroyed_permanents_wherever_they_go() {
 
 #[test]
 fn x_in_the_mana_cost_of_a_card_not_on_the_stack_is_zero() {
-    cr!("107.3f", "202.3e");
+    cr!("107.3g", "202.3e");
     ruling!(
         "Gaze of Granite",
         "If a permanent has {X} in its mana cost, the value of that X is 0."
@@ -341,7 +341,7 @@ fn time_wipe_without_a_creature_to_return_destroys_all_creatures() {
 
 #[test]
 fn titanic_ultimatum_redundant_keywords_and_a_fixed_set() {
-    cr!("702.2f", "702.7c", "702.15f", "702.19e", "611.2c");
+    cr!("702.7d", "702.15f", "702.19g", "611.2c");
     ruling!(
         "Titanic Ultimatum",
         "If a creature you control already has lifelink, Titanic Ultimatum will give it a second instance of lifelink; however, multiple instances of lifelink on the same creature are redundant. You still only gain life equal to the amount of damage dealt, regardless of how many instances of lifelink the creature has."
@@ -386,7 +386,7 @@ fn titanic_ultimatum_redundant_keywords_and_a_fixed_set() {
 
 #[test]
 fn clarion_ultimatum_searches_for_current_names() {
-    cr!("201.2", "707.2", "708.2a", "701.23a", "305.7");
+    cr!("201.2a", "707.2", "701.23a", "305.7");
     ruling!(
         "Clarion Ultimatum",
         "If you choose a permanent whose name has been changed by an effect (for example, a Clone that's copying another creature), you'll search for a card with the new name, not one with the original name. Note that changing a land's subtype doesn't change its name."
@@ -442,7 +442,7 @@ fn clarion_ultimatum_face_down_permanent_has_no_name_to_find() {
 
 #[test]
 fn clarion_ultimatum_only_finds_permanent_cards() {
-    cr!("701.23a", "110.4", "305.7");
+    cr!("701.23a", "110.4");
     ruling!(
         "Clarion Ultimatum",
         "If you find a card that isn't a permanent card while searching"
@@ -469,7 +469,7 @@ fn clarion_ultimatum_only_finds_permanent_cards() {
 
 #[test]
 fn clarion_ultimatum_auras_enter_attached_to_permanents_already_there() {
-    cr!("303.4f", "303.4g", "614.12");
+    cr!("303.4f", "303.4g");
     ruling!(
         "Clarion Ultimatum",
         "The cards all enter at the same time. If one of the cards that's entering is an Aura, it must enter attached to a permanent already on the battlefield. It can't enter attached to another permanent entering via Clarion Ultimatum. If an Aura can't enter this way, it remains in your library."
@@ -489,27 +489,45 @@ fn clarion_ultimatum_auras_enter_attached_to_permanents_already_there() {
     for _ in 0..2 {
         t.answer_yes(P0, true);
     }
+    let from = t.asked().len();
     cast_resolve(&mut t, c);
     let new_bears = t.g.current(lib[1]);
     assert!(t.on_battlefield(new_bears));
     let new_hs = t.g.current(lib[0]);
     assert!(t.on_battlefield(new_hs));
     assert_eq!(attached_to(&t, new_hs), Some(obj(bears)));
-    // Pacifism chosen with no creature to enchant: the Pacifism found stays.
+    // The Bears entering with it were never offered as what it enchants.
+    for c in entity_choices(&t, from) {
+        assert!(!c.contains(&obj(new_bears)));
+    }
+    // No creature on the battlefield: the Pacifism found can't enter attached to the
+    // Grizzly Bears entering with it, so it stays in the library. (The permanents chosen
+    // are noncreature test permanents named Pacifism and Grizzly Bears.)
     let mut t = TestGame::new(2);
-    let pac = t.battlefield(P0, "Pacifism");
+    let named = |t: &mut TestGame, name: &str| {
+        t.custom(
+            P0,
+            crate::r_s01_common::custom_card(name, "Artifact", "{1}", None, ""),
+            Zone::Battlefield,
+        )
+    };
+    let pac = named(&mut t, "Pacifism");
+    let bears = named(&mut t, "Grizzly Bears");
     let lib = stack_library(&mut t, P0, &["Pacifism", "Grizzly Bears"]);
-    let land = t.battlefield(P0, "Plains");
     let c = t.hand(P0, "Clarion Ultimatum");
     mana(&mut t, P0, ManaType::G, 2);
     mana(&mut t, P0, ManaType::W, 3);
     mana(&mut t, P0, ManaType::U, 2);
-    t.answer_choose(P0, &[obj(pac), obj(land)]);
+    t.answer_choose(P0, &[obj(pac), obj(bears)]);
     for _ in 0..2 {
         t.answer_yes(P0, true);
     }
     cast_resolve(&mut t, c);
+    let new_bears = t.g.current(lib[1]);
+    assert!(t.on_battlefield(new_bears));
+    assert!(t.obj(new_bears).tapped);
     assert_eq!(t.zone(lib[0]), Zone::Library(P0));
+    assert_eq!(t.named_on_battlefield("Pacifism"), vec![pac]);
 }
 
 #[test]
@@ -618,7 +636,7 @@ fn genesis_ultimatum_auras_attach_without_targeting() {
 
 #[test]
 fn harness_infinity_exchanges_even_with_an_empty_zone() {
-    cr!("701.12a", "514.1");
+    cr!("701.12f", "514.1");
     ruling!(
         "Harness Infinity",
         "If either your graveyard or your hand has no cards in it, the exchange still happens. If one of those zones has any cards in it, you will move them to the other zone."
@@ -690,11 +708,18 @@ fn reap_intellect_searches_only_for_what_it_exiled_and_nobody_acts_meanwhile() {
             t.answer_choose(P0, &[]);
         }
         let from = t.asked().len();
+        let events = t.g.turn_events.len();
         t.g.resolve_top();
+        t.g.flush_events();
         // No one got priority while it resolved.
         assert!(t.asked()[from..]
             .iter()
             .all(|(_, d)| !matches!(d, Decision::Priority { .. })));
+        // P1's library was searched only if a card was exiled from their hand.
+        let searched = t.g.turn_events[events..]
+            .iter()
+            .any(|e| matches!(e, Event::Searched { library, .. } if *library == P1));
+        assert_eq!(searched, exile_one, "exile one: {exile_one}");
         let shocks_left = [Zone::Hand(P1), Zone::Graveyard(P1), Zone::Library(P1)]
             .iter()
             .map(|z| t.g.find_in_zone(*z, "Shock").len())
@@ -716,7 +741,7 @@ fn reap_intellect_searches_only_for_what_it_exiled_and_nobody_acts_meanwhile() {
 
 #[test]
 fn selective_obliteration_colors_chosen_in_turn_order_for_own_permanents() {
-    cr!("101.4", "105.2c", "105.2b", "105.3");
+    cr!("101.4", "105.2c", "105.2b", "202.2");
     ruling!(
         "Selective Obliteration",
         "Lands have no mana cost, so they are colorless unless an effect states otherwise. The colors of mana that a land can produce do not affect that land's color."
@@ -916,7 +941,7 @@ fn oona_tokens_enter_under_your_control() {
 
 #[test]
 fn tariel_targets_only_the_opponent_and_picks_at_random() {
-    cr!("115.1", "608.2b");
+    cr!("115.1", "115.10");
     ruling!(
         "Tariel, Reckoner of Souls",
         "The creature card is chosen at random from among creature cards in the target opponent's graveyard as the ability resolves. Players can respond to the ability knowing the targeted player, but they won't know which creature card is about to enter."

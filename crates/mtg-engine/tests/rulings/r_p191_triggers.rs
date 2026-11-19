@@ -24,7 +24,7 @@ use mtg_engine::*;
 
 #[test]
 fn tolsimir_wolf_trigger_comes_as_voja_is_created_and_still_gains_life_without_it() {
-    cr!("603.2", "603.6a", "608.2b", "701.14b");
+    cr!("603.2", "603.6a", "701.14b");
     ruling!(
         "Tolsimir, Friend to Wolves",
         "If Tolsimir is still on the battlefield when its enters-the-battlefield trigger resolves, its last ability will trigger as Voja is created."
@@ -274,7 +274,7 @@ fn rona_trigger_resolves_even_if_the_spell_is_countered() {
 
 #[test]
 fn rona_from_the_graveyard_keeps_creature_timing() {
-    cr!("601.3", "307.1", "117.1a");
+    cr!("601.3", "302.1", "117.1a");
     ruling!(
         "Rona, Sheoldred's Faithful",
         "The casting permission granted by Rona's last ability doesn't change when you may cast it from your graveyard."
@@ -305,7 +305,7 @@ fn rona_from_the_graveyard_keeps_creature_timing() {
 
 #[test]
 fn deathbringer_liege_white_black_spell_taps_then_destroys() {
-    cr!("603.3b", "608.2b", "202.2");
+    cr!("603.3b", "608.2c", "202.2");
     ruling!(
         "Deathbringer Liege",
         "If you cast a spell that's both white and black, the last two abilities will both trigger. You may use them together to destroy any creature. To do so, put the \"destroy\" ability on the stack first, then put the \"tap\" ability on the stack, with each one targeting the same creature. When the abilities resolve, they'll tap the creature, then destroy it."
@@ -337,7 +337,7 @@ fn deathbringer_liege_white_black_spell_taps_then_destroys() {
 
 #[test]
 fn deathbringer_liege_destroy_trigger_checks_tapped_on_resolution() {
-    cr!("115.1", "608.2b", "608.2c");
+    cr!("115.1", "608.2c");
     ruling!(
         "Deathbringer Liege",
         "The last ability can target any creature, not just a tapped creature (it doesn't say \"target tapped creature\"). When the ability resolves, check whether the creature is tapped or not. If it's tapped, you may destroy it. If it's not tapped, the ability does nothing."
@@ -500,7 +500,7 @@ fn sphinx_sovereign_checks_tapped_as_it_resolves_or_as_it_left() {
 
 #[test]
 fn devourer_of_destiny_revealed_many_times_triggers_many_times() {
-    cr!("103.6", "103.6a", "603.7");
+    cr!("103.6", "103.6b", "603.7");
     ruling!(
         "Devourer of Destiny",
         "If you reveal more than one Devourer of Destiny from your opening hand, you'll put that many triggered abilities on the stack at the beginning of your first upkeep."

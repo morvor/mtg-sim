@@ -126,6 +126,7 @@ fn it_isnt_reduced_unless_it_was_cast() {
 #[test]
 fn other_replacement_effects_apply_as_normal() {
     cr!("702.150a", "616.1");
+    interp!("compleated-is-ordered-with-other-replacements");
     ruling!(
         "Vraska, Betrayal's Sting",
         "Other replacement effects that would change the number of loyalty counters Vraska enters with will apply as normal."

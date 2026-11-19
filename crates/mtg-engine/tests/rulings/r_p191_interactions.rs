@@ -37,7 +37,7 @@ use mtg_engine::*;
 
 #[test]
 fn echoes_of_eternity_copies_multiply_with_more_echoes() {
-    cr!("603.2d", "707.10", "707.10c");
+    cr!("603.2d", "707.10");
     ruling!(
         "Echoes of Eternity",
         "If you control two copies of Echoes of Eternity and you cast a colorless spell, each of their second abilities will trigger. Then, each of their first abilities will cause the other's second ability to trigger an additional time. In total, you'll get four copies of the spell in addition to the original spell. If you control three copies of Echoes of Eternity, you'll end up with nine copies of the spell plus the original."
@@ -132,7 +132,7 @@ fn echoes_of_eternity_doesnt_change_replacement_effects() {
 
 #[test]
 fn echoes_of_eternity_copy_isnt_cast() {
-    cr!("707.10", "707.10c", "603.2");
+    cr!("707.10", "603.2");
     ruling!(
         "Echoes of Eternity",
         "The copy created by Echoes of Eternity's last ability is put directly onto the stack. It isn't cast, so any abilities that apply \"when you cast [this spell]\" won't trigger."
@@ -183,7 +183,7 @@ fn queen_allenal_counts_itself() {
 
 #[test]
 fn queen_allenal_soldier_shares_the_creation_instructions_not_the_abilities() {
-    cr!("614.1a", "506.3d", "508.4");
+    cr!("614.1a", "508.4");
     ruling!(
         "Queen Allenal of Ruadach",
         "The additional Soldier token won’t have any abilities the other tokens were created with. Anything else specified in the effect creating the tokens (such as tapped, attacking, “That token gains haste,” or “Exile that token at end of combat”) applies to both the original tokens and the Soldier."
@@ -280,7 +280,7 @@ fn razia(t: &mut TestGame, from: ObjectId, to: ObjectId) -> ObjectId {
 
 #[test]
 fn razia_redirection_needs_both_targets_but_not_razia() {
-    cr!("615.1", "609.7", "608.2b");
+    cr!("614.9", "611.2a");
     ruling!(
         "Razia, Boros Archangel",
         "If either target creature leaves the battlefield before damage is dealt, that damage won’t be redirected. It doesn’t matter if Razia leaves the battlefield."
@@ -310,7 +310,7 @@ fn razia_redirection_needs_both_targets_but_not_razia() {
 
 #[test]
 fn razia_shield_redirects_three_damage_from_any_sources_over_time() {
-    cr!("615.7", "615.1");
+    cr!("614.9", "614.1a");
     ruling!(
         "Razia, Boros Archangel",
         "The 3 damage doesn’t have to be from the same source, and it doesn’t have to be all dealt at once. If only 2 damage is redirected, the next 1 damage will also be redirected."
@@ -413,8 +413,39 @@ fn dominus_of_fealty_on_your_own_permanent_still_asks() {
 }
 
 #[test]
+fn assault_suit_on_a_creature_that_player_already_controls_still_untaps_it() {
+    cr!("608.2c", "118.12", "301.5d");
+    interp!("may-gain-control-if-you-do-follows-the-choice");
+    supported("Assault Suit");
+    supported("Control Magic");
+    // P0's Assault Suit stays on its creature after P1's Control Magic takes it. At P1's
+    // upkeep, P0 may have P1 gain control of the equipped creature: choosing to apply the
+    // effect counts as doing it, though P1 already controls it, as for Dominus of Fealty.
+    for yes in [true, false] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let suit = attach_new(&mut t, P0, "Assault Suit", bears);
+        attach_new(&mut t, P1, "Control Magic", bears);
+        assert_eq!(t.obj(bears).controller, P1);
+        assert_eq!(attached_to(&t, suit), Some(obj(bears)));
+        t.set_step(P0, Step::End);
+        t.advance_to(P1, Step::Upkeep);
+        t.g.tap(bears);
+        t.answer_yes(P0, yes);
+        let from = t.asked().len();
+        t.resolve_all();
+        assert!(t.asked()[from..]
+            .iter()
+            .any(|(p, d)| *p == P0 && matches!(d, Decision::YesNo { .. })));
+        assert_eq!(t.obj(bears).controller, P1, "{yes}");
+        assert_eq!(t.obj(bears).tapped, !yes, "{yes}");
+    }
+}
+
+#[test]
 fn giant_ambush_beetle_requirement_does_nothing_if_the_creature_cant_block_it() {
     cr!("509.1c", "509.1b", "509.1d");
+    interp!("default-combat-declarations");
     ruling!(
         "Giant Ambush Beetle",
         "If you choose to have the targeted creature block but that creature isn't able to block Giant Ambush Beetle (for example, because the targeted creature can block only creatures with flying), the requirement to block does nothing. The targeted creature is free to block whichever creature its controller chooses, or block no creatures at all."
@@ -423,18 +454,24 @@ fn giant_ambush_beetle_requirement_does_nothing_if_the_creature_cant_block_it() 
         "Giant Ambush Beetle",
         "Tapped creatures, creatures that can't block as the result of an effect, creatures with unpaid costs to block (such as those from War Cadence), and creatures that aren't controlled by the defending player are exempt from effects that would require them to block. Such creatures can be targeted by Giant Ambush Beetle's ability, but the requirement to block does nothing."
     );
-    // (the target's controller, tapped, War Cadence's cost)
-    for (blocker_name, owner, tapped, cadence) in [
-        ("Cloud Sprite", P1, false, false),
-        ("Grizzly Bears", P1, true, false),
-        ("Grizzly Bears", P2, false, false),
-        ("Grizzly Bears", P1, false, true),
+    // (the target, its controller, tapped, under Pacifism, War Cadence's cost, exempt):
+    // the last case, an untapped Grizzly Bears free to block, must block it.
+    for (blocker_name, owner, tapped, pacifism, cadence, exempt) in [
+        ("Cloud Sprite", P1, false, false, false, true),
+        ("Grizzly Bears", P1, true, false, false, true),
+        ("Grizzly Bears", P1, false, true, false, true),
+        ("Grizzly Bears", P2, false, false, false, true),
+        ("Grizzly Bears", P1, false, false, true, true),
+        ("Grizzly Bears", P1, false, false, false, false),
     ] {
-        let case = (blocker_name, owner, tapped, cadence);
+        let case = (blocker_name, owner, tapped, pacifism, cadence);
         let mut t = TestGame::new(3);
         let target = t.battlefield(owner, blocker_name);
         if tapped {
             t.g.tap(target);
+        }
+        if pacifism {
+            attach_new(&mut t, P0, "Pacifism", target);
         }
         if cadence {
             let wc = t.battlefield(P0, "War Cadence");
@@ -450,9 +487,10 @@ fn giant_ambush_beetle_requirement_does_nothing_if_the_creature_cant_block_it() 
         let beetle = enter(&mut t, P0, "Giant Ambush Beetle");
         t.resolve_all();
         attack_with(&mut t, &[(beetle, pl(P1))]);
+        // P1 declares no blockers; a declaration that disobeys the requirement isn't kept.
         block_and_finish(&mut t, P1, &[]);
-        assert_eq!(t.life(P1), 16, "{case:?}");
-        assert!(t.on_battlefield(target), "{case:?}");
+        assert_eq!(t.life(P1), if exempt { 16 } else { 20 }, "{case:?}");
+        assert_eq!(t.on_battlefield(target), exempt, "{case:?}");
     }
 }
 
@@ -462,7 +500,7 @@ fn giant_ambush_beetle_requirement_does_nothing_if_the_creature_cant_block_it() 
 
 #[test]
 fn broodlord_counters_for_an_illegal_target_are_lost() {
-    cr!("601.2d", "608.2b", "702.187a");
+    cr!("601.2d", "608.2b", "702.156a");
     ruling!(
         "Broodlord",
         "If some of the creatures are illegal targets as Broodlord's triggered ability tries to resolve, the original distribution of counters still applies and the counters that would have been put on the illegal targets are lost. They won't be put instead on a legal target."
@@ -519,7 +557,7 @@ fn arsenal_threshers_entering_together_may_reveal_the_same_cards() {
 
 #[test]
 fn mindleech_mass_ignores_type_timing_but_not_other_restrictions() {
-    cr!("608.2g", "601.2", "307.5");
+    cr!("608.2g", "601.2", "601.3");
     ruling!(
         "Mindleech Mass",
         "The spell you cast via the triggered ability is cast as part of the resolution of that ability. Timing restrictions based on the card's type are ignored. Other restrictions, such as \"Cast [this spell] only during an opponent's turn,\" are not."
@@ -546,7 +584,7 @@ fn mindleech_mass_ignores_type_timing_but_not_other_restrictions() {
 
 #[test]
 fn bruna_takes_only_auras_that_could_enchant_it() {
-    cr!("303.4a", "303.4f", "303.4g");
+    cr!("701.3a", "701.3b", "608.2d");
     ruling!(
         "Bruna, Light of Alabaster",
         "Only Auras that could legally enchant Bruna may be attached to it, whether they're being moved from other permanents or being put onto the battlefield. An Aura with \"enchant land,\" for example, could not be attached to Bruna this way."
@@ -657,7 +695,7 @@ fn emrakul(t: &mut TestGame, p: PlayerId, target: PlayerId) {
 
 #[test]
 fn emrakul_extra_turn_never_begins_if_the_player_lost() {
-    cr!("723.1", "800.4a", "500.7");
+    cr!("723.1", "800.4a", "800.4k", "500.7");
     ruling!(
         "Emrakul, the Promised End",
         "If the targeted player loses the game while you control their turn during a multiplayer game, the extra turn never begins."
@@ -678,7 +716,7 @@ fn emrakul_extra_turn_never_begins_if_the_player_lost() {
 
 #[test]
 fn emrakul_later_control_effect_wins_but_each_gives_an_extra_turn() {
-    cr!("723.7", "500.7");
+    cr!("723.1a", "500.7");
     ruling!(
         "Emrakul, the Promised End",
         "Multiple player-controlling effects that affect the same player overwrite each other. The last one to be created is the one that works. If multiple players have cast Emrakul and targeted the same player, each ability’s effect will create an extra turn."
@@ -766,7 +804,7 @@ fn bolas(t: &mut TestGame, p: PlayerId, loyalty: u32) -> ObjectId {
 
 #[test]
 fn nicol_bolas_ultimate_in_two_headed_giant_takes_the_whole_team() {
-    cr!("810.8a", "104.3a");
+    cr!("810.8a", "104.3e");
     ruling!(
         "Nicol Bolas, Dragon-God",
         "In a Two-Headed Giant game, if one player on a team loses the game, the entire team loses the game, even if the other player controls a legendary creature or planeswalker."
@@ -808,52 +846,57 @@ fn nicol_bolas_draw_triggers_wait_for_the_exiles() {
 
 #[test]
 fn nicol_bolas_linked_abilities_he_gains_see_only_their_own_exiles() {
-    cr!("607.2", "607.2a", "607.1b");
+    cr!("607.2a", "607.5");
     ruling!(
         "Nicol Bolas, Dragon-God",
         "If an ability of a planeswalker exiles cards and another loyalty ability of that planeswalker references the exiled cards, those abilities are linked. If Nicol Bolas gains both abilities from the same planeswalker, the instances he has are similarly linked. Cards exiled by any other abilities Nicol Bolas has (such as his own first loyalty ability) won't be seen by those linked abilities."
     );
     supported("Ashiok, Nightmare Weaver");
+    // Three Craw Wurms (mana value 6) are exiled: by Ashiok's own +2, by Bolas's own +1,
+    // and by the +2 Bolas has from Ashiok. Ashiok's −X through Bolas with X = 6 sees only
+    // the last one.
     let mut t = TestGame::new(2);
     let ashiok = crate::r_p007_common::pw(&mut t, P1, "Ashiok, Nightmare Weaver", 3);
     let b = bolas(&mut t, P0, 6);
-    // Ashiok exiles a Hill Giant with its own +2 (P1 activates on P1's side, top of P0's
-    // library); Bolas's +1 makes P1 exile a Grizzly Bears from hand.
-    stack_library(&mut t, P0, &["Hill Giant"]);
+    // Ashiok's own +2 (P1's, on P0's library).
+    let by_ashiok = stack_library(&mut t, P0, &["Craw Wurm"])[0];
     t.set_step(P1, Step::PrecombatMain);
     t.answer_targets(P1, &[pl(P0)]);
     activate_containing(&mut t, P1, ashiok, "Exile the top three").unwrap();
     t.resolve_all();
-    assert!(t.in_exile("Hill Giant"));
+    assert_eq!(t.zone(by_ashiok), Zone::Exile);
+    // Bolas's +1: P1 exiles a Craw Wurm from their hand.
     t.set_step(P0, Step::PrecombatMain);
-    let bears = t.hand(P1, "Grizzly Bears");
-    t.answer_choose(P1, &[obj(bears)]);
+    let by_plus_one = t.hand(P1, "Craw Wurm");
+    t.answer_choose(P1, &[obj(by_plus_one)]);
     activate_containing(&mut t, P0, b, "You draw a card").unwrap();
     t.resolve_all();
-    assert_eq!(t.zone(bears), Zone::Exile);
-    // Next turn: Bolas uses Ashiok's +2 on P1's library (a Craw Wurm, mana value 6).
-    stack_library(&mut t, P1, &["Craw Wurm"]);
+    assert_eq!(t.zone(by_plus_one), Zone::Exile);
+    // Next turn: Bolas uses Ashiok's +2 on P1's library.
+    let by_bolas_ashiok = stack_library(&mut t, P1, &["Craw Wurm"])[0];
     t.set_step(P1, Step::End);
     t.advance_to(P0, Step::PrecombatMain);
     t.answer_targets(P0, &[pl(P1)]);
     activate_containing(&mut t, P0, b, "Exile the top three").unwrap();
     t.resolve_all();
-    assert!(t.in_exile("Craw Wurm"));
-    // Next turn: Ashiok's −X through Bolas, X = 2: the Grizzly Bears (Bolas's own +1) and
-    // the Hill Giant (Ashiok's) aren't seen; X = 6 finds the Craw Wurm.
+    assert_eq!(t.zone(by_bolas_ashiok), Zone::Exile);
+    // Next turn: Ashiok's −X through Bolas, X = 6.
     t.set_step(P1, Step::End);
     t.advance_to(P0, Step::PrecombatMain);
-    put(&mut t, b, "loyalty", 10);
+    let seen = obj(t.g.current(by_bolas_ashiok));
     let from = t.asked().len();
     t.answer(P0, DecisionKind::X, Answer::Number(6));
     activate_containing(&mut t, P0, b, "onto the battlefield").unwrap();
     t.resolve_all();
     for c in entity_choices(&t, from) {
-        assert!(!c.contains(&obj(bears)));
+        assert_eq!(c, vec![seen]);
     }
+    let found = t.g.current(by_bolas_ashiok);
+    assert!(t.on_battlefield(found));
+    assert_eq!(t.obj(found).controller, P0);
+    assert_eq!(t.zone(by_ashiok), Zone::Exile);
+    assert_eq!(t.zone(by_plus_one), Zone::Exile);
     assert_eq!(t.named_on_battlefield("Craw Wurm").len(), 1);
-    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
-    assert!(t.in_exile("Hill Giant"));
 }
 
 // ---------------------------------------------------------------------------------------
@@ -862,7 +905,7 @@ fn nicol_bolas_linked_abilities_he_gains_see_only_their_own_exiles() {
 
 #[test]
 fn vraska_poison_difference_then_replacement_effects() {
-    cr!("614.1a", "122.1f");
+    cr!("614.1a");
     ruling!(
         "Vraska, Betrayal's Sting",
         "In most cases, the target of Vraska's last loyalty ability will end up with nine poison counters. However, once you calculate what the difference is, replacement effects can change how many poison counters the player actually gets. For example, if the player controls Melira, the Living Cure, they will end up getting one poison counter if they had eight or fewer to begin with."
@@ -886,7 +929,7 @@ fn vraska_poison_difference_then_replacement_effects() {
 
 #[test]
 fn vraska_treasure_keeps_supertypes_only() {
-    cr!("205.1a", "205.1b", "613.1d");
+    cr!("205.1a", "613.1d");
     ruling!(
         "Vraska, Betrayal's Sting",
         "The target of Vraska's second loyalty ability will lose any other subtypes and card types it previously had and will be only a Treasure artifact. It will retain any supertypes it had."
@@ -1015,7 +1058,7 @@ fn nissa_bonuses_and_token_size_are_fixed_on_resolution() {
 
 #[test]
 fn jace_minus_two_checks_every_graveyard() {
-    cr!("608.2c", "404.1");
+    cr!("608.2c");
     ruling!(
         "Jace, the Perfected Mind",
         "Jace's second loyalty ability doesn't care which player's graveyard has twenty or more cards in it. It could be the target player's or another player's."
