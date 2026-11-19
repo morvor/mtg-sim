@@ -52,6 +52,17 @@ pub fn counters_prevented(g: &Game, obj: ObjectId, kind: &str) -> bool {
                     && g.matches(obj, &f, &crate::eval::Ctx::new(Some(*src), *ctl))
             })
     })
+        // A resolved spell's or ability's effect ("It can't have counters put on it for
+        // as long as ~ remains on the battlefield." — Suncleanser).
+        || (g.obj(obj).zone == Zone::Battlefield
+            && g.would_be_prevented(&ReplEvent::AddCounters {
+                target: Entity::Object(obj),
+                kind: kind.into(),
+                n: 1,
+                source: Some(obj),
+                by: Some(g.obj(obj).controller),
+                origin: crate::events::CounterOrigin::Cost,
+            }))
 }
 
 /// [`counters_prevented`] for an object about to enter the battlefield under

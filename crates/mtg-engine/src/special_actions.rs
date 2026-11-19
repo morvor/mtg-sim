@@ -67,6 +67,15 @@ pub struct SpecialState {
     /// you to discard a card" doesn't apply to such a discard (Library of Leng's ruling,
     /// `discard_rules::DISCARDED_BY_EFFECT`).
     pub cost_discards: u32,
+    /// The player casting a spell "if able" during a resolution right now (Wild
+    /// Evocation's "casts it without paying its mana cost if able", CR 608.2g): they may
+    /// still decline to activate mana abilities for it (CR 601.2g; see
+    /// `cost_rules::agrees_to_activate_mana_abilities`).
+    pub casting_if_able: Option<PlayerId>,
+    /// That player once they've declined: casting the spell again, they pay its cost from
+    /// their mana pool alone, none of their mana abilities (nor special actions that add
+    /// mana) planned or activated (`mana_abilities::sources_inner`, `Effect::CastCard`).
+    pub pool_only: Option<PlayerId>,
     /// The activated abilities being activated right now, innermost last (CR 602.2):
     /// (player, source, ability uid).
     pub activating: Vec<(PlayerId, ObjectId, u64)>,
