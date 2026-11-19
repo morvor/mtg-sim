@@ -1419,6 +1419,11 @@ fn sources_inner(
     beginning: Option<(ObjectId, u64)>,
 ) -> Vec<ManaSource> {
     let mut out = Vec::new();
+    // A player casting a spell "if able" who chose to activate no mana abilities for it
+    // (Wild Evocation's ruling, `cost_rules::agrees_to_activate_mana_abilities`).
+    if g.special.pool_only == Some(p) {
+        return out;
+    }
     for o in g.permanents() {
         let reserved = Some(o.id) == reserve;
         if reserved && !reserve_may_tap {

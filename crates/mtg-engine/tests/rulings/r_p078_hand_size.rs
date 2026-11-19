@@ -4,7 +4,6 @@
 use crate::r_p078_common::*;
 use crate::r_s01_common::{attack_with, supported};
 use crate::r_s02_common::destroy;
-use crate::r_s06_common::damage;
 use crate::r_s25_common::cast_new;
 use mtg_engine::game::GameResult;
 use mtg_engine::testing::*;
@@ -44,7 +43,7 @@ fn kept_through_cleanup(order: &[(PlayerId, &str)], p: PlayerId) -> usize {
 
 #[test]
 fn hand_size_reductions_apply_after_a_set_size_in_timestamp_order() {
-    cr!("402.2", "613.7", "613.7d");
+    cr!("402.2", "514.1", "613.11", "613.7", "613.7d");
     ruling!(
         "Thought Devourer",
         "If multiple effects modify your hand size, apply them in timestamp order. For example, if you are affected by Cursed Rack (an artifact that sets a player's maximum hand size to four) and then put Thought Devourer onto the battlefield, your maximum hand size would be zero. However, if those permanents entered in the opposite order, your maximum hand size would be four."
@@ -94,7 +93,7 @@ fn hand_size_reductions_apply_after_a_set_size_in_timestamp_order() {
 
 #[test]
 fn no_maximum_hand_size_and_a_set_size_apply_in_timestamp_order() {
-    cr!("402.2", "613.7", "613.7d");
+    cr!("402.2", "514.1", "613.11", "613.7", "613.7d");
     ruling!(
         "Graceful Adept",
         "If multiple effects modify your hand size, apply them in timestamp order. For example, if you put Null Profusion (an enchantment that says your maximum hand size is two) onto the battlefield and then put Graceful Adept onto the battlefield, you'll have no maximum hand size. However, if those permanents entered in the opposite order, your maximum hand size would be two."
@@ -142,7 +141,7 @@ fn no_maximum_hand_size_and_a_set_size_apply_in_timestamp_order() {
 
 #[test]
 fn damia_checks_the_hand_as_the_upkeep_begins_and_can_be_responded_to() {
-    cr!("603.4", "503.1a", "117.3b");
+    cr!("603.4", "503.1a", "117.3a", "117.3b");
     ruling!(
         "Damia, Sage of Stone",
         "The number of cards in your hand is checked at the beginning of your upkeep before you have the opportunity to cast spells and activate abilities. If you have seven or more cards in your hand at that time, Damia’s last ability won’t trigger."
@@ -241,7 +240,7 @@ fn krang_checks_the_hand_as_it_enters_and_again_as_it_resolves() {
 
 #[test]
 fn damage_from_combat_can_become_lethal_after_drawing() {
-    cr!("704.5g", "120.6", "514.2");
+    cr!("704.5g", "120.6", "510.2");
     ruling!(
         "Grim Strider",
         "Because damage remains marked on a creature until it’s removed as the turn ends, the damage a Grim Strider takes during combat may become lethal if you draw cards later in the turn."
@@ -252,22 +251,29 @@ fn damage_from_combat_can_become_lethal_after_drawing() {
     );
     supported("Grim Strider");
     supported("Stingerback Terror");
-    for (name, base) in [("Grim Strider", 6), ("Stingerback Terror", 7)] {
+    // P0's creature, a 4/4 with the cards in hand, blocks P1's Hill Giant (3/3) and takes
+    // 3 damage. After combat, P0 draws a card: 3 toughness, so the 3 damage is lethal.
+    for (name, cards) in [("Grim Strider", 2), ("Stingerback Terror", 3)] {
         let mut t = TestGame::new(2);
         let c = t.battlefield(P0, name);
-        fill_hand(&mut t, P0, 2);
-        assert_eq!(t.pt(c).1, base - 2);
-        let bears = t.battlefield(P1, "Grizzly Bears");
-        damage(&mut t, bears, base - 4, c);
-        assert!(t.on_battlefield(c), "{name} survives the damage");
-        t.g.draw_cards(P0, 1);
-        t.settle();
-        assert!(t.on_battlefield(c), "{name}: not lethal yet");
+        fill_hand(&mut t, P0, cards);
+        assert_eq!(t.pt(c), (4, 4), "{name}");
+        t.set_step(P1, Step::PrecombatMain);
+        let giant = t.battlefield(P1, "Hill Giant");
+        t.attack(&[(giant, pl(P0))], &[(c, giant)]);
+        assert!(t.on_battlefield(c), "{name} survives the combat damage");
+        assert_eq!(t.obj_now(c).damage, 3, "{name}");
+        assert!(t.in_graveyard(P1, "Hill Giant"));
+        t.advance_to(P1, Step::PostcombatMain);
+        assert!(
+            t.on_battlefield(c),
+            "{name}: the damage is still marked, not lethal"
+        );
         t.g.draw_cards(P0, 1);
         t.settle();
         assert!(
             !t.on_battlefield(c),
-            "{name}: the marked damage is now lethal"
+            "{name}: the damage marked in combat is now lethal"
         );
     }
 }

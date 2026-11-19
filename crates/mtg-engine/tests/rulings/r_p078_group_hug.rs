@@ -112,7 +112,7 @@ fn abyssal_persecutor_leaving_makes_a_dead_opponent_lose_at_once() {
 
 #[test]
 fn abyssal_persecutor_stops_every_way_to_win_or_lose() {
-    cr!("104.3b", "104.3c", "104.3d", "104.2b", "101.2");
+    cr!("104.3b", "104.3c", "104.3d", "104.3e", "104.2b", "101.2");
     ruling!(
         "Abyssal Persecutor",
         "No game effect can cause you to win the game or cause any opponent to lose the game while you control Abyssal Persecutor. It doesn't matter whether an opponent has 0 or less life, an opponent is forced to draw a card while their library is empty, an opponent has ten or more poison counters, an opponent is dealt combat damage by Phage the Untouchable, you control Felidar Sovereign and have 40 or more life, or so on. You keep playing."
@@ -400,7 +400,7 @@ fn lavaleapers_extra_mana_is_a_mana_ability_that_doesnt_use_the_stack() {
 
 #[test]
 fn conundrum_sphinx_only_your_own_named_card_goes_to_your_hand() {
-    cr!("701.20a", "101.4");
+    cr!("701.20a");
     ruling!(
         "Conundrum Sphinx",
         "If a card a player reveals this way is the card that particular player named, they must put it into their hand. Otherwise, they must put it on the bottom of their library, even if it’s the card a different player named. In no cases can a player leave the revealed card on top of their library."
@@ -540,9 +540,31 @@ fn wild_evocation_casts_without_paying_mana_cost_x_is_zero_and_kicker_may_be_pai
     assert_eq!(t.named_on_battlefield("Typhoid Rats").len(), 3);
 }
 
+/// Whether P0 was asked, since decision `from`, whether to activate mana abilities for a
+/// spell they're casting "if able".
+fn asked_to_tap(t: &TestGame, from: usize) -> bool {
+    t.asked()[from..].iter().any(|(p, d)| {
+        *p == P0 && matches!(d, Decision::YesNo { prompt, .. } if prompt.contains("mana abilities"))
+    })
+}
+
+/// After a Wild Evocation cast, an ordinary spell P0 casts is paid for with mana abilities,
+/// as always: the "if able" choice is over. P0 needs an untapped Mountain.
+fn casts_bolt_as_usual(t: &mut TestGame) {
+    let life = t.life(P1);
+    let tapped = crate::r_s01_common::tapped_lands(t, P0);
+    let from = t.asked().len();
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.cast(P0, bolt).target(pl(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), life - 3);
+    assert_eq!(crate::r_s01_common::tapped_lands(t, P0), tapped + 1);
+    assert!(!asked_to_tap(t, from));
+}
+
 #[test]
 fn wild_evocation_pays_a_mandatory_additional_cost_if_able() {
-    cr!("601.2b", "601.2f", "118.9");
+    cr!("601.2b", "601.2f", "601.2g", "601.2h", "118.9", "733.1");
     ruling!(
         "Wild Evocation",
         "If casting the revealed card involves paying a mandatory additional cost (such as the one Fling has), the player casting that card must pay that cost if able. If they can't, the card remains uncast in their hand. If the mandatory additional cost includes a mana payment, the situation is more complex. If the player has enough unspent mana to pay the cost, that player must do so. If the player can't possibly pay the cost, the card remains uncast in their hand. However, if the player has the means to produce enough mana to pay the cost, then they have a choice: The player may cast the card, produce mana, and pay the cost. Or the player may choose to activate no mana abilities, thus making the card impossible to cast because the additional mana can't be paid."
@@ -562,49 +584,100 @@ fn wild_evocation_pays_a_mandatory_additional_cost_if_able() {
     let (mut t, _) = evocation_with("Fling", |_| {});
     t.resolve_all();
     assert!(t.in_hand(P0, "Fling"));
-    // Thunderherd Migration: "As an additional cost to cast this spell, reveal a Dinosaur
-    // card from your hand or pay {1}." With no Dinosaur, the cost includes {1}.
-    supported("Thunderherd Migration");
-    let asked_to_tap = |t: &TestGame, from: usize| {
-        t.asked()[from..].iter().any(|(p, d)| {
-            *p == P0
-                && matches!(d, Decision::YesNo { prompt, .. } if prompt.contains("mana abilities"))
-        })
+    // Lash of the Balrog: "As an additional cost to cast this spell, sacrifice a creature
+    // or pay {4}. Destroy target creature." P0 controls no creature, so the cost is {4}.
+    supported("Lash of the Balrog");
+    let lash = |t: &mut TestGame| {
+        t.battlefield(P1, "Grizzly Bears");
+    };
+    let lash_with_mountains = |t: &mut TestGame| {
+        t.battlefield(P1, "Grizzly Bears");
+        t.lands(P0, "Mountain", 5);
     };
     // Unspent mana in the pool: it must be spent; the spell is cast.
-    let (mut t, _) = evocation_with("Thunderherd Migration", |_| {});
-    add_mana(&mut t, P0, &[mtg_engine::mana::ManaType::C], 1);
+    let (mut t, _) = evocation_with("Lash of the Balrog", lash);
+    add_mana(&mut t, P0, &[mtg_engine::mana::ManaType::C], 4);
     let from = t.asked().len();
     t.resolve_all();
-    assert!(t.in_graveyard(P0, "Thunderherd Migration"));
+    assert!(t.in_graveyard(P0, "Lash of the Balrog"));
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
     assert!(!asked_to_tap(&t, from));
     // No way to pay: it stays in hand.
-    let (mut t, _) = evocation_with("Thunderherd Migration", |_| {});
+    let (mut t, _) = evocation_with("Lash of the Balrog", lash);
     t.resolve_all();
-    assert!(t.in_hand(P0, "Thunderherd Migration"));
-    // A land that could pay: the player chooses. Declining to activate mana abilities
-    // leaves the card in hand and the land untapped ...
-    let (mut t, _) = evocation_with("Thunderherd Migration", |t| {
-        t.lands(P0, "Wastes", 1);
-    });
+    assert!(t.in_hand(P0, "Lash of the Balrog"));
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    // Lands that could pay: the player chooses. Declining to activate mana abilities
+    // leaves the card in hand and the lands untapped ...
+    let (mut t, _) = evocation_with("Lash of the Balrog", lash_with_mountains);
     let from = t.asked().len();
     t.answer_yes(P0, false);
     t.resolve_all();
     assert!(asked_to_tap(&t, from));
-    assert!(t.in_hand(P0, "Thunderherd Migration"));
+    assert!(t.in_hand(P0, "Lash of the Balrog"));
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
     assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 0);
-    // ... and agreeing (also the default answer) casts it, the land tapped for the {1}.
+    casts_bolt_as_usual(&mut t);
+    // ... and agreeing (also the default answer) casts it, four lands tapped for the {4}.
     for answer in [Some(true), None] {
-        let (mut t, _) = evocation_with("Thunderherd Migration", |t| {
-            t.lands(P0, "Wastes", 1);
-        });
+        let (mut t, _) = evocation_with("Lash of the Balrog", lash_with_mountains);
         if let Some(yes) = answer {
             t.answer_yes(P0, yes);
         }
         t.resolve_all();
-        assert!(t.in_graveyard(P0, "Thunderherd Migration"), "{answer:?}");
-        assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 1);
+        assert!(t.in_graveyard(P0, "Lash of the Balrog"), "{answer:?}");
+        assert!(t.in_graveyard(P1, "Grizzly Bears"), "{answer:?}");
+        assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 4);
+        casts_bolt_as_usual(&mut t);
     }
+}
+
+#[test]
+fn wild_evocation_declining_mana_abilities_for_a_kicker_still_casts_the_spell() {
+    cr!("601.2b", "601.2g", "733.1", "733.2");
+    ruling!(
+        "Wild Evocation",
+        "that player must cast that card if it's possible to do so, even if they don't want to"
+    );
+    ruling!(
+        "Wild Evocation",
+        "Or the player may choose to activate no mana abilities, thus making the card impossible to cast because the additional mana can't be paid."
+    );
+    interp!("cast-if-able-mana-abilities-default");
+    // Burst Lightning (kicker {4}), kicked, but P0 then won't tap the Mountains: the
+    // casting is reversed, and the card is cast again with the mana P0's pool has (none),
+    // so unkicked. Declining mana abilities doesn't make a card uncastable whose
+    // mandatory costs need none.
+    let (mut t, _) = evocation_with("Burst Lightning", |t| {
+        t.lands(P0, "Mountain", 5);
+    });
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    t.answer_yes(P0, false);
+    t.answer_targets(P0, &[pl(P1)]);
+    t.answer_targets(P0, &[pl(P1)]);
+    let from = t.asked().len();
+    t.resolve_all();
+    assert!(asked_to_tap(&t, from));
+    assert!(t.in_graveyard(P0, "Burst Lightning"));
+    assert_eq!(t.life(P1), 18, "cast unkicked");
+    assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 0);
+    // Kicker isn't offered again: the pool alone can't pay it.
+    let kicker_offers = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::OptionalCost { .. }))
+        .count();
+    assert_eq!(kicker_offers, 1);
+    casts_bolt_as_usual(&mut t);
+    // With {4} floating, the pool pays the kicker: nothing to decline.
+    let (mut t, _) = evocation_with("Burst Lightning", |_| {});
+    add_mana(&mut t, P0, &[mtg_engine::mana::ManaType::C], 4);
+    t.answer(P0, DecisionKind::OptionalCost, Answer::Bool(true));
+    t.answer_targets(P0, &[pl(P1)]);
+    let from = t.asked().len();
+    t.resolve_all();
+    assert!(!asked_to_tap(&t, from));
+    assert_eq!(t.life(P1), 16, "kicked");
 }
 
 // ---------------------------------------------------------------------------------
@@ -651,6 +724,63 @@ fn erestor_counts_an_opponent_with_two_votes_both_ways() {
     t.enter(P0, "Council Guardian");
     t.resolve_all();
     assert_eq!(t.life(P1), 18);
+}
+
+/// Grudge Keeper's ruling "If you have additional votes because of Brago’s Representative,
+/// and you vote for more than one choice, an opponent will lose 2 life only if they voted
+/// for none of those choices." (2014-05-29, cited for an opponent with one vote in
+/// `r_p172_combat_votes.rs`) is narrower than stated: when the opponent has several votes
+/// too, Erestor of the Council's ruling on the same words applies (docs/
+/// RULING_DISCREPANCIES.md).
+#[test]
+fn grudge_keeper_counts_an_opponent_whose_several_votes_partly_match_yours() {
+    cr!("701.38a", "701.38d");
+    ruling!(
+        "Erestor of the Council",
+        "it's possible for them to count as both an opponent who voted for a choice you voted for and an opponent who voted for a choice you didn't vote for"
+    );
+    interp!("opponent-with-several-votes-counts-both-ways");
+    // P0 votes red and green, P1 red and blue: P1 voted for red, one of P0's choices, and
+    // for blue, a choice P0 didn't vote for.
+    let vote = |t: &mut TestGame| {
+        t.battlefield(P0, "Brago's Representative");
+        t.battlefield(P1, "Brago's Representative");
+        t.answer(P0, DecisionKind::Option, Answer::Index(2)); // red
+        t.answer(P0, DecisionKind::Option, Answer::Index(3)); // green
+        t.answer(P1, DecisionKind::Option, Answer::Index(2)); // red
+        t.answer(P1, DecisionKind::Option, Answer::Index(0)); // blue
+        t.enter(P0, "Council Guardian");
+        t.resolve_all();
+    };
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grudge Keeper");
+    vote(&mut t);
+    assert_eq!(t.life(P1), 18);
+    // Erestor: a Treasure for P1 and scry 1 for P0.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Erestor of the Council");
+    vote(&mut t);
+    let treasures =
+        t.g.permanents()
+            .filter(|o| o.controller == P1 && o.chars.has_subtype("Treasure"))
+            .count();
+    assert_eq!(treasures, 1);
+    assert!(t
+        .asked()
+        .iter()
+        .any(|(p, d)| *p == P0 && matches!(d, Decision::Scry { cards } if cards.len() == 1)));
+    // P1 votes red and green, as P0 does: not a vote for a choice P0 didn't vote for.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Grudge Keeper");
+    t.battlefield(P0, "Brago's Representative");
+    t.battlefield(P1, "Brago's Representative");
+    t.answer(P0, DecisionKind::Option, Answer::Index(2));
+    t.answer(P0, DecisionKind::Option, Answer::Index(3));
+    t.answer(P1, DecisionKind::Option, Answer::Index(3));
+    t.answer(P1, DecisionKind::Option, Answer::Index(2));
+    t.enter(P0, "Council Guardian");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 20);
 }
 
 fn sail_into_the_west(t: &mut TestGame, vote: usize) {
@@ -784,6 +914,7 @@ fn iwamori_opponents_choose_from_the_active_player_in_turn_order_then_all_enter(
         |g| g.battlefield.len(),
     );
     let from = t.asked().len();
+    let events = t.g.turn_events.len();
     t.enter(P0, "Iwamori of the Open Fist");
     let before = t.g.battlefield.len();
     t.resolve_all();
@@ -794,6 +925,12 @@ fn iwamori_opponents_choose_from_the_active_player_in_turn_order_then_all_enter(
     // When P1 chose, P2's card hadn't entered yet.
     assert_eq!(seen_values(&seen), vec![before]);
     assert!(t.on_battlefield(i1) && t.on_battlefield(i2));
+    // The cards were chosen without being revealed (CR 101.4a).
+    let revealed = t.g.turn_events[events..].iter().any(|e| {
+        matches!(e, Event::Custom { name, obj: Some(o), .. }
+            if name == mtg_engine::reveal::REVEALED && (*o == i1 || *o == i2))
+    });
+    assert!(!revealed);
 }
 
 // ---------------------------------------------------------------------------------
@@ -818,7 +955,7 @@ fn centaur_peacemaker_each_team_gains_eight_in_two_headed_giant() {
 
 #[test]
 fn aku_djinn_skips_your_teammates_creatures_in_two_headed_giant() {
-    cr!("102.3", "810.2");
+    cr!("102.3");
     ruling!(
         "Aku Djinn",
         "Only puts counters on creatures your opponents control, so in the Two-Headed Giant format, won’t put counters on your teammate’s creatures."

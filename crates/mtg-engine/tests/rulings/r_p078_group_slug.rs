@@ -110,7 +110,7 @@ fn manabarbs_triggers_separately_for_each_land_and_uses_the_stack() {
 
 #[test]
 fn manabarbs_can_be_responded_to_with_the_mana_it_punishes() {
-    cr!("605.3a", "117.3c", "405.5");
+    cr!("605.3a", "106.4", "405.5");
     ruling!(
         "Manabarbs",
         "On the other hand, a player can tap lands for mana, let the Manabarbs triggered abilities be put on the stack, and then respond to those abilities by casting an instant or activating an ability using that mana. In that case, the spell or ability will resolve first."
@@ -134,7 +134,7 @@ fn manabarbs_can_be_responded_to_with_the_mana_it_punishes() {
 
 #[test]
 fn ironclad_revolutionary_sacrifices_once_chosen_as_it_resolves() {
-    cr!("608.2b", "608.2c", "118.12");
+    cr!("603.5", "608.2c", "118.12");
     ruling!(
         "Ironclad Revolutionary",
         "You can sacrifice an artifact only once when Ironclad Revolutionary’s triggered ability resolves. You can’t sacrifice more to get more counters or more life loss."

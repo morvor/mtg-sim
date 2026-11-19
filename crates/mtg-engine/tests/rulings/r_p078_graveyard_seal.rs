@@ -119,7 +119,7 @@ fn planar_void_ignores_itself_and_the_cards_going_with_it() {
 
 #[test]
 fn planar_void_lets_other_abilities_see_the_card_reach_the_graveyard() {
-    cr!("603.2", "603.3b", "700.4");
+    cr!("603.2", "603.3", "700.4");
     ruling!(
         "Planar Void",
         "The card does go to the graveyard before it is exiled, so other triggered abilities will trigger on the card going to the graveyard."

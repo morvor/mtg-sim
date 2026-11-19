@@ -2295,7 +2295,7 @@ impl Game {
         // A spell cast "if able" during a resolution: activating mana abilities for it is
         // still the player's choice (CR 601.2g).
         if !crate::cost_rules::agrees_to_activate_mana_abilities(self, p, id, &total, &spend) {
-            return Err(Illegal("declined to activate mana abilities".into()));
+            return Err(Illegal(crate::cost_rules::DECLINED_MANA_ABILITIES.into()));
         }
         let prev_otherwise = std::mem::replace(&mut self.paid_otherwise, paid_otherwise.clone());
         let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx);

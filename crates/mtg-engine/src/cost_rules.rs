@@ -510,6 +510,10 @@ pub fn may_decline_cast_if_able(g: &mut Game, p: PlayerId, card: ObjectId) -> bo
         )
 }
 
+/// The casting of a spell cast "if able" ends with this error when its caster declines to
+/// activate mana abilities for it ([`agrees_to_activate_mana_abilities`]).
+pub const DECLINED_MANA_ABILITIES: &str = "declined to activate mana abilities";
+
 /// For a spell `p` is casting "if able" while an effect resolves (Wild Evocation): when
 /// its total cost has a mana payment the mana in their pool doesn't cover but their mana
 /// abilities could, whether they activate them (CR 601.2g). The ruling of Wild Evocation:
@@ -517,7 +521,10 @@ pub fn may_decline_cast_if_able(g: &mut Game, p: PlayerId, card: ObjectId) -> bo
 /// choice: The player may cast the card, produce mana, and pay the cost. Or the player may
 /// choose to activate no mana abilities, thus making the card impossible to cast". Mana
 /// already in the pool must be spent; a cost no mana ability could pay isn't asked about.
-/// By default the player activates them (`cast-if-able-mana-abilities-default`).
+/// A player who declines has the casting reversed (CR 733.1) and casts the card again if
+/// the mana in their pool alone pays for it (`SpecialState::pool_only`, `Effect::CastCard`):
+/// one who announced a kicker cost only those mana abilities would pay casts it unkicked
+/// (CR 733.2). By default the player activates them (`cast-if-able-mana-abilities-default`).
 pub fn agrees_to_activate_mana_abilities(
     g: &mut Game,
     p: PlayerId,
@@ -525,7 +532,7 @@ pub fn agrees_to_activate_mana_abilities(
     total: &Cost,
     spend: &crate::mana::SpendContext,
 ) -> bool {
-    if g.special.casting_if_able != Some(p) {
+    if g.special.casting_if_able != Some(p) || g.special.pool_only == Some(p) {
         return true;
     }
     let Some(m) = total.mana.as_ref().filter(|m| !m.is_zero()) else {
