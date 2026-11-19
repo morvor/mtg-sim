@@ -928,6 +928,15 @@ pub fn attack_requirements(g: &Game) -> Vec<AttackRequirement> {
     }
     // Requirements that rules of keywords and hand-written abilities define.
     out.extend(crate::kw::attack_requirements(g));
+    // A creature that can't attack at all (tapped, summoning sick, "can't attack") isn't
+    // bound by "attacks if able": its requirements ask nothing of the declaration, so a
+    // conditional one ("if Viashino Bey attacks, ... attacks if able") can't make the
+    // declarations that meet its condition obey fewer requirements (CR 508.1d; register
+    // `requirements-of-creatures-unable-to-attack`).
+    if out.iter().any(|r| r.creature().is_some()) {
+        let able: BTreeSet<ObjectId> = attack_options(g).into_iter().map(|(c, _)| c).collect();
+        out.retain(|r| r.creature().is_none_or(|c| able.contains(&c)));
+    }
     out
 }
 
