@@ -1013,12 +1013,27 @@ impl Game {
             // effect has the discarded card go somewhere else (Leyline of the Void exiles
             // it), it would no longer be put into a graveyard, so the effect no longer
             // applies (CR 616.1f). ("Instead of putting it anywhere else" still does.)
+            // Madness discards the card into exile and then notes it ("exiled this way"):
+            // it still applies to a card already going to exile (Leyline of the Void's
+            // ruling: "a madness ability of the discarded card ... still work[s]"), but not
+            // to one put on top of a library instead (Nephalia Academy's ruling: "you
+            // can't cast it using madness").
             if !matches!(m.to, Zone::Graveyard(_)) {
                 out.retain(|c| {
-                    !(matches!(
+                    if !matches!(
                         c.def.event,
                         ReplacementEvent::Discard(..) | ReplacementEvent::DiscardCausedBy { .. }
-                    ) && matches!(c.def.action, ReplacementAction::MoveInstead(_)))
+                    ) {
+                        return true;
+                    }
+                    match &c.def.action {
+                        ReplacementAction::MoveInstead(_) => false,
+                        ReplacementAction::Then(first, _) => match first.as_ref() {
+                            ReplacementAction::MoveInstead(d) => m.to.kind() == Some(d.zone),
+                            _ => true,
+                        },
+                        _ => true,
+                    }
                 });
             }
         }
