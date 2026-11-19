@@ -127,6 +127,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: as the card says: the third ability triggers once for each life-gaining event, however much life was gained, and a creature dealt lethal damage as you gain life dies to state-based actions before the trigger is put on the stack, so it can't be its target.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P158.tsv` (the two rulings' "The Destined White Mage's second ability"; the rest of both stays cited); register `ruling-contradicting-oracle-gives-way`; tests `tests/rulings/r_p158_triggers.rs` (`white_mage_triggers_once_per_life_gain_event`, `white_mage_cant_save_a_creature_dealt_lethal_damage_as_the_life_is_gained`).
 
+### Taeko, the Patient Avalanche: "{U}{B}" for "{U/B}"
+- Kind: template error
+- Status: open for review
+- Ruling, Taeko, the Patient Avalanche (2024-11-08): "You don't choose a target for Taeko's last ability at the time it triggers. Rather, a second "reflexive" ability triggers when you pay {U}{B} this way. You choose a target for that ability as it goes on the stack. Each player may respond to this triggered ability as normal."
+- Conflicts with: the card's Oracle text, "Whenever Taeko attacks, you may pay {U/B}. When you do, target attacking creature can't be blocked this turn." {U/B} is one hybrid mana symbol, paid with one blue or one black mana (CR 107.4e); {U}{B} is two mana, one of each.
+- Evidence: the ruling is the standard note on reflexive triggered abilities, filled in with the card's name and cost ("You don't choose a target for [card]'s last ability at the time it triggers. Rather, a second "reflexive" ability triggers when you pay [cost] this way. ...": Weapons Vendor's "when you pay {1} this way", The Motherlode, Excavator's "when you pay {E}{E}{E}{E} this way"), with the cost written {U}{B}. No other ruling in the data has "pay {U}{B}", and no card with an attack trigger costing {U}{B} was found, so no copied source is evident: most likely the cost was mistyped as the template was filled in. The card (Foundations Jumpstart, 2024-11-15) has no other Oracle text in the data; its release notes weren't read (magic.wizards.com is outside this session's allowed network hosts, and the ormos mirror ends in 2022). Found in work item rulings-residue-reflexive-refund; the kind is provisional (no evident copied ruling).
+- Engine: one blue or one black mana pays the cost, and the reflexive ability then targets an attacking creature, as the card says; the rest of the ruling is followed.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P130.tsv` (its "when you pay {U}{B} this way"; the rest stays cited); register `ruling-contradicting-oracle-gives-way`; test `tests/rulings/r_residue_reflexive_refund.rs` (`taeko_targets_an_attacking_creature_after_paying`).
+
 ## Copying errors
 
 ### Run Out of Town: "controller" for "owner"

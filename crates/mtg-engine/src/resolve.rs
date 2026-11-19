@@ -3529,9 +3529,9 @@ impl Game {
                 Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
             }
             // "creatures defending player controls without flying can't block this turn"
-            // (The Motherlode, Excavator): the defending player (or the triggering player)
-            // as the effect begins; the creatures are a class (CR 611.2c).
-            Filter::ControlledBy(rel @ (PlayerRel::Defending | PlayerRel::TriggerPlayer)) => {
+            // (The Motherlode, Excavator): the defending player as the effect begins; the
+            // creatures are a class (CR 611.2c).
+            Filter::ControlledBy(rel @ PlayerRel::Defending) => {
                 let ps = self
                     .player_ids()
                     .into_iter()

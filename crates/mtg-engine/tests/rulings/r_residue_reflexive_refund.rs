@@ -73,7 +73,7 @@ fn slumbering_walker_targets_after_the_counter_is_removed() {
 
 #[test]
 fn taeko_targets_an_attacking_creature_after_paying() {
-    cr!("603.12", "509.1b");
+    cr!("603.12", "509.1b", "107.4e");
     ruling!(
         "Taeko, the Patient Avalanche",
         "You don't choose a target for Taeko's last ability at the time it triggers."
@@ -82,30 +82,36 @@ fn taeko_targets_an_attacking_creature_after_paying() {
         "Taeko, the Patient Avalanche",
         "You choose a target for that ability as it goes on the stack. Each player may respond to this triggered ability as normal."
     );
+    // The ruling says the reflexive ability triggers "when you pay {U}{B} this way"; the
+    // card's cost is the hybrid {U/B} ("you may pay {U/B}. When you do, ..."), paid with
+    // one blue or one black mana (docs/RULING_DISCREPANCIES.md).
+    interp!("ruling-contradicting-oracle-gives-way");
     supported("Taeko, the Patient Avalanche");
-    let mut t = TestGame::new(2);
-    let taeko = t.battlefield(P0, "Taeko, the Patient Avalanche");
-    let bears = t.battlefield(P0, "Grizzly Bears");
-    let wall = t.battlefield(P1, "Wall of Stone");
-    t.lands(P0, "Island", 1);
-    let from = t.asked().len();
-    t.answer_yes(P0, true);
-    t.answer_targets(P0, &[obj(bears)]);
-    attack_with(
-        &mut t,
-        &[(taeko, Entity::Player(P1)), (bears, Entity::Player(P1))],
-    );
-    untargeted_then_reflexive(&mut t, P0, from, &[obj(bears)]);
-    assert_eq!(untapped_lands(&t, P0), 0);
-    t.resolve_all();
-    // The Wall can't block the Bears; it blocks Taeko instead.
-    t.answer(
-        P1,
-        DecisionKind::Blockers,
-        Answer::Blockers(vec![(wall, bears)]),
-    );
-    t.advance_to(P0, Step::EndOfCombat);
-    assert_eq!(t.life(P1), 20 - 2 - t.pt(taeko).0);
+    for land in ["Island", "Swamp"] {
+        let mut t = TestGame::new(2);
+        let taeko = t.battlefield(P0, "Taeko, the Patient Avalanche");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let wall = t.battlefield(P1, "Wall of Stone");
+        t.lands(P0, land, 1);
+        let from = t.asked().len();
+        t.answer_yes(P0, true);
+        t.answer_targets(P0, &[obj(bears)]);
+        attack_with(
+            &mut t,
+            &[(taeko, Entity::Player(P1)), (bears, Entity::Player(P1))],
+        );
+        untargeted_then_reflexive(&mut t, P0, from, &[obj(bears)]);
+        assert_eq!(untapped_lands(&t, P0), 0, "{land}: one mana paid");
+        t.resolve_all();
+        // The Wall can't block the Bears (an illegal block: no block at all).
+        t.answer(
+            P1,
+            DecisionKind::Blockers,
+            Answer::Blockers(vec![(wall, bears)]),
+        );
+        t.advance_to(P0, Step::EndOfCombat);
+        assert_eq!(t.life(P1), 20 - 2 - t.pt(taeko).0, "{land}");
+    }
 }
 
 #[test]

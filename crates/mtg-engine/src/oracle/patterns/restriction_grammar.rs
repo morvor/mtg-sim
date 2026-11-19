@@ -934,9 +934,7 @@ pub(crate) fn restriction_class(f: &Filter) -> bool {
     match f {
         Filter::And(v) | Filter::Or(v) => v.iter().all(restriction_class),
         Filter::Not(x) => restriction_class(x),
-        Filter::ControlledBy(
-            PlayerRel::Target(_) | PlayerRel::Defending | PlayerRel::TriggerPlayer,
-        )
+        Filter::ControlledBy(PlayerRel::Target(_) | PlayerRel::Defending)
         | Filter::ControlledByPlayer(_)
         | Filter::Named(_)
         | Filter::Other => true,
