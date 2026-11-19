@@ -3,10 +3,17 @@
 //! order their controller chooses (CR 616.1, 616.1f, the 616.1g example; Thief of Blood's
 //! ruling), when the order can matter: one of them changes the game as it's applied and
 //! another reads or changes it too. The default is the order of the moves
-//! (interpretation `simultaneous-entries-ordered-by-controller`).
+//! (interpretation `simultaneous-entries-ordered-by-controller`). Which effects apply to
+//! each is determined as the event is proposed: one whose source an earlier-applied
+//! effect made leave the battlefield still applies (Rhythm of the Wild's ruling).
 
 use crate::r_residue_counters_common::*;
+use mtg_engine::ability::LibraryPosition;
 use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::events::MoveCause;
+use mtg_engine::keywords::KeywordKind;
+use mtg_engine::object::Zone;
+use mtg_engine::replacement::{EtbInfo, MoveEv};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
@@ -23,13 +30,55 @@ fn order_questions(t: &TestGame, p: PlayerId) -> Vec<Vec<String>> {
         .collect()
 }
 
+/// The options of every question asked to `p` about which of several permanents entering
+/// together has its effects applied next (each option names a permanent, "Thief of Blood
+/// #61: ..."), leaving out the choices among one permanent's own effects.
+fn entry_order_questions(t: &TestGame, p: PlayerId) -> Vec<Vec<String>> {
+    order_questions(t, p)
+        .into_iter()
+        .filter(|options| {
+            options
+                .iter()
+                .all(|o| o.split(": ").next().is_some_and(|h| h.contains(" #")))
+        })
+        .collect()
+}
+
+/// Puts `p`'s cards (moved from `from`, where they're put first) onto the battlefield at
+/// the same time under `p`'s control, as one simultaneous zone change. Returns each card's
+/// new object, if it entered as that move.
+fn enter_from(t: &mut TestGame, p: PlayerId, from: Zone, names: &[&str]) -> Vec<Option<ObjectId>> {
+    let objs: Vec<ObjectId> = names
+        .iter()
+        .map(|n| match from {
+            Zone::Hand(_) => t.hand(p, n),
+            _ => t.graveyard(p, n),
+        })
+        .collect();
+    let moves = objs
+        .iter()
+        .map(|o| MoveEv {
+            obj: *o,
+            to: Zone::Battlefield,
+            pos: LibraryPosition::Top,
+            cause: MoveCause::Effect,
+            by: Some(p),
+            etb: EtbInfo {
+                controller: Some(p),
+                ..Default::default()
+            },
+            source: None,
+        })
+        .collect();
+    let out = t.g.move_objects(moves);
+    t.g.flush_events();
+    t.settle();
+    out
+}
+
 #[test]
 fn ixidron_and_clone_entering_together_in_the_order_their_controller_chooses() {
     cr!("616.1", "616.1f", "614.12", "707.2");
-    cr_example!(
-        "616.1g",
-        "the effects of the two Voice of All tokens may be applied in either order"
-    );
     interp!("simultaneous-entries-ordered-by-controller");
     ruling!(
         "Ixidron",
@@ -92,7 +141,13 @@ fn thieves_of_blood_entering_together_the_chosen_one_gets_the_counters() {
     // "As this creature enters, remove all counters from all permanents. This creature
     // enters with a +1/+1 counter on it for each counter removed this way." An invalid
     // answer gets the default, the order of the moves.
-    for (answer, gets) in [(None, 0usize), (Some(0), 0), (Some(1), 1), (Some(7), 0)] {
+    for (answer, gets) in [
+        (None, 0usize),
+        (Some(0), 0),
+        (Some(1), 1),
+        (Some(2), 0),
+        (Some(7), 0),
+    ] {
         let mut t = TestGame::new(2);
         t.set_step(P0, Step::PrecombatMain);
         let bears = with_counters(&mut t, P1, "Grizzly Bears", 3);
@@ -172,7 +227,7 @@ fn sutured_ghoul_and_golgari_grave_troll_entering_together_in_the_chosen_order()
 
 #[test]
 fn no_order_question_when_no_entering_permanents_effect_changes_the_game() {
-    cr!("616.1", "614.12b");
+    cr!("616.1");
     interp!("simultaneous-entries-ordered-by-controller");
     supported("Breeding Pool");
     supported("Lakeside Shack");
@@ -222,5 +277,158 @@ fn each_players_entering_permanents_have_their_effects_applied_in_apnap_order() 
         };
         assert_eq!(plus1(&t, mine), 3, "the active player's ({active:?})");
         assert_eq!(plus1(&t, theirs), 0);
+    }
+}
+
+#[test]
+fn token_copies_doubling_season_doubles_have_their_effects_applied_in_the_chosen_order() {
+    cr!("616.1", "616.1g", "111.1");
+    cr_example!(
+        "616.1g",
+        "the effects of the two Voice of All tokens may be applied in either order"
+    );
+    interp!("simultaneous-entries-ordered-by-controller");
+    supported("Doubling Season");
+    supported("Cackling Counterpart");
+    // The CR's example with Thief of Blood for Voice of All: Cackling Counterpart ("Create a
+    // token that's a copy of target creature you control.") with Doubling Season. Doubling
+    // Season's effect is applied first (two tokens), then the two tokens' "as this enters"
+    // effects in the order P0 chooses: the one applied first removes the Bears' three
+    // counters and enters with them, doubled by Doubling Season; the other gets none.
+    for pick in [0usize, 1] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let bears = with_counters(&mut t, P1, "Grizzly Bears", 3);
+        t.battlefield(P0, "Doubling Season");
+        let thief = t.battlefield(P0, "Thief of Blood");
+        t.answer(P0, DecisionKind::Replacement, Answer::Index(pick));
+        cast_new(&mut t, P0, "Cackling Counterpart", &[obj(thief)]);
+        t.resolve_all();
+        let questions = entry_order_questions(&t, P0);
+        assert_eq!(questions.len(), 1, "{questions:?}");
+        assert_eq!(questions[0].len(), 2);
+        let tokens: Vec<ObjectId> = t
+            .named_on_battlefield("Thief of Blood")
+            .into_iter()
+            .filter(|id| *id != thief && t.obj_now(*id).is_token())
+            .collect();
+        assert_eq!(tokens.len(), 2, "Doubling Season: two tokens");
+        // The token chosen ("Thief of Blood #68: ...") got the counters.
+        let id_of = |option: &str| -> ObjectId {
+            let n = option.split(": ").next().and_then(|h| h.rsplit('#').next());
+            ObjectId(n.and_then(|n| n.parse().ok()).expect("an object number"))
+        };
+        let chosen = t.g.current(id_of(&questions[0][pick]));
+        let other = t.g.current(id_of(&questions[0][1 - pick]));
+        assert!(tokens.contains(&chosen) && tokens.contains(&other));
+        assert_eq!(plus1(&t, chosen), 6, "pick {pick}: 3 removed, doubled");
+        assert_eq!(plus1(&t, other), 0, "pick {pick}");
+        assert_eq!(plus1(&t, bears), 0);
+    }
+}
+
+#[test]
+fn mox_diamond_and_golgari_grave_troll_entering_together_in_the_chosen_order() {
+    cr!("616.1", "616.1f", "614.12");
+    interp!("simultaneous-entries-ordered-by-controller");
+    supported("Mox Diamond");
+    supported("Golgari Grave-Troll");
+    supported("Dryad Arbor");
+    // Mox Diamond: "If this artifact would enter, you may discard a land card instead. If
+    // you do, put this artifact onto the battlefield. ..." What's done instead is done as
+    // the effect is applied: discarding Dryad Arbor (a land card and a creature card)
+    // before the Troll's effect is applied gives the Troll one more creature card to count.
+    for (pick, troll_n) in [(None, 3u32), (Some(0usize), 3), (Some(1), 2)] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        t.graveyard(P0, "Grizzly Bears");
+        t.graveyard(P0, "Hill Giant");
+        let arbor = t.hand(P0, "Dryad Arbor");
+        if let Some(i) = pick {
+            t.answer(P0, DecisionKind::Replacement, Answer::Index(i));
+        }
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[obj(arbor)]);
+        enter_from(
+            &mut t,
+            P0,
+            Zone::Hand(P0),
+            &["Mox Diamond", "Golgari Grave-Troll"],
+        );
+        let questions = entry_order_questions(&t, P0);
+        assert_eq!(questions.len(), 1, "{pick:?}: {questions:?}");
+        assert!(questions[0][0].starts_with("Mox Diamond"));
+        assert_eq!(t.named_on_battlefield("Mox Diamond").len(), 1);
+        assert_eq!(t.zone(arbor), Zone::Graveyard(P0));
+        let troll = t.named_on_battlefield("Golgari Grave-Troll");
+        assert_eq!(plus1(&t, troll[0]), troll_n, "{pick:?}");
+    }
+}
+
+#[test]
+fn rhythm_of_the_wild_returned_as_another_creature_enters_still_gives_it_riot() {
+    cr!("614.12", "616.1f", "702.136a");
+    interp!("simultaneous-entries-ordered-by-controller");
+    ruling!(
+        "Rhythm of the Wild",
+        "If Rhythm of the Wild leaves the battlefield at the same time that a nontoken creature enters the battlefield (most likely because that creature has a replacement effect, such as that of Rescuer Sphinx), that creature still gets a +1/+1 counter or haste."
+    );
+    supported("Rhythm of the Wild");
+    supported("Rescuer Sphinx");
+    // Rescuer Sphinx ("As this creature enters, you may return a nonland permanent you
+    // control to its owner's hand. If you do, it enters with a +1/+1 counter on it.") and
+    // Grizzly Bears enter together; the Sphinx returns Rhythm of the Wild ("Nontoken
+    // creatures you control have riot."). Riot applied to the Bears as the event was
+    // proposed: they still get it, whichever permanent's effects are applied first.
+    for pick in [0usize, 1] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let rhythm = t.battlefield(P0, "Rhythm of the Wild");
+        t.answer(P0, DecisionKind::Replacement, Answer::Index(pick));
+        // Riot's choices (a +1/+1 counter) and the Sphinx's "you may return".
+        for _ in 0..3 {
+            t.answer_yes(P0, true);
+        }
+        t.answer_choose(P0, &[obj(rhythm)]);
+        let out = enter_from(
+            &mut t,
+            P0,
+            Zone::Graveyard(P0),
+            &["Rescuer Sphinx", "Grizzly Bears"],
+        );
+        assert!(t.in_hand(P0, "Rhythm of the Wild"), "pick {pick}: returned");
+        let bears = out[1].expect("the Bears entered");
+        assert!(
+            plus1(&t, bears) == 1 || crate::r_s06_common::has_kw(&t, bears, KeywordKind::Haste),
+            "pick {pick}: the Bears have riot's counter or haste"
+        );
+    }
+}
+
+#[test]
+fn an_effect_another_permanent_generates_is_ordered_too() {
+    cr!("616.1", "616.1f", "614.12");
+    interp!("simultaneous-entries-ordered-by-controller");
+    supported("Grumgully, the Generous");
+    supported("Ixidron");
+    // Grumgully, the Generous: "Each other non-Human creature you control enters with an
+    // additional +1/+1 counter on it." It stays on the battlefield, but Ixidron, entering
+    // with the Bears, turns it face down (a face-down 2/2 has no abilities): the Bears get
+    // Grumgully's counter only if their effects are applied first. The Bears' only effect
+    // is Grumgully's, so the player is asked.
+    for (pick, bears_n) in [(None, 0u32), (Some(0usize), 0), (Some(1), 1)] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let grumgully = t.battlefield(P0, "Grumgully, the Generous");
+        if let Some(i) = pick {
+            t.answer(P0, DecisionKind::Replacement, Answer::Index(i));
+        }
+        let ids = enter_together(&mut t, &[(P0, "Ixidron"), (P0, "Grizzly Bears")]);
+        let questions = entry_order_questions(&t, P0);
+        assert_eq!(questions.len(), 1, "{pick:?}: {questions:?}");
+        assert!(questions[0][1].starts_with("Grizzly Bears"));
+        assert!(t.obj_now(grumgully).face_down);
+        assert!(!t.obj_now(ids[1]).face_down, "entering at the same time");
+        assert_eq!(plus1(&t, ids[1]), bears_n, "{pick:?}");
     }
 }

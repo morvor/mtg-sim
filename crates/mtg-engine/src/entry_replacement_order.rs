@@ -11,13 +11,24 @@
 //! permanents that would enter under their control (`entering-would-be-controller-chooses`):
 //! `Game::move_objects` already handles the moves player by player.
 //!
+//! Which effects modify how each of them enters is determined as their entering is
+//! proposed, before any of those effects is applied (614.12; [`Game::entry_snapshot`]):
+//! an effect that applied then still applies if applying another permanent's effects made
+//! what generated it leave the battlefield (Rhythm of the Wild's ruling: "If Rhythm of the
+//! Wild leaves the battlefield at the same time that a nontoken creature enters the
+//! battlefield (most likely because that creature has a replacement effect, such as that of
+//! Rescuer Sphinx), that creature still gets a +1/+1 counter or haste."). So a Rescuer
+//! Sphinx returning Rhythm of the Wild doesn't take riot away from a creature entering
+//! with it, whichever is applied first.
+//!
 //! The order matters only when applying one permanent's effects can change what another's
 //! do: one of them acts on the game as it's applied (Thief of Blood removes every
 //! counter, Sutured Ghoul exiles cards from a graveyard, Ixidron turns creatures face
-//! down) and another one reads the game or acts on it too (Golgari Grave-Troll counts
-//! the creature cards in its owner's graveyard, Clone chooses a creature to copy, a
-//! second Thief of Blood). Choices, conditions and life or energy payments (paid once all
-//! the choices are made, CR 614.12b, `entry_costs.rs`) change nothing as they're made, so
+//! down, Lotus Vale's "sacrifice two untapped lands instead") and another one reads the
+//! game or acts on it too (Golgari Grave-Troll counts the creature cards in its owner's
+//! graveyard, Clone chooses a creature to copy, a second Thief of Blood, an effect another
+//! permanent generates). Choices, conditions and life or energy payments (paid once all the
+//! choices are made, CR 614.12b, `entry_costs.rs`) change nothing as they're made, so
 //! permanents with only such effects, or only effects that read the game, are applied in
 //! the order of the moves without a question. When the order can matter, the player is
 //! asked, before each of those permanents' effects are applied, which of the remaining
@@ -28,20 +39,23 @@ use crate::ability::{CostPart, Effect, ReplacementAction, Value};
 use crate::decision::{Answer, Decision};
 use crate::game::Game;
 use crate::object::Zone;
-use crate::replacement::{MoveEv, ReplEvent};
+use crate::replacement::{EntrySnapshot, MoveEv, ReplEvent};
 use crate::types::PlayerId;
+use std::rc::Rc;
 
 /// What applying a replacement effect that modifies how a permanent enters does besides
 /// modifying that permanent's entering.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Reach {
     /// Nothing that depends on the game or changes it: "enters tapped", "enters with two
-    /// +1/+1 counters on it".
+    /// +1/+1 counters on it" (the permanent's own abilities).
     Plain,
     /// Reads the game or asks for a choice, but changes nothing as it's applied: "enters
     /// with a +1/+1 counter for each creature card in your graveyard", "you may have it
     /// enter as a copy of any creature on the battlefield", "choose a color", "enters
-    /// tapped unless a player has 13 or less life", "you may pay 2 life" (paid later).
+    /// tapped unless a player has 13 or less life", "you may pay 2 life" (paid later). An
+    /// effect another permanent generates ("Each other non-Human creature you control
+    /// enters with an additional +1/+1 counter on it") depends on that permanent too.
     Reads,
     /// Changes the game as it's applied: removes counters, exiles or sacrifices objects,
     /// returns a permanent to its owner's hand, turns permanents face down.
@@ -124,26 +138,40 @@ fn action_reach(a: &ReplacementAction) -> Reach {
         ReplacementAction::EnterTapped | ReplacementAction::EnterUntapped => Reach::Plain,
         ReplacementAction::EnterWithCounters(_, n) => value_reach(n),
         ReplacementAction::AsEnters(e) => effect_reach(e),
-        // A copy, control or face-down choice reads the game; an event replaced by
-        // another (exiled instead) doesn't change it as it's chosen.
+        // What's done instead of (or besides) entering is done as the effect is applied:
+        // "If this land would enter, sacrifice two untapped lands instead. If you do, put
+        // this land onto the battlefield." (Lotus Vale), "you may discard a land card
+        // instead" (Mox Diamond).
+        ReplacementAction::Instead(e)
+        | ReplacementAction::Also(e)
+        | ReplacementAction::PreventAndThen(_, e) => effect_reach(e).max(Reach::Reads),
+        ReplacementAction::Then(a, e) => action_reach(a).max(effect_reach(e)),
+        // A copy, control or face-down choice reads the game; an event replaced by another
+        // (exiled instead) doesn't change it as it's chosen.
         _ => Reach::Reads,
     }
 }
 
-/// The players who choose the order of their entering permanents' replacement effects
-/// for one `Game::move_objects`, and the moves whose order each one chooses.
-#[derive(Debug, Default)]
+/// For one `Game::move_objects`: the replacement effects that modify how each of the
+/// permanents entering the battlefield together enters, determined as that event is
+/// proposed, and the players who choose the order in which those of their permanents are
+/// applied.
+#[derive(Default)]
 pub(crate) struct EntryOrder {
+    /// Per move (an index into the moves): the effects determined as the event was
+    /// proposed (`None`: not entering the battlefield, or entering alone).
+    snaps: Vec<Option<Rc<EntrySnapshot>>>,
     /// Per player: the moves whose effects they order (in the order of the moves), and
     /// those not yet applied.
     choosers: Vec<(PlayerId, Vec<usize>, Vec<usize>)>,
 }
 
 impl EntryOrder {
-    /// The moves (indices into `moves`, processed in `order`) whose replacement effects
-    /// their controller orders: for each player with two or more permanents entering
-    /// whose effects reach beyond themselves, one of which changes the game as it's
-    /// applied (see the module docs).
+    /// For the moves (indices into `moves`, processed in `order`): when two or more
+    /// objects enter the battlefield together, the effects that would modify how each one
+    /// enters, and the moves whose effects their controller orders: for each player with
+    /// two or more permanents entering whose effects reach beyond themselves, one of which
+    /// changes the game as it's applied (see the module docs).
     pub(crate) fn new(g: &mut Game, moves: &[MoveEv], order: &[usize]) -> EntryOrder {
         let entering: Vec<usize> = order
             .iter()
@@ -152,6 +180,10 @@ impl EntryOrder {
             .collect();
         if entering.len() < 2 {
             return EntryOrder::default();
+        }
+        let mut snaps: Vec<Option<Rc<EntrySnapshot>>> = vec![None; moves.len()];
+        for i in &entering {
+            snaps[*i] = Some(g.entry_snapshot(&moves[*i]));
         }
         let mut by_player: Vec<(PlayerId, Vec<usize>)> = Vec::new();
         for i in entering {
@@ -169,10 +201,18 @@ impl EntryOrder {
             let mut reaching = Vec::new();
             let mut acts = false;
             for i in mine {
-                let reach = g
-                    .entry_replacements(&moves[i])
-                    .iter()
-                    .map(|(_, a)| action_reach(a))
+                let reach = snaps[i]
+                    .as_ref()
+                    .into_iter()
+                    .flat_map(|s| s.effects())
+                    .map(|(_, a, own)| {
+                        let r = action_reach(a);
+                        if own {
+                            r
+                        } else {
+                            r.max(Reach::Reads)
+                        }
+                    })
                     .max()
                     .unwrap_or(Reach::Plain);
                 if reach > Reach::Plain {
@@ -184,7 +224,13 @@ impl EntryOrder {
                 choosers.push((p, reaching.clone(), reaching));
             }
         }
-        EntryOrder { choosers }
+        EntryOrder { snaps, choosers }
+    }
+
+    /// The effects that would modify how the object of move `i` enters, determined as the
+    /// event was proposed, to apply them with (`Game::replace_entering`).
+    pub(crate) fn snapshot(&self, i: usize) -> Option<Rc<EntrySnapshot>> {
+        self.snaps.get(i).cloned().flatten()
     }
 
     /// The move whose replacement effects are applied in the place of move `slot` (the next
@@ -215,14 +261,11 @@ impl EntryOrder {
                 .map(|i| {
                     let obj = moves[*i].obj;
                     let name = format!("{}: ", g.obj(obj).chars.name);
-                    let texts: Vec<String> = g
-                        .entry_replacements(&moves[*i])
+                    let texts: Vec<String> = self.snaps[*i]
+                        .as_ref()
                         .into_iter()
-                        .map(|(t, _)| {
-                            t.strip_prefix(name.as_str())
-                                .map(str::to_string)
-                                .unwrap_or(t)
-                        })
+                        .flat_map(|s| s.effects())
+                        .map(|(t, _, _)| t.strip_prefix(name.as_str()).unwrap_or(t).to_string())
                         .collect();
                     format!("{}: {}", g.describe(obj), texts.join(" / "))
                 })

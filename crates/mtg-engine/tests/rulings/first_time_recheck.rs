@@ -11,6 +11,7 @@ use mtg_engine::decision::Answer;
 use mtg_engine::object::StackKind;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
+use mtg_engine::types::counters;
 use mtg_engine::*;
 
 /// The text of the triggered ability on top of the stack.
@@ -150,6 +151,113 @@ fn stalwart_successors_first_time_stays_the_first_time_as_it_resolves() {
     assert_eq!(triggers_on_stack(&t, "first time"), 1, "not the first time");
     t.resolve_all();
     assert_eq!(plus1(&t, bears), 3, "two put directly, one by the ability");
+    // Counters of two kinds put on a creature at once (proliferating a creature with a
+    // +1/+1 counter and a shield counter on it from an earlier turn) are one time: the
+    // ability triggers once, and it's the first time (counted event by event, the second
+    // kind's counters would make it the second time and nothing would trigger).
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Stalwart Successor");
+    let giant = t.battlefield(P0, "Hill Giant");
+    for kind in [counters::PLUS1, counters::SHIELD] {
+        t.g.objects[giant.0 as usize]
+            .counters
+            .insert(kind.into(), 1);
+    }
+    t.g.dirty = true;
+    t.lands(P0, "Island", 3);
+    let sp = t.hand(P0, "Steady Progress");
+    t.answer_choose(P0, &[obj(giant)]);
+    t.cast(P0, sp).go();
+    t.resolve();
+    t.settle();
+    assert_eq!(t.counters(giant, counters::SHIELD), 2, "proliferated");
+    assert_eq!(triggers_on_stack(&t, "first time"), 1, "two kinds at once");
+    t.resolve_all();
+    assert_eq!(plus1(&t, giant), 3, "one proliferated, one by the ability");
+}
+
+#[test]
+fn botanical_brawler_counts_the_first_counter_though_the_spell_then_puts_another() {
+    cr!("603.4", "603.3");
+    interp!("first-time-is-about-the-trigger-event");
+    supported("Courage in Crisis");
+    // Courage in Crisis: "Put a +1/+1 counter on target creature, then proliferate." The
+    // Bears get their first +1/+1 counters this turn, then (proliferated) their second,
+    // both before the Brawler's ability is put on the stack (CR 603.3). The ability
+    // triggered on the first time; the second doesn't trigger it, and doesn't stop it.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let brawler = with_counters(&mut t, P0, "Botanical Brawler", 2);
+    t.resolve_all();
+    let before = plus1(&t, brawler);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.answer_choose(P0, &[obj(bears)]);
+    cast_new(&mut t, P0, "Courage in Crisis", &[obj(bears)]);
+    t.resolve();
+    t.settle();
+    assert_eq!(plus1(&t, bears), 2, "one put, one proliferated");
+    assert_eq!(triggers_on_stack(&t, "first time"), 1);
+    t.resolve_all();
+    assert_eq!(plus1(&t, brawler), before + 1);
+}
+
+#[test]
+fn botanical_brawler_counters_put_on_two_permanents_at_once() {
+    cr!("603.4", "603.2c");
+    interp!("first-time-is-about-the-trigger-event");
+    supported("Gird for Battle");
+    // Gird for Battle: "Put a +1/+1 counter on each of up to two target creatures." One
+    // event with an occurrence for each permanent: the Brawler's ability triggers for each
+    // (CR 603.2c). Another counter on one of them while both wait stops neither.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let brawler = with_counters(&mut t, P0, "Botanical Brawler", 2);
+    t.resolve_all();
+    let before = plus1(&t, brawler);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    lands_for_cost(&mut t, P0, "Gird for Battle");
+    let gird = t.hand(P0, "Gird for Battle");
+    t.cast(P0, gird).targets(&[obj(bears), obj(giant)]).go();
+    t.resolve();
+    t.settle();
+    assert_eq!((plus1(&t, bears), plus1(&t, giant)), (1, 1));
+    assert_eq!(triggers_on_stack(&t, "first time"), 2);
+    give_plus1(&mut t, bears, 1);
+    assert_eq!(triggers_on_stack(&t, "first time"), 2, "not the first time");
+    t.resolve_all();
+    assert_eq!(plus1(&t, brawler), before + 2);
+}
+
+#[test]
+fn a_copy_of_botanical_brawlers_ability_is_about_the_same_trigger_event() {
+    cr!("603.4", "707.10");
+    interp!("first-time-is-about-the-trigger-event");
+    supported("Strionic Resonator");
+    // Strionic Resonator copies the Brawler's ability; a second counter is then put on the
+    // Bears. The copy is about the same trigger event, the first time: both put a counter.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let brawler = with_counters(&mut t, P0, "Botanical Brawler", 2);
+    t.resolve_all();
+    let before = plus1(&t, brawler);
+    let resonator = t.battlefield(P0, "Strionic Resonator");
+    t.lands(P0, "Wastes", 2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    give_plus1(&mut t, bears, 1);
+    let ability = *t.g.stack.last().expect("the Brawler's ability");
+    t.activate(P0, resonator, 0, &[Entity::Object(ability)])
+        .expect("Strionic Resonator");
+    t.resolve();
+    assert_eq!(
+        triggers_on_stack(&t, "first time"),
+        2,
+        "the ability and its copy"
+    );
+    give_plus1(&mut t, bears, 1);
+    t.resolve_all();
+    assert_eq!(plus1(&t, brawler), before + 2);
 }
 
 #[test]

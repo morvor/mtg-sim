@@ -244,7 +244,9 @@ struct Candidate {
 /// "as this enters, return a permanent you control" choice returning the permanent that
 /// grants riot), as long as the permanent still enters the same way: not once a copy,
 /// control, back-face, or face-down effect has changed what applies (CR 616.1b–d, 616.1f).
-struct EntrySnapshot {
+/// For several permanents entering at the same time, each one's are determined as that
+/// event is proposed, before any of their effects is applied ([`Game::entry_snapshot`]).
+pub(crate) struct EntrySnapshot {
     obj: ObjectId,
     copy_of: Option<ObjectId>,
     controller: Option<PlayerId>,
@@ -253,6 +255,16 @@ struct EntrySnapshot {
     face_down: Option<KeywordKind>,
     battlefield: Vec<ObjectId>,
     cands: Vec<Candidate>,
+}
+
+impl EntrySnapshot {
+    /// Each effect's text, what it does, and whether it's an ability of the entering
+    /// object itself (rather than of another object, which can stop generating it).
+    pub(crate) fn effects(&self) -> impl Iterator<Item = (&str, &ReplacementAction, bool)> {
+        self.cands
+            .iter()
+            .map(|c| (c.text.as_str(), &c.def.action, c.source == Some(self.obj)))
+    }
 }
 
 /// Which replacement effects to look for (see [`Game::replacement_candidates`]).
@@ -347,10 +359,49 @@ impl Game {
     /// Runs the replacement pipeline on a proposed event and returns the event(s) that
     /// actually happen.
     pub fn replace(&mut self, ev: ReplEvent) -> Vec<ReplEvent> {
+        self.replace_entering(ev, None)
+    }
+
+    /// [`Game::replace`] for an object entering the battlefield along with others, with the
+    /// effects that would modify how it enters determined as that event was proposed
+    /// ([`Game::entry_snapshot`]): one that applied then still applies if applying the
+    /// effects of another object entering at the same time made what generated it leave
+    /// the battlefield (Rhythm of the Wild's ruling: "If Rhythm of the Wild leaves the
+    /// battlefield at the same time that a nontoken creature enters the battlefield (most
+    /// likely because that creature has a replacement effect, such as that of Rescuer
+    /// Sphinx), that creature still gets a +1/+1 counter or haste.").
+    pub(crate) fn replace_entering(
+        &mut self,
+        ev: ReplEvent,
+        snap: Option<Rc<EntrySnapshot>>,
+    ) -> Vec<ReplEvent> {
         let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
         // What replacement effects do is part of the event they modify: no trigger check
         // happens in the middle (see `trigger_timing`).
-        self.atomically(|g| g.replace_rec(ev, applied, 0, false, None, None))
+        self.atomically(|g| g.replace_rec(ev, applied, 0, false, snap, None))
+    }
+
+    /// The replacement effects that would modify how the object `m` moving onto the
+    /// battlefield enters, determined now from it as it would exist there (CR 614.12):
+    /// for each of several objects entering at the same time, taken as that event is
+    /// proposed, before any of their effects is applied (`Game::move_objects`; see
+    /// [`Game::replace_entering`] and `entry_replacement_order.rs`).
+    pub(crate) fn entry_snapshot(&mut self, m: &MoveEv) -> Rc<EntrySnapshot> {
+        let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
+        let ev = ReplEvent::Move(m.clone());
+        let cands = self.with_hypothetical_entry(m, |g| {
+            g.replacement_candidates(&ev, &applied, CandScope::EntryOnly)
+        });
+        Rc::new(EntrySnapshot {
+            obj: m.obj,
+            copy_of: m.etb.copy_of,
+            controller: m.etb.controller,
+            face: m.etb.face,
+            transformed: m.etb.transformed,
+            face_down: m.etb.face_down,
+            battlefield: self.battlefield.clone(),
+            cands,
+        })
     }
 
     /// Runs only self-replacement effects on an event that can't happen (CR 614.17c).
@@ -613,24 +664,6 @@ impl Game {
             .into_iter()
             .map(|c| c.text)
             .collect()
-    }
-
-    /// The replacement effects that would modify how the object `m` moves onto the
-    /// battlefield enters, determined from it as it would exist there (CR 614.12), as the
-    /// event is proposed: each one's text and what it does (see
-    /// `entry_replacement_order.rs`).
-    pub(crate) fn entry_replacements(&mut self, m: &MoveEv) -> Vec<(String, ReplacementAction)> {
-        if m.to != Zone::Battlefield {
-            return vec![];
-        }
-        let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
-        let ev = ReplEvent::Move(m.clone());
-        self.with_hypothetical_entry(m, |g| {
-            g.replacement_candidates(&ev, &applied, CandScope::EntryOnly)
-        })
-        .into_iter()
-        .map(|c| (c.text, c.def.action))
-        .collect()
     }
 
     /// Whether the proposed event can't happen: a mandatory replacement effect that applies
