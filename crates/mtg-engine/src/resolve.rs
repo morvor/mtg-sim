@@ -1265,6 +1265,7 @@ impl Game {
                 let players = self.eval_players(controller, ctx);
                 let fixed = self.fix_mods(&crate::granted_captures::confine_to_created(mods), ctx);
                 let mut created = Vec::new();
+                let mut together = Vec::new();
                 for p in players {
                     for s in &sources {
                         let tc = TokenCreate {
@@ -1275,9 +1276,19 @@ impl Game {
                             copy_of: Some(*s),
                             copy_exceptions: fixed.clone(),
                         };
-                        created
-                            .extend(self.create_tokens_maybe_attacking(p, tc, n, *attacking, ctx));
+                        if *attacking {
+                            // What each attacks is chosen as it's created.
+                            created.extend(self.create_tokens_maybe_attacking(p, tc, n, true, ctx));
+                        } else {
+                            together.push((p, tc, n, ctx.source));
+                        }
                     }
+                }
+                // "For each creature target player controls, create a token that's a copy
+                // of that creature" (Clone Legion): the tokens all enter at the same time
+                // (CR 608.2f, 614.12), so none of them sees another enter.
+                if !together.is_empty() {
+                    created.extend(self.create_tokens_together(together).into_iter().flatten());
                 }
                 // "tokens created with ~" (CR 607.1d), as for other created tokens.
                 self.link_to_creator(ctx, &created);

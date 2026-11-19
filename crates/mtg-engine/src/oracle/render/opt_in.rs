@@ -132,6 +132,19 @@ impl Renderer<'_> {
             } => effect,
             e => e,
         };
+        // A player who can't search libraries isn't offered to search (not in the text).
+        let effect: &Effect = match effect {
+            Effect::If {
+                cond: Condition::Custom(c),
+                then,
+                otherwise,
+            } if c == crate::search_rules::ITERATED_CAN_SEARCH
+                && matches!(otherwise.as_ref(), Effect::Noop) =>
+            {
+                then
+            }
+            e => e,
+        };
         let Effect::May {
             who: PlayerRef::Iterated,
             effect: opt,

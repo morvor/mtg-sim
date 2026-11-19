@@ -135,3 +135,31 @@ fn orzhov_advokist_each_player_who_puts_counters() {
     assert_eq!(t.counters(theirs, "+1/+1"), 2);
     assert_eq!(t.counters(advokist, "+1/+1"), 0);
 }
+
+#[test]
+fn kwain_every_player_draws_before_any_player_gains_life() {
+    cr!("608.2e", "101.4");
+    // "{T}: Each player may draw a card, then each player who drew a card this way gains
+    // 1 life.": two instructions; all the draws come before any life is gained.
+    supported("Kwain, Itinerant Meddler");
+    let mut t = TestGame::new(3);
+    let kwain = t.battlefield(P0, "Kwain, Itinerant Meddler");
+    for p in [P0, P1, P2] {
+        t.answer_yes(p, true);
+    }
+    t.activate(P0, kwain, 0, &[]).unwrap();
+    let from = t.g.turn_events.len();
+    t.resolve_all();
+    let order: Vec<String> = t.g.turn_events[from..]
+        .iter()
+        .filter_map(|e| match e {
+            mtg_engine::events::Event::Drew { player, .. } => Some(format!("draw {player}")),
+            mtg_engine::events::Event::LifeGained { player, .. } => Some(format!("gain {player}")),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        order,
+        ["draw P0", "draw P1", "draw P2", "gain P0", "gain P1", "gain P2"]
+    );
+}

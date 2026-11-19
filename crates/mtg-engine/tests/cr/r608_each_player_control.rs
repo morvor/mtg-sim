@@ -102,3 +102,61 @@ fn the_tokens_each_player_created_are_all_named_afterwards() {
     assert_eq!(tokens.len(), 3);
     assert!(tokens.iter().all(|o| t.obj_now(*o).tapped));
 }
+
+#[test]
+fn each_chooser_knows_the_earlier_players_choices_of_what_to_gain_control_of() {
+    cr!("101.4", "101.4b", "608.2f");
+    // "Each player gains control of a creature of their choice the player to their left
+    // controls": each player chooses knowing the earlier choices, then the control
+    // changes happen together.
+    let left = PlayerRef::Seat {
+        of: Box::new(PlayerRef::Iterated),
+        side: SeatSide::Left,
+        opponent: false,
+    };
+    let body = Effect::ForEachPlayer {
+        who: PlayerRef::EachPlayer,
+        effect: Box::new(Effect::GainControl {
+            what: Sel::Choose {
+                chooser: PlayerRef::Iterated,
+                filter: Filter::and(vec![
+                    Filter::creature(),
+                    Filter::InZone(ZoneKind::Battlefield),
+                    Filter::ControlledByPlayer(Box::new(left)),
+                ]),
+                count: Value::c(1),
+                up_to: false,
+                store: None,
+            },
+            who: PlayerRef::Iterated,
+            duration: Duration::Permanent,
+        }),
+    };
+    let mut t = TestGame::new(3);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P1, "Hill Giant");
+    let c = t.battlefield(P2, "Craw Wurm");
+    // Each player's left neighbor: P0's is P1, P1's is P2, P2's is P0.
+    t.answer_choose(P0, &[Entity::Object(b)]);
+    t.answer_choose(P1, &[Entity::Object(c)]);
+    t.answer_choose(P2, &[Entity::Object(a)]);
+    use crate::r608_each_player_common::{is_choose, known, watch};
+    let p1 = watch(&mut t, P1, is_choose, known);
+    let p2 = watch(&mut t, P2, is_choose, known);
+    let spell = t.custom(P0, sorcery("Rotation", body), Zone::Hand(P0));
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert_eq!(*p1.lock().unwrap(), vec![vec![(P0, Some(vec![b]))]]);
+    assert_eq!(
+        *p2.lock().unwrap(),
+        vec![vec![(P0, Some(vec![b])), (P1, Some(vec![c]))]]
+    );
+    assert_eq!(
+        (
+            t.obj_now(a).controller,
+            t.obj_now(b).controller,
+            t.obj_now(c).controller
+        ),
+        (P2, P0, P1)
+    );
+}
