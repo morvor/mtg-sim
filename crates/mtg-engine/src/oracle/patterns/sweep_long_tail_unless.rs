@@ -4,7 +4,10 @@
 //! unless you pay {1} for each card in your hand".
 //!
 //! The amount is determined as the payment is proposed, while the spell or ability
-//! resolves (CR 118.12, 608.2h); the player may pay it or not (CR 118.12a).
+//! resolves (CR 118.12, 608.2h); the player may pay it or not (CR 118.12a). "{X}, where X
+//! is [value]" stays a cost of {X}, X defined by the text (CR 107.3c): it's a cost that
+//! contains {X}, which mana spendable only on such costs can pay (Elementalist's Palette,
+//! Rosheen Meanderer), unlike "{1} for each [thing]".
 
 use super::counters_resources_pay::resolution_cost;
 use super::statics::parse_for_each;
@@ -23,21 +26,17 @@ inventory::submit! {
 
 /// "{1} for each [thing]", "{1} plus an additional {1} for each [thing]", "{x}, where x is
 /// [value]" (only these: a plain cost is parsed by the core patterns). `it` is what "it"
-/// refers to in the counted phrase.
-fn scaled_cost(s: &str, b: &mut Builder) -> Option<Cost> {
+/// refers to in the counted phrase. With "{x}, where x is [value]", the cost is {X} and
+/// the value is what X stands for.
+fn scaled_cost(s: &str, b: &mut Builder) -> Option<(Cost, Option<Value>)> {
     let s = end(s);
     if let Some(v) = s.strip_prefix("{x}, where x is ") {
         let (value, rest) = parse_value_phrase(v, b)?;
         if !end(&rest).is_empty() {
             return None;
         }
-        return Some(Cost {
-            mana: None,
-            parts: vec![CostPart::Repeated {
-                cost: Box::new(resolution_cost("{1}")?),
-                times: value,
-            }],
-        });
+        let x = crate::mana::ManaCost::parse("{X}")?;
+        return Some((Cost::mana(x), Some(value)));
     }
     let (base, each) = s.split_once(" for each ")?;
     let it = b.it.clone();
@@ -59,7 +58,16 @@ fn scaled_cost(s: &str, b: &mut Builder) -> Option<Cost> {
         cost: Box::new(per),
         times,
     });
-    Some(cost)
+    Some((cost, None))
+}
+
+/// The payment `pay`, preceded by setting X to the value the text defines it as, if any
+/// (X is determined as the payment is offered and keeps that value, CR 107.3c, 608.2h).
+fn defining_x(x: Option<Value>, pay: Effect) -> Effect {
+    match x {
+        Some(value) => Effect::seq(vec![Effect::SetX { value }, pay]),
+        None => pay,
+    }
 }
 
 /// "counter target spell unless its controller pays {1} for each card in your graveyard".
@@ -70,13 +78,14 @@ fn counter_unless_scaled(l: &str, b: &mut Builder) -> Option<Effect> {
     if !end(&tail).is_empty() {
         return None;
     }
-    let cost = scaled_cost(pays, b)?;
-    Some(Effect::PayOptional {
+    let (cost, x) = scaled_cost(pays, b)?;
+    let pay = Effect::PayOptional {
         who: PlayerRef::ControllerOf(Box::new(what.clone())),
         cost,
         then: Box::new(Effect::Noop),
         otherwise: Box::new(Effect::CounterSpell { what }),
-    })
+    };
+    Some(defining_x(x, pay))
 }
 
 /// "sacrifice ~ unless you pay {1} for each card in your hand".
@@ -96,11 +105,12 @@ fn unless_you_pay_scaled(l: &str, b: &mut Builder) -> Option<Effect> {
         }
     };
     let effect = parse_simple(eff, b)?;
-    let cost = scaled_cost(cost, b)?;
-    Some(Effect::PayOptional {
+    let (cost, x) = scaled_cost(cost, b)?;
+    let pay = Effect::PayOptional {
         who,
         cost,
         then: Box::new(Effect::Noop),
         otherwise: Box::new(effect),
-    })
+    };
+    Some(defining_x(x, pay))
 }

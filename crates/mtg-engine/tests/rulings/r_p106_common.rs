@@ -11,8 +11,7 @@ use mtg_engine::testing::*;
 use mtg_engine::*;
 
 pub use crate::r_p107_common::{
-    act, cast_from_hand, hand_names, is_creature, mana, obj, pool_total, put_counters,
-    resolved,
+    act, cast_from_hand, hand_names, is_creature, mana, obj, pool_total, put_counters, resolved,
 };
 pub use crate::r_s01_common::{stack_library, tokens};
 pub use crate::r_s02_common::destroy;

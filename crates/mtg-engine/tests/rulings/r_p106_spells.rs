@@ -1,7 +1,7 @@
 //! Rulings batch P106 — spells and triggered abilities of the batch's cards: cast
 //! triggers that outlive their spell, "until this leaves the battlefield" exiles, spells
 //! and abilities whose targets become illegal, decayed tokens, searching for land types,
-//! copies of tokens with {X}, and cascade into a card with two faces (CR 603.3, 610.3c,
+//! copies of tokens with {X}, and cascade into a card with two faces (CR 603.3, 610.3b,
 //! 608.2b, 702.147, 205.3i, 707.2, 702.85).
 
 use crate::r_p106_common::*;
@@ -192,7 +192,8 @@ fn the_grand_evolution_loses_the_counters_of_an_illegal_target() {
         "If some of the creatures are illegal targets as the chapter II ability tries to resolve, the original distribution of counters still applies and the counters that would have been put on the illegal targets are lost. They won’t be put instead on a legal target."
     );
     let mut t = TestGame::new(2);
-    let saga = crate::r_s17_common::enter_transformed(&mut t, P0, "Vorinclex // The Grand Evolution");
+    let saga =
+        crate::r_s17_common::enter_transformed(&mut t, P0, "Vorinclex // The Grand Evolution");
     t.resolve_all();
     let a = t.battlefield(P0, "Grizzly Bears");
     let b = t.battlefield(P0, "Hill Giant");
@@ -234,7 +235,7 @@ fn kicked_hunting_wilds_forests_stay_creatures() {
 
 #[test]
 fn copies_of_a_token_with_x_in_its_mana_cost_have_x_zero() {
-    cr!("707.2", "107.3b", "202.3e");
+    cr!("707.2", "202.3e");
     ruling!(
         "City of Death",
         "If the copied token has {X} in its mana cost, X is considered to be 0."
@@ -373,7 +374,7 @@ fn searching_for_a_basic_land_type_finds_any_land_with_it() {
 
 #[test]
 fn bigger_on_the_insides_cascade_may_cast_either_face_with_lower_mana_value() {
-    cr!("702.85a", "712.11b");
+    cr!("702.85a", "712.11b", "715.3", "715.3d");
     ruling!(
         "Bigger on the Inside",
         "Some cards, such as modal double-faced cards or adventurer cards, can be cast as one of two different spells, each with different mana costs. If the card you're casting as the cascade ability resolves is one of those cards, you may choose to cast it as either of those spells that has a lower mana value than the spell with cascade."
@@ -383,7 +384,14 @@ fn bigger_on_the_insides_cascade_may_cast_either_face_with_lower_mana_value() {
     let forest = t.battlefield(P0, "Forest");
     attach_new(&mut t, P0, "Bigger on the Inside", forest);
     t.library_top(P0, "Rowan, Scholar of Sparks // Will, Scholar of Frost");
-    act(&mut t, P0, forest, "Target player adds two mana", &[Entity::Player(P0)]).unwrap();
+    act(
+        &mut t,
+        P0,
+        forest,
+        "Target player adds two mana",
+        &[Entity::Player(P0)],
+    )
+    .unwrap();
     t.resolve_all();
     assert_eq!(pool_total(&t, P0), 2);
     mana(&mut t, P0, ManaType::G, 2);
@@ -402,6 +410,64 @@ fn bigger_on_the_insides_cascade_may_cast_either_face_with_lower_mana_value() {
     assert!(offered
         .iter()
         .any(|o| o.iter().any(|s| s.contains("Rowan")) && o.iter().any(|s| s.contains("Will"))));
+    assert_eq!(t.named_on_battlefield("Craw Wurm").len(), 1);
+    // A spell with mana value 5 (Air Elemental): Rowan (3) may be cast, not Will (5).
+    let mut t = TestGame::new(2);
+    let forest = t.battlefield(P0, "Forest");
+    attach_new(&mut t, P0, "Bigger on the Inside", forest);
+    t.library_top(P0, "Rowan, Scholar of Sparks // Will, Scholar of Frost");
+    act(
+        &mut t,
+        P0,
+        forest,
+        "Target player adds two mana",
+        &[Entity::Player(P0)],
+    )
+    .unwrap();
+    t.resolve_all();
+    mana(&mut t, P0, ManaType::U, 2);
+    mana(&mut t, P0, ManaType::C, 1);
+    let seen = crate::r_p185_common::pick_option_containing(&mut t, P0, "Cast Will");
+    t.answer_yes(P0, true);
+    cast_from_hand(&mut t, P0, "Air Elemental", &[]);
+    t.resolve_all();
+    let offered: Vec<Vec<String>> = seen.lock().unwrap().clone();
+    assert!(
+        t.named_on_battlefield("Will, Scholar of Frost").is_empty(),
+        "{offered:?}"
+    );
+    assert_eq!(t.named_on_battlefield("Rowan, Scholar of Sparks").len(), 1);
+    assert!(offered.iter().flatten().all(|s| !s.contains("Will")));
+    // An adventurer card: Bonecrusher Giant (3) or its Adventure, Stomp (2); Stomp is cast.
+    let mut t = TestGame::new(2);
+    let forest = t.battlefield(P0, "Forest");
+    attach_new(&mut t, P0, "Bigger on the Inside", forest);
+    let giant = t.library_top(P0, "Bonecrusher Giant // Stomp");
+    act(
+        &mut t,
+        P0,
+        forest,
+        "Target player adds two mana",
+        &[Entity::Player(P0)],
+    )
+    .unwrap();
+    t.resolve_all();
+    mana(&mut t, P0, ManaType::G, 2);
+    mana(&mut t, P0, ManaType::C, 2);
+    let seen = crate::r_p185_common::pick_option_containing(&mut t, P0, "Cast Stomp");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    cast_from_hand(&mut t, P0, "Craw Wurm", &[]);
+    t.resolve_all();
+    let offered: Vec<Vec<String>> = seen.lock().unwrap().clone();
+    assert!(
+        offered
+            .iter()
+            .any(|o| o.iter().any(|s| s.contains("Bonecrusher Giant"))
+                && o.iter().any(|s| s.contains("Stomp"))),
+        "{offered:?}"
+    );
+    assert_eq!(t.life(P1), 18, "{}", t.dump_log());
+    assert_eq!(t.zone(t.g.current(giant)), Zone::Exile, "on an adventure");
     assert_eq!(t.named_on_battlefield("Craw Wurm").len(), 1);
 }
 

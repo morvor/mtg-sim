@@ -174,7 +174,7 @@ fn offered_since(t: &TestGame, from: usize) -> Vec<Entity> {
 
 #[test]
 fn nissas_ultimate_counts_x_as_zero_in_hand() {
-    cr!("202.3e", "107.3b");
+    cr!("202.3e", "107.3g");
     ruling!(
         "Nissa of Shadowed Boughs",
         "If a card in a player's hand or graveyard has {X} in its mana cost, X is considered to be 0."
@@ -190,7 +190,11 @@ fn nissas_ultimate_counts_x_as_zero_in_hand() {
         t.answer_choose(P0, &[obj(krasis)]);
         act(&mut t, P0, nissa, "You may put a creature card", &[]).unwrap();
         t.resolve_all();
-        assert_eq!(offered_since(&t, from).contains(&obj(krasis)), ok, "{lands}");
+        assert_eq!(
+            offered_since(&t, from).contains(&obj(krasis)),
+            ok,
+            "{lands}"
+        );
         let on = t.named_on_battlefield("Hydroid Krasis");
         assert_eq!(on.len(), ok as usize, "{lands}");
         if ok {
@@ -227,7 +231,7 @@ fn nissas_ultimate_checks_mana_value_only_in_hand_or_graveyard() {
 
 #[test]
 fn ral_zareks_plus_one_on_a_tapped_and_an_untapped_permanent() {
-    cr!("701.26a", "115.1");
+    cr!("701.26a", "701.26b", "115.1");
     ruling!(
         "Ral Zarek",
         "Ral Zarek's first ability can target any two permanents. It doesn't matter whether they're tapped or untapped. If the first target is tapped as the ability resolves, it will just stay tapped. Similarly, if the second target is untapped as the ability resolves, it will stay untapped."
@@ -246,7 +250,7 @@ fn ral_zareks_plus_one_on_a_tapped_and_an_untapped_permanent() {
 
 #[test]
 fn ral_zareks_coin_flips_are_not_won_or_lost() {
-    cr!("705.2", "705.3");
+    cr!("705.2");
     ruling!(
         "Ral Zarek",
         "The five coins you flip for Ral Zarek's last ability aren't called, and no one wins or loses these flips. Abilities that care about a player winning or losing a coin flip won't consider these flips."
@@ -264,9 +268,14 @@ fn ral_zareks_coin_flips_are_not_won_or_lost() {
         .filter(|e| matches!(e, Event::CoinFlipped { .. }))
         .collect();
     assert_eq!(flips.len(), 5);
-    assert!(flips
-        .iter()
-        .all(|e| matches!(e, Event::CoinFlipped { won: false, lost: false, .. })));
+    assert!(flips.iter().all(|e| matches!(
+        e,
+        Event::CoinFlipped {
+            won: false,
+            lost: false,
+            ..
+        }
+    )));
     assert_eq!(t.counters(ce, "luck"), 0);
     // Nobody was asked to call a coin.
     assert!(!t.asked()[from..]
@@ -360,12 +369,40 @@ fn vraskas_ultimate_makes_the_player_lose_life() {
     t.battlefield(P0, "Exquisite Blood");
     t.g.players[1].life = 4;
     let m = mark(&t);
-    act(&mut t, P0, vraska, "life total becomes 1", &[Entity::Player(P1)]).unwrap();
+    act(
+        &mut t,
+        P0,
+        vraska,
+        "life total becomes 1",
+        &[Entity::Player(P1)],
+    )
+    .unwrap();
     t.resolve_all();
     assert_eq!(t.life(P1), 1);
     assert_eq!(life_lost_since(&t, m, P1), 3);
     // Exquisite Blood sees the loss.
     assert_eq!(t.life(P0), 23);
+    // The rare case: a player at -2 life (Platinum Angel keeps them in the game) gains 3.
+    let mut t = TestGame::new(2);
+    let vraska = t.battlefield(P0, "Vraska, Relic Seeker");
+    put_counters(&mut t, vraska, counters::LOYALTY, 4);
+    t.battlefield(P1, "Platinum Angel");
+    t.g.players[1].life = -2;
+    t.settle();
+    assert!(!t.has_lost(P1));
+    let m = mark(&t);
+    act(
+        &mut t,
+        P0,
+        vraska,
+        "life total becomes 1",
+        &[Entity::Player(P1)],
+    )
+    .unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 1);
+    assert_eq!(life_gained_since(&t, m, P1), 3);
+    assert_eq!(life_lost_since(&t, m, P1), 0);
 }
 
 #[test]
@@ -530,11 +567,7 @@ fn chandras_ultimate_casts_only_spells_that_are_red() {
     let mut t = TestGame::new(2);
     let chandra = t.battlefield(P0, "Chandra, Dressed to Kill");
     put_counters(&mut t, chandra, counters::LOYALTY, 4);
-    stack_library(
-        &mut t,
-        P0,
-        &[ROWAN, "Island", "Island", "Island", "Island"],
-    );
+    stack_library(&mut t, P0, &[ROWAN, "Island", "Island", "Island", "Island"]);
     act(&mut t, P0, chandra, "emblem", &[]).unwrap();
     t.resolve_all();
     let card = t.g.find_in_zone(Zone::Exile, "Rowan, Scholar of Sparks")[0];

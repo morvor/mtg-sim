@@ -41,7 +41,7 @@ fn birgis_cast_trigger_uses_the_stack_and_can_be_responded_to() {
 
 #[test]
 fn chandra_dressed_to_kills_mana_ability_uses_the_stack_even_without_targets() {
-    cr!("606.3", "605.1a", "115.1");
+    cr!("606.3", "605.1a", "115.6");
     ruling!(
         "Chandra, Dressed to Kill",
         "Chandra’s first ability uses the stack and can be responded to, even if no targets were chosen. It isn’t a mana ability."
@@ -100,12 +100,19 @@ fn koths_mana_loyalty_ability_uses_the_stack_once_per_turn_at_sorcery_speed() {
     t.lands(P0, "Mountain", 3);
     assert!(!is_mana_ability(&mut t, koth, "for each Mountain"));
     act(&mut t, P0, koth, "for each Mountain", &[]).unwrap();
+    // Its cost, two loyalty counters, is paid as it's activated.
+    assert_eq!(t.counters(koth, counters::LOYALTY), 1);
     assert_eq!(t.stack_len(), 1);
     assert_eq!(pool_total(&t, P0), 0);
     t.resolve();
     assert_eq!(t.g.player(P0).mana_pool.count(ManaType::R), 3);
     // No second loyalty ability this turn.
-    assert!(!can_activate_containing(&mut t, P0, koth, "Untap target Mountain"));
+    assert!(!can_activate_containing(
+        &mut t,
+        P0,
+        koth,
+        "Untap target Mountain"
+    ));
 
     // Not with something on the stack, and not outside a main phase.
     let mut t = TestGame::new(2);
@@ -114,12 +121,27 @@ fn koths_mana_loyalty_ability_uses_the_stack_once_per_turn_at_sorcery_speed() {
     mana(&mut t, P0, ManaType::R, 1);
     let spike = t.hand(P0, "Lightning Bolt");
     t.cast_with(P0, spike, &[Entity::Player(P1)]).unwrap();
-    assert!(!can_activate_containing(&mut t, P0, koth, "for each Mountain"));
+    assert!(!can_activate_containing(
+        &mut t,
+        P0,
+        koth,
+        "for each Mountain"
+    ));
     t.resolve_all();
     t.set_step(P0, Step::BeginningOfCombat);
-    assert!(!can_activate_containing(&mut t, P0, koth, "for each Mountain"));
+    assert!(!can_activate_containing(
+        &mut t,
+        P0,
+        koth,
+        "for each Mountain"
+    ));
     t.set_step(P0, Step::PostcombatMain);
-    assert!(can_activate_containing(&mut t, P0, koth, "for each Mountain"));
+    assert!(can_activate_containing(
+        &mut t,
+        P0,
+        koth,
+        "for each Mountain"
+    ));
 }
 
 #[test]

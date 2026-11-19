@@ -7,8 +7,9 @@ use crate::r_p106_common::*;
 use mtg_engine::decision::Decision;
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::mana::ManaType;
-use mtg_engine::object::Zone;
+use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::types::*;
 use mtg_engine::*;
 
@@ -49,6 +50,9 @@ fn two_red_from_pyromancers_goggles_copy_the_spell_twice() {
         assert_eq!(pool_total(&t, P0), 0);
         t.settle();
         assert_eq!(t.stack_len(), 3, "two delayed triggers above the spell");
+        // P0 keeps the copies' target (choosing new ones is up to them).
+        t.answer_yes(P0, false);
+        t.answer_yes(P0, false);
         t.resolve_all();
         assert_eq!(t.life(P1), 11, "the spell and two copies");
     }
@@ -161,6 +165,7 @@ fn the_dragonkind_orbs_delayed_triggers_work_after_the_orb_is_gone() {
     tap_times(&mut t, g, "Add {R}", 1);
     destroy(&mut t, g);
     cast_from_hand(&mut t, P0, "Lightning Bolt", &[Entity::Player(P1)]);
+    t.answer_yes(P0, false); // the copy keeps its target
     t.resolve_all();
     assert_eq!(t.life(P1), 14);
 }
@@ -204,7 +209,7 @@ fn the_dragonkind_orbs_mana_can_pay_for_anything() {
 
 #[test]
 fn carnelian_orbs_mana_on_any_part_of_a_dragons_cost_gives_haste() {
-    cr!("106.6", "601.2f");
+    cr!("106.6", "601.2f", "118.8", "118.9", "702.117a");
     ruling!(
         "Carnelian Orb of Dragonkind",
         "If the mana from Carnelian Orb of Dragonkind is spent to pay any part of the Dragon creature spell's cost, including an alternative or additional cost, the Dragon will gain haste until end of turn."
@@ -232,6 +237,25 @@ fn carnelian_orbs_mana_on_any_part_of_a_dragons_cost_gives_haste() {
     assert_eq!(pool_total(&t, P0), 0);
     t.resolve_all();
     let d = t.named_on_battlefield("Verix Bladewing")[0];
+    assert!(has(&t, d, KeywordKind::Haste));
+    // Tyrant of Valakut cast for its surge cost {3}{R}{R} (an alternative cost, CR
+    // 702.117a) after Ornithopter: the Orb's {R} pays part of it, and the Dragon has haste.
+    let mut t = TestGame::new(2);
+    let orb = t.battlefield(P0, "Carnelian Orb of Dragonkind");
+    tap_times(&mut t, orb, "Add {R}", 1);
+    cast_from_hand(&mut t, P0, "Ornithopter", &[]);
+    t.resolve_all();
+    mana(&mut t, P0, ManaType::R, 1);
+    mana(&mut t, P0, ManaType::C, 3);
+    let tyrant = t.hand(P0, "Tyrant of Valakut");
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.cast(P0, tyrant)
+        .method(CastMethod::Keyword(KeywordKind::Surge))
+        .go();
+    assert_eq!(pool_total(&t, P0), 0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17, "its surge cost was paid");
+    let d = t.named_on_battlefield("Tyrant of Valakut")[0];
     assert!(has(&t, d, KeywordKind::Haste));
 }
 
@@ -283,6 +307,7 @@ fn pyromancers_goggles_copy_has_the_same_mode() {
     let abrade = t.hand(P0, "Abrade");
     t.cast(P0, abrade).modes(&[0]).target(giant).go();
     t.settle();
+    t.answer_yes(P0, false); // the copy keeps its target
     t.resolve(); // the Goggles trigger: copies Abrade
     let copies = crate::r_s26_common::spell_copies(&t);
     assert_eq!(copies.len(), 1);
@@ -319,14 +344,19 @@ fn domris_riot_mana_on_a_riot_creature_gives_two_riot_choices() {
         }
         t.resolve_all();
         let s = t.named_on_battlefield("Gruul Spellbreaker")[0];
-        assert_eq!(t.counters(s, counters::PLUS1), plus1, "{choices:?}\n{}", t.dump_log());
+        assert_eq!(
+            t.counters(s, counters::PLUS1),
+            plus1,
+            "{choices:?}\n{}",
+            t.dump_log()
+        );
         assert_eq!(has(&t, s, KeywordKind::Haste), haste, "{choices:?}");
     }
 }
 
 #[test]
 fn elementalists_palette_triggers_once_for_a_spell_with_several_x() {
-    cr!("107.3", "603.2");
+    cr!("107.3", "603.2c");
     ruling!(
         "Elementalist's Palette",
         "If you cast a spell with multiple {X} mana symbols in its cost, the first ability triggers only once."
@@ -352,7 +382,7 @@ fn palette_mana(t: &mut TestGame, n: u32) -> ObjectId {
 
 #[test]
 fn elementalists_palette_mana_pays_any_part_of_a_cost_with_x() {
-    cr!("106.6", "107.3", "118.12");
+    cr!("106.6", "107.3", "118.12", "118.12a");
     ruling!(
         "Elementalist's Palette",
         "The mana added by the last ability can be used only to pay costs with at least one {X}, but it can be used to pay for any part of that cost, not just the {X}. That {X} could be in a spell's total cost, an ability's activation cost, or a cost you're asked to pay as a spell or ability resolves."
@@ -398,7 +428,12 @@ fn elementalists_palette_mana_pays_any_part_of_a_cost_with_x() {
     t.resolve();
     assert_eq!(pool_total(&t, P0), 0, "paid with the Palette's mana");
     t.resolve_all();
-    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "{}", t.dump_log());
+    assert_eq!(
+        t.named_on_battlefield("Grizzly Bears").len(),
+        1,
+        "{}",
+        t.dump_log()
+    );
     // Mana Leak's "unless its controller pays {3}" has no {X}: the Palette's mana can't
     // pay it.
     let mut t = TestGame::new(2);
@@ -415,6 +450,106 @@ fn elementalists_palette_mana_pays_any_part_of_a_cost_with_x() {
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
     assert_eq!(pool_total(&t, P0), 3);
+}
+
+#[test]
+fn elementalists_palette_mana_pays_an_x_cost_whose_x_the_text_defines() {
+    cr!("106.6", "107.3c", "118.12a");
+    ruling!(
+        "Elementalist's Palette",
+        "That {X} could be in a spell's total cost, an ability's activation cost, or a cost you're asked to pay as a spell or ability resolves."
+    );
+    // Rethink: "Counter target spell unless its controller pays {X}, where X is its mana
+    // value."
+    let mut t = TestGame::new(2);
+    palette_mana(&mut t, 2);
+    mana(&mut t, P0, ManaType::G, 1);
+    mana(&mut t, P0, ManaType::C, 1);
+    let bears = cast_from_hand(&mut t, P0, "Grizzly Bears", &[]);
+    assert_eq!(pool_total(&t, P0), 2, "the restricted mana is left");
+    mana(&mut t, P1, ManaType::U, 1);
+    mana(&mut t, P1, ManaType::C, 2);
+    let rethink = t.hand(P1, "Rethink");
+    t.cast_with(P1, rethink, &[obj(bears)]).unwrap();
+    t.answer_yes(P0, true);
+    t.resolve();
+    assert_eq!(pool_total(&t, P0), 0, "paid with the Palette's mana");
+    t.resolve_all();
+    assert_eq!(
+        t.named_on_battlefield("Grizzly Bears").len(),
+        1,
+        "{}",
+        t.dump_log()
+    );
+    // Soul Tithe: "that player sacrifices it unless they pay {X}, where X is its mana
+    // value", paid in P0's upkeep with the Palette's mana.
+    let mut t = TestGame::new(2);
+    let pal = t.battlefield(P0, "Elementalist's Palette");
+    put_counters(&mut t, pal, counters::CHARGE, 2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    crate::r_s06_common::attach_new(&mut t, P1, "Soul Tithe", bears);
+    t.set_step(P1, Step::End);
+    t.advance_to(P0, Step::Upkeep);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    assert!(tap_for_mana(&mut t, P0, pal, "for each charge counter"));
+    assert_eq!(pool_total(&t, P0), 2);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert!(t.on_battlefield(bears), "{}", t.dump_log());
+    assert_eq!(pool_total(&t, P0), 0);
+}
+
+/// P0's pool holds four colorless mana that may be spent only on costs that contain {X},
+/// from Rosheen Meanderer or from two basic lands with Nexos's ability.
+fn x_only_mana(t: &mut TestGame, source: &str) {
+    if source == "Nexos" {
+        t.battlefield(P0, "Nexos");
+        for p in t.lands(P0, "Plains", 2) {
+            t.activate(P0, p, 1, &[]).unwrap();
+        }
+    } else {
+        let r = t.battlefield(P0, source);
+        t.activate(P0, r, 0, &[]).unwrap();
+    }
+    assert_eq!(pool_total(t, P0), 4, "{source}");
+}
+
+#[test]
+fn x_only_mana_pays_a_cost_with_x_asked_for_as_a_spell_resolves() {
+    cr!("106.6", "107.3", "118.12a");
+    ruling!(
+        "Rosheen Meanderer",
+        "or a cost you’re asked to pay as part of the resolution of a spell or ability (such as Condescend)"
+    );
+    ruling!(
+        "Nexos",
+        "or a cost you're asked to pay as part of the resolution of a spell or ability (such as Condescend)"
+    );
+    for source in ["Rosheen Meanderer", "Nexos"] {
+        let mut t = TestGame::new(2);
+        x_only_mana(&mut t, source);
+        // Grizzly Bears has no {X}: paid with other mana.
+        mana(&mut t, P0, ManaType::G, 2);
+        let bears = cast_from_hand(&mut t, P0, "Grizzly Bears", &[]);
+        assert_eq!(pool_total(&t, P0), 4, "{source}");
+        // Condescend with X = 3: P0 pays its {X} with three of the four.
+        mana(&mut t, P1, ManaType::U, 1);
+        mana(&mut t, P1, ManaType::C, 3);
+        let condescend = t.hand(P1, "Condescend");
+        t.g.turn.priority = Some(P1);
+        t.cast(P1, condescend).x(3).target(bears).go();
+        t.answer_yes(P0, true);
+        t.resolve();
+        assert_eq!(pool_total(&t, P0), 1, "{source}");
+        t.resolve_all();
+        assert_eq!(
+            t.named_on_battlefield("Grizzly Bears").len(),
+            1,
+            "{source}\n{}",
+            t.dump_log()
+        );
+    }
 }
 
 #[test]
@@ -443,7 +578,7 @@ fn elementalists_palette_mana_can_be_split_between_costs() {
 
 #[test]
 fn astral_cornucopia_costs_three_mana_per_charge_counter() {
-    cr!("107.3", "202.3e", "107.3a");
+    cr!("107.3a", "107.3i", "107.3m");
     ruling!(
         "Astral Cornucopia",
         "If you choose 1 for the value of X, Astral Cornucopia will cost {3} to cast and enter the battlefield with one charge counter. If you choose 2 for the value of X, it will cost {6} to cast and enter the battlefield with two charge counters, and so on."
@@ -473,7 +608,7 @@ fn chandra_emblem(t: &mut TestGame) {
 
 #[test]
 fn chandras_emblem_counts_the_mana_actually_spent_to_cast() {
-    cr!("601.2f", "601.2h", "118.12");
+    cr!("601.2f", "601.2h", "118.12", "118.12a");
     ruling!(
         "Chandra, Dressed to Kill",
         "The emblem’s triggered ability looks for the actual amount of mana spent to cast the spell. If an effect caused you to pay more or less mana for that spell as you cast it, that will be taken into account when determining the value of X. If an effect would counter that spell unless you pay some amount of mana, that mana doesn’t count as mana spent to cast it."
@@ -488,6 +623,16 @@ fn chandras_emblem_counts_the_mana_actually_spent_to_cast() {
     assert_eq!(pool_total(&t, P0), 0);
     t.resolve_all();
     assert_eq!(t.life(P1), 15);
+    // Goblin Electromancer makes Searing Spear ({1}{R}) cost {R}: X = 1, plus the Spear's 3.
+    let mut t = TestGame::new(2);
+    chandra_emblem(&mut t);
+    t.battlefield(P0, "Goblin Electromancer");
+    mana(&mut t, P0, ManaType::R, 1);
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    cast_from_hand(&mut t, P0, "Searing Spear", &[Entity::Player(P1)]);
+    assert_eq!(pool_total(&t, P0), 0);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
     // Mana Leak's {3}, paid after casting, doesn't count: X stays 1.
     let mut t = TestGame::new(2);
     chandra_emblem(&mut t);
@@ -503,5 +648,10 @@ fn chandras_emblem_counts_the_mana_actually_spent_to_cast() {
     t.answer_yes(P0, true);
     t.resolve_all();
     assert_eq!(pool_total(&t, P0), 0, "paid for Mana Leak");
-    assert_eq!(t.life(P1), 16, "1 from the emblem and 3 from Bolt\n{}", t.dump_log());
+    assert_eq!(
+        t.life(P1),
+        16,
+        "1 from the emblem and 3 from Bolt\n{}",
+        t.dump_log()
+    );
 }

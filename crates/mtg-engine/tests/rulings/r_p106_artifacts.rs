@@ -181,7 +181,7 @@ fn firdoch_core_overwrites_earlier_pt_setting_and_is_overwritten_later() {
 
 #[test]
 fn foriysian_totem_that_cant_block_blocks_nothing() {
-    cr!("509.1b", "509.1c");
+    cr!("509.1a", "509.1b");
     ruling!(
         "Foriysian Totem",
         "If an effect says Foriysian Totem can't block, then it can't block any creatures."
@@ -197,11 +197,17 @@ fn foriysian_totem_that_cant_block_blocks_nothing() {
     assert!(is_creature(&t, totem));
     attack_with(
         &mut t,
-        &atk.iter().map(|a| (*a, Entity::Player(P0))).collect::<Vec<_>>(),
+        &atk.iter()
+            .map(|a| (*a, Entity::Player(P0)))
+            .collect::<Vec<_>>(),
     );
     use crate::r_s21_common::legal_blocks;
     // It could block both attackers.
-    assert!(legal_blocks(&mut t, P0, &[(totem, atk[0]), (totem, atk[1])]));
+    assert!(legal_blocks(
+        &mut t,
+        P0,
+        &[(totem, atk[0]), (totem, atk[1])]
+    ));
     // Panic ("Cast this spell only during combat before blockers are declared. Target
     // creature can't block this turn."): now it can block neither.
     mana(&mut t, P1, ManaType::R, 1);
@@ -210,7 +216,11 @@ fn foriysian_totem_that_cant_block_blocks_nothing() {
     t.resolve_all();
     assert!(!legal_blocks(&mut t, P0, &[(totem, atk[0])]));
     assert!(!legal_blocks(&mut t, P0, &[(totem, atk[1])]));
-    assert!(!legal_blocks(&mut t, P0, &[(totem, atk[0]), (totem, atk[1])]));
+    assert!(!legal_blocks(
+        &mut t,
+        P0,
+        &[(totem, atk[0]), (totem, atk[1])]
+    ));
     assert!(legal_blocks(&mut t, P0, &[]));
 }
 
@@ -319,7 +329,7 @@ fn copy_land_cant_copy_a_land_entering_with_it() {
 
 #[test]
 fn copy_land_copying_a_token_or_a_copy() {
-    cr!("707.2", "707.3", "111.4");
+    cr!("707.2", "707.3", "111.3");
     ruling!(
         "Copy Land",
         "If the chosen permanent is a token, Copy Land copies the original characteristics of that token as stated by the effect that created the token, with the listed exception. Copy Land does not become a token."
@@ -351,26 +361,34 @@ fn copy_land_copying_a_token_or_a_copy() {
 
 #[test]
 fn copy_land_copying_a_permanent_with_x_in_its_cost_has_x_zero() {
-    cr!("707.2", "202.3e", "107.3b");
+    cr!("707.2", "202.3e", "107.3g");
     ruling!(
         "Copy Land",
         "In the unusual case where the chosen permanent has {X} in its mana cost, X is 0."
     );
-    // A land with a mana cost of {X}{G}{G} (no real land has one; a custom card stands in).
+    // Chimeric Mass ({X}), cast with X = 3, is a Forest land while Song of the Dryads
+    // ("Enchanted permanent is a colorless Forest land.") enchants it, so Copy Land may copy
+    // it. The copy is a Chimeric Mass (the Aura's type change isn't copied) that's also an
+    // enchantment, with X = 0: mana value 0, and its "This artifact enters with X charge
+    // counters on it" puts none on it.
     let mut t = TestGame::new(2);
-    let def = crate::r_s01_common::custom_card(
-        "X Grove",
-        "Land — Forest",
-        "{X}{G}{G}",
-        None,
-        "",
-    );
-    let grove = t.custom(P1, def, Zone::Battlefield);
+    mana(&mut t, P0, ManaType::C, 3);
+    let mass = t.hand(P0, "Chimeric Mass");
+    t.cast(P0, mass).x(3).go();
+    t.resolve_all();
+    let mass = t.named_on_battlefield("Chimeric Mass")[0];
+    assert_eq!(t.counters(mass, counters::CHARGE), 3);
+    attach_new(&mut t, P0, "Song of the Dryads", mass);
     t.g.recompute();
-    let cl = copy_land(&mut t, Some(grove));
+    assert!(t.obj_now(mass).is(CardType::Land));
+    let cl = copy_land(&mut t, Some(mass));
     t.g.recompute();
-    assert_eq!(t.obj_now(cl).chars.name, "X Grove");
-    assert_eq!(t.g.mana_value_of(t.g.current(cl)), 2);
+    let o = t.obj_now(cl);
+    assert_eq!(o.chars.name, "Chimeric Mass");
+    assert!(o.is(CardType::Artifact) && o.is(CardType::Enchantment));
+    assert!(!o.is(CardType::Land));
+    assert_eq!(t.g.mana_value_of(t.g.current(cl)), 0);
+    assert_eq!(t.counters(cl, counters::CHARGE), 0);
 }
 
 #[test]
@@ -403,7 +421,7 @@ fn midnight_clocks_twelfth_counter_trigger() {
 
 #[test]
 fn midnight_clock_ticks_in_every_upkeep_once_per_team() {
-    cr!("503.1a", "805.4d");
+    cr!("503.1a", "805.4", "805.4d");
     ruling!(
         "Midnight Clock",
         "Midnight Clock's first triggered ability triggers at the beginning of each upkeep, not just your upkeep. In a Two-Headed Giant game, an ability that triggers at the beginning of each upkeep rather than each player's upkeep triggers only once during each team's upkeep."
@@ -443,7 +461,7 @@ fn midnight_clock_gone_before_its_last_ability_resolves_isnt_exiled() {
 
 #[test]
 fn strixhaven_stadium_checks_ten_counters_only_as_its_last_ability_resolves() {
-    cr!("603.4", "608.2c");
+    cr!("608.2c");
     ruling!(
         "Strixhaven Stadium",
         "The check for ten or more point counters happens only as the last ability is resolving. Notably, if you add the tenth point counter some other way, no one will lose the game . . . yet."
@@ -503,7 +521,7 @@ fn strixhaven_stadium_in_multiplayer_makes_one_player_lose() {
 
 #[test]
 fn replicating_ring_checks_eight_counters_only_as_its_trigger_resolves() {
-    cr!("603.4", "608.2c");
+    cr!("608.2c");
     ruling!(
         "Replicating Ring",
         "The check of whether Replicating Ring has eight or more night counters on it happens only as part of the resolution of the triggered ability. If Replicating Ring picks up its eighth night counter at another time, you won't immediately create Replicated Rings. You'll have to wait until the next time the triggered ability resolves."
@@ -653,7 +671,7 @@ fn bounty_boards_each_trigger_for_any_bounty_counter() {
 
 #[test]
 fn blitzball_counts_anyones_legendary_creature() {
-    cr!("602.5b", "510.2");
+    cr!("602.1b", "510.2");
     ruling!(
         "Blitzball",
         "Blitzball's last ability doesn't care who controls the legendary creature that dealt combat damage to an opponent this turn."
@@ -727,7 +745,7 @@ fn coalition_relic_triggers_only_in_the_first_main_phase() {
 
 #[test]
 fn ancient_cornucopia_triggers_until_you_gain_life_once() {
-    cr!("603.2", "603.5");
+    cr!("603.2h", "603.5");
     ruling!(
         "Ancient Cornucopia",
         "Once you choose to gain life using Ancient Cornucopia’s triggered ability, that ability won’t trigger again that turn."
@@ -774,7 +792,11 @@ fn chromatic_lantern_adds_an_ability_and_keeps_the_rest() {
     assert_eq!(f.chars.subtypes.len(), 1);
     assert!(f.chars.has_subtype("Forest"));
     assert!(f.chars.abilities.iter().any(|a| a.text.contains("Add {G}")));
-    assert!(f.chars.abilities.iter().any(|a| a.text.contains("any color")));
+    assert!(f
+        .chars
+        .abilities
+        .iter()
+        .any(|a| a.text.contains("any color")));
     let v = t.obj_now(vault);
     assert!(v.chars.subtypes.is_empty());
     assert!(v.chars.abilities.iter().any(|a| a.text.contains("2/2")));
@@ -852,7 +874,7 @@ fn two_phials_of_galadriel_draw_three() {
 
 #[test]
 fn phial_of_galadriel_ignores_a_teammates_life_gain() {
-    cr!("810.9", "614.1a");
+    cr!("810.9", "810.9a", "614.1a");
     ruling!(
         "Phial of Galadriel",
         "In a Two-Headed Giant game, life gained by your teammate won't cause Phial of Galadriel's second ability to apply, even though it will cause your team's life total to increase."
@@ -934,7 +956,14 @@ fn kellogg_controlled_by_someone_else_steals_nothing() {
             crate::r_s02_common::create_token(&mut t, P0, "Treasure");
         }
         let bears = t.battlefield(P1, "Grizzly Bears");
-        act(&mut t, P0, kellogg, "Gain control of target creature", &[obj(bears)]).unwrap();
+        act(
+            &mut t,
+            P0,
+            kellogg,
+            "Gain control of target creature",
+            &[obj(bears)],
+        )
+        .unwrap();
         assert!(t.named_on_battlefield("Treasure").is_empty());
         if lose_it {
             give_control(&mut t, kellogg, P1);
@@ -1052,7 +1081,11 @@ fn burdened_aerialist_gaining_flying_after_blocks_stays_blocked() {
         DecisionKind::Attackers,
         Answer::Attackers(vec![(aer, Entity::Player(P1))]),
     );
-    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![(giant, aer)]));
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(giant, aer)]),
+    );
     t.advance_to(P0, Step::DeclareBlockers);
     t.settle();
     assert!(tap_for_mana(&mut t, P0, treasure, "Sacrifice"));
@@ -1110,7 +1143,10 @@ fn rankle_and_torbran_and_prevention_in_the_order_the_player_chooses() {
         mana(&mut t, P1, ManaType::W, 1);
         let salve = t.hand(P1, "Healing Salve");
         t.g.turn.priority = Some(P1);
-        t.cast(P1, salve).modes(&[1]).target(Entity::Player(P1)).go();
+        t.cast(P1, salve)
+            .modes(&[1])
+            .target(Entity::Player(P1))
+            .go();
         t.resolve_all();
         let log = if prevent_first {
             crate::r_p041_common::apply_first(&mut t, P1, "Healing Salve")
@@ -1145,7 +1181,7 @@ fn harnfel(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn harnfel_exiles_face_up_and_only_those_cards_follow_normal_timing() {
-    cr!("406.3", "601.3", "307.1", "607.2a");
+    cr!("406.3", "601.3", "117.1a", "607.2a");
     ruling!(
         "Birgi, God of Storytelling // Harnfel, Horn of Bounty",
         "The cards exiled by Harnfel’s activated ability are exiled face up."
