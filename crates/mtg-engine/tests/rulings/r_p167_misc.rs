@@ -49,7 +49,7 @@ fn errant_and_giada_looks_at_the_top_card_any_time() {
 
 #[test]
 fn celestial_enforcer_activation_cant_be_interrupted() {
-    cr!("602.2", "602.5b", "117.1");
+    cr!("602.2", "602.1b", "113.7a", "117.1");
     ruling!(
         "Celestial Enforcer",
         "Once you begin activating Celestial Enforcer's ability, players can't take any other actions until you're done activating it. Notably, they can't try to remove your creatures with flying to make it illegal to activate the ability."
@@ -180,15 +180,23 @@ fn isperia_names_the_card_as_it_resolves_with_no_window_to_play_it() {
         .iter()
         .position(|(_, d)| matches!(d, Decision::NameCard { .. }))
         .expect("a card is named as it resolves");
-    // No one gets priority between naming the card and the end of the ability.
-    let after = &asked[named..];
-    let next_priority = after
-        .iter()
-        .position(|(_, d)| matches!(d, Decision::Priority { .. }))
-        .unwrap_or(after.len());
-    assert!(after[..next_priority]
-        .iter()
-        .all(|(p, d)| *p == P0 || !matches!(d, Decision::Priority { .. })));
+    // Then the hand is revealed and the library searched with no one getting priority in
+    // between: no window to play the named card. (A card named as the ability was put on
+    // the stack would have the players' priority passes after it.)
+    let searched = named
+        + asked[named..]
+            .iter()
+            .position(|(_, d)| {
+                matches!(d, Decision::ChooseEntities { candidates, .. } if candidates.contains(&obj(drake)))
+            })
+            .expect("the library is searched");
+    assert!(
+        !asked[named..searched]
+            .iter()
+            .any(|(_, d)| matches!(d, Decision::Priority { .. })),
+        "{:?}",
+        &asked[named..searched]
+    );
     assert!(t.in_hand(P0, "Wind Drake"));
     assert!(t.in_hand(P1, "Grizzly Bears"));
 }
@@ -261,7 +269,7 @@ fn foretell_for(t: &mut TestGame, p: PlayerId, card: ObjectId, generic: u32) -> 
 
 #[test]
 fn dream_devourer_foretold_cards_keep_their_given_cost_without_it() {
-    cr!("702.143a", "702.143d", "611.2c");
+    cr!("702.143a");
     ruling!(
         "Dream Devourer",
         "Cards that are foretold by virtue of Dream Devourer’s ability won’t continue to have the foretell ability once they leave your hand, but you can still cast them from exile on a later turn for the foretell costs they were given by Dream Devourer."
@@ -287,16 +295,48 @@ fn dream_devourer_foretold_cards_keep_their_given_cost_without_it() {
         mana(&mut t, P0, ManaType::R, 1);
         mana(&mut t, P0, ManaType::C, 1);
         assert!(can_cast(&mut t, P0, card, FORETELL), "{gone}");
-        t.cast(P0, card).method(FORETELL).go();
+        let spell = t.cast(P0, card).method(FORETELL).go();
         assert_eq!(t.g.player(P0).mana_pool.total(), 0);
+        // Out of the hand, it doesn't have foretell (even with Dream Devourer there).
+        assert!(
+            !t.obj_now(spell).has_keyword(KeywordKind::Foretell),
+            "{gone}"
+        );
         t.resolve_all();
         assert_eq!(t.named_on_battlefield("Hill Giant").len(), 1);
     }
 }
 
 #[test]
+fn dream_devourer_reduces_only_generic_mana() {
+    cr!("702.143a", "118.7a");
+    ruling!(
+        "Dream Devourer",
+        "The reduction of the foretell cost applies only to generic mana in the foretell cost. It can’t reduce requirements of specific colors of mana. For example, if you foretell a card in your hand with mana cost {1}{G}{G}, its foretell cost will be {G}{G}."
+    );
+    // Troll Ascetic ({1}{G}{G}) costs {G}{G}; Leatherback Baloth ({G}{G}{G}) still costs
+    // {G}{G}{G}.
+    for (name, cost) in [("Troll Ascetic", 2), ("Leatherback Baloth", 3)] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Dream Devourer");
+        let c = t.hand(P0, name);
+        let card = foretell_for(&mut t, P0, c, 2);
+        t.resolve_all();
+        t.advance_to(P1, Step::Upkeep);
+        t.advance_to(P0, Step::PrecombatMain);
+        mana(&mut t, P0, ManaType::G, cost - 1);
+        assert!(!can_cast(&mut t, P0, card, FORETELL), "{name}: one short");
+        mana(&mut t, P0, ManaType::G, 1);
+        t.cast(P0, card).method(FORETELL).go();
+        assert_eq!(t.g.player(P0).mana_pool.total(), 0, "{name}");
+        t.resolve_all();
+        assert_eq!(t.named_on_battlefield(name).len(), 1, "{name}");
+    }
+}
+
+#[test]
 fn dream_devourer_triggers_on_foretelling_not_on_casting() {
-    cr!("702.143a", "603.2");
+    cr!("702.143a", "702.143c", "603.2");
     ruling!(
         "Dream Devourer",
         "The last ability triggers when you exile a card from your hand using foretell, not when you cast a foretold card from exile."
@@ -322,7 +362,7 @@ fn dream_devourer_triggers_on_foretelling_not_on_casting() {
 
 #[test]
 fn dream_devourer_modal_double_faced_cards() {
-    cr!("702.143a", "712.12", "712.13", "305.9");
+    cr!("702.143a", "712.11b", "712.13", "305.1");
     ruling!(
         "Dream Devourer",
         "If you foretell a modal double-faced card, the foretell cost will be based on the mana cost of the face you cast from exile. For example, if you foretell Kolvori, God of Kinship/The Ringhart Crest, you can cast Kolvori by paying {G}{G} or The Ringhart Crest by paying {G} on a future turn. If you foretell a modal double-faced card whose front face is a nonland face but whose back face is a land face, you can’t play that card as a land."
@@ -374,22 +414,22 @@ fn cosmos_charger_reduces_foretelling_not_casting() {
     );
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Cosmos Charger");
-    // Demon Bolt: foretell {E}... ({2}{R}; foretell {R}).
-    let bolt = t.hand(P0, "Demon Bolt");
-    let card = foretell_for(&mut t, P0, bolt, 1);
+    // Behold the Multiverse ({3}{U}; foretell {1}{U}): foretelling it costs {1}.
+    let behold = t.hand(P0, "Behold the Multiverse");
+    let card = foretell_for(&mut t, P0, behold, 1);
     assert_eq!(t.g.player(P0).mana_pool.total(), 0);
+    // On a later turn its foretell cost {1}{U} isn't reduced: {U} isn't enough.
     t.advance_to(P1, Step::Upkeep);
-    let bears = t.battlefield(P1, "Grizzly Bears");
-    // Its foretell cost {R} isn't reduced.
+    mana(&mut t, P0, ManaType::U, 1);
     assert!(!can_cast(&mut t, P0, card, FORETELL));
-    mana(&mut t, P0, ManaType::R, 1);
-    t.cast(P0, card).method(FORETELL).target(obj(bears)).go();
+    mana(&mut t, P0, ManaType::C, 1);
+    t.cast(P0, card).method(FORETELL).go();
     assert_eq!(t.g.player(P0).mana_pool.total(), 0);
 }
 
 #[test]
 fn lifestreams_blessing_x_is_locked_in_as_it_is_cast() {
-    cr!("601.2", "608.2h", "702.143a");
+    cr!("601.2", "702.143a");
     ruling!(
         "Lifestream's Blessing",
         "The value of X is determined only once, as you cast Lifestream's Blessing. It doesn't matter what happens to your creatures after this; the value of X won't change."
@@ -477,7 +517,7 @@ fn slagstone_refinery_triggers_for_each_artifact_leaving_with_it() {
 
 #[test]
 fn stonebinders_familiar_triggers_once_for_one_event() {
-    cr!("603.2c", "603.2h");
+    cr!("603.2c");
     ruling!(
         "Stonebinder's Familiar",
         "If multiple cards are put into exile as part of the same event on your turn, the triggered ability will trigger only once."
@@ -552,7 +592,7 @@ fn burning_vengeance_and_secrets_of_the_dead_resolve_first_and_ignore_abilities(
 
 #[test]
 fn wildgrowth_walker_gone_still_gains_life() {
-    cr!("608.2b", "701.44a");
+    cr!("113.7a", "609.3", "701.44a");
     ruling!(
         "Wildgrowth Walker",
         "If Wildgrowth Walker leaves the battlefield while its triggered ability is on the stack, you won’t put a +1/+1 counter on anything but you will gain 3 life."

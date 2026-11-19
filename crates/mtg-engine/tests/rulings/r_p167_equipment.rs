@@ -52,7 +52,7 @@ fn novice_knight_stays_in_combat_after_it_stops_being_equipped() {
 
 #[test]
 fn astor_granted_equip_and_crew_resolve_without_astor() {
-    cr!("602.2", "608.2", "702.6a", "702.122a");
+    cr!("602.2", "113.7a", "702.6a", "702.122a");
     ruling!(
         "Astor, Bearer of Blades",
         "Once either the equip {1} or crew 1 ability is activated, causing Astor, Bearer of Blades to leave the battlefield won't stop the ability from resolving."
@@ -168,7 +168,7 @@ fn danitha_losing_control_after_casting_doesnt_affect_the_spell() {
 
 #[test]
 fn vulshok_battlemaster_takes_every_equipment() {
-    cr!("701.3a", "701.3c", "301.5d");
+    cr!("701.3a", "301.5d");
     ruling!(
         "Vulshok Battlemaster",
         "Other players' Equipment is moved onto the Battlemaster as well as your own. This doesn't change who controls the Equipment or who can activate its equip ability to move it onto another creature."
@@ -232,7 +232,12 @@ fn reyav_needs_the_attacker_equipped_only_as_it_attacks() {
         "Reyav, Master Smith",
         "The creature needs to be enchanted or equipped at the moment it's declared as an attacker to cause Reyav's ability to trigger. If the creature is no longer enchanted or equipped (or no longer attacking) as the ability tries to resolve, the ability still resolves."
     );
-    for unequip in [false, true] {
+    // (what happens before the ability resolves, the Bears' combat damage)
+    for (case, bears_dmg) in [
+        ("nothing", 8),
+        ("unequipped", 4),
+        ("removed from combat", 0),
+    ] {
         let mut t = TestGame::new(2);
         t.battlefield(P0, "Reyav, Master Smith");
         let bears = t.battlefield(P0, "Grizzly Bears");
@@ -244,15 +249,19 @@ fn reyav_needs_the_attacker_equipped_only_as_it_attacks() {
         );
         // Only the equipped attacker triggers it.
         assert_eq!(t.stack_len(), 1);
-        if unequip {
-            destroy(&mut t, sword);
+        match case {
+            "unequipped" => destroy(&mut t, sword),
+            "removed from combat" => mtg_engine::combat::remove_from_combat(&mut t.g, bears),
+            _ => {}
         }
         t.resolve_all();
-        assert!(t.obj_now(bears).has_keyword(KeywordKind::DoubleStrike));
+        assert!(
+            t.obj_now(bears).has_keyword(KeywordKind::DoubleStrike),
+            "{case}"
+        );
         assert!(!t.obj_now(plain).has_keyword(KeywordKind::DoubleStrike));
         block_and_finish(&mut t, P1, &[]);
-        let bears_dmg = if unequip { 4 } else { 8 };
-        assert_eq!(t.life(P1), 20 - bears_dmg - 3, "{unequip}");
+        assert_eq!(t.life(P1), 20 - bears_dmg - 3, "{case}");
     }
 }
 
@@ -354,7 +363,7 @@ fn nahiri_x_is_zero_unless_you_pay_the_mana_cost() {
 
 #[test]
 fn nahiri_cards_are_played_with_the_normal_timing_and_costs() {
-    cr!("601.3", "305.2", "307.1", "118.9");
+    cr!("601.3", "305.2", "301.1", "302.1", "118.9");
     ruling!(
         "Nahiri, Forged in Fury",
         "Playing the exiled card follows the normal rules for playing that card. Unless you're casting an Equipment spell this way, you must pay the spell's costs, and you must follow all applicable timing rules. For example, if the card is a creature card, you can cast that card by paying its mana cost only during your main phase while the stack is empty."
@@ -381,7 +390,10 @@ fn nahiri_cards_are_played_with_the_normal_timing_and_costs() {
     // An Equipment card: free, but as a sorcery.
     let mut t = TestGame::new(2);
     let (_, sword) = nahiri_exiles(&mut t, "Vulshok Morningstar");
-    assert!(legal_cast_methods(&mut t, P0, sword).is_empty(), "in combat");
+    assert!(
+        legal_cast_methods(&mut t, P0, sword).is_empty(),
+        "in combat"
+    );
     t.advance_to(P0, Step::PostcombatMain);
     t.cast(P0, sword).method(CastMethod::Free).go();
     t.resolve_all();
@@ -401,7 +413,7 @@ fn nahiri_cards_are_played_with_the_normal_timing_and_costs() {
 
 #[test]
 fn nahiri_card_stays_playable_after_nahiri_and_the_creature_leave() {
-    cr!("611.2c", "400.7");
+    cr!("611.2a");
     ruling!(
         "Nahiri, Forged in Fury",
         "You may play the card exiled with Nahiri's ability even if Nahiri or the equipped creature leaves the battlefield or you lose control of them."
@@ -446,7 +458,9 @@ fn activates_for(
 }
 
 /// The generic cost of the activation: the least amount it can be activated for.
-fn activation_cost(setup: &dyn Fn(&mut TestGame) -> (ObjectId, &'static str, usize, ObjectId)) -> u32 {
+fn activation_cost(
+    setup: &dyn Fn(&mut TestGame) -> (ObjectId, &'static str, usize, ObjectId),
+) -> u32 {
     (0..10)
         .find(|n| activates_for(setup, *n))
         .expect("never activatable")
@@ -454,7 +468,7 @@ fn activation_cost(setup: &dyn Fn(&mut TestGame) -> (ObjectId, &'static str, usi
 
 #[test]
 fn bureau_headmaster_and_cloud_reduce_equip_variants_but_not_reconfigure() {
-    cr!("601.2f", "602.2b", "702.6a", "702.6c", "702.151b");
+    cr!("601.2f", "602.2b", "702.6a", "702.6c", "702.151a");
     ruling!(
         "Bureau Headmaster",
         "Some Equipment creature cards in other sets have reconfigure, a different ability that attaches them to a creature. Reconfigure is not an equip ability, and reconfigure costs are not reduced by Bureau Headmaster’s last ability. Equip variants or equip abilities with restrictions, like the “equip legendary creature” ability of Brotherhood Regalia, are still equip abilities, and their costs will be reduced by Bureau Headmaster’s last ability."
@@ -469,8 +483,20 @@ fn bureau_headmaster_and_cloud_reduce_equip_variants_but_not_reconfigure() {
         ("Bureau Headmaster", "Brotherhood Regalia", "Equip", 0, 0),
         ("Bureau Headmaster", "Wrecking Ball Arm", "Equip", 0, 2),
         ("Cloud, Planet's Champion", "Lion Sash", "Reconfigure", 0, 2),
-        ("Cloud, Planet's Champion", "Wrecking Ball Arm", "Equip", 0, 1),
-        ("Cloud, Planet's Champion", "Wrecking Ball Arm", "Equip", 1, 5),
+        (
+            "Cloud, Planet's Champion",
+            "Wrecking Ball Arm",
+            "Equip",
+            0,
+            1,
+        ),
+        (
+            "Cloud, Planet's Champion",
+            "Wrecking Ball Arm",
+            "Equip",
+            1,
+            5,
+        ),
     ];
     for (reducer, eq, text, nth, cost) in cases {
         let setup = move |t: &mut TestGame| {
@@ -484,13 +510,17 @@ fn bureau_headmaster_and_cloud_reduce_equip_variants_but_not_reconfigure() {
             let e = t.battlefield(P0, eq);
             (e, text, nth, target)
         };
-        assert_eq!(activation_cost(&setup), cost, "{reducer}: {eq} {text} #{nth}");
+        assert_eq!(
+            activation_cost(&setup),
+            cost,
+            "{reducer}: {eq} {text} #{nth}"
+        );
     }
 }
 
 #[test]
 fn fighter_class_reduces_generic_equip_costs_per_class_down_to_zero() {
-    cr!("601.2f", "602.2b", "702.6a", "716.2a");
+    cr!("601.2f", "602.2b", "118.7a", "702.6a", "716.2a");
     ruling!(
         "Fighter Class",
         "The discount to equip abilities applies only to generic mana requirements. If you control multiple Fighter Classes that are level 2 or higher, equip abilities cost {2} less for each one. This can't make an ability cost less than {0}."
@@ -526,7 +556,10 @@ fn fighter_class_reduces_generic_equip_costs_per_class_down_to_zero() {
     mtg_engine::classes::set_level(&mut t.g, c, 2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let sword = t.battlefield(P0, "Greatsword of Tyr");
-    assert!(equip(&mut t, P0, sword, bears).is_err(), "{{W}} isn't reduced");
+    assert!(
+        equip(&mut t, P0, sword, bears).is_err(),
+        "{{W}} isn't reduced"
+    );
     mana(&mut t, P0, ManaType::W, 1);
     equip(&mut t, P0, sword, bears).expect("for {W}");
 }
@@ -744,7 +777,7 @@ fn warchanter_skald_has_no_way_to_tap_itself() {
 
 #[test]
 fn stoneforge_mystic_puts_any_equipment_from_hand_unattached() {
-    cr!("110.2", "301.5c");
+    cr!("301.5b");
     ruling!(
         "Stoneforge Mystic",
         "When Stoneforge Mystic's second ability resolves, you may put any Equipment card from your hand onto the battlefield, not just the one you searched for with its first ability. The Equipment is put onto the battlefield unattached."
@@ -764,7 +797,7 @@ fn stoneforge_mystic_puts_any_equipment_from_hand_unattached() {
 
 #[test]
 fn godo_adds_a_combat_phase_right_after_this_one() {
-    cr!("500.8", "505.1a");
+    cr!("500.8");
     ruling!(
         "Godo, Bandit Warlord",
         "Unlike many effects that grant additional combat phases, you don't get an additional main phase with Godo, Bandit Warlord's ability. The additional combat phase happens immediately after the first combat phase."
@@ -780,13 +813,7 @@ fn godo_adds_a_combat_phase_right_after_this_one() {
     let ok = t.g.run_until(1000, |g| g.turn.step != Step::EndOfCombat);
     assert!(ok);
     assert_eq!(t.g.turn.step, Step::BeginningOfCombat);
-    let mains = t
-        .g
-        .turn
-        .schedule
-        .iter()
-        .filter(|s| s.is_main())
-        .count();
+    let mains = t.g.turn.schedule.iter().filter(|s| s.is_main()).count();
     assert_eq!(mains, 1, "only the normal postcombat main phase");
 }
 
@@ -797,7 +824,7 @@ fn godo_adds_a_combat_phase_right_after_this_one() {
 
 #[test]
 fn one_last_job_attaches_only_where_legal() {
-    cr!("303.4f", "301.5c", "608.2c", "702.172a");
+    cr!("303.4g", "301.5e", "702.16d", "702.172a");
     ruling!(
         "One Last Job",
         "The Aura or Equipment must be able to be legally attached to the creature you choose. You can’t return an Aura card to the battlefield if there’s nothing to enchant. However, if you control no creatures (and didn’t bring any back with the first two modes), you could return an Equipment card to the battlefield unattached to anything."
@@ -823,23 +850,31 @@ fn one_last_job_attaches_only_where_legal() {
     assert_eq!(s.len(), 1);
     assert_eq!(t.g.obj(s[0]).attached_to, None);
     // With a creature it can't be attached to (protection from artifacts) and one it can,
-    // it goes on the one it can.
+    // it goes on the one it can: the other can't be chosen.
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "Tel-Jilad Chosen");
+    let chosen = t.battlefield(P0, "Tel-Jilad Chosen");
     let bears = t.battlefield(P0, "Grizzly Bears");
     let sword = t.graveyard(P0, "Bonesplitter");
     let job = t.hand(P0, "One Last Job");
     mana(&mut t, P0, ManaType::W, 1);
     mana(&mut t, P0, ManaType::C, 3);
     t.cast(P0, job).modes(&[2]).target(obj(sword)).go();
+    let from = t.asked().len();
+    t.answer_choose(P0, &[obj(chosen)]);
     t.resolve_all();
+    t.clear_answers();
+    for (_, d) in &t.asked()[from..] {
+        if let mtg_engine::decision::Decision::ChooseEntities { candidates, .. } = d {
+            assert!(!candidates.contains(&obj(chosen)), "{candidates:?}");
+        }
+    }
     let s = t.named_on_battlefield("Bonesplitter");
     assert_eq!(t.g.obj(s[0]).attached_to, Some(obj(bears)));
 }
 
 #[test]
 fn one_last_job_chooses_the_creature_as_it_resolves() {
-    cr!("608.2c", "700.2", "301.7b");
+    cr!("608.2c", "700.2", "301.7", "301.5e");
     ruling!(
         "One Last Job",
         "The creature that the Aura or Equipment card returned by the third mode will enter attached to isn’t a target of that mode and is chosen as One Last Job resolves. Notably, if you return a Vehicle with the second mode, you won’t have the opportunity to crew it before having to choose a creature for the third mode. In most cases, it won’t be a creature at that time."
@@ -882,7 +917,7 @@ fn one_last_job_chooses_the_creature_as_it_resolves() {
 
 #[test]
 fn effects_cant_attach_equipment_where_it_cant_legally_be_attached() {
-    cr!("701.3b", "702.16c", "301.5c", "704.5n");
+    cr!("701.3b", "702.16d", "301.5c");
     ruling!(
         "Battlefield Improvisation",
         "You can't try to attach an Equipment to the target creature if that Equipment can't legally be attached to it."
@@ -982,7 +1017,7 @@ fn effects_cant_attach_equipment_where_it_cant_legally_be_attached() {
 
 #[test]
 fn cass_cant_return_an_aura_that_cant_enchant_the_target() {
-    cr!("303.4a", "702.16b", "702.16c", "115.4");
+    cr!("303.4i", "702.16b", "702.16c", "613.1e");
     ruling!(
         "Cass, Hand of Vengeance",
         "You can’t return Aura cards that can’t legally be attached to the target creature. For example, if the target creature has protection from red, you can’t return Grim Reaper’s Sprint to the battlefield with Cass’s last ability."
@@ -1001,8 +1036,13 @@ fn cass_cant_return_an_aura_that_cant_enchant_the_target() {
     t.answer_choose(P0, &[obj(sword)]);
     destroy(&mut t, bears);
     assert_eq!(t.stack_len(), 1);
+    let aura_card = t.g.current(aura);
+    assert_eq!(t.zone(aura_card), Zone::Graveyard(P0));
     t.resolve_all();
-    assert!(t.in_graveyard(P0, "Unholy Strength"));
+    // The card never left the graveyard (it wasn't returned, then put back by the state-based
+    // action for an Aura attached illegally).
+    assert!(t.g.is_live(aura_card));
+    assert_eq!(t.zone(aura_card), Zone::Graveyard(P0));
     assert_eq!(attached_to(&t, sword), Some(obj(knight)));
     // The example: a creature with protection from red can't get Grim Reaper's Sprint
     // (Cass's ability, from a red source, can't even target it).
@@ -1017,13 +1057,32 @@ fn cass_cant_return_an_aura_that_cant_enchant_the_target() {
     assert!(!offered.is_empty());
     assert!(offered.iter().all(|c| !c.contains(&obj(walker))));
     t.resolve_all();
-    assert_eq!(attached_to(&t, walker), None);
     assert!(attachments_of(&t, walker).is_empty());
+    // The example as such, with Cass made black (Darkest Hour: "All creatures are black."):
+    // its ability can target the creature with protection from red, and Grim Reaper's
+    // Sprint (a red Aura) can't be returned attached to it; the Equipment can.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Darkest Hour");
+    t.battlefield(P0, "Cass, Hand of Vengeance");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let walker = t.battlefield(P0, "Kor Firewalker");
+    let sprint = attach_new(&mut t, P0, "Grim Reaper's Sprint", bears);
+    let sword = attach_new(&mut t, P0, "Bonesplitter", bears);
+    t.answer_targets(P0, &[obj(walker)]);
+    t.answer_choose_moved(P0, &[obj(sprint)]);
+    t.answer_choose(P0, &[obj(sword)]);
+    destroy(&mut t, bears);
+    assert_eq!(t.stack_len(), 1);
+    let sprint_card = t.g.current(sprint);
+    t.resolve_all();
+    assert!(t.g.is_live(sprint_card));
+    assert_eq!(t.zone(sprint_card), Zone::Graveyard(P0));
+    assert_eq!(attached_to(&t, sword), Some(obj(walker)));
 }
 
 #[test]
 fn reckless_crew_and_goldwardens_gambit_attach_one_equipment_per_token() {
-    cr!("701.3a", "701.3c", "608.2c");
+    cr!("701.3a", "608.2c");
     ruling!(
         "Reckless Crew",
         "You can’t have more than one Equipment become attached to the same token."
@@ -1070,7 +1129,11 @@ fn reckless_crew_and_goldwardens_gambit_attach_one_equipment_per_token() {
             assert!(attachments_of(&t, *tok).len() <= 1, "{spell}");
         }
         let attached: Vec<_> = eq.iter().filter_map(|e| attached_to(&t, *e)).collect();
-        assert_eq!(attached.len(), equipment, "{spell}: every Equipment got a token");
+        assert_eq!(
+            attached.len(),
+            equipment,
+            "{spell}: every Equipment got a token"
+        );
         let mut distinct = attached.clone();
         distinct.sort_by_key(|e| format!("{e:?}"));
         distinct.dedup();
@@ -1104,7 +1167,7 @@ fn kor_outfitter_may_target_itself() {
 
 #[test]
 fn magnetic_snuffler_returns_an_equipment_it_cant_wear_unattached() {
-    cr!("301.5c", "303.4f", "608.2b");
+    cr!("301.5c", "301.5e");
     ruling!(
         "Magnetic Snuffler",
         "You may target an Equipment card that can't legally be attached to Magnetic Snuffler with its first ability. If you do, it will enter the battlefield unattached."

@@ -1969,7 +1969,8 @@ impl Game {
             let mut max = if mana_x {
                 // Cost reductions can let X exceed the mana available ("This spell costs
                 // {2} less to cast for each card exiled this way", CR 601.2f): the greatest
-                // X whose total cost that mana could still cover.
+                // X whose total cost that mana could still cover (looked for up to 64 more
+                // than the mana available; the feasibility check below narrows it).
                 let avail = self.max_mana_available(p) as i64;
                 let total = |n: i64| {
                     self.total_cost_with(p, id, &chars, opt, n as u32, &extra)

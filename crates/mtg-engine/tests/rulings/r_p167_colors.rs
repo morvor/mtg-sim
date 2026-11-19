@@ -40,7 +40,7 @@ fn devotion(t: &mut TestGame, n: u32) {
 
 #[test]
 fn xenagos_devotion_as_it_enters_doesnt_count_its_own_symbols() {
-    cr!("614.12", "700.5", "614.1c");
+    cr!("614.12", "700.5", "614.1d");
     ruling!(
         "Xenagos, God of Revels",
         "As Xenagos enters the battlefield, your devotion to red and green will determine whether any replacement effects that affect creatures entering the battlefield apply. Because replacement effects are considered before Xenagos is on the battlefield, the mana symbols in its mana cost won't be counted when determining this."
@@ -52,14 +52,17 @@ fn xenagos_devotion_as_it_enters_doesnt_count_its_own_symbols() {
         devotion(&mut t, others);
         let x = t.enter(P0, "Xenagos, God of Revels");
         t.settle();
-        assert!(is_creature(&t, x), "{others}: devotion 7 or more on the battlefield");
+        assert!(
+            is_creature(&t, x),
+            "{others}: devotion 7 or more on the battlefield"
+        );
         assert_eq!(t.counters(x, counters::PLUS1), counter, "{others}");
     }
 }
 
 #[test]
 fn xenagos_keeps_its_counters_and_is_a_legendary_enchantment_otherwise() {
-    cr!("613.1d", "205.1b", "205.3d", "122.1");
+    cr!("613.1d", "205.1a", "205.4b", "122.1");
     ruling!(
         "Xenagos, God of Revels",
         "Counters put on Xenagos remain on it while it's not a creature, even if they have no effect."
@@ -113,7 +116,7 @@ fn xenagos_leaves_combat_when_it_stops_being_a_creature() {
 
 #[test]
 fn xenagos_losing_all_abilities_still_stops_being_a_creature() {
-    cr!("613.1d", "613.1f", "613.8");
+    cr!("613.1d", "613.1f");
     ruling!(
         "Xenagos, God of Revels",
         "If an effect causes Xenagos to lose all abilities, its ability that causes it to stop being a creature still applies if appropriate."
@@ -137,7 +140,7 @@ fn xenagos_losing_all_abilities_still_stops_being_a_creature() {
 
 #[test]
 fn kruphix_keeps_unspent_mana_as_colorless() {
-    cr!("106.4", "106.4a", "614.1a");
+    cr!("106.4", "500.5", "614.1a");
     ruling!(
         "Kruphix, God of Horizons",
         "As long as Kruphix is on the battlefield, you'll keep unspent mana as steps and phases end (although it will become colorless). This means you can add mana and spend it during a future step, phase, or turn. Once Kruphix leaves the battlefield, you have until the end of the current step or phase to use the mana before it disappears."
@@ -165,7 +168,7 @@ fn kruphix_keeps_unspent_mana_as_colorless() {
 
 #[test]
 fn multicolored_spells_are_reduced_once() {
-    cr!("601.2f", "105.4");
+    cr!("601.2f", "105.2");
     ruling!(
         "Goblin Anarchomancer",
         "A spell that's both red and green costs {1} less to cast."
@@ -208,7 +211,7 @@ fn multicolored_spells_are_reduced_once() {
 
 #[test]
 fn hungering_yeti_checks_the_permanent_only_as_casting_begins() {
-    cr!("601.3", "601.3e", "702.8a");
+    cr!("601.3", "702.8a");
     ruling!(
         "Hungering Yeti",
         "Hungering Yeti checks if you control a green or blue permanent only as you begin to cast it. Once you begin to cast Hungering Yeti as though it had flash, it doesn't matter what happens to the green or blue permanents you control."
@@ -227,7 +230,10 @@ fn hungering_yeti_checks_the_permanent_only_as_casting_begins() {
         mtg_engine::decision::Answer::Index(3),
     );
     t.cast(P0, yeti).go();
-    assert!(!t.on_battlefield(cantor), "sacrificed for mana while casting");
+    assert!(
+        !t.on_battlefield(cantor),
+        "sacrificed for mana while casting"
+    );
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Hungering Yeti").len(), 1);
     // Without a green or blue permanent, not at instant speed.
@@ -241,7 +247,7 @@ fn hungering_yeti_checks_the_permanent_only_as_casting_begins() {
 
 #[test]
 fn lure_of_prey_sees_an_artifact_creature_spell() {
-    cr!("601.3", "302.1");
+    cr!("601.3", "300.2");
     ruling!(
         "Lure of Prey",
         "Does work for artifact creatures cast by your opponent."
@@ -301,7 +307,11 @@ fn march_of_burgeoning_life_x_and_exiled_cards() {
         }
         assert_eq!(t.g.player(P0).mana_pool.total(), 0, "{exiled}");
         t.resolve_all();
-        assert_eq!(t.named_on_battlefield("Centaur Courser").len(), 2, "{exiled}");
+        assert_eq!(
+            t.named_on_battlefield("Centaur Courser").len(),
+            2,
+            "{exiled}"
+        );
         assert_eq!(t.hand_size(P0), 2 - exiled, "{exiled}");
     }
     // X = 3 isn't enough for a mana value 3 target.
@@ -310,7 +320,44 @@ fn march_of_burgeoning_life_x_and_exiled_cards() {
     let march = t.hand(P0, "March of Burgeoning Life");
     mana(&mut t, P0, ManaType::G, 1);
     mana(&mut t, P0, ManaType::C, 3);
-    assert!(t.cast(P0, march).x(3).target(obj(courser)).try_go().is_err());
+    assert!(t
+        .cast(P0, march)
+        .x(3)
+        .target(obj(courser))
+        .try_go()
+        .is_err());
+}
+
+#[test]
+fn march_of_burgeoning_life_default_x_counts_the_reduction() {
+    cr!("601.2b", "601.2f", "107.3a");
+    interp!("default-numbers");
+    // Two green cards exiled ({4} less) and {G} available: the greatest X the spell can
+    // be cast with, the default, is 4 ({4}{G} reduced to {G}); no greater X is offered.
+    let mut t = TestGame::new(2);
+    let courser = t.battlefield(P0, "Centaur Courser");
+    t.library_top(P0, "Centaur Courser");
+    for _ in 0..2 {
+        t.hand(P0, "Llanowar Elves");
+    }
+    let march = t.hand(P0, "March of Burgeoning Life");
+    mana(&mut t, P0, ManaType::G, 1);
+    t.answer(
+        P0,
+        DecisionKind::OptionalCost,
+        mtg_engine::decision::Answer::Number(2),
+    );
+    let from = t.asked().len();
+    let spell = t.cast(P0, march).target(obj(courser)).go();
+    let offered = t.asked()[from..].iter().find_map(|(_, d)| match d {
+        mtg_engine::decision::Decision::ChooseX { max, .. } => Some(*max),
+        _ => None,
+    });
+    assert_eq!(offered, Some(4));
+    assert_eq!(t.g.obj(spell).stack.as_ref().and_then(|s| s.x), Some(4));
+    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Centaur Courser").len(), 2);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -351,7 +398,7 @@ fn ulasht_counts_a_red_green_creature_twice() {
 
 #[test]
 fn murkfiend_liege_untaps_with_the_active_players_permanents() {
-    cr!("502.3", "502.2");
+    cr!("502.3");
     ruling!(
         "Murkfiend Liege",
         "All your green and/or blue creatures untap during each other player's untap step. You have no choice about what untaps. Those creatures untap at the same time as the active player's permanents."
@@ -370,18 +417,19 @@ fn murkfiend_liege_untaps_with_the_active_players_permanents() {
     assert!(!t.obj_now(oracle).tapped);
     assert!(t.obj_now(goblin).tapped, "red");
     assert!(!t.obj_now(theirs).tapped);
-    // Untapped as one event with the active player's permanents.
-    let untaps: Vec<usize> = t
-        .g
-        .turn_events
-        .iter()
-        .enumerate()
-        .filter_map(|(i, e)| match e {
-            mtg_engine::events::Event::Untapped { .. } => Some(i),
-            _ => None,
-        })
-        .collect();
+    // Untapped in the untap step's one untap action, with the active player's permanent:
+    // three untap events in a row, nothing between them.
+    let untaps: Vec<usize> =
+        t.g.turn_events
+            .iter()
+            .enumerate()
+            .filter_map(|(i, e)| match e {
+                mtg_engine::events::Event::Untapped { .. } => Some(i),
+                _ => None,
+            })
+            .collect();
     assert_eq!(untaps.len(), 3);
+    assert_eq!(untaps[2] - untaps[0], 2, "{untaps:?}");
 }
 
 #[test]
@@ -409,7 +457,7 @@ fn wurms_tooth_resolves_before_the_green_spell() {
 
 #[test]
 fn green_suns_zenith_countered_goes_to_the_graveyard() {
-    cr!("701.6a", "608.2b");
+    cr!("701.6a");
     ruling!(
         "Green Sun's Zenith",
         "If Green Sun's Zenith is countered, none of its effects will happen. Notably, it will be put into its owner's graveyard rather than shuffled into its owner's library."
@@ -491,8 +539,11 @@ fn color_statics_table() {
         "If Juniper Order Advocate somehow becomes green, its ability will affect itself."
     );
     // Toxic Iguanar: deathtouch with a green permanent (any kind), not without.
-    for (green, deathtouch) in [(None, false), (Some("Llanowar Elves"), true), (Some("Rancor"), true)]
-    {
+    for (green, deathtouch) in [
+        (None, false),
+        (Some("Llanowar Elves"), true),
+        (Some("Rancor"), true),
+    ] {
         let mut t = TestGame::new(2);
         let iguanar = t.battlefield(P0, "Toxic Iguanar");
         if let Some(g) = green {

@@ -19,11 +19,12 @@ fn obj(id: ObjectId) -> Entity {
 }
 
 /// (reveal land, a basic land card with one of the types it asks for).
-const REVEAL_LANDS: [(&str, &str); 2] = [("Fortified Village", "Forest"), ("Game Trail", "Mountain")];
+const REVEAL_LANDS: [(&str, &str); 2] =
+    [("Fortified Village", "Forest"), ("Game Trail", "Mountain")];
 
 #[test]
 fn a_land_entering_from_hand_at_the_same_time_can_be_revealed() {
-    cr!("614.12", "614.12a", "614.13a");
+    cr!("614.12", "614.12a");
     ruling!(
         "Fortified Village",
         "If a Forest or Plains is entering the battlefield from your hand at the same time as Fortified Village, you may reveal the other land to have Fortified Village enter untapped."
@@ -167,7 +168,7 @@ fn check_lands_look_for_land_types_not_names() {
 
 #[test]
 fn shifting_woodland_needs_a_forest_already_there() {
-    cr!("614.12", "614.1d", "603.6a");
+    cr!("614.12", "614.1d");
     ruling!(
         "Shifting Woodland",
         "You must already control a Forest as Shifting Woodland enters the battlefield for it to enter untapped. If it enters the battlefield at the same time as a Forest when you control no other Forests, it will enter tapped."
@@ -232,7 +233,7 @@ fn shifting_woodland_keeps_its_effects_and_counters() {
 
 #[test]
 fn shifting_woodland_doesnt_enter_so_enters_abilities_dont_apply() {
-    cr!("707.5", "603.6a", "614.1c");
+    cr!("707.2", "603.6a", "614.1c");
     ruling!(
         "Shifting Woodland",
         "Because Shifting Woodland isn't entering the battlefield when it becomes a copy of a card, any \"When [this creature] enters the battlefield\" or \"[This creature] enters the battlefield with\" abilities of the copied card won't apply."
