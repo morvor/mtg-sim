@@ -226,7 +226,8 @@ fn invasion_of_fiora_destroys_legendary_creatures_first() {
     let isamaru = t.battlefield(P1, "Isamaru, Hound of Konda");
     let giant = t.battlefield(P1, "Hill Giant");
     let events = t.g.turn_events.len();
-    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![0, 1]));
+    // Both modes, chosen in the other order: they still happen in the order printed.
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1, 0]));
     crate::r_s05_common::enter(&mut t, P0, "Invasion of Fiora // Marchesa, Resolute Monarch");
     t.resolve_all();
     let destroyed: Vec<ObjectId> = t.g.turn_events[events..]
