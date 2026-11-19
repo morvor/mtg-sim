@@ -136,9 +136,62 @@ impl Game {
                     );
                 ctx.prev_happened = yes;
                 if yes {
+                    let it_before = ctx.vars.get(&vars::IT).cloned();
+                    // "You may untap target tapped creature an opponent controls. If you
+                    // do, untap this creature" (Soldevi Golem): the untapping is a cost
+                    // paid as the ability resolves, and "if you do" checks whether the
+                    // player chose to pay it (CR 118.12). A player can't pay it for a
+                    // permanent that can't become untapped (CR 118.3; Blossombind ruling)
+                    // or isn't tapped (CR 701.26b); one whose untapping a stun counter
+                    // replaces still pays it (CR 122.1d; Stall for Time ruling). Only
+                    // selections that involve no choice are looked at.
+                    let could_untap = match &**effect {
+                        Effect::Untap {
+                            what:
+                                what @ (Sel::Target(_)
+                                | Sel::This
+                                | Sel::AttachedTo
+                                | Sel::TriggerObject
+                                | Sel::Var(_)),
+                        } => Some(self.resolve_objects(what, ctx).into_iter().any(|o| {
+                            let x = self.obj(o);
+                            x.tapped
+                                && !x.phased_out
+                                && !crate::prohibitions::object_cant(
+                                    self,
+                                    o,
+                                    ObjectAction::Untapped,
+                                )
+                        })),
+                        _ => None,
+                    };
                     // Effects that can fail to do what they say (sacrificing, paying,
                     // countering) record whether they did it ("if you do", "when you do").
                     self.exec(effect, ctx);
+                    if let Some(could) = could_untap {
+                        ctx.prev_happened = could;
+                    }
+                    // "You may put that card onto the battlefield. If you don't, put it
+                    // into your hand": an Aura that couldn't enter stayed where it was (CR
+                    // 303.4g) and is still the same object (CR 400.7), so "it" still means
+                    // that card, as when the player declines (Songbirds' Blessing ruling).
+                    if let (
+                        Effect::Move {
+                            what: Sel::Var(v), ..
+                        },
+                        Some(before),
+                    ) = (&**effect, it_before)
+                    {
+                        if *v == vars::IT
+                            && !ctx.prev_happened
+                            && before.iter().all(|e| match e {
+                                Entity::Object(o) => self.is_live(*o),
+                                Entity::Player(_) => false,
+                            })
+                        {
+                            ctx.set_var(vars::IT, before);
+                        }
+                    }
                     // "You may draw cards equal to its power. If you do, discard two cards":
                     // a player may choose to draw even with too few cards in their library
                     // (CR 121.3), and "if you do" follows that choice, however many cards

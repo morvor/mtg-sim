@@ -1536,7 +1536,28 @@ fn block_events(r: &str) -> Option<Parsed> {
             _ => return None,
         };
         if many {
-            return None;
+            // "Whenever equipped creature blocks or becomes blocked by one or more
+            // creatures" (Godsend): once per combat (CR 509.3a, 509.3c), not once for each
+            // of them. Only with no quality: "one or more black creatures" would also
+            // trigger when an effect adds the first black one to a block (CR 509.3e).
+            if end(o) != "one or more creatures" {
+                return None;
+            }
+            return Some((
+                TriggerCond::Where {
+                    trigger: Box::new(TriggerCond::BlocksOrBecomesBlocked(f)),
+                    cond: Condition::Exists(Filter::and(vec![
+                        g,
+                        Filter::BlockRelation {
+                            rel: BlockRel::BlockingOrBlockedBy,
+                            other: Box::new(Sel::AttachedTo),
+                            when: BlockWhen::Now,
+                        },
+                    ])),
+                },
+                Sel::AttachedTo,
+                PlayerRef::You,
+            ));
         }
         // Once for each creature it blocks or is blocked by (CR 509.3b, 509.3d): "that
         // creature" is that one.
@@ -1610,7 +1631,11 @@ fn block_events(r: &str) -> Option<Parsed> {
         parts.extend(attacking);
         let attacker = Filter::and(parts);
         return Some((
-            TriggerCond::BlockedByN { attacker, n },
+            TriggerCond::BlockedByN {
+                attacker,
+                blocker: Filter::creature(),
+                n,
+            },
             Sel::TriggerObject,
             PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
         ));
