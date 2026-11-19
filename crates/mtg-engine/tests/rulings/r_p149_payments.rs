@@ -191,7 +191,8 @@ fn development_repeats_three_times_each_opponent_offered_in_turn() {
     );
     assert_eq!(got, (2, 1));
     // Both let P0 draw in the first pass: P2 is still offered after P1 has, and P0 draws
-    // for each of them (`unless-any-player-pays-offers-everyone`).
+    // for each of them (`unless-any-player-pays-offers-everyone`, provisional; its
+    // alternative (B) would stop at P1's, as Sin Prodder's ruling does for "may have you").
     let mut t = TestGame::new(3);
     let got = development(
         &mut t,
