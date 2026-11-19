@@ -410,6 +410,23 @@ pub fn double_faced_copy_face(g: &Game, src: ObjectId) -> Option<FaceState> {
         .then_some(face)
 }
 
+/// Whether the object is a double-faced token: a token copy of a double-faced object
+/// (CR 707.8a) or a double-faced token made with its own characteristics.
+pub fn is_double_faced_token(g: &Game, id: ObjectId) -> bool {
+    let o = g.obj(id);
+    o.kind == ObjKind::Token
+        && o.card.as_ref().is_some_and(|card| {
+            card.faces.len() >= 2
+                && matches!(
+                    card.layout,
+                    crate::card::Layout::Transform
+                        | crate::card::Layout::ModalDfc
+                        | crate::card::Layout::DoubleFacedToken
+                        | crate::card::Layout::Battle
+                )
+        })
+}
+
 /// What "a copy of [phrase]" refers to when the phrase names the object the ability
 /// calls "it" (`it`). "That card" is the card that permanent became in its new zone, so
 /// it's copied as the card (Myrkul, Lord of Bones: "create a token that's a copy of that

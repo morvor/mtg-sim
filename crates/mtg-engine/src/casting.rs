@@ -724,12 +724,13 @@ impl Game {
         chars: &Characteristics,
     ) -> Option<crate::permissions::CastPermission> {
         let mut found: Option<crate::permissions::CastPermission> = None;
-        for (i, (src, ctl, perm, once)) in self.statics.play_permissions.iter().enumerate() {
+        for (i, (src, ctl, perm, once, link)) in self.statics.play_permissions.iter().enumerate() {
             let free = perm.cost.as_ref().is_some_and(Cost::is_free);
             if !free || !perm.spells || perm.zone != ZoneKind::Hand {
                 continue;
             }
-            let ctx = Ctx::new(Some(*src), *ctl);
+            let mut ctx = Ctx::new(Some(*src), *ctl);
+            ctx.link = *link;
             let view = WithChars {
                 id: card,
                 chars,
