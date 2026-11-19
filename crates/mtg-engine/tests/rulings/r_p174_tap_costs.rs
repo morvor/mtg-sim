@@ -14,34 +14,34 @@ use mtg_engine::types::*;
 use mtg_engine::*;
 
 #[derive(Clone, Copy, PartialEq)]
-enum Src {
+pub enum Src {
     /// On the battlefield; `true`: it's in the cost too (summoning sick, tapped by it).
     Battlefield { taps_itself: bool },
     Graveyard,
 }
 
-struct TapCase {
-    card: &'static str,
+pub struct TapCase {
+    pub card: &'static str,
     /// A substring of the activated ability's text.
-    needle: &'static str,
-    src: Src,
+    pub needle: &'static str,
+    pub src: Src,
     /// Permanents tapped for the cost: they all came under P0's control this turn.
-    helpers: &'static [&'static str],
-    lands: &'static [&'static str],
+    pub helpers: &'static [&'static str],
+    pub lands: &'static [&'static str],
     /// The cost has {T}: the source itself must have been under P0's control since the
     /// turn began.
-    tap_symbol: bool,
+    pub tap_symbol: bool,
     /// Extra setup; returns the ability's targets (one per target slot).
-    setup: fn(&mut TestGame) -> Vec<Entity>,
+    pub setup: fn(&mut TestGame) -> Vec<Entity>,
     /// The ability's outcome (after everything resolved).
-    check: fn(&mut TestGame, ObjectId) -> bool,
+    pub check: fn(&mut TestGame, ObjectId) -> bool,
 }
 
-fn no_setup(_: &mut TestGame) -> Vec<Entity> {
+pub fn no_setup(_: &mut TestGame) -> Vec<Entity> {
     vec![]
 }
 
-fn opp_bears(t: &mut TestGame) -> Vec<Entity> {
+pub fn opp_bears(t: &mut TestGame) -> Vec<Entity> {
     vec![Entity::Object(t.battlefield(P1, "Grizzly Bears"))]
 }
 
@@ -87,7 +87,7 @@ fn attempt(c: &TapCase, source_sick: bool) -> (TestGame, ObjectId, Vec<ObjectId>
 /// The cost can be paid by tapping permanents that came under P0's control this turn
 /// (and the source too when it's in the cost); with {T} in the cost, a summoning-sick
 /// source can't activate the ability.
-fn run(c: TapCase) {
+pub fn run(c: TapCase) {
     let taps_itself = c.src == Src::Battlefield { taps_itself: true };
     let (mut t, src, helpers, ok) = attempt(&c, taps_itself);
     assert!(ok, "{}: activation failed\n{}", c.card, t.dump_log());

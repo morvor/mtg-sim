@@ -250,6 +250,8 @@ pub fn can_waterbend(g: &Game, p: PlayerId, n: u32, ctx: &Ctx) -> bool {
             break;
         }
         if h.tap(c) {
+            // Tapped for waterbend, it can't also be sacrificed for mana.
+            h.paid_otherwise.push(c);
             rest -= 1;
         }
     }
@@ -286,22 +288,27 @@ pub fn waterbend(g: &mut Game, p: PlayerId, n: u32, ctx: &Ctx) -> bool {
                     && v.iter().collect::<std::collections::BTreeSet<_>>().len() == v.len() =>
             {
                 let v: Vec<ObjectId> = v.iter().filter_map(|e| e.object()).collect();
-                // The rest must still be payable with mana once these are tapped.
+                // The rest must still be payable with mana once these are tapped, and
+                // without sacrificing them for it (`Game::paid_otherwise`).
                 let mut h = g.clone();
                 for c in &v {
                     h.tap(*c);
                 }
+                h.paid_otherwise.extend(v.iter().copied());
                 can_pay_generic(&h, p, n - v.len() as u32, ctx).then_some(v)
             }
             _ => None,
         }
     };
-    let mut tapped = 0;
+    // CR 601.2g–h, 701.67a: what's tapped for waterbend is tapped as the cost is paid,
+    // after mana abilities are activated, so it can't also be sacrificed (or exiled or
+    // returned) for the mana that pays the rest (`Game::paid_otherwise`).
+    let mut tapped_ids: Vec<ObjectId> = Vec::new();
     match chosen {
         Some(v) => {
             for c in v {
                 if g.tap(c) {
-                    tapped += 1;
+                    tapped_ids.push(c);
                 }
             }
         }
@@ -309,23 +316,32 @@ pub fn waterbend(g: &mut Game, p: PlayerId, n: u32, ctx: &Ctx) -> bool {
         // creatures that couldn't make mana (sparing the source), then the others.
         None => {
             for c in cands {
-                if tapped as usize >= max || can_pay_generic(g, p, n - tapped, ctx) {
+                let rest = n - tapped_ids.len() as u32;
+                if tapped_ids.len() >= max
+                    || g.with_paid_otherwise(&tapped_ids, |g| can_pay_generic(g, p, rest, ctx))
+                {
                     break;
                 }
                 if g.tap(c) {
-                    tapped += 1;
+                    tapped_ids.push(c);
                 }
             }
         }
     }
+    let tapped = tapped_ids.len() as u32;
     let rest = n.saturating_sub(tapped);
     if rest > 0 {
         let spend = SpendContext {
             source: ctx.source,
             ..Default::default()
         };
-        if crate::mana_abilities::pay_mana(g, p, &ManaCost::generic(rest), &spend, None)
-            .is_none()
+        let paid = g.with_paid_otherwise(&tapped_ids, |g| {
+            crate::mana_abilities::pay_mana(g, p, &ManaCost::generic(rest), &spend, None)
+        });
+        if paid.is_none()
+            || tapped_ids
+                .iter()
+                .any(|c| !g.is_in_zone(*c, crate::object::Zone::Battlefield))
         {
             return false;
         }
