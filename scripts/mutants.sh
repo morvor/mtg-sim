@@ -141,7 +141,7 @@ PY
     while [[ -e "$dest/mutants.out.bak.$i" ]]; do i=$((i + 1)); done
     cp -a "$dest/mutants.out" "$dest/mutants.out.bak.$i"
     (cd "$dest/mutants.out" && for f in caught missed timeout unviable previously_caught; do
-      [[ -f $f.txt ]] && cat "$f.txt"
+      if [[ -f $f.txt ]]; then cat "$f.txt"; fi
     done | sort -u >previously_caught.new && mv previously_caught.new previously_caught.txt)
     # The baseline passed when the run started (same REV): don't spend a suite run on it again.
     args+=(--iterate --baseline skip)
