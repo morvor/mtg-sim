@@ -193,9 +193,7 @@ fn spirit_of_the_labyrinth_draw_limit() {
     assert_eq!(draw(&mut t, 3), 1);
     assert_eq!(draw(&mut t, 1), 0);
     // On P1's turn, P0 may draw one card again.
-    t.set_step(P1, Step::PrecombatMain);
-    t.g.history.cards_drawn.clear();
-    t.advance_to(P1, Step::End);
+    t.advance_to(P1, Step::PrecombatMain);
     assert_eq!(draw(&mut t, 2), 1);
     // Drawing a card before Spirit of the Labyrinth enters.
     let mut t = TestGame::new(2);
@@ -269,6 +267,7 @@ fn frenzied_baloth_only_stops_prevention() {
 #[test]
 fn tunnel_ignus_counts_lands_that_entered_earlier_or_together() {
     cr!("603.2", "603.4", "603.2c");
+    interp!("simultaneous-events-count-as-an-ability-triggers");
     ruling!(
         "Tunnel Ignus",
         "Whenever a land an opponent controls enters, this ability triggers only if another land had already entered the battlefield under that opponent's control this turn. It doesn't matter if that other land is still on the battlefield, is still under that player's control, or is still a land."
@@ -300,7 +299,7 @@ fn tunnel_ignus_counts_lands_that_entered_earlier_or_together() {
 
 #[test]
 fn thresher_lizard_damage_can_become_lethal() {
-    cr!("704.5g", "514.2", "613.4c");
+    cr!("704.5g", "613.4c");
     ruling!(
         "Thresher Lizard",
         "Because damage remains marked on a creature until it's removed as the turn ends, nonlethal damage dealt to Thresher Lizard while you have one or fewer cards in hand may become lethal if cards are put into your hand during that turn."

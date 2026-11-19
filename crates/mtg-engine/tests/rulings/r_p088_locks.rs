@@ -22,9 +22,16 @@ fn collector_ouphe_stops_only_artifacts_on_the_battlefield() {
     supported("Collector Ouphe");
     supported("Ketria Crystal");
     let mut t = TestGame::new(2);
+    // Its mana ability ("{T}: Add {G}, {U}, or {R}."): yes without Collector Ouphe, no
+    // with it.
+    let a = t.battlefield(P0, "Ketria Crystal");
+    let b = t.battlefield(P0, "Ketria Crystal");
+    assert!(t.activate(P0, a, 0, &[]).is_ok());
+    assert_eq!(t.player(P0).mana_pool.total(), 1);
     t.battlefield(P1, "Collector Ouphe");
-    let crystal = t.battlefield(P0, "Ketria Crystal");
-    assert!(!can_activate(&mut t, P0, crystal));
+    assert!(t.activate(P0, b, 0, &[]).is_err());
+    assert_eq!(t.player(P0).mana_pool.total(), 1);
+    t.g.players[0].mana_pool = Default::default();
     let in_hand = t.hand(P0, "Ketria Crystal");
     colorless(&mut t, P0, 2);
     assert!(crate::r_s04_common::can_cycle(&mut t, P0, in_hand));
@@ -40,11 +47,17 @@ fn collector_ouphe_cant_be_sacrificed_to_its_controllers_artifact() {
         "If you control Collector Ouphe, you can't activate any abilities of your artifacts, even if you'd sacrifice Collector Ouphe as a cost to activate one of those abilities."
     );
     supported("Ashnod's Altar");
-    // Ashnod's Altar: "Sacrifice a creature: Add {C}{C}."
+    // Ashnod's Altar: "Sacrifice a creature: Add {C}{C}." Without Collector Ouphe, P0 can
+    // sacrifice a creature to it.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let altar = t.battlefield(P0, "Ashnod's Altar");
+    t.answer_choose(P0, &[obj(bears)]);
+    t.activate(P0, altar, 0, &[]).expect("sacrifice the Bears");
+    assert_eq!(t.player(P0).mana_pool.total(), 2);
     let mut t = TestGame::new(2);
     let ouphe = t.battlefield(P0, "Collector Ouphe");
     let altar = t.battlefield(P0, "Ashnod's Altar");
-    assert!(!can_activate(&mut t, P0, altar));
     t.answer_choose(P0, &[obj(ouphe)]);
     assert!(t.activate(P0, altar, 0, &[]).is_err());
     assert!(t.on_battlefield(ouphe));
@@ -66,6 +79,8 @@ fn grand_abolisher_doesnt_stop_abilities_of_cards_in_other_zones() {
     colorless(&mut t, P1, 2);
     // During P0's turn: P1's creature's ability can't be activated, the artifact card's
     // cycling ability can.
+    t.set_step(P1, Step::PrecombatMain);
+    assert!(can_activate(&mut t, P1, sorcerer));
     t.set_step(P0, Step::PrecombatMain);
     assert!(!can_activate(&mut t, P1, sorcerer));
     assert!(crate::r_s04_common::can_cycle(&mut t, P1, crystal));
@@ -202,7 +217,7 @@ fn tomik_overrides_permission_to_play_lands_from_graveyards() {
 
 #[test]
 fn tomiks_lands_dont_have_hexproof() {
-    cr!("115.4", "702.11b");
+    cr!("702.11b", "115.1");
     ruling!(
         "Tomik, Distinguished Advokist",
         "Tomik’s middle ability is similar to hexproof, but effects that interact with hexproof don’t count these lands or land cards as having hexproof."

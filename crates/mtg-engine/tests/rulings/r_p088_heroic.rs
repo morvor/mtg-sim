@@ -589,7 +589,7 @@ fn orvar_checks_the_spells_targets_as_its_ability_resolves() {
 
 #[test]
 fn orvars_token_copies_only_copiable_values() {
-    cr!("707.2", "707.3", "707.4", "107.3m");
+    cr!("707.2", "707.3", "707.4", "202.3e");
     ruling!(
         "Orvar, the All-Form",
         "The token copies exactly what is printed on the permanent and nothing else (unless that permanent is a token or is copying something else; see below). It doesn’t copy whether that permanent is tapped or untapped, whether it has any counters on it, whether it has any Auras and/or Equipment attached to it, or any non-copy effects that changed its power, toughness, types, color, and so on."
@@ -680,7 +680,7 @@ fn orvars_token_copies_only_copiable_values() {
 
 #[test]
 fn battlefield_thaumaturge_reduces_the_total_cost() {
-    cr!("601.2f", "118.7a", "202.3", "702.95a");
+    cr!("601.2f", "118.7a", "202.3", "118.8d");
     ruling!(
         "Battlefield Thaumaturge",
         "Battlefield Thaumaturge's first ability doesn't change that spell's mana cost or mana value. It changes only the amount you actually pay (the “total cost” of the spell)."
