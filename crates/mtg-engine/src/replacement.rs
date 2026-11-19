@@ -79,6 +79,13 @@ pub struct EtbInfo {
     /// replacement effects run earlier, while the replacement applies; see
     /// [`ReplacementAction::AsEnters`].)
     pub as_enters: Vec<(Ctx, Effect)>,
+    /// Continuous effects its "as this enters" replacement effects created while it
+    /// entered ("As this artifact enters, you may have it become a copy of any creature on
+    /// the battlefield until end of turn", Cursed Mirror), held here until it's put onto
+    /// the battlefield: they apply to the permanent it becomes, whatever zone it enters
+    /// from (a card put onto the battlefield from a graveyard, a token being created; CR
+    /// 614.1c, 614.12), and to nothing if it doesn't enter.
+    pub as_enters_effects: Vec<ContinuousEffect>,
     /// Cast info carried from the stack.
     pub cast: Option<CastInfo>,
     /// Face to put onto the battlefield (for MDFCs played/cast as back face).
@@ -1909,7 +1916,16 @@ impl Game {
                     let hyp = self.with_hypothetical_entry(&m, |g| g.obj(m.obj).chars.clone());
                     std::mem::replace(&mut self.objects[m.obj.0 as usize].chars, hyp)
                 });
+                let effects_before: Vec<u32> = self.effects.iter().map(|x| x.id).collect();
                 self.exec(&e, &mut c);
+                let (mine, rest): (Vec<_>, Vec<_>) = std::mem::take(&mut self.effects)
+                    .into_iter()
+                    .partition(|x| {
+                        !effects_before.contains(&x.id)
+                            && matches!(&x.affected, Affected::Objects(v) if v == &[m.obj])
+                    });
+                self.effects = rest;
+                m.etb.as_enters_effects.extend(mine);
                 if let Some(chars) = saved_chars {
                     self.objects[m.obj.0 as usize].chars = chars;
                 }

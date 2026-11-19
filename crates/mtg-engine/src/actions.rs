@@ -670,6 +670,15 @@ impl Game {
                         created_turn: self.turn.number,
                     });
                 }
+                // Effects its "as this enters" abilities created as it entered apply to
+                // the permanent, from whatever zone it entered (CR 614.1c, 614.12), after
+                // the copy effect it enters with (a token copy of Cursed Mirror becomes a
+                // copy of the creature it chose, CR 707.2c, 613.7).
+                for mut e in m.etb.as_enters_effects.iter().cloned() {
+                    e.affected = Affected::Objects(vec![new_id]);
+                    e.timestamp = self.new_timestamp();
+                    self.effects.push(e);
+                }
                 self.battlefield.push(new_id);
                 if from == Zone::Stack {
                     // A text change made to a permanent spell continues to apply to the
