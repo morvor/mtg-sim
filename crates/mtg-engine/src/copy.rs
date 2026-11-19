@@ -219,6 +219,14 @@ pub fn add_copy_exceptions(
     g.recompute();
 }
 
+/// Set (to nothing) in the context while an instruction that copies a spell for each of
+/// several objects runs ("for each of those creatures, copy that spell", Feather, Radiant
+/// Arbiter): all of its copies, with those an effect adds to each (Twinning Staff), are
+/// put onto the stack at the same time, and it orders them all ([`order_copies`],
+/// CR 405.3), so each copy instruction inside it leaves the order of its own to it and
+/// the controller is asked once.
+pub const ORDERED_BY_ENCLOSING: crate::ability::Var = crate::ability::vars::USER + 5121;
+
 /// CR 405.3: several copies put on the stack at the same time by one effect are put
 /// there in the order their controller chooses. `copies` are the new objects, which
 /// sit together on top of the stack in creation order; the controller is asked for
