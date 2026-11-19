@@ -189,6 +189,12 @@ impl KeywordRules for Foretell {
             .filter(|k| k.kind == KeywordKind::Foretell)
             .filter_map(|k| k.cost.clone())
             .find(|c| Some(format!("{c:?}")) != printed);
+        // A cost "equal to its mana cost reduced by {2}" (Dream Devourer) is that of the
+        // face the card is cast as later (Dream Devourer ruling on modal double-faced
+        // cards), not the front face's cost it has in the hand.
+        let reduced_by = granted
+            .as_ref()
+            .and_then(|c| own_cost_reduction(g, card, c));
         let new = g.move_object_ev(MoveEv {
             obj: card,
             to: Zone::Exile,
@@ -202,7 +208,17 @@ impl KeywordRules for Foretell {
             source: None,
         });
         if let Some(new) = new {
-            crate::special_actions::mark_with_cost(g, new, KeywordKind::Foretell, granted);
+            match reduced_by {
+                Some(n) => crate::special_actions::mark_with_reduced_mana_cost(
+                    g,
+                    new,
+                    KeywordKind::Foretell,
+                    n,
+                ),
+                None => {
+                    crate::special_actions::mark_with_cost(g, new, KeywordKind::Foretell, granted)
+                }
+            }
             // CR 702.143a, 406.3: the player may look at it as long as it remains exiled.
             crate::zones::allow_look(g, p, new);
             // CR 702.143c: the player foretold a card.
@@ -325,3 +341,34 @@ impl KeywordRules for Foretell {
 }
 
 inventory::submit! { KeywordRegistration(&Foretell) }
+
+/// The generic mana a static ability giving `card` foretell "with a foretell cost equal to
+/// its mana cost reduced by {N}" (`Modification::AddKeywordOwnCost`) reduces it by, if the
+/// foretell cost `granted` the card has is that one. (Whether the ability applies to the
+/// card isn't asked again: "each nonland card in your hand without foretell" no longer
+/// matches a card it gave foretell.)
+fn own_cost_reduction(g: &Game, card: ObjectId, granted: &Cost) -> Option<u32> {
+    let chars = &g.obj(card).chars;
+    let granted = format!("{granted:?}");
+    g.permanents().find_map(|o| {
+        o.chars.abilities.iter().find_map(|a| {
+            let AbilityKind::Static(s) = &a.kind else {
+                return None;
+            };
+            let StaticEffect::Continuous { mods, .. } = &s.effect else {
+                return None;
+            };
+            mods.iter().find_map(|m| match m {
+                Modification::AddKeywordOwnCost(k, n)
+                    if k.kind == KeywordKind::Foretell
+                        && crate::layers::own_cost_keyword(k, *n, chars)
+                            .cost
+                            .is_some_and(|c| format!("{c:?}") == granted) =>
+                {
+                    Some(*n)
+                }
+                _ => None,
+            })
+        })
+    })
+}
