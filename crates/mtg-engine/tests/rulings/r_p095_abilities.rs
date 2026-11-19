@@ -531,17 +531,19 @@ fn revival_experiment_one_card_per_permanent_type() {
         "Sol Ring",
         "Glorious Anthem",
         "Jace Beleren",
+        "Invasion of Eldraine // Prickle Faeries",
     ]
     .iter()
     .map(|n| t.graveyard(P0, n))
     .collect();
-    let [bears, isamaru, forest, snow, ring, anthem, jace] = ids[..] else {
+    let [bears, isamaru, forest, snow, ring, anthem, jace, battle] = ids[..] else {
         unreachable!()
     };
-    // One choice per permanent type that has cards: artifact, creature, enchantment,
-    // land, planeswalker. The legendary and the snow cards are among the creature and land
+    // One choice per permanent type: artifact, battle (CR 110.4, since 2023; the ruling
+    // predates battles, see docs/RULING_DISCREPANCIES.md), creature, enchantment, land,
+    // planeswalker. The legendary and the snow cards are among the creature and land
     // choices, not choices of their own.
-    for pick in [ring, isamaru, anthem, snow, jace] {
+    for pick in [ring, battle, isamaru, anthem, snow, jace] {
         t.answer_choose(P0, &[Entity::Object(pick)]);
     }
     cast_new(&mut t, P0, "Revival Experiment", &[]);
@@ -550,7 +552,12 @@ fn revival_experiment_one_card_per_permanent_type() {
     let choices: Vec<Vec<Entity>> = t.asked()[from..]
         .iter()
         .filter_map(|(_, d)| match d {
-            Decision::ChooseEntities { candidates, .. } => Some(candidates.clone()),
+            // (Not the Siege's protector, a player.)
+            Decision::ChooseEntities { candidates, .. }
+                if candidates.iter().all(|e| matches!(e, Entity::Object(_))) =>
+            {
+                Some(candidates.clone())
+            }
             _ => None,
         })
         .collect();
@@ -559,17 +566,18 @@ fn revival_experiment_one_card_per_permanent_type() {
         choices,
         vec![
             vec![o(ring)],
+            vec![o(battle)],
             vec![o(bears), o(isamaru)],
             vec![o(anthem)],
             vec![o(forest), o(snow)],
             vec![o(jace)],
         ]
     );
-    for id in [ring, isamaru, anthem, snow, jace] {
+    for id in [ring, battle, isamaru, anthem, snow, jace] {
         assert!(t.on_battlefield(id));
     }
     assert!(!t.on_battlefield(bears) && !t.on_battlefield(forest));
-    assert_eq!(t.life(P0), 20 - 15);
+    assert_eq!(t.life(P0), 20 - 18);
     assert!(t.in_exile("Revival Experiment"));
 }
 

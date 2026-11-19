@@ -712,6 +712,19 @@ decides whether they become a conflict case.
   `ajani_unyielding_takes_artifact_creature_enchantment_and_planeswalker_cards`); the engine
   follows CR 110.4 (in the first of those tests, Invasion of Zendikar, a battle card, is
   among the cards Emeria Shepherd's ability can target).
+- **Revival Experiment** (rulings-P095 review): "The permanent types are artifact, creature,
+  enchantment, land, and planeswalker. Things like “legendary” or “snow” are supertypes, not
+  types." (2021-04-16) beside CR 110.4: "There are six permanent types: artifact, battle,
+  creature, enchantment, land, and planeswalker. ..." Written before battles existed (March
+  of the Machine, 2023; the CR texts of that change weren't read in this review), like the
+  Emeria Shepherd group above; a later ruling of the same template names battle: Korvold,
+  Gleeful Glutton's "The permanent types are artifact, battle, creature, enchantment, land,
+  and planeswalker. ..." (2023-09-01). Possibly outdated in its list. The same list without
+  battle is in Creeping Renaissance's (2011-09-22), Role Reversal's (2019-05-03) and
+  Liliana, Dreadhorde General's (2024-01-12) rulings, cited by earlier batches. The ruling
+  stays cited (`tests/rulings/r_p095_abilities.rs`,
+  `revival_experiment_one_card_per_permanent_type`); the engine follows CR 110.4 (in that
+  test a battle card, Invasion of Eldraine, is returned too, the sixth type).
 - **Kaboom!** (ruling-conflicts-10): "As Kaboom! resolves, if you have chosen multiple
   targets, those targets will be handled one at a time in turn order. ... You choose the
   relative order of targets within that group. For whichever target you select first, exile
