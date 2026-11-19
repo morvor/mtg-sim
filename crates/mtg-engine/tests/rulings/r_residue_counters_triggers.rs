@@ -12,7 +12,6 @@ use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
 
-
 // --- Pelt Collector ----------------------------------------------------------------------
 
 #[test]
@@ -75,12 +74,16 @@ fn pelt_collector_dies_with_a_larger_creature_dealt_lethal_damage_at_once() {
         "Pelt Collector",
         "If Pelt Collector is dealt lethal damage at the same time as a larger creature you control, they’re destroyed at the same time."
     );
-    supported("Pyroclasm");
+    supported("Tremor");
+    // Tremor's 1 damage is lethal to the 1/1 Pelt Collector and to the 2/2 Bears that
+    // already have 1 damage. A counter from the Bears dying would have made it a 2/2 with
+    // 1 damage, but the two are destroyed together.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Pelt Collector");
-    t.battlefield(P0, "Grizzly Bears");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    damage(&mut t, bears, 1);
     t.set_step(P1, Step::PrecombatMain);
-    cast_resolve(&mut t, P1, "Pyroclasm", &[]);
+    cast_resolve(&mut t, P1, "Tremor", &[]);
     assert!(t.in_graveyard(P0, "Pelt Collector"));
     assert!(t.in_graveyard(P0, "Grizzly Bears"));
 }
@@ -157,16 +160,24 @@ fn sarulf_upkeep_ability_needs_counters_on_triggering_and_resolving() {
     assert_eq!(triggers_on_stack(&t, "remove all"), 0);
     t.resolve_all();
     assert!(t.on_battlefield(bears));
-    // Counters removed in response: nothing is exiled.
+    // Counters removed in response: the ability does nothing — P0 isn't even offered to
+    // remove counters, and not even a permanent with mana value 0 is exiled.
     let mut t = TestGame::new(2);
     let sarulf = with_counters(&mut t, P0, "Sarulf, Realm Eater", 2);
     let bears = t.battlefield(P1, "Grizzly Bears");
+    let thopter = t.battlefield(P1, "Ornithopter");
     to_upkeep(&mut t);
     assert_eq!(triggers_on_stack(&t, "remove all"), 1);
     remove_plus1(&mut t, sarulf, 2);
     t.answer_yes(P0, true);
+    let from = t.asked().len();
     t.resolve_all();
+    assert!(!was_asked(&t, P0, from, |d| matches!(
+        d,
+        Decision::YesNo { .. }
+    )));
     assert!(t.on_battlefield(bears));
+    assert!(t.on_battlefield(thopter));
 }
 
 #[test]
@@ -187,7 +198,6 @@ fn sarulf_that_left_the_battlefield_exiles_nothing() {
     assert!(t.on_battlefield(bears));
 }
 
-
 #[test]
 fn sarulf_may_remove_counters_it_needs_to_survive() {
     cr!("704.5g", "704.3");
@@ -206,7 +216,6 @@ fn sarulf_may_remove_counters_it_needs_to_survive() {
     assert!(!t.on_battlefield(bears), "the ability finishes first");
     assert!(t.in_graveyard(P0, "Sarulf, Realm Eater"));
 }
-
 
 #[test]
 fn sarulf_counts_an_opponents_permanent_going_to_any_graveyard() {
@@ -334,7 +343,6 @@ fn iridescent_hornbeetle_counts_the_counters_a_creature_enters_with() {
     assert_eq!(tokens_named(&t, P0, "Insect"), 3);
 }
 
-
 // --- Cursed Wombat, Omarthis -------------------------------------------------------------
 
 #[test]
@@ -379,7 +387,7 @@ fn omarthis_triggers_for_a_colorless_creature_entering_with_counters() {
     assert_eq!(triggers_on_stack(&t, "colorless"), 0);
 }
 
-// --- Elrond, Exemplar of Light, Berta ----------------------------------------------------
+// --- Elrond, Exemplar of Light -----------------------------------------------------------
 
 #[test]
 fn elrond_triggers_once_for_each_creature_a_spell_targets() {
@@ -402,19 +410,28 @@ fn elrond_triggers_once_for_each_creature_a_spell_targets() {
 }
 
 #[test]
-fn exemplar_of_light_triggers_once_for_life_gained_for_each() {
-    cr!("119.9", "603.2");
+fn exemplar_of_light_triggers_once_for_life_gained_for_each_creature() {
+    cr!("119.9", "603.2c");
     ruling!(
         "Exemplar of Light",
         "that life is gained as one event and Exemplar of Light's second ability triggers only once"
     );
     supported("Exemplar of Light");
-    supported("Feed the Clan");
+    supported("Peach Garden Oath");
     let mut t = TestGame::new(2);
     let ex = t.battlefield(P0, "Exemplar of Light");
-    // Feed the Clan: 5 life, as one event.
-    cast_new(&mut t, P0, "Feed the Clan", &[]);
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Hill Giant");
+    // Peach Garden Oath: 2 life for each of three creatures, gained as one event of 6.
+    cast_new(&mut t, P0, "Peach Garden Oath", &[]);
     t.resolve();
+    assert_eq!(t.life(P0), 26);
+    let gains =
+        t.g.turn_events
+            .iter()
+            .filter(|e| matches!(e, mtg_engine::events::Event::LifeGained { .. }))
+            .count();
+    assert_eq!(gains, 1);
     assert_eq!(triggers_on_stack(&t, "gain life"), 1);
     t.resolve_all();
     assert_eq!(plus1(&t, ex), 1);
@@ -437,12 +454,11 @@ fn exemplar_of_light_ignores_a_teammates_life_gain() {
     assert_eq!(plus1(&t, ex), 1);
 }
 
-
 // --- Protean Hydra -----------------------------------------------------------------------
 
 #[test]
 fn protean_hydra_triggers_once_per_counter_removed_at_once() {
-    cr!("603.2c", "603.7a");
+    cr!("603.2c");
     ruling!(
         "Protean Hydra",
         "If multiple +1/+1 counters are removed from Protean Hydra at once, its last ability will trigger that many times."

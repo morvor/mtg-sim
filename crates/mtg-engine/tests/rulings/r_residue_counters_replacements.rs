@@ -3,7 +3,8 @@
 //! replacements of permanents entering together (CR 614.12, Thief of Blood), effects that
 //! add to the counters a permanent is put onto the battlefield with or gets (Prairie Dog,
 //! Combine Guildmage, High Score; CR 122.6, 616.1), Spark Rupture's planeswalkers entering
-//! as creatures (CR 306.5b, 613), and finality counters (CR 122.1h).
+//! as creatures (CR 306.5b, 613), and a copy of a permanent whose "as this enters"
+//! choice was never made (CR 707.2, Hollowmurk Siege).
 
 use crate::r_residue_counters_common::*;
 use mtg_engine::decision::{Answer, Decision};
@@ -27,43 +28,45 @@ fn ascension(t: &mut TestGame, n: u32) -> ObjectId {
 
 /// The number of library searches and shuffles P0 made this turn.
 fn searches(t: &TestGame) -> (usize, usize) {
-    let s = t
-        .g
-        .turn_events
-        .iter()
-        .filter(|e| matches!(e, Event::Searched { player: P0, .. }))
-        .count();
-    let sh = t
-        .g
-        .turn_events
-        .iter()
-        .filter(|e| matches!(e, Event::Shuffled { player: P0 }))
-        .count();
+    let s =
+        t.g.turn_events
+            .iter()
+            .filter(|e| matches!(e, Event::Searched { player: P0, .. }))
+            .count();
+    let sh =
+        t.g.turn_events
+            .iter()
+            .filter(|e| matches!(e, Event::Shuffled { player: P0 }))
+            .count();
     (s, sh)
 }
 
 #[test]
 fn archmage_ascension_ignores_cards_put_into_hand_without_drawing() {
-    cr!("121.6", "614.11");
+    cr!("121.5", "121.6");
     ruling!(
         "Archmage Ascension",
         "If a spell or ability causes you to put cards in your hand without specifically using the word “draw,” Archmage Ascension’s abilities ignore it."
     );
     supported("Archmage Ascension");
     supported("Raise Dead");
+    supported("Mulch");
     // With six quest counters, returning a card to hand isn't replaced.
     let mut t = TestGame::new(2);
     let a = ascension(&mut t, 6);
     t.set_step(P0, Step::PrecombatMain);
     let bears = t.graveyard(P0, "Grizzly Bears");
-    let giant = t.graveyard(P0, "Hill Giant");
     t.answer_yes(P0, true);
     cast_resolve(&mut t, P0, "Raise Dead", &[obj(bears)]);
     assert!(t.in_hand(P0, "Grizzly Bears"));
     assert_eq!(searches(&t).0, 0);
-    // Two cards put into hand aren't two cards drawn: no quest counter at the end step.
-    cast_resolve(&mut t, P0, "Raise Dead", &[obj(giant)]);
-    assert!(t.in_hand(P0, "Hill Giant"));
+    // Nor are cards put into hand from the library: Mulch puts the four Islands it reveals
+    // into P0's hand. Four cards put into hand aren't cards drawn: no quest counter at the
+    // end step.
+    let hand = t.hand_size(P0);
+    cast_resolve(&mut t, P0, "Mulch", &[]);
+    assert_eq!(t.hand_size(P0), hand + 4);
+    assert_eq!(searches(&t).0, 0);
     t.answer_yes(P0, true);
     to_end_step(&mut t, P0);
     t.resolve_all();
@@ -72,7 +75,7 @@ fn archmage_ascension_ignores_cards_put_into_hand_without_drawing() {
 
 #[test]
 fn archmage_ascension_replaces_each_draw_of_several_one_at_a_time() {
-    cr!("121.2", "614.11");
+    cr!("121.2", "121.6b");
     ruling!(
         "Archmage Ascension",
         "each individual draw may be replaced by Archmage Ascension’s effect. Process the draws one at a time."
@@ -88,12 +91,11 @@ fn archmage_ascension_replaces_each_draw_of_several_one_at_a_time() {
     cast_resolve(&mut t, P0, "Divination", &[]);
     assert_eq!(t.hand_size(P0), hand + 2);
     assert_eq!(searches(&t), (1, 1));
-    let drew = t
-        .g
-        .turn_events
-        .iter()
-        .filter(|e| matches!(e, Event::Drew { player: P0, .. }))
-        .count();
+    let drew =
+        t.g.turn_events
+            .iter()
+            .filter(|e| matches!(e, Event::Drew { player: P0, .. }))
+            .count();
     assert_eq!(drew, 1);
     // Both replaced: a search and a shuffle for each card.
     let mut t = TestGame::new(2);
@@ -135,11 +137,16 @@ fn archmage_ascensions_replacing_one_draw_apply_only_once() {
 
 #[test]
 fn thieves_of_blood_entering_together_one_gets_the_counters() {
-    cr!("614.12", "614.1c", "616.1");
+    cr!("614.12", "614.1c");
     ruling!(
         "Thief of Blood",
         "If more than one Thief of Blood enters the battlefield at the same time, you can apply the replacement effect of any of them."
     );
+    // The Thief whose replacement effect applies first removes all three counters and
+    // enters with them; the other then removes none and enters with none. (The engine
+    // applies them in the order the entering objects are given rather than asking: for
+    // identical Thieves, whose timestamp order P0 chooses either way (CR 613.7m), every
+    // choice the ruling allows gives the same game.)
     let mut t = TestGame::new(2);
     let bears = with_counters(&mut t, P1, "Grizzly Bears", 3);
     let ids = enter_together(&mut t, &[(P0, "Thief of Blood"), (P0, "Thief of Blood")]);
@@ -167,8 +174,6 @@ fn prairie_dog_adds_one_to_the_counters_a_creature_enters_with() {
     let bears = enter_with(&mut t, P0, "Grizzly Bears", 2, false);
     assert_eq!(plus1(&t, bears), 3);
 }
-
-
 
 #[test]
 fn combine_guildmage_does_nothing_if_either_target_is_illegal() {
@@ -199,7 +204,6 @@ fn combine_guildmage_does_nothing_if_either_target_is_illegal() {
     assert_eq!((plus1(&t, a), plus1(&t, b)), (1, 1));
 }
 
-
 #[test]
 fn two_high_scores_each_add_one_counter() {
     cr!("616.1f", "614.1a");
@@ -216,7 +220,7 @@ fn two_high_scores_each_add_one_counter() {
     assert_eq!(plus1(&t, bears), 3);
 }
 
-// --- Spark Rupture, Emperor of Bones -----------------------------------------------------
+// --- Spark Rupture -----------------------------------------------------------------------
 
 #[test]
 fn spark_rupture_planeswalkers_enter_as_creatures_with_their_loyalty() {
@@ -235,7 +239,6 @@ fn spark_rupture_planeswalkers_enter_as_creatures_with_their_loyalty() {
     assert_eq!(t.counters(jace, "loyalty"), 3);
     assert_eq!(t.pt(jace), (3, 3));
 }
-
 
 // --- Hollowmurk Siege --------------------------------------------------------------------
 
@@ -261,9 +264,17 @@ fn hollowmurk_siege_copy_without_a_choice_has_neither_ability() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     let from = t.asked().len();
     give_plus1(&mut t, bears, 1);
-    assert_eq!(triggers_on_stack(&t, "draw a card"), 1, "only the real Siege's");
+    assert_eq!(
+        triggers_on_stack(&t, "draw a card"),
+        1,
+        "only the real Siege's"
+    );
     t.resolve_all();
     assert!(!asked_since(&t, from)
         .iter()
         .any(|(_, d)| matches!(d, Decision::ChooseOption { .. })));
+    // Nor the Abzan ability: attacking triggers neither the real (Sultai) Siege nor the copy.
+    attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+    assert!(t.obj_now(man).is(CardType::Enchantment), "still a copy");
+    assert_eq!(triggers_on_stack(&t, "attacking creature"), 0);
 }

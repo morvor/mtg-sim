@@ -1,8 +1,7 @@
 //! Item `rulings-residue-counters` — damage and counters: replacement effects that add
 //! damage for each counter (Fated Firepower) or raise it (Ojer Axonil) applied after the
 //! damage is divided (CR 601.2d, 510.1c, 616.1), prevention that removes counters
-//! (Protean Hydra, CR 615), a source dealing damage to itself twice (Tracker), and
-//! Voodoo Doll's intervening "if" clause (CR 603.4).
+//! (Protean Hydra, CR 615), and Voodoo Doll's intervening "if" clause (CR 603.4).
 
 use crate::r_residue_counters_common::*;
 use mtg_engine::decision::Answer;
@@ -10,7 +9,6 @@ use mtg_engine::events::Event;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::*;
-
 
 /// P0's Fated Firepower with `n` fire counters.
 fn firepower(t: &mut TestGame, n: u32) -> ObjectId {
@@ -92,19 +90,18 @@ fn fated_firepower_extra_damage_is_dealt_by_the_same_source() {
     t.attack(&[(hawk, Entity::Player(P1))], &[]);
     assert_eq!(t.life(P1), 15);
     assert_eq!(t.life(P0), 25);
-    let sources: Vec<ObjectId> = t
-        .g
-        .turn_events
-        .iter()
-        .filter_map(|e| match e {
-            Event::Damage {
-                source,
-                target: Entity::Player(P1),
-                ..
-            } => Some(*source),
-            _ => None,
-        })
-        .collect();
+    let sources: Vec<ObjectId> =
+        t.g.turn_events
+            .iter()
+            .filter_map(|e| match e {
+                Event::Damage {
+                    source,
+                    target: Entity::Player(P1),
+                    ..
+                } => Some(*source),
+                _ => None,
+            })
+            .collect();
     assert_eq!(sources, vec![hawk], "one event, from the Nighthawk");
 }
 
@@ -123,7 +120,12 @@ fn ojer_axonil_raises_divided_damage_after_the_division() {
     let giant = t.battlefield(P1, "Hill Giant");
     // Pyrohelix's 2 damage is divided 1 and 1; only the 1 to the opponent becomes 4.
     t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![1, 1]));
-    cast_slots(&mut t, P0, "Chandra's Pyrohelix", &[&[Entity::Player(P1), obj(giant)]]);
+    cast_slots(
+        &mut t,
+        P0,
+        "Chandra's Pyrohelix",
+        &[&[Entity::Player(P1), obj(giant)]],
+    );
     t.resolve_all();
     assert_eq!(t.life(P1), 16);
     assert_eq!(marked(&t, giant), 1);
@@ -179,9 +181,6 @@ fn protean_hydra_still_loses_counters_to_unpreventable_damage() {
     assert_eq!(plus1(&t, hydra), 3);
 }
 
-// --- Tracker -----------------------------------------------------------------------------
-
-
 // --- Voodoo Doll -------------------------------------------------------------------------
 
 /// P0's Voodoo Doll with `n` pin counters.
@@ -202,7 +201,8 @@ fn voodoo_doll_is_destroyed_even_if_its_damage_is_prevented() {
     let mut t = TestGame::new(2);
     let d = doll(&mut t, 2);
     t.set_step(P0, Step::PrecombatMain);
-    // P0's own Healing Salve shield: P1 casts it on P0 (any target).
+    // A shield on P0 that prevents the next 3 damage (the helper's Healing Salve, cast by
+    // P1 with P0 as its target).
     salve(&mut t, Entity::Player(P0));
     to_end_step(&mut t, P0);
     t.resolve_all();

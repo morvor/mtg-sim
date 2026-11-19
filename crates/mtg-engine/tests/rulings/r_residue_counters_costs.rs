@@ -49,7 +49,14 @@ fn herald_of_war_reduces_an_angel_human_spell_only_once_per_counter() {
     let mut t = TestGame::new(2);
     with_counters(&mut t, P0, "Herald of War", 1);
     t.set_step(P0, Step::PrecombatMain);
-    assert!(!try_cast(&mut t, P0, "Avian Changeling", &["Plains"], &[], false));
+    assert!(!try_cast(
+        &mut t,
+        P0,
+        "Avian Changeling",
+        &["Plains"],
+        &[],
+        false
+    ));
     let mut t = TestGame::new(2);
     with_counters(&mut t, P0, "Herald of War", 1);
     t.set_step(P0, Step::PrecombatMain);
@@ -129,26 +136,16 @@ fn mutated_cultist_reduction_applies_after_increases_and_leaves_mana_value_alone
         "start with the mana cost or alternative cost you're paying, add any cost increases, then apply any cost reductions"
     );
     supported("Thalia, Guardian of Thraben");
-    // Two counters removed; Thalia adds {1} to Divination: {2}{U} + {1} - {2} = {1}{U}.
+    // Three counters removed; Thalia adds {1} to Divination: {2}{U} + {1} - {3} = {U}.
+    // Reducing first would leave {1}{U} ({2}{U} - {3} is {U}: the reduction can't take
+    // the colored part, then the {1} is added), which one Island can't pay.
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Thalia, Guardian of Thraben");
-    let bears = with_counters(&mut t, P1, "Grizzly Bears", 2);
+    let bears = with_counters(&mut t, P1, "Grizzly Bears", 3);
     cultist(&mut t, obj(bears));
     t.resolve_all();
-    assert!(!try_cast(&mut t, P0, "Divination", &["Island"], &[], false));
-    let mut t = TestGame::new(2);
-    t.battlefield(P1, "Thalia, Guardian of Thraben");
-    let bears = with_counters(&mut t, P1, "Grizzly Bears", 2);
-    cultist(&mut t, obj(bears));
-    t.resolve_all();
-    assert!(try_cast(
-        &mut t,
-        P0,
-        "Divination",
-        &["Island", "Wastes"],
-        &[],
-        false
-    ));
+    assert_eq!(plus1(&t, bears), 0, "three counters removed");
+    assert!(try_cast(&mut t, P0, "Divination", &["Island"], &[], false));
     let spell = *t.g.stack.last().unwrap();
     assert_eq!(t.g.obj(spell).chars.mana_value(), 3);
 }

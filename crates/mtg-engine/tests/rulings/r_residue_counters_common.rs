@@ -7,8 +7,8 @@
 use mtg_engine::decision::{Answer, Decision};
 use mtg_engine::events::Event;
 use mtg_engine::object::Zone;
-use mtg_engine::turn::Step;
 use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
 use mtg_engine::*;
 
 pub use crate::r_p002_common::replacement_choices;
@@ -66,7 +66,11 @@ pub fn to_upkeep(t: &mut TestGame) {
 
 /// P0 casts Dismantle on `target`; the counters go on P0's Mind Stone (as +1/+1 counters
 /// unless `charge`). Returns the Mind Stone.
-pub fn dismantle(t: &mut TestGame, target: ObjectId, meddle: impl FnOnce(&mut TestGame)) -> ObjectId {
+pub fn dismantle(
+    t: &mut TestGame,
+    target: ObjectId,
+    meddle: impl FnOnce(&mut TestGame),
+) -> ObjectId {
     let stone = t.battlefield(P0, "Mind Stone");
     t.set_step(P0, Step::PrecombatMain);
     cast_new(t, P0, "Dismantle", &[obj(target)]);

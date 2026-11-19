@@ -1,11 +1,9 @@
 //! Item `rulings-residue-counters` — counters and power read from objects that left the
 //! battlefield or changed (CR 608.2h, 603.10a: Rootwire Amalgam, Thought Sponge, Vastwood
 //! Hydra), state-based actions after counters move or a 0/0 token is created (CR 704.5f,
-//! 704.5g), Dismantle's counters (CR 608.2b, 122.1a), Descent into Madness, Nissa's
-//! uninterrupted resolution (CR 608.2), Rottenmouth Viper's choices in multiplayer
-//! (CR 101.4), Hallar in Two-Headed Giant (CR 810.9), "entered under your control this
-//! turn" (Shaile), Afiya Grove's target, and choices made on resolution (Exuberant
-//! Wolfbear).
+//! 704.5g), Dismantle's counters (CR 608.2b, 122.1a), Rottenmouth Viper's choices in
+//! multiplayer (CR 101.4), Hallar in Two-Headed Giant (CR 810.9), "entered under your
+//! control this turn" (Shaile), and choices made on resolution (Exuberant Wolfbear).
 
 use crate::r_residue_counters_common::*;
 use mtg_engine::decision::{Answer, Decision};
@@ -120,19 +118,24 @@ fn fractal_harness_put_onto_the_battlefield_makes_a_zero_zero_fractal() {
         "If you put Fractal Harness onto the battlefield without casting it, or if you choose 0 as the value of X, the token you create will be 0/0."
     );
     supported("Fractal Harness");
-    // Put onto the battlefield (X is 0).
+    // Put onto the battlefield (X is 0): the 0/0 token is created (Soul Warden sees it
+    // enter) and dies.
     let mut t = TestGame::new(2);
+    t.battlefield(P0, "Soul Warden");
     let h = t.enter(P0, "Fractal Harness");
     t.resolve_all();
+    assert_eq!(t.life(P0), 21, "a Fractal entered");
     assert!(crate::r_s01_common::with_subtype(&t, P0, "Fractal").is_empty());
     assert_eq!(t.obj_now(h).attached_to, None);
     // Cast with X = 0.
     let mut t = TestGame::new(2);
+    t.battlefield(P0, "Soul Warden");
     t.set_step(P0, Step::PrecombatMain);
     t.lands(P0, "Forest", 3);
     let h = t.hand(P0, "Fractal Harness");
     t.cast(P0, h).x(0).go();
     t.resolve_all();
+    assert_eq!(t.life(P0), 21, "a Fractal entered");
     assert!(crate::r_s01_common::with_subtype(&t, P0, "Fractal").is_empty());
     // With X = 2: a 2/2 wearing it.
     let mut t = TestGame::new(2);
@@ -167,9 +170,6 @@ fn aetherborn_marauder_taking_counters_from_a_damaged_creature_kills_it() {
 }
 
 // --- Dismantle ---------------------------------------------------------------------------
-
-
-
 
 #[test]
 fn dismantle_with_an_illegal_target_puts_no_counters_but_indestructible_does() {
@@ -216,19 +216,11 @@ fn dismantle_plus1_counters_on_a_noncreature_artifact_count_once_it_animates() {
     assert_eq!(t.pt(stone), (4, 4));
 }
 
-// --- Descent into Madness ----------------------------------------------------------------
-
-
-// --- Nissa, Steward of Elements ----------------------------------------------------------
-
-
-
-
 // --- Rottenmouth Viper -------------------------------------------------------------------
 
 #[test]
 fn rottenmouth_viper_opponents_choose_in_turn_order_then_act_together() {
-    cr!("101.4", "101.4a");
+    cr!("101.4");
     ruling!(
         "Rottenmouth Viper",
         "In a multiplayer game, each opponent in turn order makes all of their choices, then all of the actions occur simultaneously."
@@ -290,7 +282,7 @@ fn hallar_in_two_headed_giant_costs_the_opposing_team_two_per_counter() {
 
 #[test]
 fn shaile_counts_a_creature_that_entered_under_your_control_now_controlled_by_another() {
-    cr!("608.2c", "122.6");
+    cr!("110.2", "608.2h");
     ruling!(
         "Shaile, Dean of Radiance // Embrose, Dean of Shadow",
         "If a creature entered the battlefield under your control this turn but is controlled by a different player when Shaile’s activated ability resolves, it will still get a +1/+1 counter."
@@ -308,9 +300,6 @@ fn shaile_counts_a_creature_that_entered_under_your_control_now_controlled_by_an
     t.resolve_all();
     assert_eq!(plus1(&t, bears), 1);
 }
-
-// --- Afiya Grove -------------------------------------------------------------------------
-
 
 // --- Exuberant Wolfbear ------------------------------------------------------------------
 
@@ -330,7 +319,10 @@ fn exuberant_wolfbear_choice_is_made_on_resolution() {
         let from = t.asked().len();
         attack_with(&mut t, &[(wb, Entity::Player(P1))]);
         assert_eq!(t.stack_len(), 1);
-        assert!(!was_asked(&t, P0, from, |d| matches!(d, Decision::YesNo { .. })));
+        assert!(!was_asked(&t, P0, from, |d| matches!(
+            d,
+            Decision::YesNo { .. }
+        )));
         // Pumped in response: the values as it resolves.
         t.answer_yes(P0, yes);
         cast_resolve(&mut t, P0, "Giant Growth", &[obj(wb)]);

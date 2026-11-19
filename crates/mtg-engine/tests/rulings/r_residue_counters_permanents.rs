@@ -5,7 +5,8 @@
 //! "for as long as" a counter remains (CR 611.2b: Xolatoyac), characteristic-defining
 //! abilities of tokens and their copies (CR 604.3, 707.2: Daxos), locked-in sets of
 //! affected objects (CR 611.2c: Inspiring Call), creatures put onto the battlefield
-//! attacking (CR 508.4), and counting counters on permanents only (Kate Stewart).
+//! attacking (CR 508.4), and an attacked planeswalker that stops being one (CR 506.4:
+//! Spark Rupture).
 
 use crate::r_residue_counters_common::*;
 use mtg_engine::decision::Answer;
@@ -69,6 +70,26 @@ fn quarantine_field_returns_cards_before_state_based_actions() {
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
     t.settle();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    // No state-based action check in between: P0's Yavimaya Enchantress (+1/+1 for each
+    // enchantment on the battlefield) has 2 damage. With the Field it's a 3/3; the Field
+    // leaving and P1's exiled Glorious Anthem returning keep it a 3/3. Checked in between,
+    // as a 2/2 it would have been destroyed.
+    supported("Yavimaya Enchantress");
+    supported("Disenchant");
+    let mut t = TestGame::new(2);
+    let anthem = t.battlefield(P1, "Glorious Anthem");
+    let ench = t.battlefield(P0, "Yavimaya Enchantress");
+    let qf = quarantine(&mut t, P0, 1, &[obj(anthem)], false);
+    assert!(t.in_exile("Glorious Anthem"));
+    damage(&mut t, ench, 2);
+    assert_eq!(t.pt(ench), (3, 3));
+    cast_resolve(&mut t, P1, "Disenchant", &[obj(qf)]);
+    assert!(t.in_graveyard(P0, "Quarantine Field"));
+    let back = t.named_on_battlefield("Glorious Anthem");
+    assert_eq!(back.len(), 1);
+    assert_eq!(t.g.obj(back[0]).controller, P1);
+    assert!(t.on_battlefield(ench), "never a 2/2 with 2 damage");
+    assert_eq!(t.pt(ench), (3, 3));
 }
 
 #[test]
@@ -113,7 +134,11 @@ fn shield_broker_creature_losing_its_counter_in_combat_is_removed_from_combat() 
     t.advance_to(P0, Step::DeclareBlockers);
     remove(&mut t, giant, "shield", 1);
     assert_eq!(controller(&mut t, giant), P1);
-    assert!(t.g.combat.as_ref().is_none_or(|c| c.attacker(giant).is_none()));
+    assert!(t
+        .g
+        .combat
+        .as_ref()
+        .is_none_or(|c| c.attacker(giant).is_none()));
     t.advance_to(P0, Step::EndOfCombat);
     assert_eq!(t.life(P1), 20, "no combat damage");
 }
@@ -152,9 +177,6 @@ fn traveling_plague_returns_under_the_dead_creatures_controller_who_chooses() {
 
 // --- Xolatoyac, the Smiling Flood --------------------------------------------------------
 
-
-
-
 #[test]
 fn xolatoyac_flooded_land_stays_an_island_after_it_leaves() {
     cr!("611.2b");
@@ -173,8 +195,6 @@ fn xolatoyac_flooded_land_stays_an_island_after_it_leaves() {
 }
 
 // --- Daxos the Returned ------------------------------------------------------------------
-
-
 
 #[test]
 fn daxos_spirit_copies_have_its_power_and_toughness_ability() {
@@ -214,7 +234,11 @@ fn rikku_doesnt_unblock_a_creature_already_blocked() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     let wurm = t.battlefield(P1, "Craw Wurm");
     attack_with(&mut t, &[(bears, Entity::Player(P1))]);
-    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![(wurm, bears)]));
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(wurm, bears)]),
+    );
     t.advance_to(P0, Step::DeclareBlockers);
     put(&mut t, bears, "+1/+1", 1);
     assert_eq!(triggers_on_stack(&t, "can't be blocked"), 1);
@@ -225,7 +249,6 @@ fn rikku_doesnt_unblock_a_creature_already_blocked() {
 }
 
 // --- Rumbling Ruin -----------------------------------------------------------------------
-
 
 #[test]
 fn rumbling_ruin_doesnt_remove_a_blocker_whose_power_drops() {
@@ -242,7 +265,11 @@ fn rumbling_ruin_doesnt_remove_a_blocker_whose_power_drops() {
     let attacker = t.battlefield(P0, "Hill Giant");
     let blocker = t.battlefield(P1, "Grizzly Bears");
     attack_with(&mut t, &[(attacker, Entity::Player(P1))]);
-    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![(blocker, attacker)]));
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(blocker, attacker)]),
+    );
     t.advance_to(P0, Step::DeclareBlockers);
     cast_resolve(&mut t, P0, "Shrink", &[obj(blocker)]);
     assert!(t.pt(blocker).0 <= 1);
@@ -292,7 +319,11 @@ fn furnace_blessed_conqueror_token_entering_attacking_doesnt_trigger_its_attack_
     attack_with(&mut t, &[(c, Entity::Player(P1))]);
     assert_eq!(triggers_on_stack(&t, "copy of it"), 1);
     t.resolve();
-    assert_eq!(triggers_on_stack(&t, "copy of it"), 0, "the token's doesn't trigger");
+    assert_eq!(
+        triggers_on_stack(&t, "copy of it"),
+        0,
+        "the token's doesn't trigger"
+    );
     assert_eq!(
         t.named_on_battlefield("Furnace-Blessed Conqueror").len()
             + t.named_on_battlefield("Sun-Blessed Guardian // Furnace-Blessed Conqueror")
@@ -300,10 +331,6 @@ fn furnace_blessed_conqueror_token_entering_attacking_doesnt_trigger_its_attack_
         2
     );
 }
-
-// --- Kate Stewart, Armageddon Clock ------------------------------------------------------
-
-
 
 // --- Spark Rupture -----------------------------------------------------------------------
 

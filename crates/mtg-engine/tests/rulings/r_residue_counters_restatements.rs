@@ -107,11 +107,9 @@ fn restatement_rulings() {
             let from = t.asked().len();
             t.answer_yes(P0, true);
             t.resolve();
-            // Between the stack's last priority and the ability's end only P0's choice was asked.
-            let asked: Vec<_> = asked_since(&t, from)
-                .into_iter()
-                .filter(|(_, d)| !matches!(d, Decision::Priority { .. }))
-                .collect();
+            // While it resolves only P0's choice is asked: no one gets priority between the
+            // look and the card entering.
+            let asked = asked_since(&t, from);
             assert_eq!(asked.len(), 1, "{asked:?}");
             assert!(matches!(asked[0], (P0, Decision::YesNo { .. })));
             assert!(t.on_battlefield(t.g.current(bears)));
@@ -187,7 +185,11 @@ fn restatement_rulings() {
                 let attacker = t.battlefield(P0, "Grizzly Bears");
                 let blocker = t.battlefield(P1, name);
                 attack_with(&mut t, &[(attacker, Entity::Player(P1))]);
-                t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![(blocker, attacker)]));
+                t.answer(
+                    P1,
+                    DecisionKind::Blockers,
+                    Answer::Blockers(vec![(blocker, attacker)]),
+                );
                 t.advance_to(P0, Step::EndOfCombat);
                 assert_eq!(t.life(P1), life, "{name}");
             }
@@ -216,7 +218,9 @@ fn restatement_rulings() {
         }),
         // armageddon clock counters can be removed repeatedly by any player
         ("Armageddon Clock", || {
-            cr!("602.5b", "602.2");
+            // Its activation instructions let any player activate it during an upkeep, with
+            // no limit on how many times (CR 602.1b, 602.2, 117.1b).
+            cr!("602.1b", "602.2", "117.1b");
             ruling!(
                 "Armageddon Clock",
                 "Players can remove as many counters as they can pay for each turn."
@@ -302,22 +306,23 @@ fn restatement_rulings() {
             let mut t = TestGame::new(2);
             let sarulf = with_counters(&mut t, P0, "Sarulf, Realm Eater", 2);
             let bears = t.battlefield(P1, "Grizzly Bears");
-            to_upkeep(&mut t);
             let from = t.asked().len();
+            to_upkeep(&mut t);
             assert_eq!(triggers_on_stack(&t, "remove all"), 1);
-            // Nothing is asked about the counters while the ability waits on the stack.
-            assert!(!was_asked(&t, P0, from, |d| matches!(d, Decision::YesNo { .. })));
+            // Nothing is asked about the counters as the ability triggers and waits on the
+            // stack.
+            assert!(!was_asked(&t, P0, from, |d| matches!(
+                d,
+                Decision::YesNo { .. }
+            )));
+            // As it resolves, P0's choice is the only decision: no one gets priority between
+            // the choice and the exile.
             t.answer_yes(P0, true);
+            let resolving = t.asked().len();
             t.resolve_all();
-            // Asked once; between the choice and the exile no one gets priority.
-            let since = asked_since(&t, from);
-            let yes = since
-                .iter()
-                .position(|(_, d)| matches!(d, Decision::YesNo { .. }))
-                .expect("asked");
-            assert!(since[yes + 1..]
-                .iter()
-                .all(|(_, d)| !matches!(d, Decision::Priority { .. }) || t.g.stack.is_empty()));
+            let asked = asked_since(&t, resolving);
+            assert_eq!(asked.len(), 1, "{asked:?}");
+            assert!(matches!(asked[0], (P0, Decision::YesNo { .. })));
             assert_eq!(plus1(&t, sarulf), 0);
             assert!(!t.on_battlefield(bears));
         }),
