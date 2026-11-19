@@ -117,7 +117,7 @@ fn high_ground_allows_overlapping_blocks_and_the_defender_divides_damage() {
 
 #[test]
 fn entourage_blocks_two_divides_damage_and_the_block_survives_losing_the_monarchy() {
-    cr!("509.1b", "510.1c", "510.1d", "725.2");
+    cr!("509.1b", "510.1c", "510.1d", "725.3");
     ruling!(
         "Entourage of Trest",
         "Entourage of Trest checks if you're the monarch only as blockers are declared. If it blocks two attacking creatures, another player becoming the monarch won't change or undo that block."
@@ -230,7 +230,7 @@ fn fibrous_entangler_needs_no_blocker_when_none_can_block_for_free() {
 
 #[test]
 fn shape_of_the_wiitigo_counters_stay_after_it_leaves() {
-    cr!("122.2", "603.2");
+    cr!("603.6a", "122.1", "613.4c");
     ruling!(
         "Shape of the Wiitigo",
         "If Shape of the Wiitigo leaves the battlefield but the creature doesn't, the +1/+1 counters stay on the creature."
@@ -252,7 +252,7 @@ fn shape_of_the_wiitigo_counters_stay_after_it_leaves() {
 
 #[test]
 fn noble_stand_triggers_once_per_blocking_creature() {
-    cr!("509.1i", "603.2");
+    cr!("509.1i", "509.3a", "603.2");
     ruling!(
         "Noble Stand",
         "Triggers once per creature you have that blocks. Does not trigger multiple times when a single creature blocks more than one attacker."
@@ -278,7 +278,7 @@ fn noble_stand_triggers_once_per_blocking_creature() {
 
 #[test]
 fn brimaz_tokens_were_never_declared_and_may_attack_another_player() {
-    cr!("508.4", "509.4", "508.3a", "509.1i");
+    cr!("508.4", "509.4", "508.3a", "509.3a", "509.1i");
     ruling!(
         "Brimaz, King of Oreskos",
         "Although the tokens enter the battlefield attacking or blocking, they were never declared as attacking or blocking creatures. Abilities that trigger whenever a creature attacks or blocks won't trigger."
@@ -319,7 +319,7 @@ fn brimaz_tokens_were_never_declared_and_may_attack_another_player() {
 
 #[test]
 fn per_creature_block_triggers_trigger_for_each_creature_blocked() {
-    cr!("509.1i", "603.2");
+    cr!("509.1i", "509.3b", "603.2");
     ruling!(
         "Brimaz, King of Oreskos",
         "If Brimaz somehow blocks two or more creatures (note it can't naturally do this), its last ability will trigger that many times."
@@ -381,20 +381,27 @@ fn frostweb_spider_dies_before_it_gets_the_counter() {
         "Frostweb Spider",
         "If Frostweb Spider blocks a creature with flying that’s just powerful enough to kill it, it will die before it can get the +1/+1 counter."
     );
+    supported("Phantom Monster");
+    // Phantom Monster (3/3 flying) deals exactly the Spider's toughness (1/3): it dies in
+    // the combat damage step, before the counter it would have survived with (2/4) is
+    // put on at end of combat.
     let mut t = TestGame::new(2);
-    let angel = t.battlefield(P0, "Serra Angel");
+    let monster = t.battlefield(P0, "Phantom Monster");
     let spider = t.battlefield(P1, "Frostweb Spider");
-    to_blockers(&mut t, &[(angel, pl(P1))], &[(spider, angel)]);
+    to_blockers(&mut t, &[(monster, pl(P1))], &[(spider, monster)]);
+    assert_eq!(triggers_of(&t, spider), 1);
     t.resolve_all();
+    assert_eq!(t.counters(spider, counters::PLUS1), 0);
     t.advance_to(P0, Step::EndOfCombat);
     t.resolve_all();
     assert!(!t.on_battlefield(spider));
     assert!(t.in_graveyard(P1, "Frostweb Spider"));
+    assert!(t.on_battlefield(monster));
 }
 
 #[test]
 fn once_per_block_triggers_trigger_once_however_many_are_blocked() {
-    cr!("509.1i", "603.2");
+    cr!("509.1i", "509.3a", "603.2");
     ruling!(
         "Guardian of the Gateless",
         "Guardian of the Gateless's last ability triggers only once when it's declared as a blocker no matter how many creatures it's blocking."
@@ -410,7 +417,7 @@ fn once_per_block_triggers_trigger_once_however_many_are_blocked() {
     supported("Guardian of the Gateless");
     supported("Pride Guardian");
     supported("Shielded Aether Thief");
-    let two_attackers_blocked_by = |name: &str, extra: bool| {
+    let three_attackers_blocked_by = |name: &str, extra: bool| {
         let mut t = TestGame::new(2);
         let a = t.battlefield(P0, "Grizzly Bears");
         let b = t.battlefield(P0, "Llanowar Elves");
@@ -429,17 +436,17 @@ fn once_per_block_triggers_trigger_once_however_many_are_blocked() {
         (t, blocker)
     };
     // Guardian of the Gateless: one trigger, +1/+1 for each of the three.
-    let (t, g) = two_attackers_blocked_by("Guardian of the Gateless", false);
+    let (t, g) = three_attackers_blocked_by("Guardian of the Gateless", false);
     assert_eq!(t.pt(g), (6, 6));
-    let (t, _) = two_attackers_blocked_by("Pride Guardian", true);
+    let (t, _) = three_attackers_blocked_by("Pride Guardian", true);
     assert_eq!(gains(&t, P1), vec![3]);
-    let (t, _) = two_attackers_blocked_by("Shielded Aether Thief", true);
+    let (t, _) = three_attackers_blocked_by("Shielded Aether Thief", true);
     assert_eq!(energy_of(&t, P1), 1);
 }
 
 #[test]
 fn tokens_created_in_combat_are_too_late_to_attack_or_block() {
-    cr!("508.1a", "509.1a", "506.3");
+    cr!("508.1", "508.1a", "509.1", "509.1a");
     ruling!(
         "Jedit Ojanen of Efrava",
         "If Jedit Ojanen of Efrava attacks or blocks and a token is created, it will be too late for that token to be declared as an attacker (if it somehow gets haste) or a blocker during that combat phase."
@@ -492,7 +499,7 @@ fn tokens_created_in_combat_are_too_late_to_attack_or_block() {
 
 #[test]
 fn gomazoa_can_be_activated_without_blocking() {
-    cr!("602.2", "602.5");
+    cr!("117.1b", "602.2");
     ruling!(
         "Gomazoa",
         "Gomazoa’s ability can be activated any time its controller has priority. It doesn’t need to be blocking any creatures."
@@ -516,7 +523,7 @@ fn gomazoa_can_be_activated_without_blocking() {
 
 #[test]
 fn shield_dancer_used_twice_reflects_the_next_two_attacks_once_each() {
-    cr!("615.1", "616.1", "510.2", "506.1");
+    cr!("614.1a", "614.9", "616.1f", "510.2", "500.8");
     ruling!(
         "Shield Dancer",
         "If the ability is used twice, it will cause the next two attacks this turn (which only happens if something gives a player two attacks) from the creature to “reflect” back to itself. It will not result in double damage back from a single attack."

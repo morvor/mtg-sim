@@ -60,9 +60,11 @@ fn hellfire_counts_creatures_put_into_graveyards() {
     // A token counts: two died, 2 + 3.
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Grizzly Bears");
-    let token = create_token(&mut t, P1, "Soldier");
+    create_token(&mut t, P1, "Soldier");
     assert_eq!(hellfire(&mut t, P0), 5);
-    assert!(!t.g.is_live(token) || !t.on_battlefield(token));
+    // The token then ceases to exist: only the Bears card is left in the graveyard.
+    assert_eq!(t.graveyard_size(P1), 1);
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
     // Rest in Peace exiles them instead: none died, 0 + 3.
     let mut t = TestGame::new(2);
     t.battlefield(P1, "Grizzly Bears");
@@ -74,7 +76,7 @@ fn hellfire_counts_creatures_put_into_graveyards() {
 
 #[test]
 fn hybrid_objects_of_a_color_arent_non_that_color() {
-    cr!("105.4", "202.2", "205.4b");
+    cr!("105.2", "107.4e", "202.2");
     ruling!(
         "Soul Reap",
         "A hybrid creature that’s green and another color is *not* a nongreen creature. Since it’s green, it can’t be nongreen!"
@@ -162,7 +164,7 @@ fn soul_reap_checks_at_resolution_whether_you_cast_another_black_spell() {
 
 #[test]
 fn soul_reap_under_your_control_checks_your_black_spells_even_if_you_didnt_cast_it() {
-    cr!("608.2h", "110.2");
+    cr!("608.2h", "109.5");
     ruling!(
         "Soul Reap",
         "Although Soul Reap says it looks for “another black spell,” there’s no requirement that Soul Reap actually be cast (or be black) for this part of its ability to work."
@@ -205,7 +207,7 @@ fn convoke_cant_use_a_creature_already_used_for_mana() {
     );
     ruling!(
         "We Ride at Dawn",
-        "If a creature you control has a mana ability with {T} in the cost, activating that ability while casting a spell with convoke will result in the creature being tapped before you pay the spell’s costs. You won’t be able to tap it again for convoke."
+        "If a creature you control has a mana ability with {T} in the cost, activating that ability while casting a spell with convoke will result in the creature being tapped before you pay the spell’s costs. You won’t be able to tap it again for convoke. Similarly, if you sacrifice a creature to activate a mana ability while casting a spell with convoke, that creature won’t be on the battlefield when you pay the spell’s costs, so you won’t be able to tap it for convoke."
     );
     supported("Vote Out");
     supported("We Ride at Dawn");
@@ -221,16 +223,19 @@ fn convoke_cant_use_a_creature_already_used_for_mana() {
     t.lands(P0, "Swamp", 1);
     let vote = t.g.current(vote);
     assert!(t.cast(P0, vote).target(target).try_go().is_ok());
-    // We Ride at Dawn: Jedit Ojanen ({3}{G}{G}{G}) with four Forests and the Elves.
-    let mut t = TestGame::new(2);
-    t.battlefield(P0, "We Ride at Dawn");
-    t.lands(P0, "Forest", 4);
-    t.battlefield(P0, "Llanowar Elves");
-    let jedit = t.hand(P0, "Jedit Ojanen of Efrava");
-    assert!(t.cast(P0, jedit).try_go().is_err());
-    t.battlefield(P0, "Grizzly Bears");
-    let jedit = t.g.current(jedit);
-    assert!(t.cast(P0, jedit).try_go().is_ok());
+    // We Ride at Dawn: Jedit Ojanen ({3}{G}{G}{G}) with four Forests and the Elves, or
+    // four Forests and the Blood Pet.
+    for helper in ["Llanowar Elves", "Blood Pet"] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "We Ride at Dawn");
+        t.lands(P0, "Forest", 4);
+        t.battlefield(P0, helper);
+        let jedit = t.hand(P0, "Jedit Ojanen of Efrava");
+        assert!(t.cast(P0, jedit).try_go().is_err(), "{helper}");
+        t.battlefield(P0, "Grizzly Bears");
+        let jedit = t.g.current(jedit);
+        assert!(t.cast(P0, jedit).try_go().is_ok(), "{helper}");
+    }
 }
 
 #[test]
@@ -317,14 +322,14 @@ fn blight_breath_catoblepas_x_is_set_on_resolution() {
 
 #[test]
 fn nightshade_reveals_happen_on_resolution() {
-    cr!("608.2b", "608.2h", "701.20a");
+    cr!("107.3f", "118.12", "608.2b", "608.2h", "701.20a");
     ruling!(
         "Nightshade Assassin",
         "If the target creature becomes an illegal target, you don't reveal any cards."
     );
     ruling!(
         "Nightshade Assassin",
-        "You choose how many cards to reveal and which as Nightshade Assassin's triggered ability resolves."
+        "You choose how many cards to reveal and which as Nightshade Assassin's triggered ability resolves. Players can't take actions between the time you reveal cards and the time the target creature gets -X/-X."
     );
     ruling!(
         "Scent of Nightshade",
@@ -337,18 +342,30 @@ fn nightshade_reveals_happen_on_resolution() {
     supported("Nightshade Assassin");
     supported("Scent of Nightshade");
     supported("Nightshade Seer");
-    // Assassin: a black card added to hand after it triggers can be revealed.
+    // Assassin: a black card added to hand after it triggers can be revealed. The
+    // reveal and the -X/-X are one resolution: nothing is left on the stack in between.
     let mut t = TestGame::new(2);
     let giant = t.battlefield(P1, "Craw Wurm");
     let a = t.hand(P0, "Duress");
     t.answer_targets(P0, &[o(giant)]);
     t.enter(P0, "Nightshade Assassin");
     t.settle();
+    assert_eq!(t.stack_len(), 1);
     let b = t.hand(P0, "Doom Blade");
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[o(a), o(b)]);
-    t.resolve_all();
+    t.resolve();
+    assert_eq!(t.stack_len(), 0);
     assert_eq!(t.pt(giant), (4, 2));
+    // "You may": declining reveals nothing, and the creature gets nothing.
+    let mut t = TestGame::new(2);
+    let giant = t.battlefield(P1, "Craw Wurm");
+    t.hand(P0, "Duress");
+    t.answer_targets(P0, &[o(giant)]);
+    t.enter(P0, "Nightshade Assassin");
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    assert_eq!(t.pt(giant), (6, 4));
     // The target leaves: nothing is asked.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
@@ -522,7 +539,7 @@ fn urborg_stalker_triggers_in_your_upkeep_too() {
 
 #[test]
 fn stain_the_mind_may_leave_cards_with_that_name() {
-    cr!("701.23b", "701.23d");
+    cr!("701.23a", "701.23b");
     ruling!(
         "Stain the Mind",
         "You can leave any cards with that name in the zone they're in. You don't have to exile them."
@@ -559,7 +576,7 @@ fn stain_the_mind_may_leave_cards_with_that_name() {
 
 #[test]
 fn bloodline_bidding_chooses_the_type_as_it_resolves() {
-    cr!("608.2c", "205.3m");
+    cr!("608.2d", "205.3m");
     ruling!(
         "Bloodline Bidding",
         "You choose the creature type as Bloodline Bidding resolves. Once Bloodline Bidding starts to resolve, players can't respond to the choice or take any actions until Bloodline Bidding finishes resolving."
@@ -575,13 +592,11 @@ fn bloodline_bidding_chooses_the_type_as_it_resolves() {
     assert!(crate::r_s35_common::creature_type_options(&t, P0, from).is_empty());
     crate::r_s35_common::pick_options(&mut t, P0, &["Bear"]);
     let from = t.asked().len();
-    t.resolve_all();
-    // The choice is made during resolution, and nobody gets priority until it's done.
-    let asked = t.asked()[from..].to_vec();
+    t.resolve();
+    // The choice is made during resolution, and the spell finishes resolving with it:
+    // nothing is put on the stack in between.
     assert_eq!(crate::r_s35_common::creature_type_options(&t, P0, from).len(), 1);
-    assert!(!asked
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::Priority { .. })));
+    assert_eq!(t.stack_len(), 0);
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
     assert!(t.in_graveyard(P0, "Hill Giant"));
 }

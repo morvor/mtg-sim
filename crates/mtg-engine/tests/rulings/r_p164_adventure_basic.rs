@@ -1,6 +1,6 @@
 //! Rulings batch P164 — Adventure synergies (Mysterious Pathlighter; Edgewall Innkeeper,
 //! Garenbrig Squire and Wandermare's cast triggers) and basic-land synergies (Imperiosaur's
-//! "Spend only mana produced by basic lands", CR 106.12; Hermit Druid).
+//! "Spend only mana produced by basic lands"; Hermit Druid).
 
 use crate::r_p164_common::*;
 use crate::r_s06_common::attach_new;
@@ -10,7 +10,7 @@ use mtg_engine::*;
 
 #[test]
 fn mysterious_pathlighter_adds_a_counter_to_creatures_with_an_adventure() {
-    cr!("614.1c", "715.2");
+    cr!("614.1c", "715.2a");
     ruling!(
         "Mysterious Pathlighter",
         "A creature with an Adventure you control that would enter the battlefield with no +1/+1 counters on it enters with one +1/+1 counter on it."
@@ -37,7 +37,7 @@ fn mysterious_pathlighter_adds_a_counter_to_creatures_with_an_adventure() {
 
 #[test]
 fn adventure_cast_triggers_resolve_first_even_if_the_spell_is_countered() {
-    cr!("603.3", "405.5", "701.6a");
+    cr!("603.3", "405.5", "701.6a", "715.2a");
     ruling!(
         "Edgewall Innkeeper",
         "Edgewall Innkeeper's ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered."
@@ -78,7 +78,7 @@ fn adventure_cast_triggers_resolve_first_even_if_the_spell_is_countered() {
 
 #[test]
 fn imperiosaur_needs_mana_produced_by_basic_lands() {
-    cr!("106.6", "106.12a", "605.1b", "605.4a");
+    cr!("609.4b", "106.12a", "605.1b", "605.4a");
     ruling!(
         "Imperiosaur",
         "An effect that allows you to spend mana as though it were mana of any type to cast Imperiosaur won't allow you to spend mana from a source other than a basic land to cast it."

@@ -96,7 +96,7 @@ fn biomancers_familiar_reduces_only_creatures_on_the_battlefield() {
 
 #[test]
 fn heartstone_reduces_only_generic_mana_including_additional_costs() {
-    cr!("601.2f", "602.2b", "107.4h", "118.7a");
+    cr!("601.2f", "602.2b", "107.4h", "118.7a", "118.8");
     ruling!("Heartstone", "Can’t reduce Snow mana costs.");
     ruling!(
         "Heartstone",
@@ -122,8 +122,12 @@ fn heartstone_reduces_only_generic_mana_including_additional_costs() {
     // Heartstone affects every player's creatures.
     let theirs = t.battlefield(P1, "Walking Ballista");
     assert_eq!(ability_mana(&mut t, P1, theirs, 0, 0), "{3}");
-    // Suppression Field adds {2} to Prodigal Sorcerer's "{T}: ...": Heartstone reduces
-    // that additional {2} to {1}.
+    // "Additional costs": no activated ability of a creature lists a mana cost in addition
+    // to its activation cost, so the additional mana costs an ability can have are those
+    // applied to it from another effect and paid with its activation cost (CR 118.8):
+    // Suppression Field's {2}. The reduction comes off the total cost, after the
+    // additional costs and cost increases are added (CR 601.2f): Heartstone reduces
+    // Prodigal Sorcerer's "{T}: ..." with that {2} to {1}.
     let sorcerer = t.battlefield(P0, "Prodigal Sorcerer");
     assert_eq!(ability_mana(&mut t, P0, sorcerer, 0, 0), "");
     t.battlefield(P1, "Suppression Field");
@@ -309,7 +313,7 @@ fn magewrights_stone_looks_for_the_tap_symbol_granted_or_printed() {
 
 #[test]
 fn laboratory_drudge_triggers_every_end_step_and_you_may_respond() {
-    cr!("603.2", "603.4", "702.34a", "116.1");
+    cr!("603.2b", "117.1a", "702.34a");
     ruling!(
         "Laboratory Drudge",
         "Laboratory Drudge's ability will trigger at the beginning of each end step whether you've cast a spell from a graveyard or activated an ability of a card in a graveyard that turn or not. You can respond to that ability and do one (or both) of the things to draw a card."

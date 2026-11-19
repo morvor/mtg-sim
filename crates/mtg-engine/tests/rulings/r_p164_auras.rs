@@ -69,7 +69,7 @@ fn aura_finesse_with_one_illegal_target_still_draws() {
 
 #[test]
 fn aura_finesse_targets_any_aura_you_control_and_any_creature() {
-    cr!("115.1", "608.2b", "303.4c");
+    cr!("115.1", "608.2b", "303.4e", "303.4j");
     ruling!(
         "Aura Finesse",
         "If you target an Aura that’s attached to a creature, you may also target the creature it’s attached to. Aura Finesse won’t cause the Aura to move, but you’ll still draw a card when it resolves."
@@ -158,7 +158,7 @@ fn enchantment_alteration_new_target_changes_only_the_aura() {
 
 #[test]
 fn siona_triggers_whenever_an_aura_becomes_attached() {
-    cr!("603.2", "303.4", "701.3a");
+    cr!("603.2", "603.2e", "701.3a", "701.3b");
     ruling!(
         "Siona, Captain of the Pyleas",
         "Siona's last ability triggers both whenever an Aura enters the battlefield attached to a creature you control and whenever an Aura on the battlefield attached to a different object becomes attached to a creature you control. It doesn't trigger if an effect tries to attach an Aura to the creature it already enchants."
@@ -275,16 +275,17 @@ fn ajanis_chosen_triggers_for_an_aura_on_an_opponents_permanent() {
 
 #[test]
 fn ajanis_chosen_the_aura_needs_a_target_first_and_both_must_remain() {
-    cr!("303.4a", "601.2c", "608.2b", "701.3b");
+    cr!("303.4a", "601.2c", "608.2b", "701.3b", "614.1a", "614.6");
     ruling!(
         "Ajani's Chosen",
         "The ability doesn't trigger until the enchantment enters the battlefield. This means that, for example, you can't cast an Aura with enchant creature if there are no legal targets available, hoping to enchant the Cat token. Ajani's Chosen itself, however, may be a legal target for the Aura."
     );
     ruling!(
         "Ajani's Chosen",
-        "You may attach the Aura to the Cat token only if the Aura and the token are both on the battlefield when the triggered ability resolves. If the Aura leaves the battlefield before the ability resolves, it won't become attached to the token."
+        "You may attach the Aura to the Cat token only if the Aura and the token are both on the battlefield when the triggered ability resolves. If the Aura leaves the battlefield before the ability resolves, it won't become attached to the token. If the token leaves the battlefield before the ability resolves, the Aura won't become attached to that token."
     );
     supported("Lightning Greaves");
+    supported("Hallowed Moonlight");
     // Ajani's Chosen with shroud is no legal target: Holy Strength can't be cast.
     let mut t = TestGame::new(2);
     let chosen = t.battlefield(P0, "Ajani's Chosen");
@@ -317,11 +318,32 @@ fn ajanis_chosen_the_aura_needs_a_target_first_and_both_must_remain() {
     let cat = tokens(&t, P0)[0];
     assert_eq!(t.pt(cat), (2, 2));
     assert!(t.in_hand(P0, "Holy Strength"));
+    // The token: the ability creates it and attaches the Aura in one resolution, during
+    // which no player acts and no state-based action is checked, so it can't leave in
+    // between; it can only fail to be on the battlefield at all. Under Hallowed Moonlight
+    // ("if a creature would enter and it wasn't cast, exile it instead") the Cat is
+    // exiled instead of entering, and the Aura stays on Ajani's Chosen.
+    let mut t = TestGame::new(2);
+    let chosen = t.battlefield(P0, "Ajani's Chosen");
+    t.lands(P0, "Plains", 3);
+    let moonlight = t.hand(P0, "Hallowed Moonlight");
+    t.cast(P0, moonlight).go();
+    t.resolve_all();
+    let holy = t.hand(P0, "Holy Strength");
+    t.cast(P0, holy).target(chosen).go();
+    t.resolve();
+    assert_eq!(triggers_of(&t, chosen), 1);
+    let holy = t.named_on_battlefield("Holy Strength")[0];
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert!(tokens(&t, P0).is_empty());
+    assert_eq!(attached_to(&t, holy), Some(o(chosen)));
+    assert_eq!(t.pt(chosen), (4, 5));
 }
 
 #[test]
 fn preston_garvey_creates_no_settlement_without_a_land_it_can_enchant() {
-    cr!("608.2b", "303.4f", "702.16c");
+    cr!("608.2b", "303.4i", "702.16c");
     ruling!(
         "Preston Garvey, Minuteman",
         "If the target land is an illegal target as Preston Garvey's first ability tries to resolve, it won't resolve and none of its effects happen. The Settlement token won't be created."
@@ -384,6 +406,9 @@ fn umbra_mystic_umbra_armor_ignores_who_controls_the_aura() {
         "If a permanent you control would be destroyed, and it's enchanted by an Aura with umbra armor, it doesn't matter who controls that Aura. The umbra armor effect is mandatory. If that permanent is enchanted by multiple Auras, you choose which one is destroyed, regardless of who controls them."
     );
     supported("Umbra Mystic");
+    // P0's choice decides which Aura is destroyed, whoever controls it: the two answers
+    // destroy different Auras.
+    let mut kept_mine = vec![];
     for pick in 0..2 {
         let mut t = TestGame::new(2);
         t.battlefield(P0, "Umbra Mystic");
@@ -401,7 +426,9 @@ fn umbra_mystic_umbra_armor_ignores_who_controls_the_aura() {
             .collect();
         assert_eq!(asked, vec![P0]);
         assert_ne!(t.on_battlefield(theirs), t.on_battlefield(mine));
+        kept_mine.push(t.on_battlefield(mine));
     }
+    assert_ne!(kept_mine[0], kept_mine[1]);
     // Only one Aura, controlled by the opponent: destroyed with no choice.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Umbra Mystic");
@@ -418,7 +445,7 @@ fn umbra_mystic_umbra_armor_ignores_who_controls_the_aura() {
 
 #[test]
 fn umbra_mystic_on_an_umbra_is_redundant() {
-    cr!("702.89b", "702.89a");
+    cr!("702.89a", "616.1f");
     ruling!(
         "Umbra Mystic",
         "Multiple instances of umbra armor on the same Aura are redundant."
@@ -442,7 +469,7 @@ fn umbra_mystic_on_an_umbra_is_redundant() {
 
 #[test]
 fn umbra_mystic_umbra_armor_chains_through_an_aura_on_an_aura() {
-    cr!("702.89a", "616.1", "614.5");
+    cr!("702.89a", "616.1f", "614.6");
     ruling!(
         "Umbra Mystic",
         "Say you control a permanent that's enchanted by an Aura you control, and that Aura is itself enchanted by an Aura. If the permanent would be destroyed, instead the first Aura is destroyed... but since that Aura would be destroyed, instead the second Aura is destroyed."
@@ -491,15 +518,15 @@ fn dreampod_druid_checks_enchanted_on_trigger_and_resolution() {
 
 #[test]
 fn eidolon_of_countless_battles_is_0_0_off_the_battlefield() {
-    cr!("611.3a", "604.1");
+    cr!("113.6", "611.3a", "604.1");
     ruling!(
         "Eidolon of Countless Battles",
         "Eidolon of Countless Battles's last ability functions only on the battlefield. In other zones, it is a 0/0 enchantment creature card."
     );
     supported("Eidolon of Countless Battles");
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "Grizzly Bears");
-    t.battlefield(P0, "Holy Strength");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    attach_new(&mut t, P0, "Holy Strength", bears);
     let in_hand = t.hand(P0, "Eidolon of Countless Battles");
     let in_yard = t.graveyard(P0, "Eidolon of Countless Battles");
     t.g.recompute();
@@ -544,12 +571,13 @@ fn hateful_eidolon_dying_with_enchanted_creatures_sees_each_of_them() {
 
 #[test]
 fn nyx_herald_bonus_stays_after_the_aura_leaves() {
-    cr!("611.2c", "608.2h");
+    cr!("611.2c", "613.1a", "613.4c");
     ruling!(
         "Nyx Herald",
-        "Once Nyx Herald’s ability resolves, the creature keeps +1/+1 and trample even if it stops being enchanted later in the turn"
+        "Once Nyx Herald’s ability resolves, the creature keeps +1/+1 and trample even if it stops being enchanted later in the turn (or, in some unusual cases, stops being an enchantment)."
     );
     supported("Nyx Herald");
+    supported("Cytoshape");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Nyx Herald");
     let bears = t.battlefield(P0, "Grizzly Bears");
@@ -562,16 +590,72 @@ fn nyx_herald_bonus_stays_after_the_aura_leaves() {
     t.settle();
     assert_eq!(t.pt(bears), (3, 3));
     assert!(has_kw(&t, bears, KeywordKind::Trample));
+    // An enchantment creature (Nyx Herald itself) that stops being an enchantment:
+    // Cytoshape makes it a copy of Grizzly Bears, a 2/2 creature that isn't one. It's a
+    // 3/3 with trample.
+    let mut t = TestGame::new(2);
+    let herald = t.battlefield(P0, "Nyx Herald");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[o(herald)]);
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.resolve_all();
+    assert_eq!(t.pt(herald), (3, 4));
+    t.lands(P0, "Tropical Island", 3);
+    t.answer_choose(P0, &[o(bears)]);
+    let cyto = t.hand(P0, "Cytoshape");
+    t.cast(P0, cyto).target(herald).go();
+    t.resolve_all();
+    let chars = &t.obj_now(herald).chars;
+    assert_eq!(chars.name, "Grizzly Bears");
+    assert!(!chars.is(mtg_engine::types::CardType::Enchantment));
+    assert_eq!(t.pt(herald), (3, 3));
+    assert!(has_kw(&t, herald, KeywordKind::Trample));
 }
 
 #[test]
 fn calix_creates_one_token_a_turn_and_extra_instances_do_nothing() {
-    cr!("603.2", "608.2b", "111.10");
+    cr!("603.2h", "510.4");
     ruling!(
         "Calix, Guided by Fate",
         "Once you choose to create a token using the last ability, that ability won't trigger again that turn. Additional instances of the ability that are already on the stack will resolve but will have no effect."
     );
     supported("Calix, Guided by Fate");
+    supported("Fencing Ace");
+    // An enchanted Fencing Ace (double strike) deals combat damage to P1 twice. A token
+    // made in the first-strike damage step: no trigger in the regular one. No token
+    // made the first time: it triggers again, and a token can be made then. (The token
+    // entering triggers Calix's constellation ability, which targets Calix.)
+    for first in [true, false] {
+        let mut t = TestGame::new(2);
+        let calix = t.battlefield(P0, "Calix, Guided by Fate");
+        let ace = t.battlefield(P0, "Fencing Ace");
+        attach_new(&mut t, P0, "Holy Strength", ace);
+        let noble = t.battlefield(P0, "Noble Stand");
+        t.answer_targets(P0, &[o(calix)]);
+        t.answer_yes(P0, first);
+        if first {
+            t.answer_choose(P0, &[o(noble)]);
+        } else {
+            t.answer_yes(P0, true);
+            t.answer_choose(P0, &[o(noble)]);
+        }
+        attack_with(&mut t, &[(ace, pl(P1))]);
+        t.advance_to(P0, Step::FirstStrikeDamage);
+        t.settle();
+        assert_eq!(crate::r_p189_common::stack_triggers_from(&t, calix).len(), 1);
+        t.resolve_all();
+        assert_eq!(t.named_on_battlefield("Noble Stand").len(), 1 + usize::from(first));
+        t.advance_to(P0, Step::CombatDamage);
+        t.settle();
+        assert_eq!(t.life(P1), 16, "two hits");
+        assert_eq!(
+            crate::r_p189_common::stack_triggers_from(&t, calix).len(),
+            usize::from(!first)
+        );
+        t.resolve_all();
+        assert_eq!(t.named_on_battlefield("Noble Stand").len(), 2);
+    }
+    // Two instances on the stack at once: the second does nothing.
     let mut t = TestGame::new(2);
     let calix = t.battlefield(P0, "Calix, Guided by Fate");
     let bears = t.battlefield(P0, "Grizzly Bears");
