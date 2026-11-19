@@ -537,9 +537,13 @@ pub fn copy_cards(
             {
                 return out;
             }
+            // "Copy that card" (God-Eternal Kefnet): the card the trigger names, as it
+            // last existed if it has since left that zone (CR 608.2h); the copy is still
+            // created where the card was.
+            let trigger_card = matches!(what, Sel::TriggerObject);
             // CR 707.12: created in the zone the object is in.
             for o in g.resolve_objects(what, ctx) {
-                if !g.is_live(o) && !enchanted {
+                if !g.is_live(o) && !enchanted && !trigger_card {
                     continue;
                 }
                 let ob = g.obj(o).clone();
