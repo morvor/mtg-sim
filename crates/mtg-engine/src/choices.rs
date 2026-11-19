@@ -150,7 +150,7 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
             g.objects[src.0 as usize].choices.number = Some(n);
         }
         ChoiceKind::Opponent | ChoiceKind::Player => {
-            let cands: Vec<Entity> = if *kind == ChoiceKind::Opponent {
+            let cands: Vec<PlayerId> = if *kind == ChoiceKind::Opponent {
                 g.opponents(p)
             } else {
                 g.players_in_game()
@@ -158,13 +158,19 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
             .into_iter()
             // CR 801.5a: a player within the chooser's range of influence.
             .filter(|q| crate::multiplayer::range::player_in_range(g, p, *q))
-            .map(Entity::Player)
             .collect();
-            if let Some(pl) = g
-                .ask_entities(p, Some(src), "Choose a player", cands, 1, 1)
-                .first()
-                .and_then(|e| e.player())
-            {
+            // "Choose an opponent", and "an opponent [does something]" (the controller
+            // picks the opponent, `choosing_opponent`): offered in turn order from the
+            // next opponent, who is the default.
+            let pick = if *kind == ChoiceKind::Opponent {
+                crate::choosing_opponent::pick(g, p, Some(src), &cands, "Choose a player")
+            } else {
+                let cands = cands.into_iter().map(Entity::Player).collect();
+                g.ask_entities(p, Some(src), "Choose a player", cands, 1, 1)
+                    .first()
+                    .and_then(|e| e.player())
+            };
+            if let Some(pl) = pick {
                 g.objects[src.0 as usize].choices.player = Some(pl);
                 ctx.chosen_player = Some(pl);
             }

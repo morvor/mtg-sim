@@ -295,7 +295,20 @@ fn take(
     to: &Destination,
     ctx: &mut Ctx,
 ) {
-    let p = g.eval_player(chooser, ctx).unwrap_or(ctx.controller);
+    // "An opponent chooses one of them" (Burning-Rune Demon): with several opponents, the
+    // controller picks which (`choosing_opponent`).
+    let choosers = g.eval_players(chooser, ctx);
+    let p = match choosers.len() {
+        0 | 1 => choosers.first().copied().unwrap_or(ctx.controller),
+        _ => crate::choosing_opponent::pick(
+            g,
+            ctx.controller,
+            ctx.source,
+            &choosers,
+            crate::choosing_opponent::PROMPT,
+        )
+        .unwrap_or(ctx.controller),
+    };
     // Cards an earlier selection took (and left in the library) aren't among them any
     // more, unless the selection is of exactly those ("put the revealed cards into your
     // hand").

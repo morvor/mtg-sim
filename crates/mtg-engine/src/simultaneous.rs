@@ -109,6 +109,19 @@ pub fn for_each_object(g: &mut Game, objects: Vec<Entity>, var: Var, body: &Effe
             Item::Player(p) => pos(p),
         });
     }
+    // Who orders each player's objects (CR 608.2f; `per_object_order`).
+    let objects: Vec<Entity> = frames
+        .frames
+        .iter()
+        .filter_map(|f| match f.item {
+            Item::Object(_, e) => Some(e),
+            Item::Player(_) => None,
+        })
+        .collect();
+    let deciding = deciding_player(body);
+    frames.order = Some(crate::per_object_order::ObjectOrder::new(
+        g, &objects, var, deciding, ctx,
+    ));
     run(g, frames, body, ctx);
 }
 
@@ -394,6 +407,8 @@ struct Frames {
     resolving: Option<PlayerId>,
     iter: Option<PlayerId>,
     as_player: bool,
+    /// For objects: who orders each player's objects (CR 608.2f).
+    order: Option<crate::per_object_order::ObjectOrder>,
 }
 
 /// What `ctx` held when a player's instruction began.
@@ -453,6 +468,7 @@ impl Frames {
             resolving: ctx.resolving_controller,
             iter: ctx.iter_player,
             as_player: as_player.is_some(),
+            order: None,
         }
     }
 
@@ -1354,13 +1370,15 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
         };
         plans[i] = Some(plan);
     }
-    let outcomes = perform_plans(g, &mut plans, frames, ctx);
+    let mut outcomes = perform_plans(g, &mut plans, frames, ctx);
     g.end_apnap_choices(round);
     let mut process_done = false;
-    for (i, outcome) in outcomes.into_iter().enumerate() {
+    for i in 0..n {
         if frames.frames[i].actor.is_none() {
             continue;
         }
+        choose_next_object(g, i, ins, frames, &mut plans, &mut outcomes, ctx.source);
+        let outcome = std::mem::take(&mut outcomes[i]);
         // A process of several steps ("reveals cards until ..., puts that card onto the
         // battlefield, then shuffles") can't be performed simultaneously: it's performed
         // for each player or object individually (CR 608.2f), one after another, so the
@@ -1398,6 +1416,55 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
             frames.run(g, i, e, ctx);
         }
     }
+}
+
+/// Before frame `i`'s object is performed for on its own, the player who orders its
+/// player's group chooses which of the group's objects not yet performed for comes next
+/// (CR 608.2f; `per_object_order`): it's moved to position `i`, the others keeping their
+/// order.
+fn choose_next_object(
+    g: &mut Game,
+    i: usize,
+    ins: &Instruction,
+    frames: &mut Frames,
+    plans: &mut [Option<Plan>],
+    outcomes: &mut [Outcome],
+    source: Option<ObjectId>,
+) {
+    let Some(order) = &frames.order else {
+        return;
+    };
+    let alone = |p: &Option<Plan>| matches!(p, None | Some(Plan::Exec(_)));
+    let entity = |f: &Frame| match f.item {
+        Item::Object(_, e) => e,
+        Item::Player(p) => Entity::Player(p),
+    };
+    if !alone(&plans[i])
+        || !ins
+            .action
+            .as_ref()
+            .is_some_and(|a| crate::per_object_order::depends_on(a, order.var))
+    {
+        return;
+    }
+    let Some((group, chooser)) = order.group_of(entity(&frames.frames[i])) else {
+        return;
+    };
+    let options: Vec<usize> = (i..frames.frames.len())
+        .filter(|&j| {
+            frames.frames[j].actor.is_some()
+                && alone(&plans[j])
+                && order.group_of(entity(&frames.frames[j])).map(|x| x.0) == Some(group)
+        })
+        .collect();
+    if options.len() < 2 {
+        return;
+    }
+    let entities: Vec<Entity> = options.iter().map(|&j| entity(&frames.frames[j])).collect();
+    let j = options[crate::per_object_order::choose_next(g, chooser, source, &entities)];
+    frames.frames[i..=j].rotate_right(1);
+    plans[i..=j].rotate_right(1);
+    outcomes[i..=j].rotate_right(1);
 }
 
 /// Whether `e` is a process of several steps performed by one player (see

@@ -515,23 +515,16 @@ impl Game {
         }
         // CR 801.5a, 801.5c: an opponent within the controller's range of influence, or
         // else the closest opponent to their left.
+        // The controller picks which (`choosing_opponent`).
         let opps = crate::multiplayer::range::opponents_to_choose(self, controller);
-        let p = match opps.len() {
-            0 => controller,
-            1 => opps[0],
-            _ => self
-                .ask_entities(
-                    controller,
-                    Some(id),
-                    "Choose the opponent who makes the choice",
-                    opps.iter().map(|p| Entity::Player(*p)).collect(),
-                    1,
-                    1,
-                )
-                .first()
-                .and_then(|e| e.player())
-                .unwrap_or(opps[0]),
-        };
+        let p = crate::choosing_opponent::pick(
+            self,
+            controller,
+            Some(id),
+            &opps,
+            crate::choosing_opponent::PROMPT,
+        )
+        .unwrap_or(controller);
         ctx.chosen_player = Some(p);
         p
     }

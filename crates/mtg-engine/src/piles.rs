@@ -228,22 +228,11 @@ fn one_player(g: &mut Game, who: &PlayerRef, picker: Option<&PlayerRef>, ctx: &C
     let picker = picker
         .and_then(|r| g.eval_player(r, ctx))
         .unwrap_or(ctx.controller);
-    match cands.len() {
-        0 => ctx.controller,
-        1 => cands[0],
-        _ => g
-            .ask_entities(
-                picker,
-                ctx.source,
-                "Choose a player",
-                cands.iter().map(|p| Entity::Player(*p)).collect(),
-                1,
-                1,
-            )
-            .first()
-            .and_then(|e| e.player())
-            .unwrap_or(cands[0]),
-    }
+    // Offered in turn order from the next player after the picker, the default
+    // (`choosing_opponent`: "an opponent separates", "an opponent chooses one of those
+    // piles").
+    crate::choosing_opponent::pick(g, picker, ctx.source, &cands, "Choose a player")
+        .unwrap_or(ctx.controller)
 }
 
 fn describe(g: &Game, pile: &[ObjectId]) -> String {
