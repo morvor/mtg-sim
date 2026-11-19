@@ -454,6 +454,38 @@ fn fire_covenant_divides_as_cast_with_at_least_one_each() {
     t.resolve_all();
     assert!(t.on_battlefield(bears));
     assert_eq!(crate::r_s29_common::damage_marked(&t, bears), 1);
+    // A division giving a target 0 isn't one: each of them is still dealt damage.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Craw Wurm");
+    crate::r_s25_common::lands_for_cost(&mut t, P0, "Fire Covenant");
+    let card = t.hand(P0, "Fire Covenant");
+    divide(&mut t, P0, &[0, 5]);
+    t.cast(P0, card)
+        .x(5)
+        .targets(&[Entity::Object(bears), Entity::Object(giant)])
+        .go();
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Grizzly Bears") || crate::r_s29_common::damage_marked(&t, bears) >= 1);
+    assert!((1..5).contains(&crate::r_s29_common::damage_marked(&t, giant)));
+    // With X = 1, no more than one target can be chosen.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    crate::r_s25_common::lands_for_cost(&mut t, P0, "Fire Covenant");
+    let card = t.hand(P0, "Fire Covenant");
+    let from = t.asked().len();
+    t.cast(P0, card).x(1).targets(&[Entity::Object(giant)]).go();
+    let max = t.asked()[from..]
+        .iter()
+        .find_map(|(_, d)| match d {
+            Decision::ChooseTargets { max, .. } => Some(*max),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(max, 1);
+    t.resolve_all();
+    assert_eq!(crate::r_s29_common::damage_marked(&t, giant), 1);
 }
 
 #[test]
