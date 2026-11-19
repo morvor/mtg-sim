@@ -112,7 +112,7 @@ fn haytham_kenway_exiled_token_ceases_to_exist() {
 
 #[test]
 fn exile_until_leaves_does_nothing_if_the_source_left_first() {
-    cr!("610.3c", "603.4");
+    cr!("610.3b");
     ruling!(
         "Haytham Kenway",
         "If Haytham Kenway leaves the battlefield before its last ability resolves, the target creatures won’t be exiled."
@@ -148,7 +148,7 @@ fn exile_until_leaves_does_nothing_if_the_source_left_first() {
 
 #[test]
 fn consulate_crackdown_owner_leaving_returns_the_artifacts() {
-    cr!("800.4a", "610.3a");
+    cr!("800.4a", "610.3");
     ruling!(
         "Consulate Crackdown",
         "In a multiplayer game, if Consulate Crackdown’s owner leaves the game, the exiled cards will return to the battlefield. Because the one-shot effect that returns the cards isn’t an ability that goes on the stack, it won’t cease to exist along with the leaving player’s spells and abilities on the stack."
@@ -172,7 +172,7 @@ fn consulate_crackdown_owner_leaving_returns_the_artifacts() {
 
 #[test]
 fn faceless_devourer_leaving_first_exiles_the_creature_indefinitely() {
-    cr!("610.3c", "603.6c");
+    cr!("607.2a", "603.6c");
     ruling!(
         "Faceless Devourer",
         "If Faceless Devourer leaves the battlefield before its first triggered ability has resolved, its last ability triggers. This ability does nothing when it resolves. Then its first ability resolves and exiles the target creature indefinitely."
@@ -194,7 +194,7 @@ fn faceless_devourer_leaving_first_exiles_the_creature_indefinitely() {
 
 #[test]
 fn burn_away_delayed_trigger_ends_with_the_turn() {
-    cr!("603.7c", "603.7b");
+    cr!("603.7b");
     ruling!(
         "Burn Away",
         "If the creature doesn’t die that turn, the delayed triggered ability will simply cease to exist. It won’t trigger on a future turn."

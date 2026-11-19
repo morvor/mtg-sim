@@ -160,6 +160,34 @@ fn melira_the_living_cure_and_vorinclex_the_receiving_player_chooses_the_order()
     }
 }
 
+#[test]
+fn melira_the_living_cure_infect_and_toxic_damage_give_one_poison_counter() {
+    cr!("120.3b", "702.164c", "614.1a");
+    ruling!(
+        "Melira, the Living Cure",
+        "Once Melira's replacement effect has been applied in a turn, additional events that would put poison counters on a player don't happen, regardless of any other replacement effects involved."
+    );
+    // Sheoldred's Headcleaver (toxic 2) with Glistening Oil (infect): its combat damage
+    // gives poison counters twice over, the infect damage's and toxic's. Melira's effect
+    // applies to the first; the second is an additional event and doesn't happen.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Melira, the Living Cure");
+    let cleaver = t.battlefield(P1, "Sheoldred's Headcleaver");
+    attach_new(&mut t, P1, "Glistening Oil", obj(cleaver));
+    t.set_step(P1, mtg_engine::turn::Step::BeginningOfCombat);
+    attack_with(&mut t, &[(cleaver, Entity::Player(P0))]);
+    block_and_finish(&mut t, P0, &[]);
+    assert_eq!(poison(&t, P0), 1);
+    // Without Melira: 2 from the infect damage and 2 from toxic.
+    let mut t = TestGame::new(2);
+    let cleaver = t.battlefield(P1, "Sheoldred's Headcleaver");
+    attach_new(&mut t, P1, "Glistening Oil", obj(cleaver));
+    t.set_step(P1, mtg_engine::turn::Step::BeginningOfCombat);
+    attack_with(&mut t, &[(cleaver, Entity::Player(P0))]);
+    block_and_finish(&mut t, P0, &[]);
+    assert_eq!(poison(&t, P0), 4);
+}
+
 // --- Vizier of Remedies -----------------------------------------------------------------------
 
 #[test]
@@ -210,8 +238,34 @@ fn vizier_of_remedies_one_fewer_counter_for_simultaneous_damage() {
 }
 
 #[test]
+fn vizier_of_remedies_counters_two_players_put_at_once_are_two_events() {
+    cr!("120.3d", "510.2", "805.10d");
+    interp!("damage-counters-put-by-different-players-are-separate-events");
+    // Two-Headed Giant: P2's and P3's Septic Rats both block P0's Craw Wurm. Each of
+    // them puts its own two -1/-1 counters, and Vizier of Remedies applies to each
+    // player's counters: 1 + 1.
+    let mut t = crate::r_p044_common::two_headed_giant();
+    t.battlefield(P0, "Vizier of Remedies");
+    let wurm = t.battlefield(P0, "Craw Wurm");
+    let a = t.battlefield(P2, "Septic Rats");
+    let b = t.battlefield(P3, "Septic Rats");
+    t.set_step(P0, mtg_engine::turn::Step::BeginningOfCombat);
+    attack_with(&mut t, &[(wurm, Entity::Player(P2))]);
+    let decider = t.g.primary_player(P2);
+    t.answer(
+        decider,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(a, wurm), (b, wurm)]),
+    );
+    t.advance_to(P0, mtg_engine::turn::Step::CombatDamage);
+    assert_eq!(crate::r_s21_common::blocks_now(&t).len(), 2);
+    t.settle();
+    assert_eq!(t.counters(wurm, counters::MINUS1), 2);
+}
+
+#[test]
 fn vizier_of_remedies_doesnt_apply_to_creatures_entering_with_it() {
-    cr!("614.12", "614.1c");
+    cr!("614.12", "122.6");
     ruling!(
         "Vizier of Remedies",
         "If an effect puts Vizier of Remedies onto the battlefield with one or more -1/-1 counters on it, its effect won’t apply. This is because you must control Vizier of Remedies before the creature begins to enter the battlefield for its effect to apply. The same is true of any creatures entering the battlefield with -1/-1 counters on them at the same time as Vizier of Remedies enters the battlefield."

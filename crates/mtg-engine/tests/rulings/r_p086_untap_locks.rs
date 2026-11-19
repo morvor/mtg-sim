@@ -19,7 +19,7 @@ fn tidebinder_enters(t: &mut TestGame, name: &str, target: ObjectId) -> ObjectId
 
 #[test]
 fn tidebinder_mage_lock_ends_for_good_when_another_player_gains_control_of_it() {
-    cr!("611.2b", "502.3");
+    cr!("611.2a", "502.3");
     ruling!(
         "Tidebinder Mage",
         "If another player gains control of Tidebinder Mage, the creature will no longer be affected by the ability preventing it from untapping, even if you later regain control of Tidebinder Mage."
@@ -38,7 +38,7 @@ fn tidebinder_mage_lock_ends_for_good_when_another_player_gains_control_of_it() 
 
 #[test]
 fn tidebinder_mage_lock_follows_the_creature_to_your_untap_step() {
-    cr!("611.2b", "502.3");
+    cr!("611.2a", "502.3");
     ruling!(
         "Tidebinder Mage",
         "If you gain control of the creature that’s being prevented from untapping, that creature won’t untap during your untap step for as long as you control Tidebinder Mage."
@@ -59,7 +59,7 @@ fn tidebinder_mage_lock_follows_the_creature_to_your_untap_step() {
 
 #[test]
 fn tidebinder_mage_leaving_control_before_its_trigger_resolves_only_taps() {
-    cr!("611.2b", "608.2h");
+    cr!("611.2b", "608.2c");
     ruling!(
         "Tidebinder Mage",
         "If you lose control of Tidebinder Mage between when it entered the battlefield and when the ability resolves, the target creature will become tapped. However, it won’t be affected by the other effect and will untap as normal during its controller’s untap step."
@@ -71,6 +71,24 @@ fn tidebinder_mage_leaving_control_before_its_trigger_resolves_only_taps() {
     t.resolve_all();
     assert!(is_tapped(&t, goblin));
     give_control(&mut t, mage, P0);
+    next_main(&mut t, P1);
+    assert!(!is_tapped(&t, goblin));
+}
+
+#[test]
+fn tidebinder_mage_control_lost_and_regained_before_its_trigger_resolves_only_taps() {
+    cr!("611.2b");
+    interp!("control-lost-before-a-for-as-long-as-you-control-effect-begins");
+    // The "for as long as you control" duration ended while the trigger was on the stack;
+    // regaining control before it resolves doesn't begin it again.
+    let mut t = TestGame::new(2);
+    let goblin = t.battlefield(P1, "Raging Goblin");
+    let mage = tidebinder_enters(&mut t, "Tidebinder Mage", goblin);
+    give_control(&mut t, mage, P1);
+    give_control(&mut t, mage, P0);
+    t.resolve_all();
+    assert_eq!(controller(&t, mage), P0);
+    assert!(is_tapped(&t, goblin));
     next_main(&mut t, P1);
     assert!(!is_tapped(&t, goblin));
 }
@@ -129,7 +147,7 @@ fn encase_in_ice_creature_can_be_untapped_by_other_effects() {
 
 #[test]
 fn rust_tick_untapping_doesnt_untap_the_artifact_right_away() {
-    cr!("611.2b", "502.3");
+    cr!("611.2a", "502.3");
     ruling!(
         "Rust Tick",
         "If Rust Tick untaps or leaves the battlefield, its effect will end. This has no immediate visible effect on the affected artifact. (It doesn’t untap immediately, for example.) The artifact will just untap as normal during its controller’s next untap step."
@@ -198,7 +216,7 @@ fn satyr(t: &mut TestGame, target: ObjectId) -> ObjectId {
 
 #[test]
 fn willow_satyr_leaving_the_battlefield_ends_the_control_change() {
-    cr!("611.2b", "800.4a");
+    cr!("611.2a", "108.4");
     ruling!(
         "Willow Satyr",
         "If Willow Satyr leaves the battlefield, you no longer control it, so the duration of its control-change effect ends."
@@ -216,7 +234,7 @@ fn willow_satyr_leaving_the_battlefield_ends_the_control_change() {
 #[test]
 fn willow_satyr_untapped_or_stolen_before_resolution_gains_nothing() {
     cr!("611.2b");
-    interp!("control-lost-before-a-remains-tapped-effect-begins");
+    interp!("control-lost-before-a-for-as-long-as-you-control-effect-begins");
     ruling!(
         "Willow Satyr",
         "If Willow Satyr stops being tapped before its ability resolves — even if it becomes tapped again right away — you won’t gain control of the targeted creature at all. The same is true if you lose control of Willow Satyr before the ability resolves."
@@ -269,6 +287,36 @@ fn willow_satyr_effect_doesnt_care_whether_the_permanent_stays_a_legal_target() 
     t.g.recompute();
     assert!(!t.obj_now(ayumi).is(mtg_engine::types::CardType::Creature));
     assert_eq!(controller(&t, ayumi), P0);
+}
+
+#[test]
+fn olivia_voldaren_control_lost_and_regained_before_resolution_gains_nothing() {
+    cr!("611.2b");
+    interp!("control-lost-before-a-for-as-long-as-you-control-effect-begins");
+    // "{3}{B}{B}: Gain control of target Vampire for as long as you control Olivia
+    // Voldaren." Control of Olivia lost and regained while the ability is on the stack.
+    supported("Olivia Voldaren");
+    for regain in [false, true] {
+        let mut t = TestGame::new(2);
+        let olivia = t.battlefield(P0, "Olivia Voldaren");
+        let child = t.battlefield(P1, "Child of Night");
+        t.lands(P0, "Swamp", 5);
+        activate(&mut t, P0, olivia, "Gain control", &[obj(child)]);
+        give_control(&mut t, olivia, P1);
+        if regain {
+            give_control(&mut t, olivia, P0);
+        }
+        t.resolve_all();
+        assert_eq!(controller(&t, child), P1, "regain={regain}");
+    }
+    // Keeping control, the Vampire is gained.
+    let mut t = TestGame::new(2);
+    let olivia = t.battlefield(P0, "Olivia Voldaren");
+    let child = t.battlefield(P1, "Child of Night");
+    t.lands(P0, "Swamp", 5);
+    activate(&mut t, P0, olivia, "Gain control", &[obj(child)]);
+    t.resolve_all();
+    assert_eq!(controller(&t, child), P0);
 }
 
 #[test]

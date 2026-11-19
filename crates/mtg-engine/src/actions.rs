@@ -2171,6 +2171,11 @@ impl Game {
         }
         // The source's controller puts them, and not by an effect (CR 702.80a, 702.90b–c).
         let how = crate::event_causes::CounterPut::damage(self, source);
+        // What a replacement effect does right after the modified event ("..., and you
+        // can't get additional poison counters this turn", Melira, the Living Cure) is
+        // done before the damage's next counters (another player's, toxic's), as
+        // `put_counters` does it; what the damage itself left to do still waits for it.
+        let outer = std::mem::take(&mut self.post_replacement_effects);
         for e in self.replace(ReplEvent::AddCounters {
             target,
             kind: kind.into(),
@@ -2181,6 +2186,8 @@ impl Game {
         }) {
             self.execute_repl_event(e);
         }
+        self.run_post_replacement_effects();
+        self.post_replacement_effects = outer;
     }
 
     // ------------------------------------------------------------------

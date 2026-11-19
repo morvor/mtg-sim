@@ -172,20 +172,20 @@ fn aurelias_fury_with_all_targets_illegal_does_nothing() {
         "Aurelia's Fury",
         "If all of the targets are illegal when Aurelia’s Fury tries to resolve, it won’t resolve and none of its effects will happen. Nothing will be dealt damage."
     );
+    // Both targets are still there, but illegal: the Wurm gains hexproof (Blossoming
+    // Defense) and P1 shroud (Gilded Light) in response.
     let mut t = TestGame::new(2);
-    let a = t.battlefield(P1, "Craw Wurm");
-    let b = t.battlefield(P1, "Craw Wurm");
-    aurelias_fury(&mut t, &[obj(a), obj(b)], &[2, 2]);
-    // Both targets become illegal.
-    cast_new(&mut t, P1, "Unsummon", &[obj(a)]);
-    t.resolve();
-    destroy(&mut t, b);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    aurelias_fury(&mut t, &[obj(wurm), Entity::Player(P1)], &[2, 2]);
+    cast_new(&mut t, P1, "Blossoming Defense", &[obj(wurm)]);
+    cast_new(&mut t, P1, "Gilded Light", &[]);
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Aurelia's Fury"));
+    assert_eq!(damage_marked(&t, wurm), 0);
+    assert!(!is_tapped(&t, wurm));
     assert_eq!(t.life(P1), 20);
     // Nothing was dealt damage: P1 can still cast noncreature spells.
-    let c = in_hand_with_mana(&mut t, P1, "Healing Salve");
-    assert!(castable(&mut t, P1, c));
+    assert!(can_cast_new(&mut t, P1, "Opt"));
 }
 
 // --- Permission Denied ------------------------------------------------------------------------
@@ -234,7 +234,7 @@ fn permission_denied_with_an_illegal_target_doesnt_stop_noncreature_spells() {
 
 #[test]
 fn permission_denied_applies_to_every_opponent() {
-    cr!("102.2", "608.2c");
+    cr!("806.1", "608.2c");
     ruling!(
         "Permission Denied",
         "Permission Denied's effect applies to all opponents, not just the player who controlled the spell targeted by Permission Denied."
@@ -303,7 +303,7 @@ fn hope_of_ghirapur_lasts_until_after_your_upkeep_triggers() {
 
 #[test]
 fn hope_of_ghirapur_lasts_through_a_skipped_turn() {
-    cr!("611.2a", "614.10", "500.7");
+    cr!("611.2a", "614.10", "614.10a");
     ruling!(
         "Hope of Ghirapur",
         "If you skip your turn, the affected player will be unable to cast noncreature spells until you actually start a turn."
@@ -325,7 +325,7 @@ fn hope_of_ghirapur_lasts_through_a_skipped_turn() {
 
 #[test]
 fn hope_of_ghirapur_doesnt_affect_spells_cast_before_or_in_response() {
-    cr!("611.2c", "117.7", "608.2");
+    cr!("601.3", "117.7");
     ruling!(
         "Hope of Ghirapur",
         "The target player (and any other player) may cast spells in response to the activated ability of Hope of Ghirapur. The ability won’t affect those spells and it won’t affect spells that the target player cast before you activated it. (In other words, the ability can’t be used to counter a spell.)"
@@ -406,6 +406,18 @@ fn laquatuss_disdain_counters_a_flashback_spell() {
     t.resolve();
     assert!(!t.g.stack.contains(&spell));
     assert!(t.in_exile("Think Twice"));
+    // Cast from the graveyard by another effect: Gravecrawler's own "You may cast this card
+    // from your graveyard as long as you control a Zombie."
+    let mut t = TestGame::new(2);
+    t.set_step(P1, Step::PrecombatMain);
+    t.battlefield(P1, "Walking Corpse");
+    let crawler = t.graveyard(P1, "Gravecrawler");
+    t.lands(P1, "Swamp", 1);
+    let spell = t.cast(P1, crawler).go();
+    cast_new(&mut t, P0, "Laquatus's Disdain", &[obj(spell)]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Gravecrawler"));
+    assert!(t.named_on_battlefield("Gravecrawler").is_empty());
     // A spell cast from hand can't be targeted.
     let mut t = TestGame::new(2);
     let shock = cast_new(&mut t, P1, "Shock", &[Entity::Player(P0)]);
@@ -436,7 +448,7 @@ fn grafdiggers_cage_allows_casting_a_card_exiled_from_a_library() {
 
 #[test]
 fn cerulean_drake_can_counter_a_spell_with_several_targets_one_of_them_you() {
-    cr!("115.10", "115.1");
+    cr!("115.9b", "115.1");
     ruling!(
         "Cerulean Drake",
         "Cerulean Drake’s activated ability can target a spell that has multiple targets if at least one of those targets is you."

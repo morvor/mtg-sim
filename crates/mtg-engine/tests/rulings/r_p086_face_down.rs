@@ -40,7 +40,7 @@ fn morph(t: &mut TestGame, p: PlayerId) -> ObjectId {
 
 #[test]
 fn look_at_face_down_creatures_any_time_not_spells_not_stopping_their_controller() {
-    cr!("708.5", "116.1");
+    cr!("708.5");
     ruling!(
         "Keeper of the Lens",
         "Keeper of the Lens allows you to look at face-down creatures you don’t control whenever you want to, even if you don’t have priority. This action doesn’t use the stack."
@@ -68,15 +68,14 @@ fn look_at_face_down_creatures_any_time_not_spells_not_stopping_their_controller
     for name in ["Keeper of the Lens", "Lens of Clarity"] {
         supported(name);
         let mut t = TestGame::new(2);
-        t.battlefield(P0, name);
         let fd = morph(&mut t, P1);
-        // P1 holds priority with a spell on the stack: P0 can still look, and looking
-        // puts nothing on the stack.
+        assert!(!can_look_at(&t.g, P0, fd), "{name}");
+        t.battlefield(P0, name);
+        // P1 holds priority with a spell on the stack: P0 can still look. (Looking is what
+        // the player may see, not an action: nothing goes on the stack.)
         let spell = morph_spell(&mut t, P1);
         t.g.turn.priority = Some(P1);
-        let stack = t.stack_len();
         assert!(can_look_at(&t.g, P0, fd), "{name}");
-        assert_eq!(t.stack_len(), stack, "{name}");
         // Not the face-down spell.
         assert!(!can_look_at(&t.g, P0, spell), "{name}");
         // Its controller still can.

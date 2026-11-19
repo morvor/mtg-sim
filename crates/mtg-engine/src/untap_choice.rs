@@ -1,6 +1,7 @@
 //! "You may choose not to untap ~ during your untap step." (CR 502.3: the active player
 //! determines which permanents they control will untap) and the durations that go with
-//! it, "for as long as ~ remains tapped" (CR 611.2b).
+//! it, "for as long as ~ remains tapped" (CR 611.2b), with what of them and of "for as long
+//! as you control ~" ended while the ability creating the effect was on the stack.
 
 use crate::ability::{Condition, Duration, Restriction};
 use crate::eval::Ctx;
@@ -31,12 +32,19 @@ pub fn remains_tapped(control: bool) -> Duration {
 }
 
 /// The duration ended before the effect `ctx` (the resolving ability's context) is about
-/// to create could begin (CR 611.2b): see [`untapped_while_on_stack`].
+/// to create could begin (CR 611.2b): see [`changed_while_on_stack`]. "For as long as you
+/// control ~" ended if the ability's controller lost control of ~ while the ability was
+/// on the stack, even if they regained it (register
+/// `control-lost-before-a-for-as-long-as-you-control-effect-begins`).
 pub fn ended_before_it_began(g: &Game, d: &Duration, ctx: &Ctx) -> bool {
     match d {
         Duration::WhileCondition(Condition::Custom(n)) => {
             custom_condition(g, n, ctx) == Some(false)
         }
+        Duration::WhileYouControlSource => ctx
+            .source
+            .zip(ctx.stack_obj)
+            .is_some_and(|(s, a)| changed_while_on_stack(g, s, a, false, Some(ctx.controller))),
         _ => false,
     }
 }
@@ -55,23 +63,25 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
             && o.tapped
             && (!control || o.controller == ctx.controller)
             && !ctx.stack_obj.is_some_and(|a| {
-                untapped_while_on_stack(g, s, a, control.then_some(ctx.controller))
+                changed_while_on_stack(g, s, a, true, control.then_some(ctx.controller))
             })
     }))
 }
 
-/// Whether `src` became untapped after `ability` — the ability of `src` creating the
-/// effect, whose resolution context is the condition's — was put on the stack: its "for as
-/// long as ~ remains tapped" duration then ended before the effect could begin, even if
-/// `src` was tapped again (CR 611.2b; Rubinia Soulsinger and Entrancing Lyre rulings).
-/// With `controller` ("for as long as you control ~ and ~ remains tapped"), so did that
-/// player losing control of `src`, even if they regained it (Willow Satyr ruling).
+/// Whether, after `ability` — the ability of `src` creating the effect, whose resolution
+/// context is the condition's — was put on the stack, `src` became untapped (with
+/// `untapped`) or `controller` lost control of it: its "for as long as ~ remains tapped"
+/// or "for as long as you control ~" duration then ended before the effect could begin,
+/// even if `src` was tapped again (CR 611.2b; Rubinia Soulsinger and Entrancing Lyre
+/// rulings) or control of it was regained (register
+/// `control-lost-before-a-for-as-long-as-you-control-effect-begins`; Willow Satyr ruling).
 /// Once an effect exists (its condition is checked without a resolving ability), only an
 /// untap after that ends it, not one before another ability of `src` was activated.
-fn untapped_while_on_stack(
+fn changed_while_on_stack(
     g: &Game,
     src: ObjectId,
     ability: ObjectId,
+    untapped: bool,
     controller: Option<PlayerId>,
 ) -> bool {
     use crate::events::Event;
@@ -96,7 +106,7 @@ fn untapped_while_on_stack(
             {
                 put_on_stack = true;
             }
-            Event::Untapped { obj } if put_on_stack && *obj == src => return true,
+            Event::Untapped { obj } if untapped && put_on_stack && *obj == src => return true,
             Event::ControlChanged { obj, from, .. }
                 if put_on_stack && *obj == src && Some(*from) == controller =>
             {

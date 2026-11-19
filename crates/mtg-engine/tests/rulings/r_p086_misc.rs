@@ -280,6 +280,22 @@ fn break_the_spell_draws_by_destruction_not_by_graveyard() {
     t.resolve_all();
     assert!(t.in_exile("Burning Earth"));
     assert_eq!(t.hand_size(P0), hand + 1);
+    // An opponent's token (a Shard), exiled instead too: still draws; an opponent's
+    // nontoken enchantment doesn't.
+    for token in [true, false] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P1, "Rest in Peace");
+        let target = if token {
+            create_token(&mut t, P1, "Shard")
+        } else {
+            t.battlefield(P1, "Burning Earth")
+        };
+        let hand = t.hand_size(P0);
+        cast_new(&mut t, P0, "Break the Spell", &[obj(target)]);
+        t.resolve_all();
+        assert!(!t.on_battlefield(target), "token={token}");
+        assert_eq!(t.hand_size(P0), hand + usize::from(token), "token={token}");
+    }
     // An indestructible enchantment (Avacyn): not destroyed, no card.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Avacyn, Angel of Hope");
@@ -364,14 +380,18 @@ fn removal_with_an_illegal_target_does_none_of_its_other_effects() {
         t.g.find_in_zone(Zone::Hand(P1), "Kefnet the Mindful").len(),
         2
     );
-    // Light of Judgment at an equipped creature, which is bounced in response.
+    // Light of Judgment at an equipped creature, which gains hexproof (Blossoming Defense)
+    // in response: it's still there, equipped, and nothing happens to either.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let scimitar = attach_new(&mut t, P1, "Leonin Scimitar", obj(bears));
     cast_new(&mut t, P0, "Light of Judgment", &[obj(bears)]);
-    cast_new(&mut t, P1, "Unsummon", &[obj(bears)]);
+    cast_new(&mut t, P1, "Blossoming Defense", &[obj(bears)]);
     t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    assert_eq!(damage_marked(&t, bears), 0);
     assert!(t.on_battlefield(scimitar));
+    assert_eq!(attached_to(&t, scimitar), Some(obj(bears)));
     // Ringwraiths at a legendary creature, which is bounced in response.
     let mut t = TestGame::new(2);
     let avacyn = t.battlefield(P1, "Avacyn, Angel of Hope");
@@ -400,7 +420,7 @@ fn light_of_judgment_can_target_a_creature_without_equipment() {
 
 #[test]
 fn aim_for_the_head_with_one_card_in_hand() {
-    cr!("700.2", "406.1");
+    cr!("609.3", "700.2a");
     ruling!(
         "Aim for the Head",
         "If the target opponent only has one card in hand, they will exile that card."

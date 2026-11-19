@@ -45,7 +45,10 @@ pub fn plan_gain_control(
     // CR 611.2b (Master Thief). A condition about the affected objects ("for as long as
     // that creature is enchanted") is checked for them below.
     let about_affected = matches!(duration, Duration::WhileCondition(_));
-    if !about_affected && g.effect_expired(duration, ctx.source, ctx.controller) {
+    if !about_affected
+        && (g.effect_expired(duration, ctx.source, ctx.controller)
+            || crate::untap_choice::ended_before_it_began(g, duration, ctx))
+    {
         return None;
     }
     // CR 702.26e: a phased-out permanent isn't among the objects it affects, even one it

@@ -40,7 +40,7 @@ fn winds_of_rath_spares_creatures_with_any_aura_attached() {
 
 #[test]
 fn dead_ringers_checks_colors_on_resolution() {
-    cr!("608.2b", "105.2");
+    cr!("608.2h", "105.2");
     ruling!("Dead Ringers", "Colors are checked on resolution.");
     supported("Dead Ringers");
     for wisps in [false, true] {
@@ -169,7 +169,7 @@ fn incinerate_regeneration_can_be_activated_but_does_nothing() {
 
 #[test]
 fn fatal_blow_needs_a_creature_dealt_damage_this_turn() {
-    cr!("115.1", "120.6");
+    cr!("115.1", "701.19a");
     ruling!(
         "Fatal Blow",
         "Fatal Blow can’t target a creature that hasn’t been dealt damage this turn."
@@ -236,7 +236,7 @@ fn spells_with_an_illegal_target_do_nothing_else() {
 
 #[test]
 fn soul_rend_checks_the_color_only_on_resolution() {
-    cr!("608.2c", "105.2");
+    cr!("608.2h", "105.2");
     ruling!(
         "Soul Rend",
         "Only checks the color of the creature on resolution."
@@ -266,14 +266,22 @@ fn putrefy_destroys_an_artifact_that_became_a_creature() {
         "Putrefy",
         "This spell isn't modal. When it resolves, it will destroy the target if it's a creature or an artifact, even if it changed from one to the other between targeting and resolution."
     );
-    // Targeted as a noncreature artifact; March of the Machines ("Each noncreature
-    // artifact is an artifact creature ...") enters and makes it an artifact creature
-    // before Putrefy resolves.
+    use mtg_engine::types::CardType;
+    supported("Putrefy");
+    supported("Eaten by Piranhas");
+    // Targeted as a noncreature artifact; before Putrefy resolves it's a creature that
+    // isn't an artifact: March of the Machines ("Each noncreature artifact is an artifact
+    // creature ...") enters, then Eaten by Piranhas (flash: "Enchanted creature ... is a
+    // black Skeleton creature ... (It loses all other ... card types ...)") is cast on it.
     let mut t = TestGame::new(2);
     let dynamo = t.battlefield(P1, "Thran Dynamo");
     cast_new(&mut t, P0, "Putrefy", &[obj(dynamo)]);
     t.battlefield(P1, "March of the Machines");
-    assert!(t.obj_now(dynamo).is(mtg_engine::types::CardType::Creature));
+    assert!(t.obj_now(dynamo).is(CardType::Creature));
+    cast_new(&mut t, P1, "Eaten by Piranhas", &[obj(dynamo)]);
+    t.resolve();
+    assert!(t.obj_now(dynamo).is(CardType::Creature));
+    assert!(!t.obj_now(dynamo).is(CardType::Artifact));
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Thran Dynamo"));
 }
@@ -295,7 +303,7 @@ fn slay_countered_draws_no_card() {
 
 #[test]
 fn fatal_lore_opponent_chooses_the_mode_you_choose_the_targets() {
-    cr!("700.2a", "601.2c");
+    cr!("700.2e", "601.2c");
     ruling!(
         "Fatal Lore",
         "The opponent chooses which option they want (this is a mode choice). If they choose the “destroy” option, you choose the zero, one, or two targets after that."
@@ -402,7 +410,7 @@ fn albatross_dies(
 
 #[test]
 fn giant_albatross_triggers_once_and_seeks_every_creature_that_damaged_it() {
-    cr!("603.6c", "603.10a", "120.6");
+    cr!("603.6c", "603.10a");
     ruling!(
         "Giant Albatross",
         "The ability is a triggered ability and is only put on the stack once just after this card goes to the graveyard."
@@ -434,7 +442,7 @@ fn giant_albatross_triggers_once_and_seeks_every_creature_that_damaged_it() {
 
 #[test]
 fn giant_albatross_counts_damage_redirected_to_it() {
-    cr!("120.6", "614.1a");
+    cr!("614.9", "603.10a");
     ruling!(
         "Giant Albatross",
         "The ability works even if the damage is redirected to the Albatross."
