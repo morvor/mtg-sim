@@ -1106,7 +1106,10 @@ fn plan(
                 return Plan::Exec(e.clone());
             }
             let searcher = g.eval_player(who, ctx).unwrap_or(ctx.controller);
-            let owner = g.eval_player(whose, ctx).unwrap_or(searcher);
+            // Whose library: "their library" is the searcher's, as `Game::exec` reads it.
+            let mut c = ctx.clone();
+            c.iter_player = Some(searcher);
+            let owner = g.eval_player(whose, &c).unwrap_or(searcher);
             // A player searching the same library again in this instruction ("for each land
             // destroyed this way, its controller may search ...", two of theirs): one search
             // for all those cards (CR 701.23h), so the second is made once the cards the

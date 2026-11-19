@@ -231,3 +231,40 @@ fn the_damage_dealt_this_way_counts_each_opponents_damage_once() {
     assert!(t.in_graveyard(P1, "Craw Wurm"));
     assert_eq!(t.life(P0), 24);
 }
+
+#[test]
+fn each_player_searches_once_for_each_opponent() {
+    cr!("701.23i", "608.2f");
+    // "For each opponent, each player searches their library for a basic land card, puts
+    // it into their hand, then shuffles." The search isn't one the instruction's player
+    // makes alone: it's performed as written for each opponent in turn, every player
+    // searching each time.
+    let body = for_each_opponent(Effect::Search {
+        who: PlayerRef::EachPlayer,
+        whose: PlayerRef::Iterated,
+        filter: Filter::and(vec![
+            Filter::Supertype(Supertype::Basic),
+            Filter::Type(CardType::Land),
+            Filter::InZone(ZoneKind::Library),
+        ]),
+        count: Value::c(1),
+        to: Destination::zone(ZoneKind::Hand),
+        reveal: false,
+        shuffle: true,
+    });
+    let mut t = TestGame::new(3);
+    for p in [P0, P1, P2] {
+        t.library_top(p, "Forest");
+        t.library_top(p, "Island");
+    }
+    cast_body(&mut t, body);
+    let hands = (t.hand_size(P0), t.hand_size(P1), t.hand_size(P2));
+    t.resolve_all();
+    assert_eq!(
+        (t.hand_size(P0), t.hand_size(P1), t.hand_size(P2)),
+        (hands.0 + 2, hands.1 + 2, hands.2 + 2)
+    );
+    for p in [P0, P1, P2] {
+        assert!(t.in_hand(p, "Forest") && t.in_hand(p, "Island"), "{p}");
+    }
+}
