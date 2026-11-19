@@ -2,8 +2,9 @@
 //! the user's policy of Nov 19 (register `pre-battle-rulings-give-way-to-the-cr`,
 //! docs/interpretations/sources.md). The CR decides: battle is a permanent type (CR 110.4,
 //! 110.4a, 110.4b), a battle's protector is the defending player of a creature attacking it
-//! (CR 310.9d, 508.5), a creature may attack a battle (CR 508.1b, 508.1d, 508.4, 702.22d,
-//! 702.49c) and a battle's protector may block creatures attacking it (CR 310.9c, 509.1a).
+//! (CR 310.9d, 508.5, 802.2a), a creature may attack a battle (CR 508.1b, 508.1d, 508.4,
+//! 508.7, 702.22d, 702.49c) and a battle's protector may block creatures attacking it
+//! (CR 310.9c, 509.1a).
 //! Each test cites the ruling for what it says of the other permanent types, players and
 //! planeswalkers, and shows the battle case the ruling leaves out (its battle part is
 //! exempt in docs/rulings-exemptions/pre-battle-rulings.tsv and logged as outdated in
@@ -303,6 +304,85 @@ fn wardscale_dragon_attacking_a_battle_stops_its_protector_casting_spells() {
         attack_with(&mut t, &[(dragon, target)]);
         assert_eq!(castable(&mut t, P1, s1), !battle_attacked, "P1 ({POLICY})");
         assert_eq!(castable(&mut t, P2, s2), battle_attacked, "P2");
+    }
+}
+
+#[test]
+fn attack_triggers_about_the_defending_player_use_a_battles_protector() {
+    cr!("508.5", "802.2a", "310.9d");
+    interp!("pre-battle-rulings-give-way-to-the-cr");
+    ruling!(
+        "Fiend Binder",
+        "In a multiplayer game, Fiend Binder’s triggered ability can only target a creature controlled by the player it’s attacking (or by the controller of the planeswalker it’s attacking)."
+    );
+    ruling!(
+        "Lord of Shatterskull Pass",
+        "In a multiplayer game, the only player affected by the last ability is the one Lord of Shatterskull Pass is attacking (or the one who controls the planeswalker Lord of Shatterskull Pass is attacking)."
+    );
+    ruling!(
+        "Bloodvial Purveyor",
+        "Only Blood tokens controlled by the player Bloodvial Purveyor is attacking or the controller of the planeswalker it's attacking are counted to determine the bonus from its last ability."
+    );
+    // Fiend Binder: "Whenever this creature attacks, tap target creature defending player
+    // controls." Lord of Shatterskull Pass (level 6): "Whenever this creature attacks, it
+    // deals 6 damage to each creature defending player controls." Bloodvial Purveyor:
+    // "Whenever this creature attacks, it gets +1/+0 until end of turn for each Blood token
+    // defending player controls." P1 and P2 each control a Craw Wurm, P1 one Blood token
+    // and P2 two; P2 controls Jace Beleren and a Siege that P1 protects. Attacking P1, the
+    // defending player is P1; attacking Jace, P2; attacking the Siege, its protector P1.
+    for name in [
+        "Fiend Binder",
+        "Lord of Shatterskull Pass",
+        "Bloodvial Purveyor",
+    ] {
+        supported(name);
+        for target in ["P1", "the planeswalker", "the battle"] {
+            let (mut t, b) = three_with_siege();
+            let jace = t.battlefield(P2, "Jace Beleren");
+            let w1 = t.battlefield(P1, "Craw Wurm");
+            let w2 = t.battlefield(P2, "Craw Wurm");
+            crate::r_s02_common::create_token(&mut t, P1, "Blood");
+            for _ in 0..2 {
+                crate::r_s02_common::create_token(&mut t, P2, "Blood");
+            }
+            let a = t.battlefield(P0, name);
+            if name == "Lord of Shatterskull Pass" {
+                t.g.add_counters(obj(a), mtg_engine::types::counters::LEVEL, 6, None);
+                t.g.recompute();
+            }
+            let (to, dp) = match target {
+                "P1" => (pl(P1), P1),
+                "the planeswalker" => (obj(jace), P2),
+                _ => (obj(b), P1),
+            };
+            let (mine, other) = if dp == P1 { (w1, w2) } else { (w2, w1) };
+            if name == "Fiend Binder" {
+                t.answer_targets(P0, &[obj(mine)]);
+            }
+            let from = t.asked().len();
+            to_combat(&mut t, P0);
+            attack_with(&mut t, &[(a, to)]);
+            t.resolve_all();
+            let case = format!("{name} attacking {target} ({POLICY})");
+            match name {
+                "Fiend Binder" => {
+                    let cands = crate::r_s02_common::target_candidates(&t, P0, from);
+                    assert!(
+                        cands[0].contains(&obj(mine)) && !cands[0].contains(&obj(other)),
+                        "{case}"
+                    );
+                    assert!(t.obj_now(mine).tapped && !t.obj_now(other).tapped, "{case}");
+                }
+                "Lord of Shatterskull Pass" => {
+                    assert!(!t.on_battlefield(mine), "{case}");
+                    assert_eq!(t.obj_now(other).damage, 0, "{case}");
+                }
+                _ => {
+                    let blood = if dp == P1 { 1 } else { 2 };
+                    assert_eq!(t.pt(a).0, 5 + blood, "{case}");
+                }
+            }
+        }
     }
 }
 
