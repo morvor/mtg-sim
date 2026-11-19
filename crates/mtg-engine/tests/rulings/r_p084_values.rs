@@ -27,7 +27,8 @@ fn goyf_in_graveyard(t: &mut TestGame, others: &[&str]) -> ObjectId {
 
 #[test]
 fn morbid_bloom_uses_the_star_toughness_as_the_card_last_existed() {
-    cr!("604.3", "608.2h", "113.6");
+    cr!("604.3", "608.2h", "113.6a");
+    interp!("exiled-card-power-as-it-last-existed-in-the-graveyard");
     ruling!(
         "Morbid Bloom",
         "If a creature card has “*” in its toughness, the ability that defines “*” works in all zones. The value of X is equal to the toughness of the targeted creature card as it last existed in the graveyard."
@@ -68,6 +69,7 @@ fn tymarets_toughness_works_in_the_graveyard() {
 #[test]
 fn selfless_exorcist_star_power_applies_in_the_graveyard() {
     cr!("604.3", "608.2h", "120.3");
+    interp!("exiled-card-power-as-it-last-existed-in-the-graveyard");
     ruling!(
         "Selfless Exorcist",
         "The reminder text printed on Selfless Exorcist is no longer correct. Abilities that define a creature’s power (and toughness) apply in every zone. The value of * is defined by such an ability."
@@ -88,6 +90,7 @@ fn selfless_exorcist_star_power_applies_in_the_graveyard() {
 #[test]
 fn lobelia_uses_the_power_as_the_card_last_existed_in_the_graveyard() {
     cr!("608.2h", "604.3");
+    interp!("exiled-card-power-as-it-last-existed-in-the-graveyard");
     ruling!(
         "Lobelia Sackville-Baggins",
         "Use the card's power as it last existed in the graveyard to determine the value of X."
@@ -112,6 +115,7 @@ fn lobelia_uses_the_power_as_the_card_last_existed_in_the_graveyard() {
 #[test]
 fn flesh_counters_use_last_known_power_and_blood_the_power_on_resolution() {
     cr!("608.2h", "702.102c", "709.3");
+    interp!("exiled-card-power-as-it-last-existed-in-the-graveyard");
     ruling!(
         "Flesh // Blood",
         "The number of +1/+1 counters is based on the power of the creature card as it last existed in the graveyard."
@@ -309,7 +313,7 @@ fn grime_gorger_exiles_one_card_of_each_card_type() {
 
 #[test]
 fn eradicate_splinter_and_scour_target_by_type_then_search_by_name() {
-    cr!("201.2", "608.2h", "613.1d", "701.23a");
+    cr!("201.2a", "608.2h", "613.1d", "701.23a");
     ruling!(
         "Eradicate",
         "If you manage to turn a land (such as a Forest or Stalking Stones) into a creature, you can indeed use this effect on that basic land type. Eradicate’s exile effect only looks for cards by name, not type."
@@ -343,8 +347,8 @@ fn eradicate_splinter_and_scour_target_by_type_then_search_by_name() {
         assert_eq!(t.zone(forest), Zone::Graveyard(P1));
     }
     // Grizzly Bears turned into an enchantment by Soul Sculptor ("{1}{W}, {T}: Target
-    // creature becomes an enchantment and loses all other card types until a player casts
-    // a creature spell.").
+    // creature becomes an enchantment and loses all abilities until a player casts a
+    // creature spell."; "becomes an enchantment" replaces its card types, CR 205.1a).
     supported("Soul Sculptor");
     let mut t = TestGame::new(2);
     let sculptor = t.battlefield(P1, "Soul Sculptor");
@@ -369,7 +373,7 @@ fn eradicate_splinter_and_scour_target_by_type_then_search_by_name() {
 
 #[test]
 fn eradicate_uses_the_name_as_the_creature_leaves_the_battlefield() {
-    cr!("608.2h", "707.2", "201.2");
+    cr!("608.2h", "707.2", "201.2a");
     ruling!(
         "Eradicate",
         "Use the name of the card as it leaves the battlefield."
@@ -396,7 +400,7 @@ fn eradicate_uses_the_name_as_the_creature_leaves_the_battlefield() {
 
 #[test]
 fn pit_of_offerings_makes_only_the_exiled_cards_colors() {
-    cr!("106.1a", "106.7", "105.1");
+    cr!("106.1a", "106.5", "105.1");
     ruling!(
         "Pit of Offerings",
         "If no cards are exiled with Pit of Offerings, its last ability can't add mana."
@@ -425,7 +429,7 @@ fn pit_of_offerings_makes_only_the_exiled_cards_colors() {
         // It entered tapped.
         let pit = t.g.current(pit);
         t.g.obj_mut(pit).tapped = false;
-        // (With no colors to choose from, it can be activated but adds no mana: CR 106.5.)
+        // (With no colors to choose from, it can be activated but adds no mana: 106.5.)
         let _ = t.activate(P0, pit, 1, &[]);
         let offered: Vec<String> = t.asked()[from..]
             .iter()

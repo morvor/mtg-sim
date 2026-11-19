@@ -77,7 +77,8 @@ fn x_is_zero_for_free_copies_and_blue_mages_canes_three() {
         "Blue Mage's Cane",
         "If the spell has {X} in its mana cost, you must choose 0 as the value of X when casting it by paying {3} rather than paying its mana cost."
     );
-    // Blaze ({X}{R}: "Blaze deals X damage to any target."), with X = 3 asked for.
+    // Blaze ({X}{R}: "Blaze deals X damage to any target."), with X = 3 asked for, and
+    // three untapped Mountains that could pay for an X of 3 if one could be chosen.
     let queue = |t: &mut TestGame| {
         t.answer(P0, DecisionKind::X, Answer::Number(3));
         t.answer_targets(P0, &[pl(P1)]);
@@ -89,6 +90,7 @@ fn x_is_zero_for_free_copies_and_blue_mages_canes_three() {
     let tok = t.battlefield(P0, "Llanowar Elves");
     tokenize(&mut t, tok);
     let blaze = t.graveyard(P1, "Blaze");
+    t.lands(P0, "Mountain", 3);
     t.answer_targets(P0, &[obj(blaze)]);
     t.answer_yes(P0, true);
     queue(&mut t);
@@ -96,6 +98,7 @@ fn x_is_zero_for_free_copies_and_blue_mages_canes_three() {
     t.resolve_all();
     assert_eq!(casts(&t, "Blaze").len(), 1, "{}", t.dump_log());
     assert_eq!(t.life(P1), 19);
+    assert_eq!(tapped_lands(&t, P0), 0);
     assert_eq!(t.obj_now(sw).face, FaceState::Back);
     // Mnemonic Deluge: one of the three copies is cast.
     let mut t = TestGame::new(2);
@@ -105,9 +108,11 @@ fn x_is_zero_for_free_copies_and_blue_mages_canes_three() {
     t.answer_yes(P0, false);
     queue(&mut t);
     cast_modes(&mut t, P0, "Mnemonic Deluge", "6UUU", &[], &[&[obj(blaze)]]);
+    t.lands(P0, "Mountain", 3);
     t.resolve_all();
     assert_eq!(casts(&t, "Blaze").len(), 1, "{}", t.dump_log());
     assert_eq!(t.life(P1), 20);
+    assert_eq!(tapped_lands(&t, P0), 0);
     // Blue Mage's Cane: {3} is paid, not {3} plus X = 3.
     supported("Blue Mage's Cane");
     let mut t = TestGame::new(2);
@@ -295,7 +300,7 @@ fn wrexial_exiles_the_card_whether_it_resolves_or_is_countered() {
 
 #[test]
 fn wildfire_devils_does_nothing_if_the_random_player_has_no_instant_or_sorcery() {
-    cr!("706.1", "608.2c");
+    cr!("609.3", "608.2c");
     ruling!(
         "Wildfire Devils",
         "If the chosen player has no instant or sorcery cards in their graveyard, Wildfire Devils’s ability does nothing. You don’t pick a different player."
@@ -342,8 +347,8 @@ fn wildfire_devils_copy_is_cast_on_resolution_or_never() {
         "You can cast the copy only as the triggered ability resolves. If you don’t want to cast it at that time (or you can’t cast it, perhaps because there are no legal targets available), the copy ceases to exist. You can’t cast it later."
     );
     for yes in [true, false] {
-        // In P1's precombat main phase (as if it had flash); both graveyards have a
-        // Divination, so whoever is chosen exiles one.
+        // In P1's upkeep (as if it had flash); both graveyards have a Divination, so
+        // whoever is chosen exiles one.
         let mut t = TestGame::new(2);
         t.set_step(P1, Step::Upkeep);
         t.graveyard(P0, "Divination");
@@ -367,6 +372,7 @@ fn wildfire_devils_copy_is_cast_on_resolution_or_never() {
         );
         // The exiled card stays exiled; no copy is left to cast later.
         assert!(t.in_exile("Divination"));
+        assert_eq!(t.g.exile.len(), 1, "only the exiled card: yes={yes}");
         assert!(t.stack.is_empty());
         assert!(!can_cast_anything(&mut t, P0), "yes={yes}");
     }
@@ -393,13 +399,14 @@ fn reenact_the_crime_copy_is_cast_while_it_is_on_the_stack() {
         assert_eq!(seen, vec![vec!["Reenact the Crime".to_string()]]);
         assert_eq!(t.hand_size(P0), if yes { hand + 2 } else { hand });
         assert_eq!(t.zone(div), Zone::Exile);
+        assert_eq!(t.g.exile.len(), 1, "no copy is left: yes={yes}");
         assert!(!can_cast_anything(&mut t, P0));
     }
 }
 
 #[test]
 fn soundwave_targets_only_the_exact_mana_value() {
-    cr!("115.1", "202.3", "603.2c");
+    cr!("115.1", "202.3", "603.3d");
     ruling!(
         "Soundwave, Sonic Spy // Soundwave, Superior Captain",
         "Soundwave, Sonic Spy's triggered ability can target only an instant or sorcery card with mana value exactly equal to the amount of damage dealt to the player by creature tokens you control."
@@ -419,11 +426,30 @@ fn soundwave_targets_only_the_exact_mana_value() {
     t.attack(&[(tok, pl(P1))], &[]);
     let c = crate::r_s02_common::target_candidates(&t, P0, from);
     assert_eq!(c, vec![vec![obj(cs)]]);
+    // Two 1/1 tokens and a nontoken Hill Giant: the tokens dealt 2 together (not 1 each,
+    // and not the 5 all the attackers dealt).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, SOUNDWAVE);
+    let a = t.battlefield(P0, "Llanowar Elves");
+    let b = t.battlefield(P0, "Llanowar Elves");
+    tokenize(&mut t, a);
+    tokenize(&mut t, b);
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.graveyard(P1, "Lightning Bolt");
+    let cs = t.graveyard(P1, "Counterspell");
+    t.graveyard(P1, "Divination");
+    t.graveyard(P1, "Plow Under");
+    let from = t.asked().len();
+    t.answer_yes(P0, false);
+    t.attack(&[(a, pl(P1)), (b, pl(P1)), (giant, pl(P1))], &[]);
+    assert_eq!(t.life(P1), 15);
+    let c = crate::r_s02_common::target_candidates(&t, P0, from);
+    assert_eq!(c, vec![vec![obj(cs)]]);
 }
 
 #[test]
 fn soundwave_copy_not_cast_ceases_to_exist_and_the_card_stays_exiled() {
-    cr!("707.12", "704.5d", "608.2g");
+    cr!("707.12", "704.5e", "608.2g");
     ruling!(
         "Soundwave, Sonic Spy // Soundwave, Superior Captain",
         "If you don't cast the copy, it ceases to exist the next time state-based actions are checked. The exiled card stays exiled whether you cast the copy or not."
@@ -505,6 +531,7 @@ fn spelltwine_casts_both_copies_from_exile_in_either_order() {
             &[],
             &[&[obj(div)], &[obj(cancel)]],
         );
+        let from = t.asked().len();
         t.resolve_all();
         let div_cast = casts(&t, "Divination");
         let cancel_cast = casts(&t, "Cancel");
@@ -519,13 +546,17 @@ fn spelltwine_casts_both_copies_from_exile_in_either_order() {
         let first_is_div = div_cast[0].0 .0 < cancel_cast[0].0 .0;
         assert_eq!(first_is_div, order == vec![0, 1], "{order:?}");
         if first_is_div {
-            // Cancel's target choice saw the Divination copy on the stack.
+            // Cancel's target choice saw the Divination copy on the stack, and it was a
+            // legal target.
             let seen = seen.lock().unwrap().clone();
             let last = seen.last().unwrap();
             assert!(
                 last.contains(&("Divination".to_string(), ObjKind::CardCopy)),
                 "{last:?}"
             );
+            let candidates = crate::r_s02_common::target_candidates(&t, P0, from);
+            let cancels = candidates.last().expect("Cancel's targets");
+            assert!(cancels.contains(&obj(div_cast[0].0)), "{cancels:?}");
         }
     }
 }
@@ -601,7 +632,7 @@ fn spellweaver_helix_copies_even_after_it_leaves_the_battlefield() {
 
 #[test]
 fn spellweaver_helix_copy_needs_targets_and_permission_to_cast() {
-    cr!("601.2c", "601.3", "707.12");
+    cr!("601.2c", "601.3", "707.12", "101.2");
     ruling!(
         "Spellweaver Helix",
         "You can’t cast the copy unless all of its targets can be chosen."
@@ -629,6 +660,38 @@ fn spellweaver_helix_copy_needs_targets_and_permission_to_cast() {
     assert!(casts(&t, "Lava Spike").is_empty(), "{}", t.dump_log());
     assert_eq!(t.life(P1), 20);
     assert!(casts(&t, "Divination").len() == 1);
+    // Abeyance on P0 ("Until end of turn, target player can't cast instant or sorcery
+    // spells, ..."): P1's Divination triggers P0's Helix, but P0 can't cast the copy
+    // (without Abeyance, P0 does).
+    for abeyance in [false, true] {
+        let mut t = TestGame::new(2);
+        t.set_step(P1, Step::PrecombatMain);
+        helix(&mut t, "Divination", "Lava Spike");
+        if abeyance {
+            cast_modes(&mut t, P1, "Abeyance", "1W", &[], &[&[pl(P0)]]);
+            t.resolve_all();
+        }
+        let d = t.hand(P1, "Divination");
+        mana(&mut t, P1, "2U");
+        t.answer_yes(P0, true);
+        t.answer_yes(P0, true);
+        t.answer_targets(P0, &[pl(P1)]);
+        t.cast(P1, d).go();
+        t.settle();
+        assert_eq!(
+            crate::r_s01_common::triggers_on_stack(&t, "copy the other"),
+            1
+        );
+        t.resolve_all();
+        assert_eq!(
+            casts(&t, "Lava Spike").len(),
+            usize::from(!abeyance),
+            "abeyance={abeyance}: {}",
+            t.dump_log()
+        );
+        assert_eq!(t.life(P1), if abeyance { 20 } else { 17 });
+        assert_eq!(casts(&t, "Divination").len(), 1);
+    }
 }
 
 #[test]

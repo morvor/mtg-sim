@@ -108,7 +108,7 @@ fn turn_the_earth_with_only_illegal_targets_gains_no_life() {
 
 #[test]
 fn erebos_intervention_first_mode_illegal_target_gains_no_life() {
-    cr!("608.2b", "107.3m");
+    cr!("608.2b", "700.2");
     ruling!(
         "Erebos's Intervention",
         "If you choose the first mode and the target creature is an illegal target by the time Erebos’s Intervention tries to resolve, the spell won’t resolve. You won’t gain X life."
@@ -133,7 +133,9 @@ fn erebos_intervention_first_mode_illegal_target_gains_no_life() {
 
 #[test]
 fn thought_distortion_with_an_illegal_player_target_does_nothing() {
-    cr!("608.2b", "702.11b", "101.2");
+    // Not resolving (608.2b) isn't being countered: "can't be countered" doesn't keep the
+    // spell from being removed from the stack with no effect.
+    cr!("608.2b", "702.11c");
     ruling!(
         "Thought Distortion",
         "If the target player is an illegal target by the time Thought Distortion tries to resolve, the spell won’t resolve and will be put into its owner’s graveyard with no effect. This is true even though it can’t be countered."

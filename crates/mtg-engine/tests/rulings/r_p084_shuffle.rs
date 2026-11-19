@@ -92,7 +92,9 @@ fn turn_the_earth_shuffles_each_library_once() {
 
 #[test]
 fn gaeas_blessing_milled_with_other_cards_shuffles_them_all_in() {
-    cr!("603.2", "603.10a", "701.17a");
+    // The trigger waits for the whole mill (603.3: it goes on the stack the next time a
+    // player would receive priority).
+    cr!("603.2", "603.3", "701.17a");
     ruling!(
         "Gaea's Blessing",
         "If an effect puts multiple cards from your library into your graveyard at once, put all of those cards there before Gaea's Blessing shuffles your graveyard into your library."

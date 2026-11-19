@@ -38,7 +38,7 @@ fn unsick(t: &mut TestGame, id: ObjectId) {
 
 #[test]
 fn cemetery_illuminator_casts_a_face_sharing_a_type_with_the_exiled_card() {
-    cr!("601.3", "601.3e", "712.11");
+    cr!("601.3", "601.3e", "712.11b", "712.11c");
     ruling!(
         "Cemetery Illuminator",
         "Cemetery Illuminator's ability allows you to cast a spell that shares a card type with the exiled card, even if the card on top of the library doesn't. For example, if you've exiled an artifact card, you could cast The Omenkeel from the top of your library, even though it's the back face of the modal double-faced card Cosima, God of the Voyage, which isn't an artifact."
@@ -47,12 +47,12 @@ fn cemetery_illuminator_casts_a_face_sharing_a_type_with_the_exiled_card() {
     const COSIMA: &str = "Cosima, God of the Voyage // The Omenkeel";
     // Bone Saw (a noncreature artifact card) is exiled as Cemetery Illuminator enters.
     let mut t = TestGame::new(2);
-    let orni = t.graveyard(P1, "Bone Saw");
+    let saw = t.graveyard(P1, "Bone Saw");
     let top = t.library_top(P0, COSIMA);
-    t.answer_choose(P0, &[obj(orni)]);
+    t.answer_choose(P0, &[obj(saw)]);
     t.enter(P0, "Cemetery Illuminator");
     t.resolve_all();
-    assert_eq!(t.zone(orni), Zone::Exile);
+    assert_eq!(t.zone(saw), Zone::Exile);
     mana(&mut t, P0, "1UU");
     let methods = cast_methods(&mut t, P0, top);
     // The Omenkeel (Legendary Artifact — Vehicle) can be cast; Cosima (a creature) can't.
@@ -74,42 +74,64 @@ fn casting_from_among_exiled_cards_needs_the_permanent_only_to_begin() {
         "Intrepid Paleontologist",
         "Intrepid Paleontologist must be under your control in order to start casting a Dinosaur creature spell using its last ability, but it doesn't need to stay under your control throughout that process or be under your control as the spell resolves. If, for example, you sacrifice Intrepid Paleontologist to pay an additional cost of the spell or it's destroyed in response, the spell will still resolve normally."
     );
-    // Dawnhand Dissident exiles P0's Grizzly Bears (blighting a Hill Giant twice for
-    // its four counters... two of them, then two more on another).
+    // Dawnhand Dissident exiles P0's Grizzly Bears: Blight 2 puts two -1/-1 counters on a
+    // Hill Giant, and with the other Hill Giant's, there are three counters to remove.
+    // Gone before the casting begins, it gives no permission; gone once the spell is on
+    // the stack (destroyed in response), the spell still resolves.
     supported("Dawnhand Dissident");
-    let mut t = TestGame::new(2);
-    let d = t.battlefield(P0, "Dawnhand Dissident");
-    let bears = t.graveyard(P0, "Grizzly Bears");
-    let g1 = t.battlefield(P0, "Hill Giant");
-    let g2 = t.battlefield(P0, "Hill Giant");
-    t.g.add_counters(obj(g2), "-1/-1", 1, None);
-    t.answer_choose(P0, &[obj(g1)]);
-    t.activate(P0, d, 1, &[obj(bears)]).unwrap();
-    t.resolve_all();
-    assert_eq!(t.zone(bears), Zone::Exile);
-    mana(&mut t, P0, "1G");
-    let spell = t.cast(P0, t.g.current(bears)).go();
-    // Destroyed in response: the Bears still resolve.
-    t.g.destroy(d, None);
-    t.g.flush_events();
-    t.resolve_all();
-    assert!(t.in_graveyard(P0, "Dawnhand Dissident"));
-    assert_eq!(t.zone(spell), Zone::Battlefield, "{}", t.dump_log());
+    for gone_first in [true, false] {
+        let mut t = TestGame::new(2);
+        let d = t.battlefield(P0, "Dawnhand Dissident");
+        let bears = t.graveyard(P0, "Grizzly Bears");
+        let g1 = t.battlefield(P0, "Hill Giant");
+        let g2 = t.battlefield(P0, "Hill Giant");
+        t.g.add_counters(obj(g2), "-1/-1", 1, None);
+        t.answer_choose(P0, &[obj(g1)]);
+        t.activate(P0, d, 1, &[obj(bears)]).unwrap();
+        t.resolve_all();
+        assert_eq!(t.zone(bears), Zone::Exile);
+        mana(&mut t, P0, "1G");
+        assert!(!cast_methods(&mut t, P0, bears).is_empty());
+        if gone_first {
+            t.g.destroy(d, None);
+            t.g.flush_events();
+            t.settle();
+            assert!(cast_methods(&mut t, P0, bears).is_empty());
+            continue;
+        }
+        let spell = t.cast(P0, t.g.current(bears)).go();
+        // Destroyed in response: the Bears still resolve.
+        t.g.destroy(d, None);
+        t.g.flush_events();
+        t.resolve_all();
+        assert!(t.in_graveyard(P0, "Dawnhand Dissident"));
+        assert_eq!(t.zone(spell), Zone::Battlefield, "{}", t.dump_log());
+    }
     // Intrepid Paleontologist exiles P0's Colossal Dreadmaw (a Dinosaur).
     supported("Intrepid Paleontologist");
-    let mut t = TestGame::new(2);
-    let ip = t.battlefield(P0, "Intrepid Paleontologist");
-    let maw = t.graveyard(P0, "Colossal Dreadmaw");
-    activate(&mut t, P0, ip, "Exile target card", "2", &[obj(maw)]);
-    t.resolve_all();
-    assert_eq!(t.zone(maw), Zone::Exile);
-    mana(&mut t, P0, "4GG");
-    let spell = t.cast(P0, t.g.current(maw)).go();
-    t.g.destroy(ip, None);
-    t.g.flush_events();
-    t.resolve_all();
-    assert_eq!(t.zone(spell), Zone::Battlefield, "{}", t.dump_log());
-    assert_eq!(t.counters(spell, "finality"), 1);
+    for gone_first in [true, false] {
+        let mut t = TestGame::new(2);
+        let ip = t.battlefield(P0, "Intrepid Paleontologist");
+        let maw = t.graveyard(P0, "Colossal Dreadmaw");
+        activate(&mut t, P0, ip, "Exile target card", "2", &[obj(maw)]);
+        t.resolve_all();
+        assert_eq!(t.zone(maw), Zone::Exile);
+        mana(&mut t, P0, "4GG");
+        assert!(!cast_methods(&mut t, P0, maw).is_empty());
+        if gone_first {
+            t.g.destroy(ip, None);
+            t.g.flush_events();
+            t.settle();
+            assert!(cast_methods(&mut t, P0, maw).is_empty());
+            continue;
+        }
+        let spell = t.cast(P0, t.g.current(maw)).go();
+        t.g.destroy(ip, None);
+        t.g.flush_events();
+        t.resolve_all();
+        assert_eq!(t.zone(spell), Zone::Battlefield, "{}", t.dump_log());
+        assert_eq!(t.counters(spell, "finality"), 1);
+    }
 }
 
 #[test]
@@ -128,10 +150,18 @@ fn immersturm_predator_triggers_only_when_it_becomes_tapped() {
         "You can activate Immersturm Predator's last ability even if it's already tapped."
     );
     supported("Immersturm Predator");
-    // Attacking taps it: the trigger exiles a card and puts a counter on it.
+    // Its trigger is no way to tap it: alone and untapped, nothing of it can be activated.
     let mut t = TestGame::new(2);
     let ip = t.battlefield(P0, "Immersturm Predator");
     let card = t.graveyard(P1, "Lightning Bolt");
+    t.g.turn.priority = Some(P0);
+    t.g.recompute();
+    assert!(!t
+        .g
+        .legal_actions(P0)
+        .iter()
+        .any(|a| matches!(a, Action::Activate { source, .. } if *source == ip)));
+    // Attacking taps it: the trigger exiles a card and puts a counter on it.
     t.answer_targets(P0, &[obj(card)]);
     attack_with(&mut t, &[(ip, pl(P1))]);
     t.resolve_all();
@@ -204,7 +234,7 @@ fn general_kudro_sacrifices_itself_and_ignores_human_planeswalkers() {
 
 #[test]
 fn endless_detour_puts_a_token_into_the_library_then_it_ceases_to_exist() {
-    cr!("111.7", "704.5d", "401.4");
+    cr!("111.7", "704.5d");
     ruling!(
         "Endless Detour",
         "If Endless Detour targets a token, that token is put into the library, then ceases to exist."
@@ -222,7 +252,7 @@ fn endless_detour_puts_a_token_into_the_library_then_it_ceases_to_exist() {
 
 #[test]
 fn a_melded_permanent_goes_all_on_top_or_all_on_the_bottom() {
-    cr!("712.4", "712.4c", "401.4");
+    cr!("712.21a", "712.21c", "401.4");
     ruling!(
         "Endless Detour",
         "If multiple cards are put into the library this way (such as when the spell targets a melded permanent), that permanent's owner puts all the cards on top or all the cards on the bottom. They put them in whatever order they wish, and do not need to reveal the order."
@@ -269,7 +299,7 @@ fn a_melded_permanent_goes_all_on_top_or_all_on_the_bottom() {
 
 #[test]
 fn hive_of_the_eye_tyrant_ignores_lands_entering_with_it() {
-    cr!("614.12", "614.1c", "603.6a");
+    cr!("614.12", "614.1d");
     ruling!(
         "Hive of the Eye Tyrant",
         "If Hive of the Eye Tyrant enters the battlefield at the same time as one or more other lands, it doesn't take those lands into consideration when determining how many other lands you control."
@@ -322,7 +352,7 @@ fn hive_of_the_eye_tyrant_animated_twice_has_two_attack_triggers() {
 
 #[test]
 fn hive_of_the_eye_tyrant_animated_the_turn_it_arrived_cant_attack_or_tap() {
-    cr!("302.6", "305.1", "508.1a");
+    cr!("302.6", "508.1a");
     ruling!(
         "Hive of the Eye Tyrant",
         "If you turn Hive of the Eye Tyrant into a creature but haven't controlled it continuously since your most recent turn began, you won't be able to activate its mana ability or attack with it."
@@ -359,7 +389,7 @@ fn hive_of_the_eye_tyrant_animated_the_turn_it_arrived_cant_attack_or_tap() {
 
 #[test]
 fn dreams_of_steel_and_oil_exiles_from_the_graveyard_anyway() {
-    cr!("608.2c", "701.20a");
+    cr!("608.2c", "609.3");
     ruling!(
         "Dreams of Steel and Oil",
         "If the opponent has no artifact or creature cards in their hand, you must still choose an artifact or creature card from their graveyard to exile."
@@ -394,7 +424,9 @@ fn eater_of_the_dead_does_something_only_if_tapped_as_it_resolves() {
     );
     supported("Eater of the Dead");
     // (tapped when activated, tapped as it resolves)
-    for (at_activation, at_resolution) in [(true, true), (false, false), (true, false)] {
+    for (at_activation, at_resolution) in
+        [(true, true), (false, false), (true, false), (false, true)]
+    {
         let mut t = TestGame::new(2);
         let e = t.battlefield(P0, "Eater of the Dead");
         let bears = t.graveyard(P1, "Grizzly Bears");
@@ -590,7 +622,7 @@ fn simple_graveyard_hate_who_chooses_and_who_gets_what() {
 
 #[test]
 fn watchers_of_the_dead_choices_are_made_in_apnap_order_then_exiled_together() {
-    cr!("101.4", "101.4a", "608.2e");
+    cr!("101.4", "608.2e");
     ruling!(
         "Watchers of the Dead",
         "When this ability resolves, first the player whose turn it is (if that player is an opponent) chooses two cards in their graveyard, then each other opponent in turn order does the same, then all of the other cards in their graveyards are exiled simultaneously. Each player will know the choices made by the players who chose before them."
@@ -648,12 +680,22 @@ fn watchers_of_the_dead_choices_are_made_in_apnap_order_then_exiled_together() {
 
 #[test]
 fn lost_in_thought_is_ignored_with_a_special_action() {
-    cr!("116.2d", "116.1", "602.5a");
+    cr!("116.2d", "116.1", "508.1c");
     ruling!(
         "Lost in Thought",
         "You can take the “exile three cards” action any time you have priority without using the stack."
     );
     supported("Lost in Thought");
+    // Without the special action, the enchanted Bears can't attack.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    crate::r_s06_common::attach_new(&mut t, P0, "Lost in Thought", bears);
+    t.set_step(P1, Step::BeginningOfCombat);
+    unsick(&mut t, bears);
+    assert!(!crate::r_s09_common::legal_attack(
+        &mut t,
+        &[(bears, pl(P0))]
+    ));
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     crate::r_s06_common::attach_new(&mut t, P0, "Lost in Thought", bears);

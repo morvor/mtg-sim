@@ -7,6 +7,7 @@ use crate::r_p084_common::*;
 use crate::r_s02_common::target_candidates;
 use mtg_engine::ability::AbilityKind;
 use mtg_engine::decision::Decision;
+use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -59,6 +60,28 @@ fn a_spell_on_the_stack_cant_target_itself_in_a_graveyard() {
     assert_eq!(c, vec![vec![obj(other)]]);
     assert!(!c[0].contains(&obj(spell)));
     assert!(matches!(t.zone(spell), Zone::Stack));
+    // Cast from the graveyard (flashback from Snapcaster Mage), it has left the graveyard
+    // for the stack before its target is chosen: only the Grizzly Bears card is offered.
+    supported("Snapcaster Mage");
+    let mut t = TestGame::new(2);
+    let ba = t.graveyard(P0, "Beckon Apparition");
+    let bears = t.graveyard(P1, "Grizzly Bears");
+    t.answer_targets(P0, &[obj(ba)]);
+    t.enter(P0, "Snapcaster Mage");
+    t.resolve_all();
+    mana(&mut t, P0, "W");
+    let from = t.asked().len();
+    t.answer_targets(P0, &[obj(bears)]);
+    let spell = t
+        .cast(P0, ba)
+        .method(CastMethod::Keyword(KeywordKind::Flashback))
+        .go();
+    let c = target_candidates(&t, P0, from);
+    assert_eq!(c, vec![vec![obj(bears)]]);
+    t.resolve_all();
+    assert_eq!(t.zone(bears), Zone::Exile);
+    assert_eq!(t.zone(spell), Zone::Exile, "flashback exiles it");
+    assert_eq!(tokens_of(&t, P0, "Spirit"), 1);
     // Stream of Consciousness, put into the graveyard as it resolves, isn't shuffled in.
     let mut t = TestGame::new(2);
     let bears = t.graveyard(P0, "Grizzly Bears");
@@ -172,7 +195,7 @@ fn spelltwine_needs_both_targets() {
 
 #[test]
 fn spelltwine_with_one_illegal_target_still_exiles_and_copies_the_other() {
-    cr!("608.2b", "707.10", "707.12");
+    cr!("608.2b", "707.12");
     ruling!(
         "Spelltwine",
         "If one of Spelltwine’s targets is illegal when Spelltwine tries to resolve, you’ll still exile and copy the remaining legal target."
@@ -261,7 +284,9 @@ fn skullsnatcher_targets_zero_one_or_two_cards() {
 
 #[test]
 fn faerie_macabre_from_hand_at_instant_speed_any_graveyards() {
-    cr!("602.2", "116.1", "115.1");
+    // Its cost discards it from the hand, so the ability functions only there (113.6m);
+    // an activated ability can be activated any time its controller has priority (117.1b).
+    cr!("602.2", "113.6m", "117.1b", "115.1");
     ruling!(
         "Faerie Macabre",
         "Faerie Macabre's second ability can be activated only while it's in your hand. You can do this any time you could cast an instant."
