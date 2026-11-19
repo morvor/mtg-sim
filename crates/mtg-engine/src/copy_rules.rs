@@ -290,8 +290,10 @@ fn copyable(g: &Game, spell: ObjectId) -> bool {
 }
 
 /// CR 707.10d: copies `spell` for each other object or player it could target; each copy
-/// targets a different one of them. The copies are put onto the stack in the order their
-/// controller chooses.
+/// targets a different one of them. Returns the copies in the order they were made: the
+/// caller has their controller order them ([`crate::copy::order_copies`]) together with
+/// any copies an effect adds to them, which are put onto the stack at the same time
+/// (CR 405.3), so the controller is asked once.
 pub fn copy_for_each_target(
     g: &mut Game,
     spell: ObjectId,
@@ -320,7 +322,7 @@ pub fn copy_for_each_target(
         return vec![];
     };
     let ctx = g.stack_ctx(spell);
-    let mut cands: Vec<Entity> = g
+    let cands: Vec<Entity> = g
         .legal_target_candidates(spec, &ctx, spell)
         .into_iter()
         .filter(|e| !current.contains(e))
@@ -334,22 +336,6 @@ pub fn copy_for_each_target(
             }
         })
         .collect();
-    if cands.len() > 1 {
-        let items = cands.iter().map(|e| format!("{e:?}")).collect();
-        if let crate::decision::Answer::Indices(order) = g.ask(
-            controller,
-            crate::decision::Decision::Order {
-                prompt: "Order the copies (first is put onto the stack first)".into(),
-                items,
-            },
-        ) {
-            let mut sorted = order.clone();
-            sorted.sort();
-            if sorted == (0..cands.len()).collect::<Vec<_>>() {
-                cands = order.iter().map(|i| cands[*i]).collect();
-            }
-        }
-    }
     cands
         .into_iter()
         .filter_map(|e| copy_targeting(g, spell, controller, e, false))

@@ -248,14 +248,10 @@ fn land_and_spell_of_each_permanent_type(
     };
     // CR 110.4: the permanent types.
     let mut v = vec![permission(CardType::Land, true, "land")];
-    for (t, slot) in [
-        (CardType::Artifact, "artifact spell"),
-        (CardType::Battle, "battle spell"),
-        (CardType::Creature, "creature spell"),
-        (CardType::Enchantment, "enchantment spell"),
-        (CardType::Planeswalker, "planeswalker spell"),
-    ] {
-        v.push(permission(t, false, slot));
+    for t in CardType::PERMANENT_TYPES {
+        if t != CardType::Land {
+            v.push(permission(t, false, &format!("{} spell", t.word())));
+        }
     }
     Some(v)
 }

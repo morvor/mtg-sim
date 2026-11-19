@@ -216,9 +216,9 @@ fn choose_kind(l: &str, _b: &mut Builder) -> Option<Effect> {
             }
             // CR 110.4: the permanent types.
             "a permanent type" => ChoiceKind::OneOf(
-                ["artifact", "battle", "creature", "enchantment", "land", "planeswalker"]
+                crate::types::CardType::PERMANENT_TYPES
                     .iter()
-                    .map(|s| s.to_string())
+                    .map(|t| t.word().to_string())
                     .collect(),
             ),
             "land or nonland" => ChoiceKind::Word(vec!["land".into(), "nonland".into()]),
