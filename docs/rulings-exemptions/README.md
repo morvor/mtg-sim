@@ -13,7 +13,9 @@ outdated one (older than a rules or Oracle change, named and dated in the reason
 whose words contradict the card's own Oracle text with no dated change to explain it
 (register `ruling-contradicting-oracle-gives-way`; the reason names the policy, the date
 of the decision and the ruling's likely origin). The parts of either that still hold stay
-cited. A ruling inconsistent with the other rulings, or with the CR with no dated change to
+cited. Rulings written before battles existed that leave them out (or were edited for them
+in a way their rules contradict) are outdated in part under the user's policy of Nov 19
+(register `pre-battle-rulings-give-way-to-the-cr`; `pre-battle-rulings.tsv`). A ruling inconsistent with the other rulings, or with the CR with no dated change to
 explain it, is exempt only by a register decision about that question (Gnoll War Band's, by
 `history-counts-players-who-left`; Araumi of the Dead Tide's "you can choose any value for
 X", by `x-in-a-cost-equal-to-a-cards-mana-cost-is-0`; Arbiter of Knollridge's, by

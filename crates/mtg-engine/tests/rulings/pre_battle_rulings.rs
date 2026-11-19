@@ -358,7 +358,10 @@ fn attacks_if_able_attacks_a_battle_when_attacking_the_player_costs() {
             }
             t.lands(P0, "Wastes", 4);
             to_combat(&mut t, P0);
-            assert!(legal_attack(&mut t, &[(jugg, Entity::Player(P1))]), "{name}");
+            assert!(
+                legal_attack(&mut t, &[(jugg, Entity::Player(P1))]),
+                "{name}"
+            );
             assert_eq!(
                 legal_attack(&mut t, &[]),
                 !with_battle,
@@ -405,8 +408,8 @@ fn territorial_hellkite_may_attack_a_battle_when_attacking_the_chosen_player_cos
 }
 
 #[test]
-fn boros_battleshaper_its_forced_attacker_may_attack_a_battle_and_its_forced_blocker_blocks_for_one()
-{
+fn boros_battleshaper_its_forced_attacker_may_attack_a_battle_and_its_forced_blocker_blocks_for_one(
+) {
     cr!("508.1b", "508.1d", "509.1a", "509.1c", "310.9c");
     interp!("pre-battle-rulings-give-way-to-the-cr");
     ruling!(
