@@ -7,6 +7,8 @@
 #   RERUN=1 ONLY='mana.rs:1019' scripts/mutants.sh mana   # only the survivors matching
 #   SAMPLE=1 scripts/mutants.sh trigger_timing   # every mutant instead of a 1-in-N sample
 #   FULL=1 scripts/mutants.sh simultaneous       # the same: a full run (every mutant, no shard)
+#   FULL=1 RESUME=1 scripts/mutants.sh simultaneous   # continue an interrupted run of the same
+#                                                # commit (same SAMPLE/FULL), skipping what it tested
 #   TIMEOUT=900 scripts/mutants.sh layers        # a longer test timeout per mutant (default 600 s;
 #                                                # the unmutated mtg-engine suite takes ~290 s)
 #
@@ -128,8 +130,21 @@ PY
     c() { wc -l <"$mo/$1.txt"; }
     echo "== $stem: caught $(c caught) missed $(c missed) timeout $(c timeout) unviable $(c unviable)"
     continue
-  elif ((k > 1)); then
-    args+=(--shard "0/$k" --sharding round-robin)
+  fi
+  ((k > 1)) && args+=(--shard "0/$k" --sharding round-robin)
+  if [[ -n "${RESUME:-}" ]]; then
+    # RESUME=1: continue a run of the same commit that was interrupted (a machine restart).
+    # The mutants it tested are skipped: caught and unviable ones through --iterate (which
+    # reads the earlier results copied into <stem>-resume), missed and timed-out ones
+    # through -E. The results are merged back into <stem>/mutants.out afterwards.
+    prev=$OUT/$stem/mutants.out
+    dest=$OUT/$stem-resume
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    cp -r "$prev" "$dest/mutants.out"
+    args+=(--iterate)
+    while IFS= read -r re; do args+=(-E "$re"); done < <(cat "$prev/missed.txt" "$prev/timeout.txt" 2>/dev/null |
+      python3 -c 'import re, sys; [print("^" + re.escape(l.rstrip("\n")) + "$") for l in sys.stdin if l.strip()]')
   fi
   args+=(-o "$dest")
   echo "== $stem: $n mutants, sample 1/$k: cargo ${args[*]}"
@@ -142,6 +157,31 @@ PY
     exit "$rc"
   fi
   mo=$dest/mutants.out
+  if [[ -n "${RESUME:-}" ]]; then
+    # Merge: each mutant's latest outcome (this run's, else the interrupted run's).
+    python3 - "$prev" "$mo" <<'PY'
+import os, shutil, sys
+prev, new = sys.argv[1:]
+kinds = ["caught", "missed", "timeout", "unviable"]
+def read(d, k):
+    p = os.path.join(d, k + ".txt")
+    return [l for l in open(p).read().splitlines() if l] if os.path.exists(p) else []
+outcome = {}
+for d in (prev, new):
+    for k in kinds:
+        for name in read(d, k):
+            outcome[name] = k
+for k in kinds:
+    with open(os.path.join(prev, k + ".txt"), "w") as f:
+        f.writelines(n + "\n" for n, o in outcome.items() if o == k)
+src = os.path.join(new, "diff")
+if os.path.isdir(src):
+    os.makedirs(os.path.join(prev, "diff"), exist_ok=True)
+    for name in os.listdir(src):
+        shutil.copy(os.path.join(src, name), os.path.join(prev, "diff", name))
+PY
+    mo=$prev
+  fi
   c() { [[ -f "$mo/$1.txt" ]] && wc -l <"$mo/$1.txt" || echo 0; }
   echo "== $stem: caught $(c caught) missed $(c missed) timeout $(c timeout) unviable $(c unviable)"
 done
