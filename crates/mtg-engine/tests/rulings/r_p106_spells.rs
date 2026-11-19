@@ -91,7 +91,7 @@ fn sowing_mycospawns_cast_triggers_resolve_even_if_it_is_countered() {
 
 #[test]
 fn until_it_leaves_exiles_do_nothing_if_the_source_is_already_gone() {
-    cr!("610.3c", "603.4");
+    cr!("610.3b");
     ruling!(
         "Buried in the Garden",
         "If Buried in the Garden leaves the battlefield before its first triggered ability resolves, the target permanent won't be exiled."
@@ -186,7 +186,7 @@ fn prismari_command_with_some_or_all_targets_illegal() {
 
 #[test]
 fn the_grand_evolution_loses_the_counters_of_an_illegal_target() {
-    cr!("601.2d", "608.2b", "714.3b");
+    cr!("601.2d", "608.2b", "714.2b");
     ruling!(
         "Vorinclex // The Grand Evolution",
         "If some of the creatures are illegal targets as the chapter II ability tries to resolve, the original distribution of counters still applies and the counters that would have been put on the illegal targets are lost. They won’t be put instead on a legal target."
@@ -288,7 +288,7 @@ fn copies_of_a_token_with_x_in_its_mana_cost_have_x_zero() {
 
 #[test]
 fn single_target_spells_with_an_illegal_target_do_nothing() {
-    cr!("608.2b", "303.4f");
+    cr!("608.2b", "608.3b");
     ruling!(
         "Gild",
         "If the creature isn't a legal target as Gild tries to resolve, the spell won't resolve and none of its effects will happen. No token will be created."

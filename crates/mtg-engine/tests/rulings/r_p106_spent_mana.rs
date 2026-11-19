@@ -399,6 +399,22 @@ fn elementalists_palette_mana_pays_any_part_of_a_cost_with_x() {
     assert_eq!(pool_total(&t, P0), 0, "paid with the Palette's mana");
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1, "{}", t.dump_log());
+    // Mana Leak's "unless its controller pays {3}" has no {X}: the Palette's mana can't
+    // pay it.
+    let mut t = TestGame::new(2);
+    palette_mana(&mut t, 3);
+    mana(&mut t, P0, ManaType::G, 1);
+    mana(&mut t, P0, ManaType::C, 1);
+    let bears = cast_from_hand(&mut t, P0, "Grizzly Bears", &[]);
+    assert_eq!(pool_total(&t, P0), 3);
+    mana(&mut t, P1, ManaType::U, 1);
+    mana(&mut t, P1, ManaType::C, 1);
+    let leak = t.hand(P1, "Mana Leak");
+    t.cast_with(P1, leak, &[obj(bears)]).unwrap();
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Grizzly Bears"));
+    assert_eq!(pool_total(&t, P0), 3);
 }
 
 #[test]

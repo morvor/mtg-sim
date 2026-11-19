@@ -27,7 +27,7 @@ fn koth_emblem(t: &mut TestGame) {
 
 #[test]
 fn koth_animating_a_mountain_that_just_came_under_your_control() {
-    cr!("302.6", "113.6");
+    cr!("302.6", "508.1a");
     ruling!(
         "Koth of the Hammer",
         "If Koth’s first ability animates a Mountain that came under your control that turn, it will have “summoning sickness” and be unable to attack. It will also be unable to be tapped to activate an ability with the {T} symbol in its cost, such as the Mountain’s mana ability or the ability granted to it by Koth’s emblem."
@@ -48,8 +48,10 @@ fn koth_animating_a_mountain_that_just_came_under_your_control() {
     assert!(!tap_for_mana(&mut t, P0, new, "Add {R}"));
     // The Mountain controlled since the turn began (not a creature) can do both.
     assert!(can_activate_containing(&mut t, P0, old, "deals 1 damage"));
-    // And it can't attack.
+    // And it can't attack (a creature controlled since the turn began can).
+    let bears = t.battlefield(P0, "Grizzly Bears");
     t.set_step(P0, Step::DeclareAttackers);
+    assert!(can_attack(&mut t, bears));
     assert!(!can_attack(&mut t, new));
 }
 
@@ -426,7 +428,7 @@ fn power_four_enters_triggers_count_statics_counters_and_copies() {
 
 #[test]
 fn power_four_enters_triggers_draw_even_if_power_drops_or_the_creature_leaves() {
-    cr!("603.4", "603.10");
+    cr!("603.2", "603.10");
     ruling!(
         "Kiora, Behemoth Beckoner",
         "If the entering creature’s power changes to 3 or less after it has entered the battlefield, you’ll still draw a card."
@@ -497,7 +499,7 @@ const ROWAN: &str = "Rowan, Scholar of Sparks // Will, Scholar of Frost";
 
 #[test]
 fn chandras_middle_ability_checks_the_exiled_card_so_either_face_may_be_cast() {
-    cr!("712.8a", "712.11", "601.3e");
+    cr!("712.8a", "712.11b", "601.3e");
     ruling!(
         "Chandra, Dressed to Kill",
         "Chandra’s second ability checks the characteristics of the card you exiled to see if it’s red. If the card is red, but the spell that card becomes somehow isn’t red, you may still cast it. For example, Rowan, Scholar of Sparks, the front face of a modal double-faced card, is red. Will, Scholar of Frost, the back face of the same card, is blue. In exile, that card is red, so you may cast either face if you exile it with this ability."

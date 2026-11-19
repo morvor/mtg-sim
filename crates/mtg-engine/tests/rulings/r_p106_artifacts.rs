@@ -30,7 +30,7 @@ fn fill_graveyard(t: &mut TestGame, p: PlayerId, n: usize) {
 
 #[test]
 fn the_warring_triad_as_a_noncreature_artifact() {
-    cr!("205.1b", "205.3d", "122.1", "113.6");
+    cr!("205.3d", "122.1", "113.6");
     ruling!(
         "The Warring Triad",
         "If The Warring Triad stops being a creature, it loses the type creature and the creature type God. It continues to be a legendary artifact."
@@ -115,7 +115,7 @@ fn the_warring_triad_losing_all_abilities_still_isnt_a_creature() {
 
 #[test]
 fn izzet_keyrune_animated_another_way_still_loots() {
-    cr!("510.3a", "603.2");
+    cr!("603.2", "510.2");
     ruling!(
         "Izzet Keyrune",
         "If Izzet Keyrune becomes a creature in a way other than its own activated ability, its last ability will still work."
@@ -403,7 +403,7 @@ fn midnight_clocks_twelfth_counter_trigger() {
 
 #[test]
 fn midnight_clock_ticks_in_every_upkeep_once_per_team() {
-    cr!("503.1a", "805.8");
+    cr!("503.1a", "805.4d");
     ruling!(
         "Midnight Clock",
         "Midnight Clock's first triggered ability triggers at the beginning of each upkeep, not just your upkeep. In a Two-Headed Giant game, an ability that triggers at the beginning of each upkeep rather than each player's upkeep triggers only once during each team's upkeep."
@@ -760,7 +760,7 @@ fn ancient_cornucopia_triggers_until_you_gain_life_once() {
 
 #[test]
 fn chromatic_lantern_adds_an_ability_and_keeps_the_rest() {
-    cr!("613.1f", "305.7");
+    cr!("613.1f");
     ruling!(
         "Chromatic Lantern",
         "Lands you control won't lose any other abilities they had. They also won't gain or lose any land types."
@@ -783,7 +783,7 @@ fn chromatic_lantern_adds_an_ability_and_keeps_the_rest() {
 
 #[test]
 fn benders_waterskin_untaps_in_other_players_untap_steps_despite_doesnt_untap() {
-    cr!("502.3", "611.3a");
+    cr!("502.3");
     ruling!(
         "Bender's Waterskin",
         "Some effects state that an artifact doesn't untap during its controller's untap step. These effects won't apply and stop Bender's Waterskin from untapping during another player's untap step."
@@ -922,7 +922,7 @@ fn dragonstorm_globe_doesnt_see_dragons_entering_with_it() {
 
 #[test]
 fn kellogg_controlled_by_someone_else_steals_nothing() {
-    cr!("611.2b", "800.4a");
+    cr!("611.2b");
     ruling!(
         "Kellogg, Dangerous Mind",
         "If you lose control of Kellogg before its last ability resolves, you won't gain control of the target creature at all."
@@ -1038,7 +1038,7 @@ fn crystal_skull_cant_cast_a_historic_card_face_down() {
 
 #[test]
 fn burdened_aerialist_gaining_flying_after_blocks_stays_blocked() {
-    cr!("509.1h", "506.4");
+    cr!("509.1h", "702.9b");
     ruling!(
         "Burdened Aerialist",
         "If a blocked creature gains flying after blockers are declared, it won't cause that creature to become unblocked, even if the blocking creature doesn't have flying or reach."
@@ -1064,7 +1064,7 @@ fn burdened_aerialist_gaining_flying_after_blocks_stays_blocked() {
 
 #[test]
 fn rankle_and_torbrans_extra_damage_comes_from_the_original_source() {
-    cr!("614.1a", "120.3");
+    cr!("614.1a");
     ruling!(
         "Rankle and Torbran",
         "The additional 2 damage is dealt by the same source as the original source of damage. The damage isn’t dealt by Rankle and Torbran unless Rankle and Torbran is the original source of damage."
