@@ -442,7 +442,12 @@ fn player_clause_as(c: &str) -> Option<Clause> {
         if let Some((obj, num)) = head.rsplit_once(' ') {
             if let Some((Value::Const(k), "")) = parse_number(num) {
                 if obj.starts_with("a ") || obj.starts_with("an ") {
-                    return Some(Clause::new(format!("{subj} {verb} {obj}"), Cmp::Ge, k, negated));
+                    return Some(Clause::new(
+                        format!("{subj} {verb} {obj}"),
+                        Cmp::Ge,
+                        k,
+                        negated,
+                    ));
                 }
             }
         }
@@ -742,14 +747,17 @@ fn trigger_of(text: &str) -> Option<TriggerCond> {
         Some((c, x, y))
     };
     // A card put into a hand from the battlefield is returned there.
-    let (cond, _, _) = parse(text).or_else(about_source).or_else(about_source_creature).or_else(|| {
-        let i = text.find(" is put into ")?;
-        let r = &text[i + " is put into ".len()..];
-        if !r.contains("hand from ") {
-            return None;
-        }
-        parse(&format!("{} is returned to {r}", &text[..i]))
-    })?;
+    let (cond, _, _) = parse(text)
+        .or_else(about_source)
+        .or_else(about_source_creature)
+        .or_else(|| {
+            let i = text.find(" is put into ")?;
+            let r = &text[i + " is put into ".len()..];
+            if !r.contains("hand from ") {
+                return None;
+            }
+            parse(&format!("{} is returned to {r}", &text[..i]))
+        })?;
     if matches!(cond, TriggerCond::Custom(_)) {
         return None;
     }
@@ -1003,10 +1011,14 @@ pub fn history_condition(c: &str) -> Option<Condition> {
 fn team_condition(cond: Condition) -> Option<Condition> {
     fn teamed(t: &TriggerCond) -> Option<TriggerCond> {
         let mate = match t {
-            TriggerCond::GainsLife { who: PlayerRel::You } => TriggerCond::GainsLife {
+            TriggerCond::GainsLife {
+                who: PlayerRel::You,
+            } => TriggerCond::GainsLife {
                 who: PlayerRel::Teammate,
             },
-            TriggerCond::LosesLife { who: PlayerRel::You } => TriggerCond::LosesLife {
+            TriggerCond::LosesLife {
+                who: PlayerRel::You,
+            } => TriggerCond::LosesLife {
                 who: PlayerRel::Teammate,
             },
             _ => return None,
@@ -1014,9 +1026,11 @@ fn team_condition(cond: Condition) -> Option<Condition> {
         Some(TriggerCond::AnyOf(vec![t.clone(), mate]))
     }
     Some(match cond {
-        Condition::Compare(Value::EventsThisTurn(t, Tally::Events), cmp, n) => {
-            Condition::Compare(Value::EventsThisTurn(Box::new(teamed(&t)?), Tally::Events), cmp, n)
-        }
+        Condition::Compare(Value::EventsThisTurn(t, Tally::Events), cmp, n) => Condition::Compare(
+            Value::EventsThisTurn(Box::new(teamed(&t)?), Tally::Events),
+            cmp,
+            n,
+        ),
         Condition::Not(c) => Condition::Not(Box::new(team_condition(*c)?)),
         _ => return None,
     })
@@ -1337,7 +1351,10 @@ fn cast_from(w: &Whose, z: ZoneKind, yours: bool) -> Condition {
     status(
         w,
         Condition::CastFrom(z),
-        owned(Filter::Custom(format!("{}{z:?}", ch::CAST_FROM).into()), yours),
+        owned(
+            Filter::Custom(format!("{}{z:?}", ch::CAST_FROM).into()),
+            yours,
+        ),
     )
 }
 
@@ -1391,9 +1408,10 @@ fn cast_status_clause(c: &str, b: &mut Option<&mut Builder>) -> Option<Condition
             let w = whose(word, b.as_deref_mut())?;
             let cond = match rest.trim() {
                 "" => was_cast(&w),
-                "from anywhere other than your hand" => {
-                    Condition::And(vec![was_cast(&w), not(cast_from(&w, ZoneKind::Hand, false))])
-                }
+                "from anywhere other than your hand" => Condition::And(vec![
+                    was_cast(&w),
+                    not(cast_from(&w, ZoneKind::Hand, false)),
+                ]),
                 z => {
                     let z = z.strip_prefix("from ")?;
                     cast_from(&w, zone_phrase(z)?, yours(z))
@@ -1928,6 +1946,21 @@ fn two_conditional_instructions(l: &str, b: &mut Builder) -> Option<Effect> {
         let saved = (b.it.clone(), b.it_player.clone());
         if let Some(e2) = crate::oracle::effects::parse_clause(&x2_full, b) {
             if b.targets.len() == after1 {
+                // "You gain X life if ... and X life if ...": one life gain of the total,
+                // a single event (Dawnglow Infusion ruling, CR 119.9).
+                if let (Effect::GainLife { who: w1, n: n1 }, Effect::GainLife { who: w2, n: n2 }) =
+                    (&e1, &e2)
+                {
+                    if format!("{w1:?}") == format!("{w2:?}") {
+                        let part = |c: Condition, n: &Value| {
+                            Value::If(Box::new(c), Box::new(n.clone()), Box::new(Value::Const(0)))
+                        };
+                        return Some(Effect::GainLife {
+                            who: w1.clone(),
+                            n: Value::Sum(vec![part(cond1, n1), part(cond2, n2)]),
+                        });
+                    }
+                }
                 return Some(Effect::Seq(vec![
                     Effect::If {
                         cond: cond1,

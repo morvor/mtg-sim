@@ -467,6 +467,21 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   perform one combined action (one `move_objects` call / one event batch). Keep per-player sequencing for
   bodies that the rules process separately (608.2f).
 - Size: M-L
+- Residual (found in the review of rulings-P149, Nov 19; the two-phase executor, `simultaneous.rs`, now does
+  the above for moves, sacrifices, discards, searches, damage, life, tokens and control changes): a dig's
+  "take" step is performed for each player in turn, its reveal and its move together. Explore the Vastlands
+  ("Each player looks at the top five cards of their library and may reveal a land card and/or an instant or
+  sorcery card from among them. Each player puts the cards they revealed this way into their hand and the
+  rest on the bottom of their library in a random order.") compiles the reveal and the "puts ... into their
+  hand" of the next sentence into one `DigStep::Take`, which the executor can't plan, so a scratch test
+  found the active player's two revealed cards already in their hand when the next player chose (CR 101.4:
+  all reveal, in turn order, then the cards are put into hands together). Its ruling (the order of the
+  reveals, each player knowing the earlier ones) holds and is cited
+  (`tests/rulings/r_p149_payments.rs`, `explore_the_vastlands_players_choose_in_turn_order_seeing_earlier_reveals`).
+  No observable difference was found: the instruction's events are one batch either way, and the revealed
+  cards are known to the later players anyway. Fix: plan `DigStep::Take` in `simultaneous.rs` (choose and
+  reveal for each player in turn, then move the chosen cards together, as `Plan::Search` does), or compile
+  the reveal as its own step that leaves the cards in place (`dig_grammar.rs`). Size S-M.
 
 ### G25. "Shuffle ... into their library" doesn't shuffle when there's nothing to shuffle in
 - Rules: CR 701.24c, 701.24d (the library is shuffled even if the set of objects is empty or they aren't
