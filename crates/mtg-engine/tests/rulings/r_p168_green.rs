@@ -37,7 +37,10 @@ fn shuffles(t: &TestGame, p: PlayerId) -> usize {
 fn cast_new(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) -> ObjectId {
     give_mana_for(t, p, name);
     let c = t.hand(p, name);
-    t.cast(p, c).targets(targets).go()
+    for e in targets {
+        t.answer_targets(p, &[*e]);
+    }
+    t.cast(p, c).go()
 }
 
 #[test]
@@ -856,7 +859,7 @@ fn hunt_the_hunter_needs_both_targets() {
     let hunt = t.hand(P0, "Hunt the Hunter");
     assert!(t.cast(P0, hunt).target(bears).try_go().is_err());
     let theirs = t.battlefield(P1, "Grizzly Bears");
-    assert!(t.cast(P0, hunt).targets(&[obj(bears), obj(theirs)]).try_go().is_ok());
+    assert!(t.cast(P0, hunt).target(bears).target(theirs).try_go().is_ok());
 }
 
 #[test]

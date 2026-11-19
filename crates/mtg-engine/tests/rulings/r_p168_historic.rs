@@ -31,8 +31,11 @@ fn pl(p: PlayerId) -> Entity {
 fn cast_new(t: &mut TestGame, p: PlayerId, name: &str, targets: &[Entity]) -> ObjectId {
     give_mana_for(t, p, name);
     let c = t.hand(p, name);
+    for e in targets {
+        t.answer_targets(p, &[*e]);
+    }
     t.g.turn.priority = Some(p);
-    t.cast(p, c).targets(targets).go()
+    t.cast(p, c).go()
 }
 
 /// The names of the objects among `es`.

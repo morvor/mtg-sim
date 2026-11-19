@@ -1277,11 +1277,13 @@ impl Renderer<'_> {
             // "each other permanent with the same name as that permanent": other than
             // the target just named.
             // "it gets +1/+1 for each other creature you control": other than "it".
+            // "Each legendary creature you control gets +1/+1 for each other legendary
+            // creature you control": other than each affected object.
             Filter::In(s)
                 if matches!(
                     s.as_ref(),
                     Sel::Target(_) | Sel::TriggerObject | Sel::AttachedTo
-                ) =>
+                ) || matches!(s.as_ref(), Sel::Var(v) if *v == crate::ability::vars::AFFECTED) =>
             {
                 np.other = true
             }
