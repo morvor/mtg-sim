@@ -156,8 +156,17 @@ fn casts_chosen_color(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
 /// paying its mana cost" (CR 607.2a, 607.3).
 fn linked_exile_effects(l: &str, b: &mut Builder) -> Option<Effect> {
     const V: Var = vars::USER + 80;
+    // CR 607.2a: "the exiled card" is a card exiled with this object that is still in
+    // exile, not one a previous use of the ability returned (now linked as put onto the
+    // battlefield with it, CR 607.2c, or a new object elsewhere, CR 400.7).
+    let exiled = || {
+        Sel::All(Filter::And(vec![
+            Filter::In(Box::new(Sel::Linked)),
+            Filter::InZone(ZoneKind::Exile),
+        ]))
+    };
     let each = |to: Destination| Effect::ForEach {
-        sel: Sel::Linked,
+        sel: exiled(),
         var: V,
         effect: Box::new(Effect::Move {
             what: Sel::Var(V),
@@ -188,7 +197,7 @@ fn linked_exile_effects(l: &str, b: &mut Builder) -> Option<Effect> {
         // Spell Queller: the owner casts it as the ability resolves (CR 608.2g).
         "the exiled card's owner may cast that card without paying its mana cost" => {
             Some(Effect::ForEach {
-                sel: Sel::Linked,
+                sel: exiled(),
                 var: V,
                 effect: Box::new(Effect::CastCard {
                     who: PlayerRef::OwnerOf(Box::new(Sel::Var(V))),

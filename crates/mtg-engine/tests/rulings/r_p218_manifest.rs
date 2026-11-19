@@ -446,3 +446,24 @@ fn a_manifested_double_faced_card_cant_transform_and_turns_up_front_face() {
     assert_eq!(t.obj(m).chars.name.as_str(), "Delver of Secrets");
     assert_eq!(t.pt(m), (1, 1));
 }
+
+#[test]
+fn valgavoths_onslaught_manifests_one_at_a_time_after_an_each_player_spell() {
+    cr!("701.40e", "603.2c");
+    ruling!(
+        "Valgavoth's Onslaught",
+        "an ability that triggers \"Whenever one or more creatures enter\" would trigger once for each event"
+    );
+    supported("Exhume");
+    supported("Valgavoth's Onslaught");
+    // Exhume ("Each player puts a creature card from their graveyard onto the
+    // battlefield.") resolves first, with nothing to return; Valgavoth's Onslaught then
+    // still manifests its cards in separate events.
+    let mut t = TestGame::new(2);
+    let w = watcher(&mut t, P0);
+    cast_resolve(&mut t, "Exhume", None, &[]);
+    assert_eq!(t.g.batch_hold, 0);
+    cast_resolve(&mut t, "Valgavoth's Onslaught", Some(2), &[]);
+    assert_eq!(face_down(&t, P0).len(), 2);
+    assert_eq!(triggered_from(&t, w), 2);
+}

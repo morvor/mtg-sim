@@ -40,10 +40,7 @@ fn any_player_may_have_damage(l: &str, b: &mut Builder) -> Option<Effect> {
             amount: n,
             to: Sel::Players(PlayerRef::Iterated),
         },
-        Effect::StoreValue {
-            var: CHOSE,
-            value: Value::c(1),
-        },
+        chose(),
     ]);
     Some(Effect::Seq(vec![
         Effect::StoreValue {
@@ -61,6 +58,21 @@ fn any_player_may_have_damage(l: &str, b: &mut Builder) -> Option<Effect> {
             }),
         },
     ]))
+}
+
+/// Notes that a player chose to be dealt the damage. The note reads the flag it sets ("if
+/// no one has yet"), so every player's note is one shared record, not only that player's
+/// own view of the instruction (`simultaneous.rs`): a choice made by an earlier player
+/// still counts when a later one declines.
+pub fn chose() -> Effect {
+    Effect::If {
+        cond: Condition::Compare(Value::Var(CHOSE), Cmp::Eq, Value::c(0)),
+        then: Box::new(Effect::StoreValue {
+            var: CHOSE,
+            value: Value::c(1),
+        }),
+        otherwise: Box::new(Effect::Noop),
+    }
 }
 
 inventory::submit! { EffectPattern { name: "any player may have ~ deal N damage to them", priority: 100, parse: any_player_may_have_damage } }

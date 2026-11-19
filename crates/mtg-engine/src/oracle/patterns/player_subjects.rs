@@ -1105,8 +1105,10 @@ fn subject_effect(subj: Subject, pred: &str, b: &mut Builder) -> Option<Effect> 
                 var: OUTER_X,
                 value: Value::X,
             });
-            // CR 101.4: they decide in APNAP order, then those who accepted do it.
+            // CR 101.4: they decide in APNAP order, then those who accepted do it. A
+            // player who can't search libraries can't choose to search (Stranglehold).
             let mut v: Vec<Effect> = pre.into_iter().collect();
+            let guard = |o: Effect| guard(crate::search_rules::guard_search_opt_in(&e, o));
             v.extend(opt_in(who, &guard));
             v.push(Effect::ForEachPlayer {
                 who: PlayerRef::Var(ACCEPTED),

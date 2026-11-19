@@ -96,6 +96,29 @@ pub const ITERATED_CAN_SEARCH: &str = "search: the player can search libraries";
 /// ability had you search your library, and it hasn't been shuffled since.
 pub const YOU_SEARCHED_THIS_WAY: &str = "search: you searched your library this way";
 
+/// The choice to take part in "each [player] may search their library ..." (`opt_in`, the
+/// iterated player's "may"), offered only to a player who can search libraries
+/// ([`ITERATED_CAN_SEARCH`]): one who can't can't choose to search, so they don't shuffle
+/// either (Stranglehold's ruling; CR 701.23, 118.12b). Other choices are returned as they are.
+pub fn guard_search_opt_in(instruction: &Effect, opt_in: Effect) -> Effect {
+    fn searches(e: &Effect) -> bool {
+        match e {
+            Effect::Search { .. } => true,
+            Effect::Seq(v) => v.first().is_some_and(searches),
+            Effect::AsPlayer { effect, .. } | Effect::May { effect, .. } => searches(effect),
+            _ => false,
+        }
+    }
+    if !searches(instruction) {
+        return opt_in;
+    }
+    Effect::If {
+        cond: Condition::Custom(ITERATED_CAN_SEARCH.into()),
+        then: Box::new(opt_in),
+        otherwise: Box::new(Effect::Noop),
+    }
+}
+
 pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
     if name == YOU_SEARCHED_THIS_WAY {
         let p = ctx.controller;

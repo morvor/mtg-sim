@@ -85,3 +85,38 @@ fn colorless_mana_symbols_still_need_colorless_mana() {
     t.resolve();
     assert_eq!(t.named_on_battlefield("Thought-Knot Seer").len(), 1);
 }
+
+#[test]
+fn an_opponents_cards_found_in_an_each_player_search_are_exiled() {
+    cr!("701.23i");
+    ruling!(
+        "Opposition Agent",
+        "Any other effects the spell or ability has will still apply."
+    );
+    // Natural Balance: "Each player who controls four or fewer lands may search their
+    // library for up to X basic land cards and put them onto the battlefield, ..." Both
+    // players search at once; the opponent's lands are exiled instead, P0's own enter.
+    let mut t = TestGame::new(2);
+    t.g.search_finds_by_default = true;
+    t.battlefield(P0, "Opposition Agent");
+    t.lands(P0, "Forest", 4);
+    let mine = t.library_top(P0, "Forest");
+    t.lands(P1, "Plains", 3);
+    let theirs = [t.library_top(P1, "Plains"), t.library_top(P1, "Plains")];
+    t.answer_yes(P0, true);
+    t.answer_yes(P1, true);
+    let spell = t.hand(P0, "Natural Balance");
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(mine)));
+    for c in theirs {
+        assert_eq!(t.zone(t.g.current(c)), Zone::Exile);
+    }
+    let lands = |t: &TestGame, p| {
+        t.g.permanents_controlled_by(p)
+            .iter()
+            .filter(|o| t.g.obj(**o).chars.is(mtg_engine::types::CardType::Land))
+            .count()
+    };
+    assert_eq!(lands(&t, P1), 3);
+}

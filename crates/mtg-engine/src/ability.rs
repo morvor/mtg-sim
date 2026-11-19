@@ -4314,9 +4314,13 @@ pub enum TriggerCond {
         attacker: Filter,
         blocker: Filter,
     },
-    /// "Whenever [attacker] becomes blocked by N or more creatures" (CR 509.3e).
+    /// "Whenever [attacker] becomes blocked by N or more [blockers]" (CR 509.3e): as
+    /// blockers are declared, if at least N of its blockers match `blocker`, and when an
+    /// effect adds a matching blocker that brings their number to N. "Becomes blocked by
+    /// one or more colorless creatures" (Hedron Blade) is N = 1: once, not once for each.
     BlockedByN {
         attacker: Filter,
+        blocker: Filter,
         n: u32,
     },
     /// "Whenever [source filter] deals (combat) damage to [recipient]".
