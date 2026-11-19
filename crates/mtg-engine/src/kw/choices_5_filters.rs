@@ -50,6 +50,12 @@ pub const NOT_THAT_SPELLS_TARGET_PLAYER: &str = "choices5:not the player that sp
 /// spell could target, and copy that spell, the copy targeting it (CR 707.10c).
 pub const COPY_TARGETING_PLAYER_OR_PERMANENT: &str =
     "choices5:choose that player or a permanent they control; copy that spell targeting it";
+/// `Effect::Custom` name: after [`COPY_TARGETING_PLAYER_OR_PERMANENT`] for each of the
+/// players, the copies it made, which are put onto the stack at the same time, are put
+/// there in the order their controller chooses (CR 405.3).
+pub const ORDER_COPIES_MADE: &str = "choices5:order the copies made for each player";
+/// The copies [`COPY_TARGETING_PLAYER_OR_PERMANENT`] made, over the players.
+pub const COPIES_MADE: crate::ability::Var = crate::ability::vars::USER + 9544;
 
 /// `Condition::Custom` name: the player being iterated over is a defending player (CR
 /// 506.2, 802.2: with several, each of them).
@@ -124,9 +130,26 @@ impl KeywordRules for Choices5Filters {
             let Some(t) = pick.first().copied().or(cands.first().copied()) else {
                 return true;
             };
-            if crate::copy_rules::copy_with_target(g, spell, ctx.controller, vec![t]).is_some() {
-                crate::copy::additional_copies(g, spell, ctx.controller);
+            let copy = crate::copy_rules::copy_with_target(g, spell, ctx.controller, vec![t]);
+            if let Some(copy) = copy {
+                let mut made = ctx.vars.get(&COPIES_MADE).cloned().unwrap_or_default();
+                made.push(Entity::Object(copy));
+                made.extend(
+                    crate::copy::additional_copies(g, spell, ctx.controller)
+                        .into_iter()
+                        .map(Entity::Object),
+                );
+                ctx.set_var(COPIES_MADE, made);
             }
+            return true;
+        }
+        if name == ORDER_COPIES_MADE {
+            let copies: Vec<ObjectId> = ctx
+                .vars
+                .get(&COPIES_MADE)
+                .map(|v| v.iter().filter_map(|e| e.object()).collect())
+                .unwrap_or_default();
+            crate::copy::order_copies(g, ctx.controller, &copies);
             return true;
         }
         if name == CHOOSE_TYPE_SHARED_BY_CRAFT_MATERIALS {

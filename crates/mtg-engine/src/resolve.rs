@@ -215,12 +215,25 @@ impl Game {
             Effect::ForEach { sel, var, effect } => {
                 let items = self.resolve_sel(sel, ctx);
                 let stack_before = self.stack.len();
-                // CR 608.2f: an action on several objects happens to all of them at once.
-                crate::simultaneous::for_each_object(self, items, *var, effect, ctx);
                 // "For each of those creatures, copy that spell" (Feather, Radiant
                 // Arbiter): the copies are put on the stack at once, in the order their
-                // controller chooses (CR 405.3).
-                if matches!(**effect, Effect::CopySpellRetargeted { .. }) {
+                // controller chooses (CR 405.3), all of them together: the copies an
+                // effect adds to each one's too (Twinning Staff), which the copy
+                // instruction leaves to this.
+                let copies_together = matches!(**effect, Effect::CopySpellRetargeted { .. });
+                let marker = crate::copy::ORDERED_BY_ENCLOSING;
+                let outer = copies_together.then(|| ctx.vars.insert(marker, vec![]));
+                // CR 608.2f: an action on several objects happens to all of them at once.
+                crate::simultaneous::for_each_object(self, items, *var, effect, ctx);
+                if let Some(outer) = outer {
+                    match outer {
+                        Some(v) => {
+                            ctx.vars.insert(marker, v);
+                        }
+                        None => {
+                            ctx.vars.remove(&marker);
+                        }
+                    }
                     let copies: Vec<ObjectId> = self.stack[stack_before.min(self.stack.len())..]
                         .iter()
                         .copied()
@@ -1701,22 +1714,28 @@ impl Game {
             } => {
                 let targets = target.as_ref().map(|t| self.resolve_sel(t, ctx));
                 for o in self.resolve_objects(what, ctx) {
-                    let made = match &targets {
+                    let mut made: Vec<ObjectId> = match &targets {
                         Some(ts) => {
                             crate::copy_rules::copy_with_target(self, o, ctx.controller, ts.clone())
                                 .into_iter()
-                                .count()
+                                .collect()
                         }
                         None => crate::copy_rules::copy_for_each_target(
                             self,
                             o,
                             ctx.controller,
                             among.as_ref().map(|f| (f, &*ctx)),
-                        )
-                        .len(),
+                        ),
                     };
-                    if made > 0 {
-                        crate::copy::additional_copies(self, o, ctx.controller);
+                    if !made.is_empty() {
+                        // Copies an effect adds are put onto the stack with these at the
+                        // same time, all in the order their controller chooses (CR 405.3,
+                        // 707.10d): asked once, here, unless an enclosing "for each"
+                        // orders them with its other copies.
+                        made.extend(crate::copy::additional_copies(self, o, ctx.controller));
+                        if !ctx.vars.contains_key(&crate::copy::ORDERED_BY_ENCLOSING) {
+                            crate::copy::order_copies(self, ctx.controller, &made);
+                        }
                     }
                 }
             }

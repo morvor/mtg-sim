@@ -152,3 +152,56 @@ fn copies_are_put_onto_the_stack_even_though_spells_cant_be_cast() {
     t.resolve_all();
     assert!(snakes(&t, P0) > before);
 }
+
+#[test]
+fn the_upkeep_copy_and_an_added_copy_are_ordered_by_their_controller() {
+    // Twinning Staff ("If you would copy a spell one or more times, instead copy it that
+    // many times plus an additional time. You may choose new targets for the additional
+    // copy.") adds a copy to epic's: the two are put onto the stack at the same time, in
+    // the order their controller chooses (CR 405.3).
+    cr!("702.50a", "405.3");
+    assert_supported("Twinning Staff");
+    for order in [vec![0, 1], vec![1, 0]] {
+        let def = with_cost(
+            custom_card(
+                "Eternal Embers",
+                "Sorcery",
+                None,
+                "Eternal Embers deals 2 damage to any target.\nEpic",
+            ),
+            "{R}",
+        );
+        let mut t = TestGame::new(3);
+        t.lands(P0, "Mountain", 1);
+        let embers = t.custom(P0, def, object::Zone::Hand(P0));
+        t.cast(P0, embers).target(P1).go();
+        t.resolve_all();
+        assert_eq!(t.life(P1), 18);
+        t.battlefield(P0, "Twinning Staff");
+        // At P0's next upkeep: epic's copy keeps its target (P1); the additional copy
+        // targets P2.
+        t.answer_yes(P0, false);
+        t.answer_yes(P0, true);
+        t.answer_targets(P0, &[Entity::Player(P2)]);
+        t.answer(P0, DecisionKind::Order, Answer::Indices(order.clone()));
+        t.advance_to(P0, Step::Upkeep);
+        t.settle();
+        let from = t.asked().len();
+        t.resolve(); // the delayed trigger: the copies
+        let orders = t.asked()[from..]
+            .iter()
+            .filter(|(p, d)| *p == P0 && matches!(d, Decision::Order { .. }))
+            .count();
+        assert_eq!(orders, 1, "{order:?}");
+        // The copy listed first (epic's) is put onto the stack first: the other one
+        // resolves first.
+        t.resolve();
+        if order[0] == 0 {
+            assert_eq!((t.life(P1), t.life(P2)), (18, 18), "{order:?}");
+        } else {
+            assert_eq!((t.life(P1), t.life(P2)), (16, 20), "{order:?}");
+        }
+        t.resolve_all();
+        assert_eq!((t.life(P1), t.life(P2)), (16, 18), "{order:?}");
+    }
+}

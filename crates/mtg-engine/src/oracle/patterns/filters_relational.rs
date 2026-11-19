@@ -818,25 +818,18 @@ fn shares_with<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
         // A permanent type (artifact, battle, creature, enchantment, land, planeswalker)
         // both have.
         3 => Filter::Or(
-            [
-                CardType::Artifact,
-                CardType::Battle,
-                CardType::Creature,
-                CardType::Enchantment,
-                CardType::Land,
-                CardType::Planeswalker,
-            ]
-            .into_iter()
-            .map(|t| {
-                Filter::and(vec![
-                    Filter::Type(t),
-                    Filter::SharesCardType(Box::new(Sel::All(Filter::and(vec![
+            CardType::PERMANENT_TYPES
+                .into_iter()
+                .map(|t| {
+                    Filter::and(vec![
                         Filter::Type(t),
-                        Filter::In(sel.clone()),
-                    ])))),
-                ])
-            })
-            .collect(),
+                        Filter::SharesCardType(Box::new(Sel::All(Filter::and(vec![
+                            Filter::Type(t),
+                            Filter::In(sel.clone()),
+                        ])))),
+                    ])
+                })
+                .collect(),
         ),
         _ => Filter::SharesColor(sel),
     };

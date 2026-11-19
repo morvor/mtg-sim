@@ -224,6 +224,47 @@ fn zevlor_copies_check_their_targets_and_survive_a_countered_original() {
     assert_eq!((t.life(P1), t.life(P2)), (20, 17));
 }
 
+#[test]
+fn zevlor_copies_go_on_the_stack_in_the_order_its_controller_chooses() {
+    // The copies, one for each other opponent, are put onto the stack at the same time:
+    // their controller orders them (CR 405.3). Before, they went on in the order they
+    // were made (P2's, then P3's), with no choice.
+    cr!("405.3", "707.10e");
+    for order in [vec![0, 1], vec![1, 0]] {
+        let mut t = TestGame::new(4);
+        let z = t.battlefield(P0, "Zevlor, Elturel Exile");
+        t.lands(P0, "Wastes", 2);
+        t.activate(P0, z, 0, &[]).unwrap();
+        t.resolve_all();
+        // P2's copy targets P2, P3's targets P3 (each opponent chosen in turn order).
+        t.answer_choose(P0, &[pl(P2)]);
+        t.answer_choose(P0, &[pl(P3)]);
+        let strike = cast_x(&mut t, P0, "Lightning Strike", None, &[pl(P1)]);
+        let from = t.asked().len();
+        t.answer(P0, DecisionKind::Order, Answer::Indices(order.clone()));
+        t.resolve();
+        let orders = asked_since(&t, from)
+            .iter()
+            .filter(|(p, d)| *p == P0 && matches!(d, Decision::Order { .. }))
+            .count();
+        assert_eq!(orders, 1, "{order:?}");
+        assert_eq!(t.stack_len(), 3, "{order:?}");
+        assert_eq!(t.g.stack[0], strike, "{order:?}");
+        // The first in the chosen order is put on the stack first: the other one is on
+        // top and resolves first.
+        let (first, last) = if order[0] == 0 { (P2, P3) } else { (P3, P2) };
+        t.resolve();
+        assert_eq!(t.life(last), 17, "{order:?}: the top copy resolves first");
+        assert_eq!(t.life(first), 20, "{order:?}");
+        t.resolve_all();
+        assert_eq!(
+            (t.life(P1), t.life(P2), t.life(P3)),
+            (17, 17, 17),
+            "{order:?}"
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Nalia de'Arnise and full parties
 // ---------------------------------------------------------------------------
