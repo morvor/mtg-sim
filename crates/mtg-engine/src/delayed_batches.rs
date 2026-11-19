@@ -79,6 +79,15 @@ pub fn triggered_by_batch(
         }
         for grp in groups {
             let mut info = grp[0].clone();
+            // The opponent the group is for (`that-opponent-fixed-as-it-triggers`).
+            let grouped_by = match per {
+                BatchPer::OtherController => grp[0].other,
+                BatchPer::ObjectController => grp[0].object,
+                _ => None,
+            };
+            if let Some(o) = grouped_by {
+                info.player = Some(g.obj(o).controller);
+            }
             info.amount = grp.iter().map(|i| i.amount).sum();
             if grp.iter().all(|i| i.amount == 0) {
                 info.amount = grp.len() as i32;

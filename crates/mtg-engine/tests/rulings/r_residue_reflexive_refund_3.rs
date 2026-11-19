@@ -107,7 +107,7 @@ fn coveted_jewel_triggers_after_blocks_if_any_attacker_is_unblocked() {
 
 #[test]
 fn coveted_jewel_ignores_creatures_attacking_a_planeswalker() {
-    cr!("506.3c", "508.1b");
+    cr!("508.1b");
     ruling!(
         "Coveted Jewel",
         "A creature attacking a planeswalker you control won't cause Coveted Jewel's last ability to trigger."
@@ -124,6 +124,7 @@ fn coveted_jewel_ignores_creatures_attacking_a_planeswalker() {
 #[test]
 fn coveted_jewel_triggers_for_each_opponent_attacking_you() {
     cr!("805.10a", "603.3b", "810.7");
+    interp!("one-or-more-an-opponent-controls-per-opponent");
     ruling!(
         "Coveted Jewel",
         "If more than one opponent attacks you at the same time, Coveted Jewel's last ability triggers for each of them. You choose which player ends up with Coveted Jewel, but each of them draws three cards and has a chance to activate its mana ability."
@@ -174,6 +175,49 @@ fn coveted_jewel_triggers_for_each_opponent_attacking_you() {
         holders.push(bottom_player);
     }
     assert_ne!(holders[0], holders[1], "P0 chooses who ends up with it");
+}
+
+#[test]
+fn coveted_jewel_that_player_is_the_attacking_opponent_after_a_control_change() {
+    cr!("506.4", "603.2");
+    interp!("that-opponent-fixed-as-it-triggers");
+    // P1's unblocked Bears trigger the Jewel; in response P0 gains control of them (they
+    // leave combat, CR 506.4). "That player" is still P1, the opponent whose creature
+    // attacked: P1 draws three cards and gains control of the Jewel.
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P1, "Grizzly Bears");
+    let jewel = jewel_combat(&mut t, &[(a, Entity::Player(P0))], &[]);
+    assert_eq!(triggers_on_stack(&t, "aren't blocked"), 1);
+    let hands = (t.hand_size(P0), t.hand_size(P1));
+    crate::r_p015_common::gain_control(&mut t, P0, a);
+    assert_eq!(t.obj_now(a).controller, P0);
+    assert!(!t.g.is_attacking(t.g.current(a)), "removed from combat");
+    t.resolve_all();
+    assert_eq!(t.obj_now(jewel).controller, P1);
+    assert_eq!((t.hand_size(P0), t.hand_size(P1)), (hands.0, hands.1 + 3));
+}
+
+#[test]
+fn norns_decree_that_opponent_is_the_damaging_creatures_controller_as_it_triggered() {
+    cr!("510.2", "603.2");
+    interp!("that-opponent-fixed-as-it-triggers");
+    // Norn's Decree: "Whenever one or more creatures an opponent controls deal combat
+    // damage to you, that opponent gets a poison counter." P0 gains control of P1's Bears
+    // after their combat damage: P1 still gets the poison counter, not P0.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Norn's Decree");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P1, Step::BeginningOfCombat);
+    attack_with(&mut t, &[(bears, Entity::Player(P0))]);
+    t.resolve_all();
+    t.advance_to(P1, Step::CombatDamage);
+    t.settle();
+    assert_eq!(t.life(P0), 18);
+    assert_eq!(triggers_on_stack(&t, "poison counter"), 1);
+    crate::r_p015_common::gain_control(&mut t, P0, bears);
+    t.resolve_all();
+    assert_eq!(t.g.player(P1).poison(), 1);
+    assert_eq!(t.g.player(P0).poison(), 0);
 }
 
 // --- Indulge // Excess --------------------------------------------------------------------
@@ -349,7 +393,9 @@ fn jaya_ballards_mana_ability_is_a_loyalty_ability() {
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let jaya = t.battlefield(P0, "Jaya Ballard");
+    let loyalty_before = t.counters(jaya, counters::LOYALTY);
     t.activate(P0, jaya, 0, &[]).unwrap();
+    assert_eq!(t.counters(jaya, counters::LOYALTY), loyalty_before + 1);
     assert_eq!(t.stack_len(), 1, "it uses the stack");
     assert_eq!(pool_of(&t, P0, ManaType::R), 0);
     t.resolve();
@@ -401,7 +447,7 @@ fn jayas_emblem_only_lets_you_cast_them() {
 
 #[test]
 fn drain_power_target_player_chooses_a_variable_amount() {
-    cr!("605.3a", "106.4");
+    cr!("602.2b", "106.4");
     ruling!(
         "Drain Power",
         "If a land can draw a variable amount of mana, the target player (not the player of this spell) chooses how much to draw."
@@ -431,7 +477,7 @@ fn drain_power_target_player_chooses_a_variable_amount() {
 
 #[test]
 fn culmination_of_studies_counts_a_card_for_each_quality() {
-    cr!("105.2", "120.2");
+    cr!("105.2b", "120.2b");
     ruling!(
         "Culmination of Studies",
         "If an exiled card is both blue and red, Culmination of Studies deals 1 damage to each opponent and you draw a card."
@@ -479,7 +525,7 @@ fn culmination_of_studies_counts_a_card_for_each_quality() {
 
 #[test]
 fn teferis_emblem_with_the_chain_veil() {
-    cr!("606.3", "606.6");
+    cr!("606.3", "114.4");
     ruling!(
         "Teferi, Temporal Archmage",
         "If you control The Chain Veil (from the Magic 2015 core set) and its activated ability has resolved, and you also control Teferi’s emblem, for each planeswalker you control, you can activate one of its loyalty abilities during that turn any time you could cast an instant, and then you may activate a loyalty ability again that turn (choosing the same loyalty ability or a different one) any time you could cast an instant."
@@ -521,7 +567,7 @@ fn teferis_emblem_with_the_chain_veil() {
 
 #[test]
 fn urza_construct_counts_itself_and_the_exiled_card_stays_in_exile() {
-    cr!("111.10", "406.3", "611.2a");
+    cr!("611.3a", "406.1", "611.2a");
     ruling!(
         "Urza, Lord High Artificer",
         "The token created by Urza's first ability will count itself, so it'll be at least 1/1."
@@ -706,7 +752,7 @@ fn web_watch_mana_pays_for_any_spell_cast_from_exile() {
 
 #[test]
 fn brass_infiniscope_trigger_uses_the_countered_spells_x() {
-    cr!("603.7", "608.2h", "113.7a");
+    cr!("603.7", "608.2h");
     ruling!(
         "Brass Infiniscope",
         "The delayed triggered ability created by Brass Infiniscope's ability resolves before the spell that caused it to trigger. It resolves even if that spell is countered or otherwise leaves the stack without resolving. In that case, use the value of X as that spell last existed on the stack to determine the value of X for the delayed triggered ability."

@@ -115,6 +115,36 @@ fn taeko_targets_an_attacking_creature_after_paying() {
 }
 
 #[test]
+fn slinza_pays_its_hybrid_cost_with_two_mana() {
+    cr!("603.12", "107.4e");
+    ruling!(
+        "Slinza, the Spiked Stampede",
+        "You choose a target for that ability as it goes on the stack. Each player may respond to this triggered ability as normal."
+    );
+    // The ruling says the reflexive ability triggers "when you pay {1}{R}{G} this way"; the
+    // card's cost is {1}{R/G} ("you may pay {1}{R/G}. When you do, ..."), two mana: {1} and
+    // one red or one green mana (docs/RULING_DISCREPANCIES.md).
+    interp!("ruling-contradicting-oracle-gives-way");
+    supported("Slinza, the Spiked Stampede");
+    for land in ["Mountain", "Forest"] {
+        let mut t = TestGame::new(2);
+        t.lands(P0, land, 1);
+        t.lands(P0, "Wastes", 1);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        let from = t.asked().len();
+        t.answer_yes(P0, true);
+        t.answer_targets(P0, &[obj(bears)]);
+        let slinza = t.enter(P0, "Slinza, the Spiked Stampede");
+        t.settle();
+        untargeted_then_reflexive(&mut t, P0, from, &[obj(bears)]);
+        assert_eq!(untapped_lands(&t, P0), 0, "{land}: two mana paid");
+        t.resolve_all();
+        assert!(!t.on_battlefield(bears), "{land}");
+        assert_eq!(t.obj_now(slinza).damage, 2, "{land}");
+    }
+}
+
+#[test]
 fn tester_of_the_tangential_moves_counters_to_the_reflexive_target() {
     cr!("603.12", "107.3", "122.5");
     ruling!(
@@ -262,6 +292,48 @@ fn motherlode_cant_block_applies_to_creatures_that_lose_flying_or_arrive_later()
     }
 }
 
+#[test]
+fn motherlode_cant_block_keeps_applying_to_that_player_this_turn() {
+    cr!("611.2c", "608.2h", "506.2a");
+    ruling!(
+        "The Motherlode, Excavator",
+        "The Motherlode's reflexive triggered ability prevents all creatures without flying that player controls from blocking that turn"
+    );
+    // "That player" is the defending player as the effect begins. Three players: The
+    // Motherlode attacks P1 with Combat Celebrant (exerted: another combat follows); in the
+    // second combat it attacks P2 and Grizzly Bears attack P1, whose Wall still can't block.
+    let mut t = TestGame::new(3);
+    let ml = t.battlefield(P0, "The Motherlode, Excavator");
+    let celebrant = t.battlefield(P0, "Combat Celebrant");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    give_energy(&mut t, P0, 4);
+    let vault = t.battlefield(P1, "Mutavault");
+    let wall = t.battlefield(P1, "Wall of Stone");
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[obj(vault)]);
+    attack_with(
+        &mut t,
+        &[(ml, Entity::Player(P1)), (celebrant, Entity::Player(P1))],
+    );
+    t.resolve_all();
+    assert!(!t.on_battlefield(vault));
+    assert!(t.obj_now(celebrant).exerted);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(bears, Entity::Player(P1)), (ml, Entity::Player(P2))]),
+    );
+    t.answer(
+        P1,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(wall, bears)]),
+    );
+    t.advance_to(P0, Step::End);
+    assert_eq!(t.life(P2), 15, "The Motherlode attacked P2 in the second combat");
+    assert_eq!(t.life(P1), 20 - 5 - 4 - 2, "the Wall couldn't block the Bears");
+}
+
 /// The index (in `t.asked()`, from `from` on) of the first decision `p` was asked of the
 /// given kind.
 pub fn first_asked(t: &TestGame, p: PlayerId, from: usize, kind: DecisionKind) -> Option<usize> {
@@ -314,7 +386,7 @@ fn inferno_of_the_star_mounts_targets_only_when_its_power_becomes_20() {
 
 #[test]
 fn caesar_chooses_modes_and_target_as_the_reflexive_ability_goes_on_the_stack() {
-    cr!("603.12", "700.2a", "700.2b");
+    cr!("603.12", "700.2b");
     ruling!(
         "Caesar, Legion's Emperor",
         "You don't choose modes or a target for Caesar, Legion's Emperor's ability at the time it triggers. Rather, a second \"reflexive\" ability triggers when you sacrifice another creature this way."
@@ -369,7 +441,7 @@ fn miasma_demon_targets_up_to_the_number_discarded() {
 
 #[test]
 fn weapons_vendor_targets_after_paying() {
-    cr!("603.12", "301.5c");
+    cr!("603.12", "701.3a");
     ruling!(
         "Weapons Vendor",
         "You don't choose targets for Weapons Vendor's last ability at the time it triggers. Rather, a second \"reflexive\" ability triggers when you pay {1} this way."
@@ -451,8 +523,9 @@ fn resplendent_marshal_players_respond_knowing_the_exiled_card() {
     t.settle();
     assert!(first_asked(&t, P0, from, DecisionKind::Entities).is_none());
     resolve_into_reflexive(&mut t, &[]);
-    // The exiled card is public: an Elf. Nothing has a counter yet.
+    // The exiled card is public (face up): an Elf. Nothing has a counter yet.
     assert!(is_in(&t, elf, Zone::Exile));
+    assert!(!t.obj_now(elf).face_down);
     assert!(t.obj_now(elf).chars.has_subtype("Elf"));
     assert!(is_in(&t, bears, Zone::Graveyard(P0)));
     assert_eq!(t.counters(mystic, counters::PLUS1), 0);
@@ -464,7 +537,7 @@ fn resplendent_marshal_players_respond_knowing_the_exiled_card() {
 
 #[test]
 fn young_necromancer_players_may_respond_before_the_card_returns() {
-    cr!("603.12", "117.3b");
+    cr!("603.12");
     ruling!(
         "Young Necromancer",
         "Young Necromancer's reflexive triggered ability (the one that returns a card to the battlefield) triggers when you exile two cards from your graveyard. Players may respond to that ability before the card is returned."

@@ -1423,7 +1423,8 @@ fn creatures_attack(r: &str) -> Option<Parsed> {
         )),
         "you and aren't blocked" if n == 1 => Some((
             // Declared unblocked while attacking you (CR 509.1h): "that player" is the
-            // attacking player, the creatures' controller. With shared team turns several
+            // attacking player, the creatures' controller as it triggered
+            // (`that-opponent-fixed-as-it-triggers`). With shared team turns several
             // opponents attack at once (CR 805.10a): once for each of them (Coveted
             // Jewel's ruling).
             TriggerCond::Batched {
@@ -1434,7 +1435,7 @@ fn creatures_attack(r: &str) -> Option<Parsed> {
                 per: BatchPer::ObjectController,
             },
             objs,
-            PlayerRef::ControllerOf(Box::new(Sel::TriggerObjects)),
+            PlayerRef::TriggerPlayer,
         )),
         _ => None,
     }

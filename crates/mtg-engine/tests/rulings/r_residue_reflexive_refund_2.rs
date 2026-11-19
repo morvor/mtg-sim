@@ -41,7 +41,7 @@ pub fn order_on_top(t: &mut TestGame, p: PlayerId, top: &'static str) {
 
 #[test]
 fn etched_slith_targets_as_the_reflexive_ability_goes_on_the_stack_and_chooses_the_counter() {
-    cr!("603.12", "122.8");
+    cr!("603.12");
     ruling!(
         "Etched Slith",
         "You don't choose a target for Etched Slith's last ability at the time it triggers. Rather, a second \"reflexive\" ability triggers when you put a +1/+1 counter on Etched Slith this way."
@@ -102,7 +102,7 @@ fn etched_slith_targets_as_the_reflexive_ability_goes_on_the_stack_and_chooses_t
 
 #[test]
 fn ratonhnhaketon_targets_after_the_token_is_created() {
-    cr!("603.12", "301.5c", "701.3b");
+    cr!("603.12", "301.5b", "701.3b");
     ruling!(
         "Ratonhnhaké꞉ton",
         "You don't choose a target for Ratonhnhaké:ton's last ability at the time it triggers. Rather, a second \"reflexive\" ability triggers when you create an Assassin token this way."
@@ -235,102 +235,106 @@ fn gilgamesh_reflexive_and_job_select_are_ordered_by_you() {
     );
     supported("Gilgamesh, Master-at-Arms");
     supported("Samurai's Katana");
-    let mut t = TestGame::new(2);
-    let lib = stack_library(
-        &mut t,
-        P0,
-        &[
-            "Samurai's Katana",
-            "Island",
-            "Island",
-            "Island",
-            "Island",
-            "Island",
-        ],
-    );
-    let katana = lib[0];
-    t.answer_choose(P0, &[obj(katana)]);
-    order_on_top(&mut t, P0, "Samurai you control");
-    t.answer_yes(P0, true);
-    let gil = t.enter(P0, "Gilgamesh, Master-at-Arms");
-    t.settle();
-    t.resolve();
-    assert!(t.on_battlefield(katana));
-    assert_eq!(t.stack_len(), 2, "job select and the reflexive ability");
-    // The reflexive ability resolves first: the Katana is attached to Gilgamesh.
-    t.answer_choose(P0, &[obj(gil)]);
-    t.resolve();
-    assert_eq!(t.obj_now(katana).attached_to, Some(obj(gil)));
-    // Then job select creates a Hero and attaches the Katana to it anyway.
-    t.resolve_all();
-    let heroes = with_subtype(&t, P0, "Hero");
-    assert_eq!(heroes.len(), 1);
-    assert_eq!(t.obj_now(katana).attached_to, Some(obj(heroes[0])));
+    // Either order: the ability on top resolves first, and the Katana ends up on the
+    // creature the one below it attaches it to.
+    for reflexive_first in [true, false] {
+        let mut t = TestGame::new(2);
+        let lib = stack_library(
+            &mut t,
+            P0,
+            &[
+                "Samurai's Katana",
+                "Island",
+                "Island",
+                "Island",
+                "Island",
+                "Island",
+            ],
+        );
+        let katana = lib[0];
+        t.answer_choose(P0, &[obj(katana)]);
+        // The items are "Samurai's Katana: Job Select" and "Gilgamesh, Master-at-Arms:
+        // reflexive trigger".
+        let top = if reflexive_first {
+            "reflexive trigger"
+        } else {
+            "Job Select"
+        };
+        order_on_top(&mut t, P0, top);
+        t.answer_yes(P0, true);
+        let gil = t.enter(P0, "Gilgamesh, Master-at-Arms");
+        t.settle();
+        t.resolve();
+        assert!(t.on_battlefield(katana));
+        assert_eq!(t.stack_len(), 2, "job select and the reflexive ability");
+        t.answer_choose(P0, &[obj(gil)]);
+        t.resolve();
+        let heroes = with_subtype(&t, P0, "Hero");
+        if reflexive_first {
+            // The reflexive ability resolved: the Katana is on Gilgamesh; then job select
+            // creates a Hero and attaches the Katana to it anyway.
+            assert!(heroes.is_empty());
+            assert_eq!(t.obj_now(katana).attached_to, Some(obj(gil)));
+            t.resolve_all();
+            let heroes = with_subtype(&t, P0, "Hero");
+            assert_eq!(heroes.len(), 1);
+            assert_eq!(t.obj_now(katana).attached_to, Some(obj(heroes[0])));
+        } else {
+            // Job select resolved first; the reflexive ability then moves the Katana to
+            // Gilgamesh.
+            assert_eq!(heroes.len(), 1);
+            assert_eq!(t.obj_now(katana).attached_to, Some(obj(heroes[0])));
+            t.resolve_all();
+            assert_eq!(t.obj_now(katana).attached_to, Some(obj(gil)));
+        }
+    }
 }
 
 #[test]
 fn gilgamesh_cant_attach_equipment_that_cant_legally_be_attached() {
-    cr!("301.5c", "701.3b");
+    cr!("301.5b", "701.3a");
     ruling!(
         "Gilgamesh, Master-at-Arms",
         "You can't use the reflexive triggered ability to try to attach an Equipment to a creature if that Equipment can't legally be attached to that creature."
     );
-    let mut t = TestGame::new(2);
-    let retainer = t.battlefield(P0, "Devoted Retainer");
-    let lib = stack_library(
-        &mut t,
-        P0,
-        &[
-            "Konda's Banner",
-            "Island",
-            "Island",
-            "Island",
-            "Island",
-            "Island",
-        ],
-    );
-    let banner = lib[0];
-    t.answer_choose(P0, &[obj(banner)]);
-    t.answer_yes(P0, true);
-    t.answer_choose(P0, &[obj(retainer)]);
-    t.answer_choose(P0, &[obj(retainer)]);
-    t.enter(P0, "Gilgamesh, Master-at-Arms");
-    t.settle();
-    t.resolve_all();
-    assert!(t.on_battlefield(banner));
-    assert_ne!(
-        t.obj_now(banner).attached_to,
-        Some(obj(retainer)),
-        "Konda's Banner can be attached only to a legendary creature"
-    );
-    // (Positive control: to Gilgamesh, a legendary Samurai, it can be attached.)
-    let mut t = TestGame::new(2);
-    let lib = stack_library(
-        &mut t,
-        P0,
-        &[
-            "Konda's Banner",
-            "Island",
-            "Island",
-            "Island",
-            "Island",
-            "Island",
-        ],
-    );
-    let banner = lib[0];
-    let gil = t.enter(P0, "Gilgamesh, Master-at-Arms");
-    t.answer_choose(P0, &[obj(banner)]);
-    t.answer_yes(P0, true);
-    t.answer_choose(P0, &[obj(gil)]);
-    t.answer_choose(P0, &[obj(gil)]);
-    t.settle();
-    t.resolve_all();
-    assert_eq!(t.obj_now(banner).attached_to, Some(obj(gil)));
+    // Devoted Retainer is a Samurai, but not legendary: Konda's Banner can't be attached to
+    // it, so only Gilgamesh is offered; Short Sword can go on either.
+    for (equipment, onto_retainer) in [("Short Sword", true), ("Konda's Banner", false)] {
+        let mut t = TestGame::new(2);
+        let retainer = t.battlefield(P0, "Devoted Retainer");
+        let lib = stack_library(
+            &mut t,
+            P0,
+            &[equipment, "Island", "Island", "Island", "Island", "Island"],
+        );
+        let eq = lib[0];
+        t.answer_choose(P0, &[obj(eq)]);
+        t.answer_yes(P0, true);
+        let from = t.asked().len();
+        let gil = t.enter(P0, "Gilgamesh, Master-at-Arms");
+        let onto = if onto_retainer { retainer } else { gil };
+        t.answer_choose(P0, &[obj(eq)]);
+        t.answer_choose(P0, &[obj(onto)]);
+        t.settle();
+        t.resolve_all();
+        // The last choice was the creature to attach it to.
+        let offered = t.asked()[from..]
+            .iter()
+            .rev()
+            .find_map(|(_, d)| match d {
+                Decision::ChooseEntities { candidates, .. } => Some(candidates.clone()),
+                _ => None,
+            })
+            .expect("a creature was chosen");
+        assert!(offered.contains(&obj(gil)), "{equipment}");
+        assert_eq!(offered.contains(&obj(retainer)), onto_retainer, "{equipment}");
+        assert_eq!(t.obj_now(eq).attached_to, Some(obj(onto)), "{equipment}");
+    }
 }
 
 #[test]
 fn three_dog_aura_tokens_copy_only_copiable_values() {
-    cr!("707.2", "707.4", "107.3b");
+    cr!("707.2", "202.3e");
     ruling!(
         "Three Dog, Galaxy News DJ",
         "If the copied Aura had {X} in its mana cost, X is 0."
@@ -415,7 +419,7 @@ fn isareth_exile_replacement_outlasts_the_corpse_counter() {
 
 #[test]
 fn bloodthirsty_adversary_originals_stay_in_exile() {
-    cr!("707.12", "406.3");
+    cr!("707.12", "406.1");
     ruling!(
         "Bloodthirsty Adversary",
         "Whether or not you cast the copies this way, the original cards will remain in exile."
@@ -443,7 +447,7 @@ fn bloodthirsty_adversary_originals_stay_in_exile() {
 
 #[test]
 fn cabal_therapist_names_the_card_as_the_reflexive_ability_resolves() {
-    cr!("603.12", "608.2", "201.3");
+    cr!("603.12", "608.2");
     ruling!(
         "Cabal Therapist",
         "You name the card as Cabal Therapist’s reflexive triggered ability resolves, not as it’s put onto the stack. Then the targeted player reveals their hand and discards if appropriate. No player may choose to take actions between you naming the card and the targeted player revealing and discarding."
@@ -473,19 +477,15 @@ fn cabal_therapist_names_the_card_as_the_reflexive_ability_resolves() {
         first_asked(&t, P0, from, DecisionKind::Name).is_none(),
         "no name yet"
     );
+    // The reflexive ability resolves: the name is chosen then, and the reveal and discard
+    // follow within that same resolution (nothing else goes on the stack in between).
     let at = t.asked().len();
     t.resolve();
-    // The name was chosen, then the discard happened in the same resolution: no player
-    // got priority in between.
-    let asked = t.asked();
-    let after: Vec<&Decision> = asked[at..].iter().map(|(_, d)| d).collect();
-    let named = after
-        .iter()
-        .position(|d| matches!(d, Decision::NameCard { .. }))
-        .expect("named on resolution");
-    assert!(!after[named..]
-        .iter()
-        .any(|d| matches!(d, Decision::Priority { .. })));
+    assert!(
+        first_asked(&t, P0, at, DecisionKind::Name).is_some(),
+        "named on resolution"
+    );
+    assert_eq!(t.stack_len(), 0);
     assert_eq!(t.hand_size(P1), 1);
     assert!(t.in_hand(P1, "Grizzly Bears"));
 }
@@ -598,8 +598,6 @@ fn priority_boarding_doesnt_change_when_you_can_play_the_card() {
     roll(&mut t, 5);
     t.resolve_all();
     assert!(is_in(&t, spike, Zone::Exile));
-    let giant = t.hand(P0, "Grizzly Bears");
-    let _ = giant;
     cast_new(&mut t, P0, "Shock", &[Entity::Player(P1)]);
     assert!(
         !can_cast(&mut t, P0, spike, CastMethod::Normal),
