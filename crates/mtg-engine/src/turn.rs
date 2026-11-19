@@ -1248,6 +1248,17 @@ impl Game {
 /// The player a "doesn't untap" restriction on a group of permanents is about, if its
 /// filter names one ("creatures [that player] controls").
 fn untap_restricted_player(r: &Restriction) -> Option<PlayerId> {
+    // "Creatures don't untap during target player's next untap step": that player.
+    if let Restriction::DoesntUntapDuringUntapStepOf { who, .. } = r {
+        return match who {
+            PlayerFilter::Is(p) => Some(*p),
+            PlayerFilter::Or(v) => match v.as_slice() {
+                [PlayerFilter::Is(p)] => Some(*p),
+                _ => None,
+            },
+            _ => None,
+        };
+    }
     let Restriction::DoesntUntap(f) = r else {
         return None;
     };

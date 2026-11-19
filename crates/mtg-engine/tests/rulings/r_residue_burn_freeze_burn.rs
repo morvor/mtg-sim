@@ -44,7 +44,8 @@ fn vengeful_archon_is_the_source_of_noncombat_damage() {
     t.lands(P0, "Wastes", 2);
     t.answer(P0, DecisionKind::X, Answer::Number(2));
     t.g.turn.priority = Some(P0);
-    t.activate(P0, archon, 0, &[pl(P1)]).expect("Vengeful Archon");
+    t.activate(P0, archon, 0, &[pl(P1)])
+        .expect("Vengeful Archon");
     t.resolve_all();
     let from = t.g.turn_events.len();
     attack_with(&mut t, &[(hawk, pl(P0))]);
@@ -169,7 +170,8 @@ fn flames_of_the_blood_hand_stops_only_the_targets_life_gain() {
     t.lands(P1, "Wastes", 3);
     t.answer(P1, DecisionKind::X, Answer::Number(3));
     t.g.turn.priority = Some(P1);
-    t.activate(P1, archon, 0, &[pl(P2)]).expect("Vengeful Archon");
+    t.activate(P1, archon, 0, &[pl(P2)])
+        .expect("Vengeful Archon");
     t.resolve_all();
     cast_new(&mut t, P0, "Flames of the Blood Hand", &[pl(P1)]);
     t.resolve_all();
@@ -222,13 +224,12 @@ fn chandra_roaring_flames_emblem_is_a_colorless_source() {
     loyalty(&mut t, P0, c, 2, &[]);
     t.resolve_all();
     assert_eq!(t.life(P1), 14);
-    let emblem = t
-        .g
-        .objects
-        .iter()
-        .find(|o| o.kind == ObjKind::Emblem && o.zone == Zone::Command && o.owner == P1)
-        .map(|o| o.id)
-        .expect("P1's emblem");
+    let emblem =
+        t.g.objects
+            .iter()
+            .find(|o| o.kind == ObjKind::Emblem && o.zone == Zone::Command && o.owner == P1)
+            .map(|o| o.id)
+            .expect("P1's emblem");
     assert!(t.obj_now(emblem).chars.colors.is_colorless());
     // At P1's upkeep it deals 3 damage to P1, from a colorless source.
     t.advance_to(P1, Step::Upkeep);
@@ -275,7 +276,7 @@ fn corpse_explosion_uses_the_power_the_card_had_in_the_graveyard() {
 
 #[test]
 fn concussive_bolt_checks_metalcraft_only_as_it_resolves() {
-    cr!("608.2h", "702.1", "509.1a");
+    cr!("608.2h", "207.2c", "509.1a");
     ruling!(
         "Concussive Bolt",
         "The number of artifacts you control is checked only once: when Concussive Bolt resolves. If you don’t control three or more artifacts at that time, creatures will be able to block that turn, even if you gain control of more artifacts later in the turn."
@@ -634,11 +635,7 @@ fn blim_does_nothing_if_its_target_is_illegal() {
     t.hand(P1, "Shock");
     t.answer_targets(P0, &[obj(rock)]);
     attack_with(&mut t, &[(blim, pl(P1))]);
-    t.answer(
-        P1,
-        DecisionKind::Blockers,
-        Answer::Blockers(vec![]),
-    );
+    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![]));
     t.advance_to_step(Step::CombatDamage);
     t.settle();
     // The trigger is on the stack: the Ornithopter leaves.

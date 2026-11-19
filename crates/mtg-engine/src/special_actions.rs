@@ -538,6 +538,10 @@ fn excluding(r: &Restriction, ps: &[PlayerId], objs: &[ObjectId]) -> Restriction
         R::CantBlock(f) => R::CantBlock(not_objects(f, objs)),
         R::CantAttackOrBlock(f) => R::CantAttackOrBlock(not_objects(f, objs)),
         R::DoesntUntap(f) => R::DoesntUntap(not_objects(f, objs)),
+        R::DoesntUntapDuringUntapStepOf { who, what } => R::DoesntUntapDuringUntapStepOf {
+            who: who.clone(),
+            what: not_objects(what, objs),
+        },
         R::CantCast { who, what } => R::CantCast {
             who: not_players(who, ps),
             what: what.clone(),

@@ -1396,7 +1396,7 @@ impl Game {
                     && self.matches(obj, f, &Ctx::new(e.source, e.controller))
             }
             _ => false,
-        })
+        }) || crate::untap_choice::kept_tapped_this_untap_step(self, obj)
     }
 
     // ------------------------------------------------------------------
