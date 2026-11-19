@@ -2,7 +2,9 @@
 //! times plus an additional time. You may choose new targets for the additional copy."
 //! Each Twinning Staff adds a copy; copying a card rather than a spell doesn't (rulings).
 //! It applies to the effects that copy spells (`Effect::CopySpell`, storm, replicate, ...;
-//! see `copy::additional_copies`).
+//! see `copy::additional_copies`), once to each copy event: one instruction's copies of a
+//! spell, also "for each of those creatures, copy that spell" (register
+//! `copy-for-each-one-copy-event`).
 
 use super::{active, marker, ManualAbility};
 use crate::game::Game;

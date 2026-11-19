@@ -51,8 +51,10 @@ pub const NOT_THAT_SPELLS_TARGET_PLAYER: &str = "choices5:not the player that sp
 pub const COPY_TARGETING_PLAYER_OR_PERMANENT: &str =
     "choices5:choose that player or a permanent they control; copy that spell targeting it";
 /// `Effect::Custom` name: after [`COPY_TARGETING_PLAYER_OR_PERMANENT`] for each of the
-/// players, the copies it made, which are put onto the stack at the same time, are put
-/// there in the order their controller chooses (CR 405.3).
+/// players, the copies it made are one copy event: the copies an effect adds to it
+/// (Twinning Staff) are made now, once (`copy::additional_copies`), and all of them, which
+/// are put onto the stack at the same time, are put there in the order their controller
+/// chooses (CR 405.3).
 pub const ORDER_COPIES_MADE: &str = "choices5:order the copies made for each player";
 /// The copies [`COPY_TARGETING_PLAYER_OR_PERMANENT`] made, over the players.
 pub const COPIES_MADE: crate::ability::Var = crate::ability::vars::USER + 9544;
@@ -132,23 +134,26 @@ impl KeywordRules for Choices5Filters {
             };
             let copy = crate::copy_rules::copy_with_target(g, spell, ctx.controller, vec![t]);
             if let Some(copy) = copy {
+                // The copies an effect adds come once, with all of them
+                // (`ORDER_COPIES_MADE`).
                 let mut made = ctx.vars.get(&COPIES_MADE).cloned().unwrap_or_default();
                 made.push(Entity::Object(copy));
-                made.extend(
-                    crate::copy::additional_copies(g, spell, ctx.controller)
-                        .into_iter()
-                        .map(Entity::Object),
-                );
                 ctx.set_var(COPIES_MADE, made);
             }
             return true;
         }
         if name == ORDER_COPIES_MADE {
-            let copies: Vec<ObjectId> = ctx
+            let mut copies: Vec<ObjectId> = ctx
                 .vars
                 .get(&COPIES_MADE)
                 .map(|v| v.iter().filter_map(|e| e.object()).collect())
                 .unwrap_or_default();
+            // One copy event for all the players: "for each other opponent, ..., copy
+            // that spell" copies it one or more times (`copy::additional_copies`).
+            let spell = ctx.event.as_ref().and_then(|e| e.spell.or(e.object));
+            if let (Some(spell), false) = (spell, copies.is_empty()) {
+                copies.extend(crate::copy::additional_copies(g, spell, ctx.controller));
+            }
             crate::copy::order_copies(g, ctx.controller, &copies);
             return true;
         }

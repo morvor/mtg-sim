@@ -725,6 +725,20 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   unless a real meld pair resolves, but the instruction "exile them, then meld them" should still exile both
   and leave them in exile (CR 701.42b-c: objects that can't be melded stay where they are, i.e. exiled).
   Size S.
+- A "for each" instruction that creates a token in each pass creates them one pass at a time (found in the
+  review of ruling-conflicts-11, Nov 19). Wurmquake ("Then for each opponent with three or more poison
+  counters, you create another one of those tokens.") compiles to `Repeat { CreateToken }`, each pass its
+  own creation: with Peregrin Took ("If one or more tokens would be created under your control, those
+  tokens plus an additional Food token are created instead.") and three such opponents, a scratch test
+  made 4 Wurms and 4 Foods. Its ruling (2023-02-04) has "then you create a number of tokens equal to the
+  number of opponents with three of more poison counters and they enter the battlefield at the same time":
+  one creation, so 2 Foods (the ruling is CITED for its first part, in
+  `tests/cards/cards2_more_tokens_counters.rs`, with one poisoned opponent). Endless Ranks of HYDRA ("For
+  each opponent, you create a 2/1 black Villain creature token with menace.") made 3 Foods for 3
+  opponents the same way, while Brass's Bounty ("For each land you control, create a Treasure token.")
+  creates its tokens together (Xorn adds one). Fix: one creation for one instruction's tokens, as one copy
+  event for one instruction's copies (register `copy-for-each-one-copy-event`; myriad's and Tempting
+  Contract's rulings say their "for each" tokens are created at the same time). Size S-M.
 
 ---
 
