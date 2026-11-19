@@ -20,7 +20,7 @@ fn enchantment(t: &mut TestGame, cost: &str) -> ObjectId {
 
 #[test]
 fn starnheim_courser_reduces_only_generic_mana() {
-    cr!("601.2f", "118.7c");
+    cr!("601.2f", "118.7a");
     ruling!(
         "Starnheim Courser",
         "The cost reduction applies only to generic mana in the costs of artifact and enchantment spells you cast. It can't reduce requirements of specific colors of mana."
@@ -42,7 +42,7 @@ fn starnheim_courser_reduces_only_generic_mana() {
 
 #[test]
 fn starnheim_courser_applies_after_cost_increases_and_keeps_the_mana_value() {
-    cr!("601.2f", "202.3", "202.3b");
+    cr!("601.2f", "202.3", "118.7");
     ruling!(
         "Starnheim Courser",
         "To determine the total cost of a spell, start with the mana cost or alternative cost you're paying, add any cost increases, then apply any cost reductions (such as that of Starnheim Courser). The mana value of the spell is determined only by its mana cost, no matter what the total cost to cast the spell was."
@@ -127,7 +127,7 @@ fn focus_fire_counts_a_spacecraft_creature_once() {
 
 #[test]
 fn gossamer_chains_needs_blockers_declared_for_an_unblocked_creature() {
-    cr!("509.1h", "506.4");
+    cr!("509.1h");
     ruling!(
         "Gossamer Chains",
         "A creature is only considered an “unblocked creature” if it is an attacker during combat after blockers are declared."
@@ -154,7 +154,7 @@ fn gossamer_chains_needs_blockers_declared_for_an_unblocked_creature() {
 
 #[test]
 fn labyrinth_of_skophos_leaves_a_removed_creature_tapped() {
-    cr!("506.4", "506.4a");
+    cr!("506.4");
     ruling!(
         "Labyrinth of Skophos",
         "A creature removed from combat by Labyrinth of Skophos remains tapped if it was tapped."

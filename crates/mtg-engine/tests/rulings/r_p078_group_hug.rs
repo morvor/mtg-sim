@@ -698,7 +698,7 @@ fn sail_into_the_west_embark_decisions_go_in_turn_order_then_all_discard() {
 
 #[test]
 fn sail_into_the_west_return_choices_in_turn_order_then_all_at_once() {
-    cr!("101.4", "101.4a");
+    cr!("101.4");
     ruling!(
         "Sail into the West",
         "If return gets more votes, first the active player chooses which cards they'll return from their graveyard to their hand, then each other player in turn order does the same, knowing choices made before their choice. Then all those cards are returned from graveyards to hands simultaneously."
@@ -986,7 +986,7 @@ fn party_dude_locks_in_x_as_its_ability_resolves() {
 
 #[test]
 fn planar_birth_lands_enter_tapped_rather_than_tapping_after() {
-    cr!("614.1c", "614.12");
+    cr!("110.5b");
     ruling!(
         "Planar Birth",
         "They enter tapped. They do not enter and then tap afterwards."
@@ -1015,7 +1015,7 @@ fn planar_birth_lands_enter_tapped_rather_than_tapping_after() {
 
 #[test]
 fn yurlok_life_loss_happens_with_the_mana_loss_without_the_stack() {
-    cr!("500.4", "106.4");
+    cr!("500.5", "106.4");
     ruling!(
         "Yurlok of Scorch Thrash",
         "Yurlok's middle ability is similar to the \"mana burn\" rule from years past. The loss of life happens at the same time the mana is lost. This loss of life doesn't use the stack and can't be responded to."

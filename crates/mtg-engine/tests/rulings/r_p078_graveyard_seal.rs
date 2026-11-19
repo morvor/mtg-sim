@@ -140,7 +140,7 @@ fn planar_void_lets_other_abilities_see_the_card_reach_the_graveyard() {
 
 #[test]
 fn anafenza_lets_madness_and_discard_checks_work() {
-    cr!("702.35a", "400.7k", "614.1a");
+    cr!("702.35a", "701.9a", "614.1a");
     ruling!(
         "Anafenza, the Foremost",
         "If your opponent discards a creature card while Anafenza is on the battlefield, abilities that function when a card is discarded (such as madness) still work, even though that card never reaches a graveyard. In addition, spells or abilities that check the characteristics of a discarded card (such as Chandra Ablaze's first ability) can find that card in exile."
