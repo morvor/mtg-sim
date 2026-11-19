@@ -486,7 +486,11 @@ fn sphinx_sovereign_checks_tapped_as_it_resolves_or_as_it_left() {
             kill(&mut t, sphinx);
         }
         t.resolve_all();
-        assert_eq!((t.life(P0), t.life(P1)), (p0, p1), "tap {tap}, remove {remove}");
+        assert_eq!(
+            (t.life(P0), t.life(P1)),
+            (p0, p1),
+            "tap {tap}, remove {remove}"
+        );
     }
 }
 
@@ -507,12 +511,11 @@ fn devourer_of_destiny_revealed_many_times_triggers_many_times() {
     t.g.begin_turn(P0, false);
     t.advance_to(P0, Step::Upkeep);
     t.settle();
-    let mine: Vec<_> = t
-        .g
-        .stack
-        .iter()
-        .filter(|id| t.g.obj(**id).controller == P0)
-        .collect();
+    let mine: Vec<_> =
+        t.g.stack
+            .iter()
+            .filter(|id| t.g.obj(**id).controller == P0)
+            .collect();
     assert_eq!(mine.len(), 7);
     assert_eq!(t.stack_len(), 7);
     let lib = t.library_size(P0);
