@@ -1938,8 +1938,17 @@ impl Game {
             (None, c) => c,
         };
         let x_ok = |n: i64| x_allowed.as_ref().is_none_or(|v| v.contains(&n));
+        // CR 107.3b: a spell with an {X} in its mana cost that its text doesn't define, cast
+        // paying neither its mana cost nor an alternative cost that includes X ("without
+        // paying its mana cost"), can only have 0 as X, also for its additional costs that
+        // use X ("As an additional cost to cast this spell, pay X life", Bond of Agony).
+        let x_must_be_zero = x_allowed.is_none()
+            && chars.mana_cost.as_ref().is_some_and(|m| m.has_x())
+            && opt.alt_cost.as_ref().is_some_and(|c| {
+                !c.mana.as_ref().is_some_and(|m| m.has_x()) && !c.parts.iter().any(cost_part_has_x)
+            });
         let mut x: i64 = 0;
-        if base_cost_has_x {
+        if base_cost_has_x && !x_must_be_zero {
             // Whether mana is paid for X: then the mana available bounds it. Otherwise X is
             // paid some other way ("pay X life", "discard X cards") and what the player has
             // of that bounds it (CR 107.3a, 601.2b; the feasibility check below narrows it).

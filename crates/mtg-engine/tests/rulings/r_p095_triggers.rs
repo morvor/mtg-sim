@@ -30,7 +30,7 @@ fn yes_no_asked(t: &TestGame, from: usize, p: PlayerId) -> usize {
 
 #[test]
 fn arrogant_poet_pays_as_the_ability_resolves() {
-    cr!("608.2c", "603.5");
+    cr!("118.12", "603.5");
     ruling!(
         "Arrogant Poet",
         "You choose whether or not to pay 2 life as the ability resolves. Once you make that choice, no one can respond before Arrogant Poet gains flying."
@@ -53,7 +53,7 @@ fn arrogant_poet_pays_as_the_ability_resolves() {
 
 #[test]
 fn sangrophage_may_pay_life_while_tapped() {
-    cr!("608.2c", "701.26a");
+    cr!("118.12a", "701.26a");
     ruling!(
         "Sangrophage",
         "You choose whether or not to pay 2 life as the triggered ability resolves. You can pay 2 life even if Sangrophage is already tapped. (Doing so won't cause Sangrophage to become untapped, however.)"
@@ -74,7 +74,7 @@ fn sangrophage_may_pay_life_while_tapped() {
 
 #[test]
 fn corpses_of_the_lost_returns_as_part_of_the_resolution() {
-    cr!("608.2c", "603.4");
+    cr!("118.12", "603.4");
     ruling!(
         "Corpses of the Lost",
         "You decide to pay 1 life as the last ability is resolving. If you decide to pay 1 life and Corpses of the Lost is still on the battlefield, it will immediately return to its owner's hand. No player may take any actions in between you deciding to pay life and it returning this way."
@@ -114,7 +114,7 @@ fn corpses_of_the_lost_returns_as_part_of_the_resolution() {
 
 #[test]
 fn elenda_and_azor_x_is_chosen_as_the_attack_trigger_resolves() {
-    cr!("107.3", "608.2c");
+    cr!("107.3", "118.12");
     ruling!(
         "Elenda and Azor",
         "You choose the value of X as the first triggered ability resolves."
@@ -339,7 +339,7 @@ fn herald_of_torment_as_an_aura_its_controller_loses_life() {
 
 #[test]
 fn dawn_of_the_dead_exiles_the_creature_only_if_it_is_still_on_the_battlefield() {
-    cr!("610.3", "400.7", "603.7c");
+    cr!("400.7", "603.7c");
     ruling!(
         "Dawn of the Dead",
         "The creature is only exiled if it is still on the battlefield at the beginning of the end step."

@@ -100,7 +100,7 @@ fn divine_favor_with_an_illegal_target_doesnt_enter() {
 
 #[test]
 fn tandem_tactics_with_no_targets_or_only_illegal_targets() {
-    cr!("608.2b", "115.1d", "601.2c");
+    cr!("608.2b", "115.1a", "601.2c");
     ruling!(
         "Tandem Tactics",
         "You can cast Tandem Tactics with no targets. When it resolves, you’ll gain 2 life. However, if you cast Tandem Tactics with any targets and all of those targets are illegal as it tries to resolve, it won’t resolve and none of its effects will happen. You won’t gain 2 life in that case."
@@ -135,7 +135,7 @@ fn tandem_tactics_with_no_targets_or_only_illegal_targets() {
 
 #[test]
 fn the_destroyed_creatures_owner_gains_the_life() {
-    cr!("108.3", "110.2");
+    cr!("108.3", "110.2", "111.2");
     ruling!(
         "Misfortune's Gain",
         "The creature's *owner* gains the life, regardless of who happens to control it."
@@ -237,7 +237,7 @@ fn dire_tactics_checks_for_a_human_after_exiling() {
 
 #[test]
 fn madame_null_uses_the_power_as_the_ability_resolves() {
-    cr!("608.2h", "603.4");
+    cr!("608.2h", "118.12");
     ruling!(
         "Madame Null, Power Broker",
         "Use the creature's power as Madame Null's last ability resolves to determine how much life you may pay. If that creature is no longer on the battlefield, use its power as it last existed on the battlefield. (You probably won't want to pay life in that case, though.)"

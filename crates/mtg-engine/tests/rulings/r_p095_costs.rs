@@ -7,6 +7,7 @@
 use crate::r_p095_common::*;
 use crate::r_s01_common::{supported, tokens};
 use mtg_engine::decision::Decision;
+use mtg_engine::object::CastMethod;
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
@@ -67,11 +68,12 @@ fn lord_of_tresserhorn_life_loss_can_take_you_below_zero() {
     t.resolve_all();
     assert_eq!(t.life(P0), -1);
     assert!(t.on_battlefield(lord));
+    assert!(t.has_lost(P0));
 }
 
 #[test]
 fn lord_of_tresserhorn_sacrifices_itself_and_regeneration_doesnt_save_it() {
-    cr!("701.21a", "701.19c", "608.2b");
+    cr!("701.21a", "701.19a", "608.2c");
     ruling!(
         "Lord of Tresserhorn",
         "When Lord of Tresserhorn enters, if you have zero or one other creature on the battlefield, Lord of Tresserhorn itself will be sacrificed as part of its ability's effect. Regeneration won't save it. The rest of the effect still happens."
@@ -204,7 +206,7 @@ fn carnival_of_souls_life_loss_is_not_optional() {
 
 #[test]
 fn fretwork_colony_loses_life_even_if_it_left_the_battlefield() {
-    cr!("608.2b", "122.1");
+    cr!("609.3", "400.7");
     ruling!(
         "Fretwork Colony",
         "You lose 1 life even if you can't put a +1/+1 counter on Fretwork Colony, perhaps because it left the battlefield in response to its triggered ability."
@@ -335,6 +337,39 @@ fn bond_of_agony_x_life_and_x_mana() {
     t.settle();
     assert!(t.has_lost(P0));
     assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn bond_of_agony_cast_without_paying_its_mana_cost_has_x_zero() {
+    cr!("107.3b", "107.3i", "118.9");
+    ruling!(
+        "Omniscience",
+        "If a spell has {X} in its mana cost, you must choose 0 as the value of X when casting it without paying its mana cost."
+    );
+    // Bond of Agony ({X}{B}, "As an additional cost to cast this spell, pay X life.") cast
+    // with Omniscience: the X of its additional cost is the X of its mana cost (CR 107.3i),
+    // which can only be 0, so no life is paid and no one loses any.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Omniscience");
+    let card = t.hand(P0, "Bond of Agony");
+    let spell = t.cast(P0, card).method(CastMethod::Free).x(3).go();
+    assert_eq!(crate::r_s25_common::x_of(&t, spell), Some(0));
+    assert_eq!(t.life(P0), 20);
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1)), (20, 20));
+    // Hatred has no {X} in its mana cost: its X is still chosen and paid (CR 107.3a).
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Omniscience");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let card = t.hand(P0, "Hatred");
+    t.cast(P0, card)
+        .method(CastMethod::Free)
+        .x(5)
+        .target(bears)
+        .go();
+    assert_eq!(t.life(P0), 15);
+    t.resolve_all();
+    assert_eq!(t.pt(bears), (7, 2));
 }
 
 #[test]

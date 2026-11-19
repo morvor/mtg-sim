@@ -13,6 +13,7 @@ use mtg_engine::keywords::KeywordKind;
 use mtg_engine::mana::ManaType;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
+use mtg_engine::types::CardType;
 use mtg_engine::*;
 
 /// Moves every card of `p`'s library to exile.
@@ -139,7 +140,7 @@ fn underrealm_lich_with_few_or_no_cards_in_the_library() {
 
 #[test]
 fn underrealm_lich_can_gain_indestructible_while_tapped() {
-    cr!("602.5", "701.26a", "702.12b");
+    cr!("609.3", "701.26a", "702.12b");
     ruling!(
         "Underrealm Lich",
         "You can activate Underrealm Lich's last ability even if it's already tapped. It can't be tapped again, but it still gains indestructible."
@@ -195,17 +196,30 @@ fn biotransference_creatures_entering_get_artifact_entering_replacements() {
     );
     supported("Biotransference");
     supported("Root Maze");
-    // Root Maze: "Artifacts and lands enter tapped." Grizzly Bears cast and resolving, and
-    // a creature card put onto the battlefield by an effect.
+    // Root Maze: "Artifacts and lands enter tapped." Grizzly Bears cast and resolving: an
+    // artifact spell, so Biotransference's last ability triggers too (1 life and a Necron
+    // Warrior, which enters tapped as well).
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Biotransference");
     t.battlefield(P1, "Root Maze");
-    // (Bears is an artifact spell: Biotransference's last ability triggers too.)
     cast_new(&mut t, P0, "Grizzly Bears", &[]);
     t.resolve_all();
     let bears = t.named_on_battlefield("Grizzly Bears")[0];
     assert!(t.obj_now(bears).tapped);
-    let giant = t.enter(P0, "Hill Giant");
+    assert_eq!(t.life(P0), 19);
+    let necron = crate::r_s01_common::tokens(&t, P0);
+    assert_eq!(necron.len(), 1);
+    assert!(t.obj_now(necron[0]).tapped);
+    // A creature card P1 owns, put onto the battlefield under P0's control by Reanimate:
+    // not an artifact in P1's graveyard, it is one as it would exist on the battlefield
+    // (a creature P0 controls), so it enters tapped.
+    let giant = t.graveyard(P1, "Hill Giant");
+    assert!(!t.obj_now(giant).is(CardType::Artifact));
+    cast_new(&mut t, P0, "Reanimate", &[Entity::Object(giant)]);
+    t.resolve_all();
+    let giant = t.named_on_battlefield("Hill Giant")[0];
+    assert_eq!(t.obj_now(giant).controller, P0);
+    assert!(t.obj_now(giant).is(CardType::Artifact));
     assert!(t.obj_now(giant).tapped);
     // An opponent's creature isn't an artifact: it enters untapped.
     let goblin = t.enter(P1, "Raging Goblin");
@@ -218,7 +232,7 @@ fn biotransference_creatures_entering_get_artifact_entering_replacements() {
 
 #[test]
 fn infernal_darkness_changes_the_type_of_mana_not_the_amount() {
-    cr!("106.12b", "106.3");
+    cr!("106.12b", "616.1");
     ruling!(
         "Infernal Darkness",
         "This effect changes the type of mana produced, but not the amount. For example, if a land that's tapped for mana would add {W}{W}, it adds {B}{B} instead."
@@ -268,7 +282,7 @@ fn purgatory_creature_goes_to_the_graveyard_before_it_is_exiled() {
 
 #[test]
 fn aether_storm_doesnt_stop_creatures_being_put_onto_the_battlefield() {
-    cr!("101.2", "601.2");
+    cr!("101.2", "601.3");
     ruling!(
         "Aether Storm",
         "This does not stop a creature card from being put directly onto the battlefield by a spell or ability."
@@ -292,7 +306,7 @@ fn aether_storm_doesnt_stop_creatures_being_put_onto_the_battlefield() {
 
 #[test]
 fn transcendence_with_platinum_angel_is_a_loop_that_draws_the_game() {
-    cr!("104.4b", "603.8", "104.3b");
+    cr!("104.4b", "603.8", "104.3e");
     ruling!(
         "Transcendence",
         "If your life total is 20 or more and you control an effect that states “you can’t lose the game”, then an infinite loop is formed. If neither player wants to end the loop by removing one of these two cards from the battlefield, the game ends in a draw."

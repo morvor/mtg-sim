@@ -60,7 +60,7 @@ fn twinblade_paladin_triggers_once_per_life_gaining_event() {
 
 #[test]
 fn twinblade_paladin_gaining_double_strike_after_first_strike_damage() {
-    cr!("510.4", "702.4c", "613.1f");
+    cr!("510.4", "613.1f");
     ruling!(
         "Twinblade Paladin",
         "If Twinblade Paladin gains double strike after combat damage has already been dealt (most likely because a creature with lifelink dealt combat damage), Twinblade Paladin will deal only regular combat damage."
@@ -168,7 +168,7 @@ fn twinblade_paladin_in_two_headed_giant() {
 
 #[test]
 fn plus_one_replacements_apply_once_per_life_gaining_event() {
-    cr!("119.9", "614.1a", "702.15b");
+    cr!("614.1a", "614.5", "702.15b");
     ruling!(
         "Pest Rescuer",
         "Each creature with lifelink dealing combat damage causes a separate life-gaining event. For example, if two creatures you control with lifelink deal combat damage at the same time, Pest Rescuer's last ability will apply twice. However, if a single creature you control with lifelink deals combat damage to multiple creatures, players, planeswalkers, and/or battles at the same time (perhaps because it has trample or was blocked by more than one creature), the ability will apply only once."
@@ -200,7 +200,7 @@ fn plus_one_replacements_apply_once_per_life_gaining_event() {
 
 #[test]
 fn pest_rescuer_stacks_and_applies_once_for_each() {
-    cr!("119.9", "614.5", "616.1");
+    cr!("614.5", "616.1");
     ruling!(
         "Pest Rescuer",
         "If you control two Pest Rescuers and you would gain life, you gain that much life plus 2. A third Pest Rescuer has you gain that much life plus 3, and so on."
@@ -281,7 +281,7 @@ fn rhox_faithmender_two_headed_giant_teammate_isnt_affected() {
 
 #[test]
 fn alhammarrets_archives_multiply() {
-    cr!("614.5", "616.1", "704.5j");
+    cr!("614.5", "616.1");
     ruling!(
         "Alhammarret's Archive",
         "Because Alhammarret’s Archive is legendary, it’s unlikely that one player will control two. However, if that happens, life gained by that player will be multiplied by four. Three Archives will multiply that life gain by eight, and so on."
@@ -605,7 +605,7 @@ fn angel_of_destiny_a_player_who_lost_to_first_strike_damage_gains_no_life() {
 
 #[test]
 fn angel_of_destiny_must_be_on_the_battlefield_at_your_end_step() {
-    cr!("603.4", "603.6c");
+    cr!("603.4", "113.6");
     ruling!(
         "Angel of Destiny",
         "If Angel of Destiny leaves the battlefield before your end step, its last ability won't trigger and won't cause a player to lose the game, even if Angel of Destiny attacked that player earlier."

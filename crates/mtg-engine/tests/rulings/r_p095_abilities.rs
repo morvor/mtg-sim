@@ -29,7 +29,7 @@ fn exile_by_other_means(t: &mut TestGame, id: ObjectId) {
 
 #[test]
 fn serpents_soul_jar_card_removed_before_the_exile_trigger_resolves() {
-    cr!("607.2a", "400.7", "608.2b");
+    cr!("607.2a", "400.7");
     ruling!(
         "Serpent's Soul-Jar",
         "Players can respond to the triggered ability that exiles the card from your graveyard by removing it in some other way. If the card leaves the graveyard before the ability of Serpent's Soul-Jar exiles it, Serpent's Soul-Jar won't let you cast it."
@@ -53,7 +53,7 @@ fn serpents_soul_jar_card_removed_before_the_exile_trigger_resolves() {
 
 #[test]
 fn serpents_soul_jar_doesnt_change_when_the_creature_can_be_cast() {
-    cr!("601.3", "307.1");
+    cr!("601.3", "117.1a");
     ruling!(
         "Serpent's Soul-Jar",
         "The activated ability doesn't change when you can cast the creature spell. In most cases, this means during your main phase while the stack is empty, although flash may change this."
@@ -87,13 +87,27 @@ fn serpents_soul_jar_doesnt_change_when_the_creature_can_be_cast() {
 
 #[test]
 fn powerstone_tokens_are_predefined_artifacts_with_a_restricted_mana_ability() {
-    cr!("111.10", "111.10k", "106.6");
+    cr!("111.10", "111.10h");
     ruling!(
         "Terisiare's Devastation",
         "Powerstone tokens are a kind of predefined token. Each one has the artifact subtype “Powerstone” and the ability “{T}: Add {C}. This mana can’t be spent to cast a nonartifact spell.”"
     );
+    ruling!(
+        "Wreck Hunter",
+        "Powerstone tokens are a kind of predefined token. Each one has the artifact subtype “Powerstone” and the ability “{T}: Add {C}. This mana can’t be spent to cast a nonartifact spell.”"
+    );
     supported("Terisiare's Devastation");
-    // X = 1: lose 1 life, one tapped Powerstone.
+    supported("Wreck Hunter");
+    // A colorless tapped Powerstone artifact token with a mana ability.
+    let is_powerstone = |t: &TestGame, id: ObjectId| {
+        let stone = t.obj_now(id);
+        stone.is_token()
+            && stone.is(CardType::Artifact)
+            && stone.chars.colors == ColorSet::NONE
+            && stone.tapped
+            && stone.chars.abilities.iter().any(|a| a.is_mana_ability())
+    };
+    // Terisiare's Devastation with X = 1: lose 1 life, one tapped Powerstone.
     let mut t = TestGame::new(2);
     crate::r_s25_common::lands_for_cost(&mut t, P0, "Terisiare's Devastation");
     t.lands(P0, "Wastes", 1);
@@ -103,32 +117,27 @@ fn powerstone_tokens_are_predefined_artifacts_with_a_restricted_mana_ability() {
     assert_eq!(t.life(P0), 19);
     let stones = crate::r_s01_common::with_subtype(&t, P0, "Powerstone");
     assert_eq!(stones.len(), 1);
-    let stone = t.obj_now(stones[0]);
-    assert!(stone.is_token() && stone.is(CardType::Artifact) && stone.tapped);
-    assert!(stone
-        .chars
-        .abilities
-        .iter()
-        .any(|a| a.is_mana_ability()));
+    assert!(is_powerstone(&t, stones[0]));
+    // Wreck Hunter, worded "a tapped Powerstone token for each ...": P1's Grizzly Bears
+    // was put into P1's graveyard from the battlefield this turn, so one.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.g.destroy(bears, None);
+    t.g.flush_events();
+    t.settle();
+    t.answer_targets(P0, &[Entity::Player(P1)]);
+    t.enter(P0, "Wreck Hunter");
+    t.resolve_all();
+    let stones = crate::r_s01_common::with_subtype(&t, P0, "Powerstone");
+    assert_eq!(stones.len(), 1);
+    assert!(is_powerstone(&t, stones[0]));
 }
 
 #[test]
 fn powerstone_mana_pays_for_anything_but_nonartifact_spells() {
-    cr!("106.6", "111.10k", "602.2b");
+    cr!("106.6", "111.10h", "602.2b", "702.21a");
     ruling!(
         "Karn, Living Legacy",
-        "You can use the {C} added by a Powerstone token on anything that isn’t a nonartifact spell. This includes paying costs to activate abilities of both artifact and nonartifact permanents, paying ward costs, and so on."
-    );
-    ruling!(
-        "Terisiare's Devastation",
-        "You can use the {C} added by a Powerstone token on anything that isn’t a nonartifact spell. This includes paying costs to activate abilities of both artifact and nonartifact permanents, paying ward costs, and so on."
-    );
-    ruling!(
-        "The Mana Rig",
-        "You can use the {C} added by a Powerstone token on anything that isn’t a nonartifact spell. This includes paying costs to activate abilities of both artifact and nonartifact permanents, paying ward costs, and so on."
-    );
-    ruling!(
-        "Wreck Hunter",
         "You can use the {C} added by a Powerstone token on anything that isn’t a nonartifact spell. This includes paying costs to activate abilities of both artifact and nonartifact permanents, paying ward costs, and so on."
     );
     supported("Karn, Living Legacy");
@@ -139,14 +148,17 @@ fn powerstone_mana_pays_for_anything_but_nonartifact_spells() {
     t.resolve_all();
     let stone = crate::r_s01_common::with_subtype(&t, P0, "Powerstone")[0];
     t.g.untap(stone);
-    // Not a nonartifact spell: Raging Goblin ({R}) can't be cast with a Mountain's mana
-    // plus the Powerstone's for Grizzly Bears ({1}{G}) with a Forest.
-    t.lands(P0, "Forest", 1);
+    // Not a nonartifact spell: Grizzly Bears ({1}{G}) can't be cast with a Forest's mana
+    // plus the Powerstone's.
+    let forest = t.lands(P0, "Forest", 1)[0];
     let bears = t.hand(P0, "Grizzly Bears");
     assert!(t.cast(P0, bears).try_go().is_err());
-    // An artifact spell: Sol Ring ({1}).
+    assert!(!t.obj_now(stone).tapped);
+    // An artifact spell: Sol Ring ({1}), with the Powerstone's mana (the Forest tapped).
+    t.g.tap(forest);
     let ring = t.hand(P0, "Sol Ring");
     t.cast(P0, ring).go();
+    assert!(t.obj_now(stone).tapped);
     t.resolve_all();
     assert!(!t.named_on_battlefield("Sol Ring").is_empty());
     // An ability of a nonartifact permanent: Mishra's Factory's "{1}: ... becomes a 2/2
@@ -160,6 +172,22 @@ fn powerstone_mana_pays_for_anything_but_nonartifact_spells() {
     assert!(t.obj_now(stone).tapped);
     t.resolve_all();
     assert!(t.obj_now(factory).is(CardType::Creature));
+    // A ward cost for a nonartifact spell: Shock targets P1's Tomakul Honor Guard (ward
+    // {2}); P0 pays the {2} with two Powerstones' mana, so Shock isn't countered.
+    let mut t = TestGame::new(2);
+    let guard = t.battlefield(P1, "Tomakul Honor Guard");
+    let stones = [
+        crate::r_s02_common::create_token(&mut t, P0, "Powerstone"),
+        crate::r_s02_common::create_token(&mut t, P0, "Powerstone"),
+    ];
+    t.lands(P0, "Mountain", 1);
+    let shock = t.hand(P0, "Shock");
+    t.answer_yes(P0, true);
+    t.cast(P0, shock).target(guard).go();
+    assert!(!t.obj_now(stones[0]).tapped && !t.obj_now(stones[1]).tapped);
+    t.resolve_all();
+    assert!(t.obj_now(stones[0]).tapped && t.obj_now(stones[1]).tapped);
+    assert!(t.in_graveyard(P1, "Tomakul Honor Guard"));
 }
 
 // ---------------------------------------------------------------------------------------
@@ -189,7 +217,7 @@ fn netherborn_altar_counts_soul_counters_as_it_resolves() {
 
 #[test]
 fn cleaving_reaper_any_angel_or_berserker_that_entered_this_turn() {
-    cr!("602.5b", "113.6");
+    cr!("602.5", "113.6m");
     ruling!(
         "Cleaving Reaper",
         "The Angel or Berserker doesn't have to still be under your control in order to activate Cleaving Reaper's ability. Additionally, the Angel or Berserker could have entered the battlefield under your control at any point in the turn, even before Cleaving Reaper was put into the graveyard."
@@ -239,7 +267,7 @@ fn foul_familiar_ability_works_only_on_the_battlefield() {
 
 #[test]
 fn vona_activated_while_attacking_stays_in_combat() {
-    cr!("506.4", "602.5d");
+    cr!("506.4", "702.20b");
     ruling!(
         "Vona, Butcher of Magan",
         "Vona's last ability can be activated during any step or phase of your turn, including the combat phase. It's possible to attack with Vona and then activate its ability before blockers are declared. Doing so won't remove Vona from combat."
@@ -310,7 +338,7 @@ fn priest_of_fell_rites_cant_target_itself() {
 
 #[test]
 fn chainer_returns_the_creature_black_and_a_nightmare_as_it_enters() {
-    cr!("614.12", "613.1d", "613.1e", "105.3");
+    cr!("603.6a", "613.1d", "613.1e", "105.3");
     ruling!(
         "Chainer, Dementia Master",
         "The creature put onto the battlefield by Chainer's activated ability is black only, not black in addition to its other colors. It is, however, a Nightmare in addition to its other creature types. As it enters the battlefield, it is already a black Nightmare (and perhaps some other creature types); it doesn't enter and then become a black Nightmare."
@@ -342,7 +370,7 @@ fn chainer_returns_the_creature_black_and_a_nightmare_as_it_enters() {
 
 #[test]
 fn noctis_artifact_spells_from_the_graveyard_follow_costs_and_timing() {
-    cr!("601.3", "601.2f", "307.1");
+    cr!("601.3", "601.2f", "117.1a");
     ruling!(
         "Noctis, Prince of Lucis",
         "You pay all costs and follow all timing rules for artifact spells cast with the permission granted by Noctis's last ability."
@@ -583,7 +611,7 @@ fn revival_experiment_one_card_per_permanent_type() {
 
 #[test]
 fn nameless_race_has_no_creature_type() {
-    cr!("205.3d", "205.3m");
+    cr!("205.3a", "205.3f");
     ruling!(
         "Nameless Race",
         "This currently has no creature type. It's Nameless."
