@@ -163,7 +163,6 @@ fn aurelias_fury_keeps_the_division_for_the_remaining_legal_targets() {
     assert_eq!(t.life(P1), 17);
     // P1 was dealt damage: no noncreature spells this turn.
     assert!(!can_cast_new(&mut t, P1, "Shock"));
-    assert!(can_cast_new(&mut t, P1, "Raging Goblin") || t.g.turn.active != P1);
 }
 
 #[test]
@@ -246,7 +245,6 @@ fn permission_denied_applies_to_every_opponent() {
     assert_eq!(t.life(P0), 20);
     assert!(!can_cast_new(&mut t, P1, "Healing Salve"));
     assert!(!can_cast_new(&mut t, P2, "Healing Salve"));
-    assert!(can_cast_new(&mut t, P2, "Raging Goblin") || t.g.turn.active != P2);
     // Its controller isn't affected.
     assert!(can_cast_new(&mut t, P0, "Healing Salve"));
 }

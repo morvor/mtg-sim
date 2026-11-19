@@ -194,6 +194,7 @@ fn vizier_of_remedies_one_fewer_counter_but_all_the_damage_is_dealt() {
 #[test]
 fn vizier_of_remedies_one_fewer_counter_for_simultaneous_damage() {
     cr!("120.3d", "510.2", "614.1a");
+    interp!("simultaneous-damage-counters-one-event");
     ruling!(
         "Vizier of Remedies",
         "If multiple creatures with wither and/or infect deal damage to a creature at once, Vizier of Remedies causes only one counter fewer to be put on that creature. Its effect doesn’t apply separately for each creature dealing damage."

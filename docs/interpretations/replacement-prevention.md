@@ -123,3 +123,15 @@ index: `docs/INTERPRETATIONS.md`.
 - Affects: Gather Specimens, Crafty Cutpurse's entering creatures, Xantcha, and reanimation or theft of an opponent's card ("put onto the battlefield under your control") with two or more replacement effects that need ordering (Essence of the Wild and Infinite Reflection, Master Biomancer and Spike Feeder's own counters).
 - Code: `crates/mtg-engine/src/replacement.rs` (`affected_player`); `crates/mtg-engine/src/actions.rs` (`move_objects`: the APNAP order of the choices).
 - Tests: `tests/cr/r616_001_audit_would_be_controller.rs` (`the_new_would_be_controller_chooses_among_the_remaining_gather_specimens`, `after_gather_specimens_its_caster_orders_the_copy_effects`, `a_card_reanimated_from_an_opponents_graveyard_has_its_entry_ordered_by_the_reanimator`).
+
+## simultaneous-damage-counters-one-event: Counters from damage dealt at the same time are put on each recipient as one event per player putting them
+- Kind: interpretation
+- Status: decided
+- Rules: 120.3d "Damage dealt to a creature by a source with wither and/or infect causes that source’s controller to put that many -1/-1 counters on that creature." / 120.3b (poison counters from infect damage to a player) / Vizier of Remedies ruling: "If multiple creatures with wither and/or infect deal damage to a creature at once, Vizier of Remedies causes only one counter fewer to be put on that creature. Its effect doesn’t apply separately for each creature dealing damage."
+- Question: Damage from several sources at once (combat damage) causes several sources' controllers to put counters. Is that one counter-putting event for each recipient, or one per source? And when the sources have different controllers?
+- Decision: The engine gathers the counters damage dealt at the same time causes and puts them, after all of that damage is dealt, as one event for each recipient, kind of counter and player putting them (the first source standing for them as the event's source). Sources controlled by different players give separate events, since different players put them.
+- Alternatives: One event per source (what the engine did before): Vizier of Remedies and other "one or more counters" replacement effects would apply once per source, against the ruling. One event per recipient whoever puts them: a "you would put counters" replacement effect (Vorinclex) couldn't tell whose counters it modifies.
+- Why: The Vizier ruling for the single-player case; CR 120.3d names the source's controller as the one putting them, so different controllers put different counters.
+- Affects: Vizier of Remedies, Melira, the Living Cure, Vorinclex, Monstrous Raider and other replacement effects on putting -1/-1 or poison counters, with wither and infect damage.
+- Code: `crates/mtg-engine/src/actions.rs` (`Game::put_batched_damage_counters`).
+- Tests: `tests/rulings/r_p086_counters.rs` (`vizier_of_remedies_one_fewer_counter_for_simultaneous_damage`).

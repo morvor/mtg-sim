@@ -216,6 +216,7 @@ fn willow_satyr_leaving_the_battlefield_ends_the_control_change() {
 #[test]
 fn willow_satyr_untapped_or_stolen_before_resolution_gains_nothing() {
     cr!("611.2b");
+    interp!("control-lost-before-a-remains-tapped-effect-begins");
     ruling!(
         "Willow Satyr",
         "If Willow Satyr stops being tapped before its ability resolves — even if it becomes tapped again right away — you won’t gain control of the targeted creature at all. The same is true if you lose control of Willow Satyr before the ability resolves."

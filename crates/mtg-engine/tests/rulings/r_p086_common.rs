@@ -13,7 +13,7 @@ pub use crate::r_p087_common::{activate, could_cast, is_tapped, obj, tap, untap}
 pub use crate::r_s01_common::{attack_with, block_and_finish, supported};
 pub use crate::r_s02_common::{create_token, destroy, target_candidates};
 pub use crate::r_s03_common::{in_hand_with_mana, run_effect, to_blockers};
-pub use crate::r_s04_common::{ability_targets, next_upkeep, spell_targets};
+pub use crate::r_s04_common::{ability_targets, add_mana, next_upkeep, spell_targets};
 pub use crate::r_s06_common::{attach_new, attached_to, damage, give_control};
 pub use crate::r_s21_common::{castable, legal_blocks};
 pub use crate::r_s25_common::{cast_new, lands_for_cost};
