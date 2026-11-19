@@ -162,6 +162,34 @@ impl Game {
                     if exiles_whole_set(effect) {
                         ctx.prev_happened = true;
                     }
+                    // "You may gain control of target permanent ... If you do, untap it"
+                    // (also "you may have that player gain control of equipped creature"):
+                    // choosing to apply the effect to a permanent the player already
+                    // controls still counts (Dominus of Fealty ruling); one that's gone (an
+                    // illegal target, a permanent that left) doesn't (Iroh, Tea Master
+                    // ruling). Only selections that involve no choice are looked at again.
+                    if let Effect::GainControl { what, who, .. } = &**effect {
+                        if matches!(
+                            what,
+                            Sel::Target(_)
+                                | Sel::This
+                                | Sel::AttachedTo
+                                | Sel::TriggerObject
+                                | Sel::Var(_)
+                        ) {
+                            let gainer = self.eval_player(who, ctx);
+                            let objs = self.resolve_objects(what, ctx);
+                            if !objs.is_empty()
+                                && objs.iter().all(|o| {
+                                    self.is_live(*o)
+                                        && !crate::kw::phasing::is_phased_out(self, *o)
+                                        && Some(self.obj(*o).controller) == gainer
+                                })
+                            {
+                                ctx.prev_happened = true;
+                            }
+                        }
+                    }
                 }
                 // Set after the offered instruction ran, so a "you may" inside it doesn't
                 // stand in for this one (`Condition::PrevChosen`).
@@ -173,6 +201,8 @@ impl Game {
                 then,
                 otherwise,
             } => {
+                let had_x = ctx.cost_has_x;
+                ctx.cost_has_x = cost.mana.as_ref().is_some_and(|m| m.has_x());
                 let cost = &crate::mana_abilities::bind_x_for_payment(self, cost, ctx);
                 // "[cost] for each ...": the total is determined now (CR 702.24a).
                 let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
@@ -194,16 +224,23 @@ impl Game {
                     );
                     self.last_paid = None;
                     if pays && crate::entry_costs::pay(self, p, cost, ctx) {
+                        // The first payment is the one "if they do" refers to; the
+                        // remaining players are still offered the cost, to no further
+                        // effect (CR 118.12a; `any-player-may-after-a-payment`).
+                        if !paid {
+                            crate::kw::payment_mana::note(self, ctx);
+                            crate::cost_effects::note_paid(self, cost, ctx);
+                        }
+                        self.last_paid = None;
                         paid = true;
-                        crate::kw::payment_mana::note(self, ctx);
-                        crate::cost_effects::note_paid(self, cost, ctx);
-                        break;
+                        continue;
                     }
                     if !pays && matches!(**then, Effect::Noop) {
                         // CR 732.6: declining the [B] of "[A] unless [B]".
                         crate::shortcuts::declined_unless(self);
                     }
                 }
+                ctx.cost_has_x = had_x;
                 ctx.prev_happened = paid;
                 if paid {
                     self.exec(then, ctx);
@@ -214,8 +251,39 @@ impl Game {
             }
             Effect::ForEach { sel, var, effect } => {
                 let items = self.resolve_sel(sel, ctx);
+                let stack_before = self.stack.len();
+                // "For each of those creatures, copy that spell" (Feather, Radiant
+                // Arbiter): one copy event, so the copies an effect adds (Twinning Staff)
+                // are made once for it, not for each creature (`copy::begin_copy_event`);
+                // and the copies are put on the stack at once, in the order their
+                // controller chooses (CR 405.3), all of them together, which the copy
+                // instruction leaves to this.
+                let copies_together = matches!(**effect, Effect::CopySpellRetargeted { .. });
+                let marker = crate::copy::ORDERED_BY_ENCLOSING;
+                let outer = copies_together.then(|| ctx.vars.insert(marker, vec![]));
+                let event = copies_together && crate::copy::begin_copy_event(self);
                 // CR 608.2f: an action on several objects happens to all of them at once.
                 crate::simultaneous::for_each_object(self, items, *var, effect, ctx);
+                crate::copy::end_copy_event(self, event);
+                if let Some(outer) = outer {
+                    match outer {
+                        Some(v) => {
+                            ctx.vars.insert(marker, v);
+                        }
+                        None => {
+                            ctx.vars.remove(&marker);
+                        }
+                    }
+                    let copies: Vec<ObjectId> = self.stack[stack_before.min(self.stack.len())..]
+                        .iter()
+                        .copied()
+                        .filter(|c| {
+                            self.obj(*c).kind == ObjKind::SpellCopy
+                                && self.obj(*c).controller == ctx.controller
+                        })
+                        .collect();
+                    crate::copy::order_copies(self, ctx.controller, &copies);
+                }
             }
             Effect::ForEachPlayer { who, effect } => {
                 let players = self.eval_players(who, ctx);
@@ -930,7 +998,10 @@ impl Game {
                 // effect does nothing. (One about the affected objects, "for as long as
                 // that creature has a bounty counter on it", is checked for them below.)
                 let about_affected = matches!(duration, Duration::WhileCondition(_));
-                if !about_affected && self.effect_expired(duration, ctx.source, ctx.controller) {
+                if !about_affected
+                    && (self.effect_expired(duration, ctx.source, ctx.controller)
+                        || crate::untap_choice::ended_before_it_began(self, duration, ctx))
+                {
                     return;
                 }
                 // CR 702.26e: a phased-out permanent isn't among the objects it affects,
@@ -1300,11 +1371,13 @@ impl Game {
                 );
             }
             Effect::CounterSpell { what } => {
-                let mut any = false;
+                let mut countered = Vec::new();
                 let mut moved = Vec::new();
                 for o in self.resolve_objects(what, ctx) {
                     if self.counter_by(o, crate::event_causes::Cause::of(ctx)) {
-                        any = true;
+                        // "Each spell and ability countered this way": all of them, as
+                        // they last existed on the stack, wherever they went.
+                        countered.push(Entity::Object(o));
                         // CR 400.7j: other parts of the effect can find the countered card
                         // in the public zone it moved to ("exile it instead ... You may
                         // cast that card ...").
@@ -1316,7 +1389,8 @@ impl Game {
                         }
                     }
                 }
-                ctx.prev_happened = any;
+                ctx.prev_happened = !countered.is_empty();
+                ctx.set_var(crate::kw::value_results::COUNTERED, countered);
                 if !moved.is_empty() {
                     ctx.set_var(vars::IT, moved);
                 }
@@ -1691,22 +1765,29 @@ impl Game {
             } => {
                 let targets = target.as_ref().map(|t| self.resolve_sel(t, ctx));
                 for o in self.resolve_objects(what, ctx) {
-                    let made = match &targets {
+                    let mut made: Vec<ObjectId> = match &targets {
                         Some(ts) => {
                             crate::copy_rules::copy_with_target(self, o, ctx.controller, ts.clone())
                                 .into_iter()
-                                .count()
+                                .collect()
                         }
                         None => crate::copy_rules::copy_for_each_target(
                             self,
                             o,
                             ctx.controller,
                             among.as_ref().map(|f| (f, &*ctx)),
-                        )
-                        .len(),
+                        ),
                     };
-                    if made > 0 {
-                        crate::copy::additional_copies(self, o, ctx.controller);
+                    if !made.is_empty() {
+                        // Copies an effect adds are put onto the stack with these at the
+                        // same time, all in the order their controller chooses (CR 405.3,
+                        // 707.10d): asked once, here, unless an enclosing "for each"
+                        // orders them with its other copies (and makes the added copies
+                        // once, for all of them: one copy event).
+                        made.extend(crate::copy::additional_copies(self, o, ctx.controller));
+                        if !ctx.vars.contains_key(&crate::copy::ORDERED_BY_ENCLOSING) {
+                            crate::copy::order_copies(self, ctx.controller, &made);
+                        }
                     }
                 }
             }
@@ -2513,13 +2594,36 @@ impl Game {
                         }
                         only = Some(f);
                     }
-                    if let Ok(spell) = crate::casting::cast_during_resolution_as(
+                    let prev = std::mem::replace(
+                        &mut self.special.casting_if_able,
+                        (!*optional).then_some(p),
+                    );
+                    let mut r = crate::casting::cast_during_resolution_as(
                         self,
                         p,
                         o,
-                        method,
+                        method.clone(),
                         only.as_deref(),
-                    ) {
+                    );
+                    // The player chose to activate no mana abilities for it: the casting was
+                    // reversed (CR 733.1), and they cast it again, as they must if able,
+                    // with the mana in their pool alone (CR 733.2), choosing only costs it
+                    // pays (an unkicked spell rather than a kicked one).
+                    if r.as_ref()
+                        .is_err_and(|e| e.0 == crate::cost_rules::DECLINED_MANA_ABILITIES)
+                    {
+                        let prev_pool = std::mem::replace(&mut self.special.pool_only, Some(p));
+                        r = crate::casting::cast_during_resolution_as(
+                            self,
+                            p,
+                            o,
+                            method,
+                            only.as_deref(),
+                        );
+                        self.special.pool_only = prev_pool;
+                    }
+                    self.special.casting_if_able = prev;
+                    if let Ok(spell) = r {
                         spent += self.mana_value_of(spell) as i64;
                         cast.push(Entity::Object(spell));
                     }

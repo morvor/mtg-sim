@@ -380,6 +380,7 @@ fn found_card_onto_battlefield_instead(l: &str, prev: &mut Effect, b: &mut Build
             count: Value::c(1),
             up_to: false,
             all: false,
+            exactly: false,
         }],
         distinct_names: false,
         optional: false,

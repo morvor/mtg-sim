@@ -2402,11 +2402,17 @@ fn parse_predicate(
                 other => Value::Mul(Box::new(other), Box::new(n.clone())),
             };
             let n = parse_for_each(fe, Some(it))?;
+            // A group's "for each other ...": other than each affected object.
+            let other = |n: Value| match subj.it {
+                None => super::filters_relational::other_than_affected(n),
+                Some(_) => n,
+            };
+            let n = other(n);
             pv = times(pv, &n);
             tv = times(tv, &n);
             if let Some(m) = more {
                 let (p2, t2, tail2) = crate::oracle::effects::parse_pt_mod(&m)?;
-                let n2 = parse_for_each(tail2.trim().strip_prefix("for each ")?, Some(it))?;
+                let n2 = other(parse_for_each(tail2.trim().strip_prefix("for each ")?, Some(it))?);
                 pv = Value::Sum(vec![pv, times(p2, &n2)]);
                 tv = Value::Sum(vec![tv, times(t2, &n2)]);
             }

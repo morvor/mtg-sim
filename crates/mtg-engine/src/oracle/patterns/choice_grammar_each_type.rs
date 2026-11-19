@@ -28,17 +28,10 @@ pub const CHOSEN_EACH: Var = vars::USER + 30528;
 
 /// The permanent types (CR 110.4).
 fn permanent_types() -> Vec<Filter> {
-    [
-        CardType::Artifact,
-        CardType::Battle,
-        CardType::Creature,
-        CardType::Enchantment,
-        CardType::Land,
-        CardType::Planeswalker,
-    ]
-    .into_iter()
-    .map(Filter::Type)
-    .collect()
+    CardType::PERMANENT_TYPES
+        .into_iter()
+        .map(Filter::Type)
+        .collect()
 }
 
 /// One choice of a `base` object for each of `kinds`, by `chooser`, collected in

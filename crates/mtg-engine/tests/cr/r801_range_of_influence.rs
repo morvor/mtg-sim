@@ -220,6 +220,42 @@ fn with_no_opponent_in_range_the_closest_one_to_the_left_chooses() {
 }
 
 #[test]
+fn with_no_opponent_in_range_the_closest_one_to_the_left_chooses_a_card() {
+    cr!("801.5c");
+    interp!("controller-picks-the-choosing-opponent");
+    // P0's neighbors are teammates. Burning-Rune Demon: "... An opponent chooses one of
+    // them. Put the chosen card into your hand and the other into your graveyard ..."
+    let mut t = with_teams(
+        &[0, 0, 1, 1, 0],
+        GameConfig {
+            range_of_influence: Some(1),
+            ..GameConfig::team_vs_team(vec![])
+        },
+    );
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    let shock = t.library_top(P0, "Shock");
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[Entity::Object(shock), Entity::Object(bolt)]);
+    t.answer_choose(P2, &[Entity::Object(bolt)]);
+    let from = t.asked().len();
+    t.enter(P0, "Burning-Rune Demon");
+    t.resolve_all();
+    // P2 (two seats to the left) is the closest opponent to P0's left and chooses
+    // Lightning Bolt; P0 doesn't choose for an opponent.
+    let choosers: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| {
+            matches!(d, Decision::ChooseEntities { candidates, .. }
+                if candidates.iter().all(|e| matches!(e, Entity::Object(_))))
+        })
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(choosers, vec![P0, P2]);
+    assert!(t.in_hand(P0, "Lightning Bolt"));
+    assert!(t.in_graveyard(P0, "Shock"));
+}
+
+#[test]
 fn abilities_of_objects_outside_range_cant_be_activated() {
     cr!("801.6");
     // Lethal Vapors: "{0}: Destroy this enchantment. You skip your next turn. Any player

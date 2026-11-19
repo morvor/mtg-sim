@@ -234,11 +234,15 @@ impl Game {
         // CR 603.10d: who controlled each permanent whose control changes in the current
         // batch immediately before those simultaneous changes.
         let mut control_before = control_before_fn(&events[batch_start..]);
+        // The events of the current batch that haven't been processed yet: while triggers
+        // are detected for one, those after it in the batch (`Game::batch_ahead`).
+        self.batch_ahead = batch_of(&events[batch_start..]);
         for (i, ev) in events.iter().enumerate() {
             if matches!(ev, Event::BatchBoundary) {
                 self.check_batch_triggers(&events[batch_start..i], &born_later);
                 batch_start = i + 1;
                 control_before = control_before_fn(&events[batch_start..]);
+                self.batch_ahead = batch_of(&events[batch_start..]);
                 // The next batch's objects exist from now on.
                 for e in events[batch_start..]
                     .iter()
@@ -262,18 +266,13 @@ impl Game {
             // Recorded before detection so "for the first time each turn" can see which
             // events of this turn precede this one.
             self.turn_events.push(ev.clone());
-            self.excess_ahead = events[i + 1..]
-                .iter()
-                .take_while(|e| !matches!(e, Event::BatchBoundary))
-                .filter(|e| matches!(e, Event::ExcessDamage { .. }))
-                .cloned()
-                .collect();
+            self.batch_ahead.pop_front();
             if let Some(f) = self.observer.as_ref().map(|o| o.on_event.clone()) {
                 f(self, ev);
             }
             once_delayed.extend(self.detect_triggers(ev, &recent, &born_later, &control_before));
         }
-        self.excess_ahead.clear();
+        self.batch_ahead.clear();
         self.check_batch_triggers(&events[batch_start..], &born_later);
         self.fire_once_delayed(once_delayed);
         // Static abilities' conditions can depend on what happened this turn ("as long as
@@ -2760,6 +2759,16 @@ impl Game {
         self.exec(&body.effect, &mut ctx);
         crate::structure::record(&t.ability, &self.obj(t.source).chars.name, "resolved");
     }
+}
+
+/// The events of the batch of simultaneous events that `events` starts with (up to the
+/// next [`Event::BatchBoundary`]).
+fn batch_of(events: &[Event]) -> std::collections::VecDeque<Event> {
+    events
+        .iter()
+        .take_while(|e| !matches!(e, Event::BatchBoundary))
+        .cloned()
+        .collect()
 }
 
 /// For the events of one batch (up to the next [`Event::BatchBoundary`]), the controller

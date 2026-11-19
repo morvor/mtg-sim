@@ -12,7 +12,7 @@ use crate::keywords::KeywordKind;
 use crate::kw::{KeywordRegistration, KeywordRules};
 use crate::object::Zone;
 use crate::replacement::{EtbInfo, MoveEv};
-use crate::types::{Entity, ObjectId, PlayerId};
+use crate::types::{ObjectId, PlayerId};
 
 const PICKS: &str = "card:Memories Returning:alternate picks with an opponent";
 const TEXT: &str = "Reveal the top five cards of your library. Put one of them into your hand. Then choose an opponent. They put one on the bottom of your library. Then you put one into your hand. Then they put one on the bottom of your library. Put the other into your hand.";
@@ -58,7 +58,7 @@ impl KeywordRules for Rules {
         let src = ctx.source;
         let mut cards = crate::library::top_cards(g, you, 5);
         crate::reveal::reveal(g, you, &cards, src);
-        let opps: Vec<Entity> = g.opponents(you).into_iter().map(Entity::Player).collect();
+        let opps: Vec<PlayerId> = g.opponents(you);
         let mut opp: Option<PlayerId> = None;
         // You, (choose an opponent), they, you, they; the last card to your hand.
         for (step, to_hand) in [true, false, true, false].into_iter().enumerate() {
@@ -66,10 +66,8 @@ impl KeywordRules for Rules {
                 break;
             }
             if step == 1 {
-                opp = g
-                    .ask_entities(you, src, "Choose an opponent", opps.clone(), 1, 1)
-                    .first()
-                    .and_then(|e| e.player());
+                // The opponent who picks (`choosing_opponent`).
+                opp = crate::choosing_opponent::pick(g, you, src, &opps, "Choose an opponent", true);
             }
             let who = if to_hand { you } else { opp.unwrap_or(you) };
             let prompt = if to_hand {

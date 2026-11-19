@@ -496,6 +496,11 @@ fn note_this_way(e: &Effect, out: &mut Vec<(Var, &'static str, Option<CardType>)
             set(out, vars::IT, Some(("returned", ty(what))))
         }
         Effect::Tap { what } => set(out, vars::TAPPED, Some(("tapped", ty(what)))),
+        Effect::CounterSpell { .. } => set(
+            out,
+            crate::kw::value_results::COUNTERED,
+            Some(("countered", None)),
+        ),
         // "If a permanent dealt damage this way would die this turn, ...".
         Effect::DealDamage { .. } => set(out, vars::DAMAGED, Some(("dealt damage", None))),
         Effect::Discard { .. } | Effect::DiscardHand { .. } => set(
@@ -748,11 +753,18 @@ impl Renderer<'_> {
     /// The instructions after one that sets X ("roll a d20", then "create X Treasure
     /// tokens"), with ", where X is [value]" after the first sentence that uses X.
     pub(crate) fn x_defined_later(&mut self, value: &Value, rest: &[Effect]) -> Option<String> {
+        let before = (self.introduced.clone(), self.gaps.len());
         let x = self.value(value);
         if x == "X" || rest.is_empty() {
             return None;
         }
+        // The value is said after the sentence that uses X, so a target both mention is
+        // introduced in that sentence and the value refers back to it ("Counter target
+        // spell unless its controller pays {X}, where X is its mana value.").
+        self.introduced = before.0;
+        self.gaps.truncate(before.1);
         let text = self.seq(rest);
+        let x = self.value(value);
         let uses_x = |s: &str| {
             s.split(|c: char| !c.is_alphanumeric() && c != '{' && c != '}')
                 .any(|w| w == "X" || w == "{X}")

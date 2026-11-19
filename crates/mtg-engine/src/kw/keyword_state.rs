@@ -21,4 +21,9 @@ pub struct KeywordState {
     /// The mana spent on each cost paid by a resolving "you may pay [cost]", in order
     /// (see `kw/payment_mana.rs`: "for each {B} or {R} spent this way").
     pub payments: Vec<Vec<crate::mana::ManaType>>,
+    /// While one instruction copies a spell for each of several objects (one copy event,
+    /// `copy::begin_copy_event`): each spell copied in it, with the player who copied it,
+    /// whose added copies ("instead copy it that many times plus an additional time") are
+    /// made once, as the instruction ends. `None` otherwise.
+    pub copy_event: Option<Vec<(ObjectId, PlayerId)>>,
 }

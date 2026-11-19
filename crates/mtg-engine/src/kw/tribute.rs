@@ -78,23 +78,20 @@ impl KeywordRules for Tribute {
 /// it enter with `n` additional +1/+1 counters.
 fn tribute(g: &mut Game, ctx: &mut Ctx, this: ObjectId, n: u32) {
     let p = ctx.controller;
-    let opponents: Vec<Entity> = g
+    let opponents: Vec<PlayerId> = g
         .opponents(p)
         .into_iter()
         .filter(|q| g.player(*q).in_game())
-        .map(Entity::Player)
         .collect();
-    let chosen = g
-        .ask_entities(
-            p,
-            Some(this),
-            "Choose an opponent (tribute)",
-            opponents,
-            1,
-            1,
-        )
-        .first()
-        .and_then(|e| e.player());
+    // The opponent who decides (`choosing_opponent`).
+    let chosen = crate::choosing_opponent::pick(
+        g,
+        p,
+        Some(this),
+        &opponents,
+        "Choose an opponent (tribute)",
+        true,
+    );
     let name = g.obj(this).chars.name.clone();
     // Counters that can't be put on it (Solemnity): tribute can't be paid even if the
     // opponent wants to (CR 614.17b; Solemnity ruling).

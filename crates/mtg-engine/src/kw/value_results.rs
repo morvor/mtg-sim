@@ -88,12 +88,14 @@ fn matches_at(
     matches_of(g, cond, ctx, ev)
 }
 
-/// This turn's events (processed ones with their index), then the current action's.
+/// This turn's events (processed ones with their index), then those simultaneous with the
+/// event being checked for triggers (`Game::batch_ahead`), then the current action's.
 fn turn_events_indexed(g: &Game) -> impl Iterator<Item = (Option<usize>, &Event)> {
     g.turn_events
         .iter()
         .enumerate()
         .map(|(i, e)| (Some(i), e))
+        .chain(g.batch_ahead.iter().map(|e| (None, e)))
         .chain(g.events.iter().map(|e| (None, e)))
 }
 
@@ -136,16 +138,20 @@ fn matches_of(g: &Game, cond: &TriggerCond, ctx: &Ctx, ev: &Event) -> Vec<EventI
 /// CR 608.2h); `vars::IT` holds the cards they became.
 pub const DESTROYED: crate::ability::Var = crate::ability::vars::USER + 7520;
 
+/// The spells and abilities the latest counter instruction countered, as they last existed
+/// on the stack ("for each spell and ability countered this way", CR 608.2h): also a
+/// spell that a replacement effect put into a library or hand instead of a graveyard
+/// (Darksteel Colossus) and a countered ability, which no other instruction can find;
+/// `vars::IT` holds the countered cards in the public zones they went to (CR 400.7j).
+pub const COUNTERED: crate::ability::Var = crate::ability::vars::USER + 7526;
+
 pub fn events_this_turn(g: &Game, cond: &TriggerCond, tally: Tally, ctx: &Ctx) -> i64 {
     let mut n = 0i64;
     let mut players = BTreeSet::new();
-    // Excess damage dealt along with the damage being looked at (CR 120.10).
-    let ahead = match cond {
-        TriggerCond::DealtExcessDamage { .. } => g.excess_ahead.as_slice(),
-        _ => &[],
-    };
-    let events = turn_events_indexed(g).chain(ahead.iter().map(|e| (None, e)));
-    for (i, ev) in events {
+    // The events simultaneous with the one an ability is triggering on count too
+    // (`Game::batch_ahead`): excess damage dealt along with the damage being looked at
+    // (CR 120.10), lands entering together (Tunnel Ignus).
+    for (i, ev) in turn_events_indexed(g) {
         for info in matches_at(g, cond, ctx, i, ev) {
             match tally {
                 Tally::Events => n += 1,

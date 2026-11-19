@@ -30,3 +30,22 @@ fn not_without_enough_mana_and_creatures() {
     t.lands(P0, "Forest", 2);
     assert!(t.activate(P0, epic, 0, &[]).is_err());
 }
+
+#[test]
+fn by_default_only_the_creatures_the_mana_cant_pay_for_are_tapped() {
+    cr!("602.2b", "601.2h");
+    interp!("default-cost-helpers");
+    // No answer queued: with two Wastes, two of the three Grizzly Bears are tapped; with
+    // four Wastes, none.
+    for (wastes, n) in [(2, 2), (4, 0)] {
+        let mut t = TestGame::new(2);
+        let epic = t.battlefield(P0, "Heirloom Epic");
+        let bears: Vec<ObjectId> = (0..3).map(|_| t.battlefield(P0, "Grizzly Bears")).collect();
+        let lands = t.lands(P0, "Wastes", wastes);
+        t.activate(P0, epic, 0, &[]).unwrap();
+        assert_eq!(bears.iter().filter(|b| t.obj_now(**b).tapped).count(), n);
+        assert!(lands.iter().all(|l| t.obj_now(*l).tapped));
+        t.resolve_all();
+        assert_eq!(t.hand_size(P0), 1);
+    }
+}

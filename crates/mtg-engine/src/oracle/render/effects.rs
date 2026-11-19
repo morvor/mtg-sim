@@ -1905,6 +1905,16 @@ impl Renderer<'_> {
                     None => self.move_effect(what, to),
                 }
             }
+            // "[reveal cards ... until they reveal four land cards], then puts those cards
+            // into their graveyard": every card revealed (Mirko Vosk, Mind Drinker).
+            Effect::Move {
+                what: Sel::Var(v),
+                to,
+            } if *v == vars::REVEALED
+                && format!("{to:?}") == format!("{:?}", Destination::zone(ZoneKind::Graveyard)) =>
+            {
+                "{opt:that player} put those cards into its owner's graveyard".into()
+            }
             Effect::Move { what, to } => self.move_effect(what, to),
             Effect::Tap { what } => {
                 let w = self.sel(what, Case::Obj);
@@ -7697,6 +7707,9 @@ impl Renderer<'_> {
                     _ if p.all => Det::Count("all".into()),
                     (Value::Const(1), false) => Det::A,
                     (Value::Const(n), _) if *n >= 99 => Det::Count("any number of".into()),
+                    (Value::Const(n), false) if p.exactly => {
+                        Det::Count(format!("exactly {}", number_word(*n)))
+                    }
                     (Value::Const(n), false) => Det::Count(number_word(*n)),
                     (Value::Const(n), true) => Det::UpTo(number_word(*n)),
                     (other, up_to) => {

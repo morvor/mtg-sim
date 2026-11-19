@@ -683,6 +683,10 @@ pub struct SearchPart {
     /// "all cards with that name": every matching card in a public zone is found.
     #[serde(default)]
     pub all: bool,
+    /// "exactly N": the searcher finds N cards or none, and none if N can't be found
+    /// together (register `exactly-n-cards-are-n-or-none`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub exactly: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1388,9 +1392,9 @@ pub enum PlayerFilter {
     /// A player who has max speed: their speed is 4 (CR 702.179e).
     MaxSpeed,
     /// In the vote the ability triggered on ("whenever players finish voting", CR
-    /// 701.38): a player who voted for a choice you voted for (`true`), or who voted only
-    /// for choices you didn't vote for (`false`; Grudge Keeper's rulings). See
-    /// `kwa::vote::voted_like`.
+    /// 701.38): a player who voted for a choice you voted for (`true`), or for a choice
+    /// you didn't vote for (`false`); a player with several votes can be both (Erestor of
+    /// the Council's ruling). See `kwa::vote::voted_like`.
     VotedLikeYou(bool),
     /// A player who chose this word for the source ("players who chose war", "each
     /// opponent who chose silence"): that player's own choice among the source's
@@ -4642,7 +4646,9 @@ pub enum Effect {
         effect: Box<Effect>,
     },
     /// "[Player] may pay [cost]. If they do, [then]. If they don't, [otherwise]."
-    /// Also covers "unless [player] pays" (swap then/otherwise).
+    /// Also covers "unless [player] pays" (swap then/otherwise). With several players
+    /// ("any opponent may", "unless any player pays"), each in turn order is offered the
+    /// cost, even after one has paid; `then` follows the first payment (CR 118.12a).
     PayOptional {
         who: PlayerRef,
         cost: Cost,

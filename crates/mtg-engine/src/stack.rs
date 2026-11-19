@@ -515,23 +515,17 @@ impl Game {
         }
         // CR 801.5a, 801.5c: an opponent within the controller's range of influence, or
         // else the closest opponent to their left.
+        // The controller picks which (`choosing_opponent`).
         let opps = crate::multiplayer::range::opponents_to_choose(self, controller);
-        let p = match opps.len() {
-            0 => controller,
-            1 => opps[0],
-            _ => self
-                .ask_entities(
-                    controller,
-                    Some(id),
-                    "Choose the opponent who makes the choice",
-                    opps.iter().map(|p| Entity::Player(*p)).collect(),
-                    1,
-                    1,
-                )
-                .first()
-                .and_then(|e| e.player())
-                .unwrap_or(opps[0]),
-        };
+        let p = crate::choosing_opponent::pick(
+            self,
+            controller,
+            Some(id),
+            &opps,
+            crate::choosing_opponent::PROMPT,
+            false,
+        )
+        .unwrap_or(controller);
         ctx.chosen_player = Some(p);
         p
     }
@@ -890,6 +884,8 @@ impl Game {
             .filter(|i| !by_other(&specs[*i]))
             .chain((0..specs.len()).filter(|i| by_other(&specs[*i])))
             .collect();
+        // Whether an earlier slot's "of an opponent's choice" has had its opponent chosen.
+        let mut opponent_chosen = false;
         for (pos, &i) in order.iter().enumerate() {
             let spec = &specs[i];
             ctx.targets = out.clone();
@@ -901,6 +897,14 @@ impl Game {
                 }
             }
             let chooser = if spec.chosen_by_opponent {
+                // Each "of an opponent's choice" is a choice of its own: the controller
+                // decides which opponent makes each one, the same opponent or another (CR
+                // 601.7a; Volcanic Offering's rulings), so a later slot's opponent isn't
+                // an earlier slot's by default.
+                if opponent_chosen {
+                    ctx.chosen_player = None;
+                }
+                opponent_chosen = true;
                 let o = self.deciding_opponent(ctx.controller, stack_obj, ctx);
                 // Kept for the targets' legality as it resolves (CR 608.2b).
                 if let Some(si) = self.objects[stack_obj.0 as usize].stack.as_mut() {

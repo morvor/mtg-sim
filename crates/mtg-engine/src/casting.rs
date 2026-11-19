@@ -724,12 +724,13 @@ impl Game {
         chars: &Characteristics,
     ) -> Option<crate::permissions::CastPermission> {
         let mut found: Option<crate::permissions::CastPermission> = None;
-        for (i, (src, ctl, perm, once)) in self.statics.play_permissions.iter().enumerate() {
+        for (i, (src, ctl, perm, once, link)) in self.statics.play_permissions.iter().enumerate() {
             let free = perm.cost.as_ref().is_some_and(Cost::is_free);
             if !free || !perm.spells || perm.zone != ZoneKind::Hand {
                 continue;
             }
-            let ctx = Ctx::new(Some(*src), *ctl);
+            let mut ctx = Ctx::new(Some(*src), *ctl);
+            ctx.link = *link;
             let view = WithChars {
                 id: card,
                 chars,
@@ -1889,6 +1890,12 @@ impl Game {
         for c in crate::splice::offer_splices(self, p, id, &opt, &extra) {
             add_cost(&mut extra, &c);
         }
+        // The additional costs announced so far count as X is announced: a reduction for
+        // each time one is paid ("This spell costs {2} less to cast for each card exiled
+        // this way") bounds the X the mana available could pay for (CR 601.2b, 601.2f).
+        if let Some(si) = self.objects[id.0 as usize].stack.as_mut() {
+            si.cast.paid = cast_info.paid.clone();
+        }
         let base_cost_has_x = match &opt.alt_cost {
             // CR 107.3a: an X in any part of an alternative cost ("Flashback—{1}{U}, Exile
             // X blue cards from your graveyard").
@@ -1938,8 +1945,17 @@ impl Game {
             (None, c) => c,
         };
         let x_ok = |n: i64| x_allowed.as_ref().is_none_or(|v| v.contains(&n));
+        // CR 107.3b: a spell with an {X} in its mana cost that its text doesn't define, cast
+        // paying neither its mana cost nor an alternative cost that includes X ("without
+        // paying its mana cost"), can only have 0 as X, also for its additional costs that
+        // use X ("As an additional cost to cast this spell, pay X life", Bond of Agony).
+        let x_must_be_zero = x_allowed.is_none()
+            && chars.mana_cost.as_ref().is_some_and(|m| m.has_x())
+            && opt.alt_cost.as_ref().is_some_and(|c| {
+                !c.mana.as_ref().is_some_and(|m| m.has_x()) && !c.parts.iter().any(cost_part_has_x)
+            });
         let mut x: i64 = 0;
-        if base_cost_has_x {
+        if base_cost_has_x && !x_must_be_zero {
             // Whether mana is paid for X: then the mana available bounds it. Otherwise X is
             // paid some other way ("pay X life", "discard X cards") and what the player has
             // of that bounds it (CR 107.3a, 601.2b; the feasibility check below narrows it).
@@ -1952,7 +1968,22 @@ impl Game {
                     .as_ref()
                     .is_some_and(|c| c.mana.as_ref().is_some_and(|m| m.has_x()));
             let mut max = if mana_x {
-                self.max_mana_available(p) as i64
+                // Cost reductions can let X exceed the mana available ("This spell costs
+                // {2} less to cast for each card exiled this way", CR 601.2f): the greatest
+                // X whose total cost that mana could still cover (looked for up to 64 more
+                // than the mana available; the feasibility check below narrows it).
+                let avail = self.max_mana_available(p) as i64;
+                let total = |n: i64| {
+                    self.total_cost_with(p, id, &chars, opt, n as u32, &extra)
+                        .mana
+                        .as_ref()
+                        .map_or(0, |m| m.mana_value()) as i64
+                };
+                let mut m = avail;
+                while m < avail + 64 && total(m + 1) <= avail {
+                    m += 1;
+                }
+                m
             } else {
                 let mut parts: Vec<&CostPart> = extra.parts.iter().collect();
                 if let Some(c) = &opt.alt_cost {
@@ -2262,6 +2293,11 @@ impl Game {
         // and a payment that removed such a permanent anyway (sacrificing it to another
         // permanent's mana ability) can't be made. The spell's own costs may still
         // sacrifice it: those are paid together with the tapping (CR 601.2h).
+        // A spell cast "if able" during a resolution: activating mana abilities for it is
+        // still the player's choice (CR 601.2g).
+        if !crate::cost_rules::agrees_to_activate_mana_abilities(self, p, id, &total, &spend) {
+            return Err(Illegal(crate::cost_rules::DECLINED_MANA_ABILITIES.into()));
+        }
         let prev_otherwise = std::mem::replace(&mut self.paid_otherwise, paid_otherwise.clone());
         let paid = self.pay_total_cost(p, &total, Some(id), &spend, &ctx);
         self.paid_otherwise = prev_otherwise;
@@ -3290,7 +3326,20 @@ impl Game {
         crate::cost_rules::choose_payment_ways_for(self, p, Some(src), Some(id), &mut cost);
         // Paying part of it other than with mana ("you may tap an untapped creature you
         // control rather than pay that mana").
+        let untapped: Vec<ObjectId> = self
+            .battlefield
+            .iter()
+            .copied()
+            .filter(|o| !self.obj(*o).tapped)
+            .collect();
         crate::kw::pay_activation_otherwise(self, p, src, a, &mut cost);
+        // What it tapped is tapped as the total cost is paid, after mana abilities are
+        // activated (CR 601.2g–h): it can't also be sacrificed for mana (Heirloom Epic's
+        // rulings), as for convoke (`Game::paid_otherwise`).
+        let paid_otherwise: Vec<ObjectId> = untapped
+            .into_iter()
+            .filter(|o| self.is_in_zone(*o, Zone::Battlefield) && self.obj(*o).tapped)
+            .collect();
         // CR 602.1e: a modification of how the activation cost may be paid applies to the
         // total cost.
         let spend = SpendContext {
@@ -3326,10 +3375,20 @@ impl Game {
         // stays revealed until the ability leaves the stack (CR 701.20a).
         let before = ctx.stack_obj.replace(id);
         ctx.cost_of = Some(crate::rule_statics::payment::CostOf::Ability);
-        let paid = self.pay_total_cost(p, &cost, Some(src), &spend, &ctx);
+        let paid = self.with_paid_otherwise(&paid_otherwise, |g| {
+            g.pay_total_cost(p, &cost, Some(src), &spend, &ctx)
+        });
         ctx.cost_of = None;
         ctx.stack_obj = before;
         let paid = paid?;
+        if paid_otherwise
+            .iter()
+            .any(|c| !self.is_in_zone(*c, Zone::Battlefield) && !paid.objects.contains(c))
+        {
+            return Err(Illegal(
+                "a permanent tapped to pay the ability's cost was removed for mana".into(),
+            ));
+        }
         // "{6}, Roll a d8: Monstrosity X, where X is the result.": the results of a die
         // rolled to pay the cost (CR 118.1, 602.2b).
         for (k, v) in &paid.nums {
@@ -3701,6 +3760,10 @@ impl Game {
             // "Spend this mana only to pay cumulative upkeep costs": the cost the resolving
             // keyword ability asks for (CR 702.24a).
             purpose: crate::keyword_impls::resolving_keyword_purpose(self, ctx),
+            // "Spend this mana only on costs that contain {X}": a cost with {X} asked for
+            // as a spell or ability resolves (Power Sink's "unless its controller pays
+            // {X}"), whose X already has its value.
+            has_x: ctx.cost_has_x,
             ..Default::default()
         };
         match self.pay_total_cost(p, cost, src, &spend, ctx) {
@@ -4061,6 +4124,22 @@ impl Game {
         }
     }
 
+    /// Runs `f` with `tapped` among the permanents tapped to pay part of a total cost other
+    /// than with mana (`Game::paid_otherwise`): they're tapped as that cost is paid, after
+    /// mana abilities are activated (CR 601.2g–h), so the mana `f` pays can't come from
+    /// sacrificing, exiling or returning them.
+    pub fn with_paid_otherwise<T>(
+        &mut self,
+        tapped: &[ObjectId],
+        f: impl FnOnce(&mut Game) -> T,
+    ) -> T {
+        let prev = self.paid_otherwise.clone();
+        self.paid_otherwise.extend_from_slice(tapped);
+        let r = f(self);
+        self.paid_otherwise = prev;
+        r
+    }
+
     /// Pays a total cost: mana (activating mana abilities as needed) and all other parts
     /// (CR 601.2g–h). Errors leave partial state; callers roll back.
     pub fn pay_total_cost(
@@ -4153,8 +4232,24 @@ impl Game {
             };
             // CR 609.4b: "as though it were mana of any color" changes only how it's paid.
             let m = &crate::as_though::payment_cost(self, p, m);
-            let spent = crate::mana_abilities::pay_mana(self, p, m, spend, reserve)
+            // What the "Tap an untapped [permanent]" parts tapped first is tapped as the
+            // total cost is paid, after the mana abilities (CR 601.2g–h): none of them may
+            // be sacrificed for this mana (two Wild Cantors can't both pay {2} and be
+            // tapped as Humans).
+            let tapped_first = paid.tapped.clone();
+            let spent = self
+                .with_paid_otherwise(&tapped_first, |g| {
+                    crate::mana_abilities::pay_mana(g, p, m, spend, reserve)
+                })
                 .ok_or_else(|| Illegal("can't pay mana".into()))?;
+            if tapped_first
+                .iter()
+                .any(|o| !self.is_in_zone(*o, Zone::Battlefield))
+            {
+                return Err(Illegal(
+                    "a permanent tapped to pay the cost was removed for mana".into(),
+                ));
+            }
             self.players[p.idx()].mana_spent_this_turn += spent.len() as u32;
             paid.mana_spent = spent;
         }
@@ -4758,6 +4853,15 @@ impl Game {
                     for o in v.iter().filter_map(|x| x.object()) {
                         if self.obj(o).zone == Zone::Exile && !paid.objects.contains(&o) {
                             paid.objects.push(o);
+                        } else if let (Effect::Move { .. }, true, Some(prev)) =
+                            (&**e, self.obj(o).zone.is_public(), self.obj(o).prev)
+                        {
+                            // CR 400.7j: a card the cost put into a graveyard ("Put a card
+                            // exiled with ~ into its owner's graveyard: Counter target
+                            // spell if it has the same name as that card") is found there.
+                            if !paid.objects.contains(&prev) {
+                                paid.objects.push(prev);
+                            }
                         }
                     }
                 }

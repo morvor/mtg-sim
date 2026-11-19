@@ -11,8 +11,8 @@
 //!   its caster isn't the active player ("except during its controller's turn").
 //!   [`CASTER_ENCHANTED`]: its caster is the player the source enchants ("Spells with the
 //!   chosen name enchanted player casts cost {2} more to cast.").
-//! * "for each creature it targets": each time the spell targets a creature counts
-//!   (Battlefield Thaumaturge ruling).
+//! * "for each creature it targets": each creature the spell targets counts once, however
+//!   many times it's targeted (interpretation `thaumaturge-counts-each-targeted-creature-once`).
 //! * A player effect that changes spells' costs for a while has its amount determined once,
 //!   as the effect begins (CR 608.2h: "where X is the amount of life you lost this turn"
 //!   is locked in, Rowan, Scion of War ruling) — see [`lock_player_effect`].
@@ -91,7 +91,8 @@ pub fn paid_times(name: &str) -> String {
 /// player is chosen counts), once they're chosen (CR 601.2c); none before that.
 pub const OWN_TARGETS: &str = "spell cost:own targets";
 
-/// `Value::Custom` name: how many times the spell being cast targets an object of type `t`.
+/// `Value::Custom` name: how many objects of type `t` the spell being cast targets (each
+/// once, however many times it's targeted).
 pub fn targets_of_type(t: CardType) -> String {
     format!("{TARGETS_PREFIX}{}", format!("{t:?}").to_lowercase())
 }
@@ -317,7 +318,7 @@ fn most_times_payable(g: &Game, card: ObjectId, p: PlayerId, name: &str) -> i64 
     most
 }
 
-/// The most times `card`, cast now, could target an object of type `t` (CR 601.2c).
+/// The most objects of type `t` that `card`, cast now, could target (CR 601.2c).
 fn most_targets_of_type(g: &Game, card: ObjectId, t: CardType) -> i64 {
     let o = g.obj(card);
     let ctx = Ctx::new(Some(card), o.owner);
@@ -501,16 +502,19 @@ impl KeywordRules for SpellCostGrammar {
         let Some(si) = spell.and_then(|s| g.obj(s).stack.as_deref()) else {
             return Some(0);
         };
-        let n = si
-            .chosen
-            .iter()
-            .flat_map(|cm| cm.targets.iter().flatten())
-            .filter(|e| match e {
-                Entity::Object(o) => g.is_live(*o) && g.obj(*o).chars.card_types.contains(t),
-                Entity::Player(_) => false,
-            })
-            .count();
-        Some(n as i64)
+        // "For each creature it targets": the creatures that are its targets, a creature
+        // targeted more than once counting once, as "for each target" counts the objects
+        // and players that are targets (Hinata, Dawn-Crowned's ruling; interpretation
+        // `thaumaturge-counts-each-targeted-creature-once`).
+        let mut seen: Vec<ObjectId> = Vec::new();
+        for e in si.chosen.iter().flat_map(|cm| cm.targets.iter().flatten()) {
+            if let Entity::Object(o) = e {
+                if !seen.contains(o) && g.is_live(*o) && g.obj(*o).chars.card_types.contains(t) {
+                    seen.push(*o);
+                }
+            }
+        }
+        Some(seen.len() as i64)
     }
 
     fn global_spell_cost(&self, g: &Game, p: PlayerId, card: ObjectId, cost: &mut Cost) {

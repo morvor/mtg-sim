@@ -818,25 +818,18 @@ fn shares_with<'a>(t: &'a str, _so_far: &Filter) -> Option<(Filter, &'a str)> {
         // A permanent type (artifact, battle, creature, enchantment, land, planeswalker)
         // both have.
         3 => Filter::Or(
-            [
-                CardType::Artifact,
-                CardType::Battle,
-                CardType::Creature,
-                CardType::Enchantment,
-                CardType::Land,
-                CardType::Planeswalker,
-            ]
-            .into_iter()
-            .map(|t| {
-                Filter::and(vec![
-                    Filter::Type(t),
-                    Filter::SharesCardType(Box::new(Sel::All(Filter::and(vec![
+            CardType::PERMANENT_TYPES
+                .into_iter()
+                .map(|t| {
+                    Filter::and(vec![
                         Filter::Type(t),
-                        Filter::In(sel.clone()),
-                    ])))),
-                ])
-            })
-            .collect(),
+                        Filter::SharesCardType(Box::new(Sel::All(Filter::and(vec![
+                            Filter::Type(t),
+                            Filter::In(sel.clone()),
+                        ])))),
+                    ])
+                })
+                .collect(),
         ),
         _ => Filter::SharesColor(sel),
     };
@@ -1700,6 +1693,18 @@ pub fn other_than_referent(f: Filter) -> Filter {
         return f;
     }
     other_than_it(f, &referent())
+}
+
+/// "Each legendary creature you control gets +1/+1 for each other legendary creature you
+/// control" (Heroes' Podium): with a group as the subject, "other" in what's counted means
+/// other than each affected object (as with a relational "that creature", Mirror Box),
+/// not other than the source. A count's top-level [`Filter::Other`] becomes "not the
+/// affected object".
+pub fn other_than_affected(v: Value) -> Value {
+    match v {
+        Value::Count(f) => Value::Count(other_than_it(f, &Sel::Var(vars::AFFECTED))),
+        v => v,
+    }
 }
 
 /// "that each have mana value X", "that each have mana value X or less" (after a plural

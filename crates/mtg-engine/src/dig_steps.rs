@@ -295,7 +295,22 @@ fn take(
     to: &Destination,
     ctx: &mut Ctx,
 ) {
-    let p = g.eval_player(chooser, ctx).unwrap_or(ctx.controller);
+    // "An opponent chooses one of them" (Burning-Rune Demon): with several opponents, the
+    // controller picks which (`choosing_opponent`); with none within the controller's
+    // range of influence, the closest one to their left chooses (CR 801.5c).
+    let mut choosers = g.eval_players(chooser, ctx);
+    if choosers.is_empty() {
+        choosers.extend(crate::multiplayer::range::closest_chooser(g, chooser, ctx));
+    }
+    let p = crate::choosing_opponent::pick(
+        g,
+        ctx.controller,
+        ctx.source,
+        &choosers,
+        crate::choosing_opponent::PROMPT,
+        false,
+    )
+    .unwrap_or(ctx.controller);
     // Cards an earlier selection took (and left in the library) aren't among them any
     // more, unless the selection is of exactly those ("put the revealed cards into your
     // hand").

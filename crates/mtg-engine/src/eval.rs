@@ -105,6 +105,11 @@ pub struct Ctx {
     /// `Game::legal_target_candidates` on their own copy of the context.
     #[serde(default)]
     pub target_legality: bool,
+    /// The cost a resolving spell or ability asks for had {X} in it before X was replaced
+    /// by its value (`mana_abilities::bind_x_for_payment`): mana that may be spent only
+    /// on costs that contain {X} can pay it (CR 107.3; Elementalist's Palette's rulings).
+    #[serde(default)]
+    pub cost_has_x: bool,
 }
 
 /// Modifications to how a permanent enters, collected while applying an "as this
@@ -413,7 +418,10 @@ impl Game {
                 self.eval_value(v, ctx),
             ),
             PlayerFilter::Defending => self.defending_player_for(ctx) == Some(p),
-            PlayerFilter::Active => self.turn.active == p,
+            // A player whose turn it is ("during their own turns", "it's that player's
+            // turn"): with shared team turns, each player on the active team (CR 805.4a,
+            // 805.9: "all of the active players").
+            PlayerFilter::Active => self.is_active_player(p),
             PlayerFilter::AttackedThisTurn => {
                 self.turn.active == p && !self.history.attackers.is_empty()
             }
@@ -487,9 +495,7 @@ impl Game {
             PlayerFilter::Chose(w) => self
                 .source_choices(ctx)
                 .is_some_and(|ch| crate::choices::player_choice_matches(ch, p, w)),
-            PlayerFilter::VotedLikeYou(like) => {
-                crate::kwa::vote::voted_like(self, ctx, p) == Some(*like)
-            }
+            PlayerFilter::VotedLikeYou(like) => crate::kwa::vote::voted_like(self, ctx, p, *like),
             // Twice the life total against the starting life total: no rounding.
             PlayerFilter::HalfStartingLife(cmp) => cmp.eval(
                 2 * self.player(p).life as i64,

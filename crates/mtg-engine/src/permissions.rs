@@ -271,11 +271,12 @@ pub fn allowing(
     // cast spells "with certain qualities" only by a player who may look at it (and then
     // only if the resulting spell has those qualities).
     let hidden = o.zone == Zone::Exile && o.face_down && !crate::zones::may_look(g, p, card);
-    for (i, (src, ctl, perm, once)) in g.statics.play_permissions.iter().enumerate() {
+    for (i, (src, ctl, perm, once, link)) in g.statics.play_permissions.iter().enumerate() {
         if hidden || (land && !perm.lands) || (!land && !perm.spells) {
             continue;
         }
         let mut ctx = Ctx::new(Some(*src), *ctl);
+        ctx.link = *link;
         if !g.player_rel_matches(perm.who, p, &ctx) || !in_permission_zone(g, p, card, perm) {
             continue;
         }
@@ -386,7 +387,7 @@ pub fn may_be_permitted(g: &Game, p: PlayerId, card: ObjectId) -> bool {
         || g.statics
             .play_permissions
             .iter()
-            .any(|(src, ctl, perm, _)| {
+            .any(|(src, ctl, perm, _, _)| {
                 g.player_rel_matches(perm.who, p, &Ctx::new(Some(*src), *ctl))
                     && in_permission_zone(g, p, card, perm)
             })
@@ -398,8 +399,9 @@ pub fn effect_permitted_cards(g: &Game, p: PlayerId) -> Vec<ObjectId> {
     if own_only() {
         return out;
     }
-    for (src, ctl, perm, _) in &g.statics.play_permissions {
-        let ctx = Ctx::new(Some(*src), *ctl);
+    for (src, ctl, perm, _, link) in &g.statics.play_permissions {
+        let mut ctx = Ctx::new(Some(*src), *ctl);
+        ctx.link = *link;
         if !g.player_rel_matches(perm.who, p, &ctx) {
             continue;
         }
