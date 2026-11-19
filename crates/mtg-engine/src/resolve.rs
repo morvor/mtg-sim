@@ -136,9 +136,31 @@ impl Game {
                     );
                 ctx.prev_happened = yes;
                 if yes {
+                    let it_before = ctx.vars.get(&vars::IT).cloned();
                     // Effects that can fail to do what they say (sacrificing, paying,
                     // countering) record whether they did it ("if you do", "when you do").
                     self.exec(effect, ctx);
+                    // "You may put that card onto the battlefield. If you don't, put it
+                    // into your hand": an Aura that couldn't enter stayed where it was (CR
+                    // 303.4g) and is still the same object (CR 400.7), so "it" still means
+                    // that card, as when the player declines (Songbirds' Blessing ruling).
+                    if let (
+                        Effect::Move {
+                            what: Sel::Var(v), ..
+                        },
+                        Some(before),
+                    ) = (&**effect, it_before)
+                    {
+                        if *v == vars::IT
+                            && !ctx.prev_happened
+                            && before.iter().all(|e| match e {
+                                Entity::Object(o) => self.is_live(*o),
+                                Entity::Player(_) => false,
+                            })
+                        {
+                            ctx.set_var(vars::IT, before);
+                        }
+                    }
                     // "You may draw cards equal to its power. If you do, discard two cards":
                     // a player may choose to draw even with too few cards in their library
                     // (CR 121.3), and "if you do" follows that choice, however many cards
@@ -584,17 +606,9 @@ impl Game {
                         crate::zones::target_not_source_moved(ctx, what, e, found).object()
                     })
                     .collect();
-                let before = objs.clone();
                 let mut moves = self.destination_moves(objs, to, ctx);
                 self.put_by_chooser(what, to, ctx, &mut moves);
                 let res: Vec<ObjectId> = self.move_objects(moves).into_iter().flatten().collect();
-                // "You may put that card onto the battlefield. If you don't, put it into
-                // your hand": an Aura that can't enter stays where it is (CR 303.4g) and is
-                // still the same object (CR 400.7 is about zone changes), so "it" still
-                // refers to it, as when the player declines (Songbirds' Blessing ruling).
-                let stayed = matches!(what, Sel::Var(v) if *v == vars::IT)
-                    && !before.is_empty()
-                    && before.iter().all(|o| self.is_live(*o) && !res.contains(o));
                 crate::zones::note_source_moved(ctx, what, &res);
                 // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
                 let mut res = crate::merge::found_all(self, res);
@@ -609,9 +623,7 @@ impl Game {
                 // "... return it to the battlefield. If you do, ...": whether it moved
                 // (it may not, CR 400.7, 712.14a).
                 ctx.prev_happened = !res.is_empty();
-                if !(stayed && res.is_empty()) {
-                    ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
-                }
+                ctx.set_var(vars::IT, res.into_iter().map(Entity::Object).collect());
             }
             Effect::Tap { what } => {
                 let mut tapped = Vec::new();
