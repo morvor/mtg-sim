@@ -119,10 +119,7 @@ fn ice_floe_effect_survives_the_creature_being_untapped_and_tapped_again() {
 /// attackers step, before blocks.
 fn fog_after_attacks(t: &mut TestGame, spell: &str, attackers: &[ObjectId]) {
     supported(spell);
-    let at: Vec<(ObjectId, Entity)> = attackers
-        .iter()
-        .map(|a| (*a, Entity::Player(P1)))
-        .collect();
+    let at: Vec<(ObjectId, Entity)> = attackers.iter().map(|a| (*a, Entity::Player(P1))).collect();
     attacks(t, &at);
     cast_card(t, P1, spell, &[]).unwrap();
     t.resolve_all();

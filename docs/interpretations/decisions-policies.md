@@ -256,7 +256,7 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Why: The rulings require three different colors; random choices keep simulated drafts varied and reproducible from the seed.
 - Affects: Paliano, the High City and Regicide (and any card with the same draft ability).
 - Code: `crates/mtg-engine/src/draft.rs` (`Draft::three_colors`, `Draft::preset_colors`).
-- Tests: `tests/cards/draft_4.rs` (`paliano_and_regicide_use_the_colors_chosen_as_they_were_drafted`).
+- Tests: `tests/cards/draft_4.rs` (`paliano_and_regicide_use_the_colors_chosen_as_they_were_drafted`); `tests/rulings/r_residue_hate_attack_block_block.rs` (`regicide_colors_are_three_different_ones`: a preset repeating a color is ignored).
 
 ## opponents-choice-untargeted: "A land of an opponent's choice" is chosen by an opponent the controller picks
 - Kind: interpretation
