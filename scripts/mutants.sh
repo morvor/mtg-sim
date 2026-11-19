@@ -140,9 +140,9 @@ PY
     i=1
     while [[ -e "$dest/mutants.out.bak.$i" ]]; do i=$((i + 1)); done
     cp -a "$dest/mutants.out" "$dest/mutants.out.bak.$i"
-    (cd "$dest/mutants.out" && cat caught.txt missed.txt timeout.txt unviable.txt \
-      previously_caught.txt 2>/dev/null | sort -u >previously_caught.new &&
-      mv previously_caught.new previously_caught.txt)
+    (cd "$dest/mutants.out" && for f in caught missed timeout unviable previously_caught; do
+      [[ -f $f.txt ]] && cat "$f.txt"
+    done | sort -u >previously_caught.new && mv previously_caught.new previously_caught.txt)
     # The baseline passed when the run started (same REV): don't spend a suite run on it again.
     args+=(--iterate --baseline skip)
   fi
