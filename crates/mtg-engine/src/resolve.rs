@@ -179,6 +179,8 @@ impl Game {
                 then,
                 otherwise,
             } => {
+                let had_x = ctx.cost_has_x;
+                ctx.cost_has_x = cost.mana.as_ref().is_some_and(|m| m.has_x());
                 let cost = &crate::mana_abilities::bind_x_for_payment(self, cost, ctx);
                 // "[cost] for each ...": the total is determined now (CR 702.24a).
                 let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
@@ -210,6 +212,7 @@ impl Game {
                         crate::shortcuts::declined_unless(self);
                     }
                 }
+                ctx.cost_has_x = had_x;
                 ctx.prev_happened = paid;
                 if paid {
                     self.exec(then, ctx);
@@ -222,15 +225,18 @@ impl Game {
                 let items = self.resolve_sel(sel, ctx);
                 let stack_before = self.stack.len();
                 // "For each of those creatures, copy that spell" (Feather, Radiant
-                // Arbiter): the copies are put on the stack at once, in the order their
-                // controller chooses (CR 405.3), all of them together: the copies an
-                // effect adds to each one's too (Twinning Staff), which the copy
+                // Arbiter): one copy event, so the copies an effect adds (Twinning Staff)
+                // are made once for it, not for each creature (`copy::begin_copy_event`);
+                // and the copies are put on the stack at once, in the order their
+                // controller chooses (CR 405.3), all of them together, which the copy
                 // instruction leaves to this.
                 let copies_together = matches!(**effect, Effect::CopySpellRetargeted { .. });
                 let marker = crate::copy::ORDERED_BY_ENCLOSING;
                 let outer = copies_together.then(|| ctx.vars.insert(marker, vec![]));
+                let event = copies_together && crate::copy::begin_copy_event(self);
                 // CR 608.2f: an action on several objects happens to all of them at once.
                 crate::simultaneous::for_each_object(self, items, *var, effect, ctx);
+                crate::copy::end_copy_event(self, event);
                 if let Some(outer) = outer {
                     match outer {
                         Some(v) => {
@@ -1737,7 +1743,8 @@ impl Game {
                         // Copies an effect adds are put onto the stack with these at the
                         // same time, all in the order their controller chooses (CR 405.3,
                         // 707.10d): asked once, here, unless an enclosing "for each"
-                        // orders them with its other copies.
+                        // orders them with its other copies (and makes the added copies
+                        // once, for all of them: one copy event).
                         made.extend(crate::copy::additional_copies(self, o, ctx.controller));
                         if !ctx.vars.contains_key(&crate::copy::ORDERED_BY_ENCLOSING) {
                             crate::copy::order_copies(self, ctx.controller, &made);

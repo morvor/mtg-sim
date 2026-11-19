@@ -940,6 +940,14 @@ decides whether they become a conflict case.
   `two_target_destruction_with_one_target_left_affects_it`). Whether the Journey into Nyx
   release notes (2014; ormos mirror) have the same spelling wasn't checked. No kind fits a
   misspelled name.
+- **Siege of Towers** (ruling-conflicts-11): "As the replicate triggered ability resolves,
+  you'll copy Shattering Spree for each time you paid its replicate cost, even if the
+  original spell is no longer on the stack at that time (perhaps because it was countered)."
+  (2024-01-12, Ravnica Remastered) names Shattering Spree: it is Shattering Spree's ruling,
+  word for word and with the same date, with the name left unchanged. Replicate works the
+  same on both cards, so with Siege of Towers' name read in, the ruling holds. The text is
+  cited through Shattering Spree (`tests/rulings/r_s14_replicate_retrace.rs`), so it needs
+  no test of its own. Not exempted; not an entry.
 - Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (copying errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the
