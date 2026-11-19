@@ -265,20 +265,35 @@ pub fn custom_value(g: &Game, name: &str, ctx: &Ctx) -> i64 {
             .sum(),
         // "the number of creatures that were exiled under your opponents' control this
         // turn" (Vren, the Relentless): creatures an opponent controlled that left the
-        // battlefield for exile (their last known information, CR 608.2h).
-        "creatures_exiled_from_opponents_this_turn" => g
-            .history
-            .permanents_left
-            .iter()
-            .filter(|o| {
-                let old = g.obj(**o);
-                old.chars.is(crate::types::CardType::Creature)
-                    && g.are_opponents(ctx.controller, old.controller)
-                    && old
-                        .next
-                        .is_some_and(|n| g.obj(n).zone == crate::object::Zone::Exile)
-            })
-            .count() as i64,
+        // battlefield for exile (their last known information, CR 608.2h), whether or not
+        // they're still there: a token that has ceased to exist (CR 704.5d) or a card that
+        // has since left exile was still exiled.
+        "creatures_exiled_from_opponents_this_turn" => {
+            use crate::object::Zone;
+            let exiled = |old: ObjectId| {
+                g.turn_events.iter().chain(g.events.iter()).any(|e| {
+                    matches!(e, crate::events::Event::ZoneChange {
+                        old: o,
+                        from: Zone::Battlefield,
+                        to: Zone::Exile,
+                        ..
+                    } if *o == old)
+                }) || g
+                    .obj(old)
+                    .next
+                    .is_some_and(|n| g.obj(n).zone == Zone::Exile)
+            };
+            g.history
+                .permanents_left
+                .iter()
+                .filter(|o| {
+                    let old = g.obj(**o);
+                    old.chars.is(crate::types::CardType::Creature)
+                        && g.are_opponents(ctx.controller, old.controller)
+                        && exiled(**o)
+                })
+                .count() as i64
+        }
         // "the number of spells cast this turn" (by all players).
         "spells_cast_this_turn" => g.history.spells_cast.len() as i64,
         // Number of spells the controller has cast this turn.
