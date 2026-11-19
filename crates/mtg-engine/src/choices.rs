@@ -163,7 +163,7 @@ pub fn make_choice(g: &mut Game, p: PlayerId, kind: &ChoiceKind, ctx: &mut Ctx) 
             // picks the opponent, `choosing_opponent`): offered in turn order from the
             // next opponent, who is the default.
             let pick = if *kind == ChoiceKind::Opponent {
-                crate::choosing_opponent::pick(g, p, Some(src), &cands, "Choose a player")
+                crate::choosing_opponent::pick(g, p, Some(src), &cands, "Choose a player", true)
             } else {
                 let cands = cands.into_iter().map(Entity::Player).collect();
                 g.ask_entities(p, Some(src), "Choose a player", cands, 1, 1)

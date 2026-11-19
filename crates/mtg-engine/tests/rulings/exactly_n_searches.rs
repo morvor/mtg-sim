@@ -7,7 +7,7 @@
 //! CR 701.23b allows for cards with a stated quality, none, never between one and N - 1;
 //! if N such cards can't be found together, none are, and a library searched for
 //! Burning-Rune Demon is still shuffled (CR 701.23g, 118.12b). No rule or ruling speaks to
-//! the shortfall: register entry `exactly-n-cards-are-n-or-none` (provisional), which reads
+//! the shortfall: register entry `exactly-n-cards-are-n-or-none` (decided by the user, Nov 19), which reads
 //! "exactly" as Spry and Mighty's ruling does for "Choose exactly two creatures you
 //! control". A player who chooses not to search for Burning-Rune Demon doesn't shuffle (its
 //! ruling).

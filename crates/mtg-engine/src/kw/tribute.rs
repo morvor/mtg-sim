@@ -90,6 +90,7 @@ fn tribute(g: &mut Game, ctx: &mut Ctx, this: ObjectId, n: u32) {
         Some(this),
         &opponents,
         "Choose an opponent (tribute)",
+        true,
     );
     let name = g.obj(this).chars.name.clone();
     // Counters that can't be put on it (Solemnity): tribute can't be paid even if the

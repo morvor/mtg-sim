@@ -231,7 +231,7 @@ fn one_player(g: &mut Game, who: &PlayerRef, picker: Option<&PlayerRef>, ctx: &C
     // Offered in turn order from the next player after the picker, the default
     // (`choosing_opponent`: "an opponent separates", "an opponent chooses one of those
     // piles").
-    crate::choosing_opponent::pick(g, picker, ctx.source, &cands, "Choose a player")
+    crate::choosing_opponent::pick(g, picker, ctx.source, &cands, "Choose a player", false)
         .unwrap_or(ctx.controller)
 }
 

@@ -33,18 +33,21 @@ pub fn in_turn_order_after(g: &Game, from: PlayerId, players: &[PlayerId]) -> Ve
 
 /// `controller` picks which of `candidates` (players, usually their opponents) makes a
 /// choice for a spell or ability they control, offered in turn order from the next player
-/// after them; by default that next one. `None` if there's no candidate.
+/// after them; by default that next one. `None` if there's no candidate. A lone candidate
+/// is picked without asking unless `ask_alone` (an explicit "choose an opponent", which
+/// the controller is asked even with one opponent).
 pub fn pick(
     g: &mut Game,
     controller: PlayerId,
     source: Option<ObjectId>,
     candidates: &[PlayerId],
     prompt: &str,
+    ask_alone: bool,
 ) -> Option<PlayerId> {
     let order = in_turn_order_after(g, controller, candidates);
     match order.as_slice() {
         [] => None,
-        [one] => Some(*one),
+        [one] if !ask_alone => Some(*one),
         _ => Some(
             g.ask_entities(
                 controller,

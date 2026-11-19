@@ -67,7 +67,7 @@ impl KeywordRules for Rules {
             }
             if step == 1 {
                 // The opponent who picks (`choosing_opponent`).
-                opp = crate::choosing_opponent::pick(g, you, src, &opps, "Choose an opponent");
+                opp = crate::choosing_opponent::pick(g, you, src, &opps, "Choose an opponent", true);
             }
             let who = if to_hand { you } else { opp.unwrap_or(you) };
             let prompt = if to_hand {

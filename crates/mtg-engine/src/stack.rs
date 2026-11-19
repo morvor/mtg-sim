@@ -523,6 +523,7 @@ impl Game {
             Some(id),
             &opps,
             crate::choosing_opponent::PROMPT,
+            false,
         )
         .unwrap_or(controller);
         ctx.chosen_player = Some(p);

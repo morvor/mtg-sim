@@ -306,6 +306,7 @@ fn take(
             ctx.source,
             &choosers,
             crate::choosing_opponent::PROMPT,
+            false,
         )
         .unwrap_or(ctx.controller),
     };
