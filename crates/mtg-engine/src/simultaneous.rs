@@ -1124,7 +1124,7 @@ fn plan(
             }
             let searcher = g.eval_player(who, ctx).unwrap_or(ctx.controller);
             // Whose library: "their library" is the searcher's, as `Game::exec` reads it
-            // (and the cards are looked for as that player's).
+            // (which also reads the cards' description with the searcher as "they").
             let mut c = ctx.clone();
             c.iter_player = Some(searcher);
             let owner = g.eval_player(whose, &c).unwrap_or(searcher);
@@ -1732,9 +1732,8 @@ fn perform_plans(
             out[i].moved = res[r].to_vec();
         }
     }
-    // Then the searchers shuffle, in APNAP order (CR 701.23i), each library they searched
-    // once: a player who searched the same library again in this instruction made one
-    // search (CR 701.23h).
+    // Then the searchers shuffle, in APNAP order, each library they searched once: a player
+    // who searched the same library again in this instruction made one search (CR 701.23h).
     let mut shuffled: Vec<(PlayerId, PlayerId)> = Vec::new();
     for plan in plans.iter().flatten() {
         if let Plan::Search {

@@ -1,7 +1,8 @@
 //! CR 608.2f, 603.2c: an action that can't be processed simultaneously (a process of
 //! several steps) is processed for each player individually; the other players' actions of
 //! the same instruction are still processed simultaneously, and one action with what
-//! records it or a permission to play a card is still one action. "Players dealt damage
+//! records it or a permission to play a card is still one action (what records it stays
+//! with it when the objects processed one at a time are reordered). "Players dealt damage
 //! this way" are the players a part's damage was dealt to, each once.
 
 use crate::r608_each_player_common::*;
@@ -127,4 +128,82 @@ fn a_player_dealt_damage_by_two_sources_at_once_is_dealt_damage_this_way_once() 
         17,
         "2 damage, then 1 life for being dealt damage this way"
     );
+}
+
+#[test]
+fn what_records_a_planned_part_stays_with_it_when_the_objects_are_reordered() {
+    cr!("608.2f");
+    interp!("per-object-actions-in-given-order");
+    // "For each permanent an opponent controls: if it's a land, its controller mills a card,
+    // then draws a card; otherwise, this spell deals 1 damage to it and N goes up by its
+    // power. Then you gain N life." P1 controls a land, Grizzly Bears and another land, in
+    // that order. The lands' parts are processes, performed one land at a time, and P0
+    // chooses the second land to go first (CR 608.2f); the Bears' part is planned with its
+    // damage, and what records it (N goes up by its power, 2) is still performed for the
+    // Bears, not for the land that took the Bears' place in the order.
+    const EACH: Var = vars::USER + 4291;
+    const N: Var = vars::USER + 4292;
+    let it = || Sel::Var(EACH);
+    let process = Effect::AsPlayer {
+        who: PlayerRef::ControllerOf(Box::new(it())),
+        effect: Box::new(Effect::Seq(vec![
+            Effect::Mill {
+                who: PlayerRef::You,
+                n: Value::c(1),
+            },
+            draw(1),
+        ])),
+    };
+    let damage_and_count = Effect::Seq(vec![
+        Effect::DealDamage {
+            source: Sel::This,
+            amount: Value::c(1),
+            to: it(),
+        },
+        Effect::StoreValue {
+            var: N,
+            value: Value::Sum(vec![Value::Var(N), Value::PowerOf(Box::new(it()))]),
+        },
+    ]);
+    let body = Effect::Seq(vec![
+        Effect::StoreValue {
+            var: N,
+            value: Value::c(0),
+        },
+        Effect::ForEach {
+            sel: Sel::All(Filter::and(vec![
+                Filter::InZone(ZoneKind::Battlefield),
+                Filter::ControlledBy(PlayerRel::Opponent),
+            ])),
+            var: EACH,
+            effect: Box::new(Effect::If {
+                cond: Condition::SelMatches(it(), Filter::Type(CardType::Land)),
+                then: Box::new(process),
+                otherwise: Box::new(damage_and_count),
+            }),
+        },
+        Effect::GainLife {
+            who: PlayerRef::You,
+            n: Value::Var(N),
+        },
+    ]);
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Ancient Tomb");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let second = t.battlefield(P1, "Ancient Tomb");
+    for _ in 0..4 {
+        t.library_top(P1, "Island");
+    }
+    // P0 orders P1's lands: the second one first.
+    t.answer_choose(P0, &[Entity::Object(second)]);
+    let asked = t.asked().len();
+    cast_body(&mut t, body);
+    t.resolve_all();
+    let orders = t.asked()[asked..]
+        .iter()
+        .filter(|(p, d)| *p == P0 && matches!(d, mtg_engine::decision::Decision::ChooseEntities { .. }))
+        .count();
+    assert_eq!(orders, 1, "P0 ordered the lands");
+    assert_eq!(t.g.obj(bears).damage, 1);
+    assert_eq!(t.life(P0), 22, "N is the Bears' power");
 }

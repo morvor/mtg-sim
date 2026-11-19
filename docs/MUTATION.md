@@ -1134,12 +1134,17 @@ mutants', not theirs. The new code (`Plan::Then`, the continued search, the `pro
 of the file would.
 
 **Review.** Every engine fix's regression test was checked again to fail with its fix
-reverted (`any_player_may_have_damage`, C1, C2/C3/C6, C4, C5, C8, C9, C10, L5). Changes:
+reverted (`any_player_may_have_damage`, C1, C2/C3/C6, C4, C5, C8, C9, C10, L5), and
+`browbeat_damage_to_every_player_who_takes_it_is_one_event` turned out to pin the process
+classification (`1414:17` and the rest), not C10, which `vexing_devil_with_lifelink_...`
+pins. Changes:
 
 - The merge with upstream's `per_object_order` (the order of one player's objects chosen
   as the instruction resolves, CR 608.2f): `choose_next_object` rotates the frames, plans and
   outcomes of a group, and now each part's `Plan::Then` records with them, so they stay with
-  their part.
+  their part (`what_records_a_planned_part_stays_with_it_when_the_objects_are_reordered`,
+  `tests/cr/r608_002f_individual_processes.rs`, hand-built: without the rotation a land's
+  part ran the Bears' record).
 - C4's repeated search: the implementer had a player's second search of the same library
   wait until the first one's cards had moved; with "then shuffle" after each search that's a
   new search after the shuffle, so two searches and two shuffles, against CR 701.23h ("The
