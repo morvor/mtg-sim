@@ -379,6 +379,13 @@ impl Game {
                     if self.is_live(*t) {
                         let before = self.objects[t.0 as usize].chars.clone();
                         let mut c = before.clone();
+                        // A double-faced token copy's copy exceptions (CR 707.8a) are
+                        // applied this way: the characteristic-defining abilities of what
+                        // it copies that define a characteristic they set aren't copied
+                        // (CR 707.9d; a 1/1 Soul Separator copy of Sage of Ancient Lore).
+                        if crate::copy_rules::is_double_faced_token(self, *t) {
+                            crate::copy::drop_overridden_cdas(&mut c, mods);
+                        }
                         for m in mods {
                             apply_mod(&mut c, m, self, &ctx, *t);
                         }
