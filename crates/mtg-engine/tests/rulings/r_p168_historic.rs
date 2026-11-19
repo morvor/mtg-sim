@@ -488,7 +488,11 @@ fn historic_in_each_wording_counts_a_legendary_artifact_once() {
         t.activate(P0, tome, 0, &[]).unwrap();
         t.resolve_all();
         assert_eq!(t.zone(t.g.current(g)) == Zone::Exile, exiled, "{in_gy}");
-        assert_eq!(t.hand_size(P0), if exiled { hand + 1 } else { hand }, "{in_gy}");
+        assert_eq!(
+            t.hand_size(P0),
+            if exiled { hand + 1 } else { hand },
+            "{in_gy}"
+        );
     }
 
     // What Must Be Done: "Return target historic permanent card from your graveyard".
@@ -604,7 +608,11 @@ fn historic_cast_triggers_ignore_legendary_lands() {
         t.settle();
         let ruin = t.g.current(search);
         assert!(t.obj_now(ruin).is(CardType::Land), "{name}");
-        assert!(t.obj_now(ruin).chars.supertypes.contains(Supertype::Legendary));
+        assert!(t
+            .obj_now(ruin)
+            .chars
+            .supertypes
+            .contains(Supertype::Legendary));
         assert_eq!(t.stack_len(), 0, "{name}");
     }
 }
@@ -771,18 +779,27 @@ fn port_town_put_onto_the_battlefield_tapped_stays_tapped() {
     );
     supported("Arboreal Grazer");
     let mut t = TestGame::new(2);
-    let town = t.hand(P0, "Port Town");
+    let in_hand = t.hand(P0, "Port Town");
     let island = t.hand(P0, "Island");
     // Arboreal Grazer: "you may put a land card from your hand onto the battlefield tapped."
     t.answer_yes(P0, true);
-    t.answer_choose(P0, &[obj(town)]);
+    t.answer_choose(P0, &[obj(in_hand)]);
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[obj(island)]);
+    let from = t.asked().len();
     t.enter(P0, "Arboreal Grazer");
     t.resolve_all();
-    let town = t.g.current(town);
+    let town = t.g.current(in_hand);
     assert!(t.on_battlefield(town));
     assert!(t.obj_now(town).tapped);
+    // Port Town's reveal was offered, with the Island, and the Island was revealed (it
+    // stays in hand).
+    assert!(t.asked()[from..].iter().any(|(_, d)| matches!(
+        d,
+        Decision::ChooseEntities { source: Some(s), candidates, .. }
+            if *s == in_hand && candidates == &vec![obj(island)]
+    )));
+    assert!(t.in_hand(P0, "Island"));
 }
 
 /// P1's Tempting Wurm lets P0 put `lands` from hand onto the battlefield at the same time;
@@ -841,7 +858,7 @@ fn archway_of_innovation_needs_an_island_already() {
 
 #[test]
 fn nimbus_maze_checks_land_types_not_names() {
-    cr!("305.6", "602.5b");
+    cr!("305.6", "602.5");
     ruling!(
         "Nimbus Maze",
         "Nimbus Maze's last two abilities check the subtypes of lands you control, not their names. You can activate the appropriate abilities as long as you control a land with the corresponding subtype, Plains or Island. Most nonbasic lands don't have basic land types, even if they produce colored mana. For example, Nimbus Maze itself is neither a Plains nor an Island, while Hallowed Fountain is both."
@@ -854,11 +871,10 @@ fn nimbus_maze_checks_land_types_not_names() {
     for color in ["{W}", "{U}"] {
         t.g.recompute();
         t.g.turn.priority = Some(P0);
-        let usable = t
-            .g
-            .activatable_abilities(P0)
-            .iter()
-            .any(|(s, ab)| *s == a && ab.text.contains(color));
+        let usable =
+            t.g.activatable_abilities(P0)
+                .iter()
+                .any(|(s, ab)| *s == a && ab.text.contains(color));
         assert!(!usable, "{color}");
     }
     t.battlefield(P0, "Hallowed Fountain");

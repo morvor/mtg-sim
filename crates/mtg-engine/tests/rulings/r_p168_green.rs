@@ -71,18 +71,17 @@ fn kruphix_colorless_mana_keeps_its_spending_restriction() {
     let sol = t.hand(P0, "Sol Ring");
     t.g.turn.priority = Some(P0);
     assert!(t.cast(P0, sol).try_go().is_err());
-    // ... but pays for a legendary one, which can't be countered.
+    // ... but pays for a legendary one, which can't be countered: P1's Counterspell
+    // resolves and Shadowspear stays on the stack, then resolves.
     let mut t = restricted_colorless();
     let spear = t.hand(P0, "Shadowspear");
     let spell = t.cast(P0, spear).go();
-    t.g.recompute();
-    assert!(t
-        .g
-        .obj(spell)
-        .chars
-        .abilities
-        .iter()
-        .any(|a| a.text == "This spell can't be countered."));
+    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
+    cast_new(&mut t, P1, "Counterspell", &[obj(spell)]);
+    t.resolve();
+    assert_eq!(t.g.stack, vec![spell]);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Shadowspear").len(), 1);
 }
 
 #[test]
@@ -116,7 +115,10 @@ fn momir_vig_both_triggers_stack_in_either_order() {
     // One order: the search puts it on top, then the reveal puts it into the hand. The
     // other: the reveal finds the Island, then the search puts the Dragon on top.
     assert!(outcomes.contains(&(Zone::Hand(P0), false)), "{outcomes:?}");
-    assert!(outcomes.contains(&(Zone::Library(P0), true)), "{outcomes:?}");
+    assert!(
+        outcomes.contains(&(Zone::Library(P0), true)),
+        "{outcomes:?}"
+    );
 }
 
 #[test]
@@ -151,7 +153,7 @@ fn garruk_emblem_creature_enters_first_and_does_not_retrigger() {
 
 #[test]
 fn garruk_minus_three_chooses_the_card_on_resolution() {
-    cr!("608.2", "606.3");
+    cr!("608.2");
     ruling!(
         "Garruk, Caller of Beasts",
         "You choose what green creature card to put onto the battlefield, if any, when the second ability resolves."
@@ -223,7 +225,11 @@ fn ivy_lane_denizen_can_target_itself_or_the_entering_creature() {
             t.answer_targets(P0, &[obj(bears)]);
         }
         t.resolve_all();
-        let (on, off) = if itself { (denizen, bears) } else { (bears, denizen) };
+        let (on, off) = if itself {
+            (denizen, bears)
+        } else {
+            (bears, denizen)
+        };
         assert_eq!(t.counters(on, "+1/+1"), 1, "itself: {itself}");
         assert_eq!(t.counters(off, "+1/+1"), 0, "itself: {itself}");
     }
@@ -257,7 +263,7 @@ fn klothyss_design_fixes_x_and_the_affected_set_on_resolution() {
 
 #[test]
 fn nyleas_huntmaster_fixes_x_on_resolution() {
-    cr!("611.2c", "700.5");
+    cr!("608.2h", "700.5");
     ruling!(
         "Nylea's Huntmaster",
         "The value of X is determined only as the triggered ability resolves. Once that happens, the value of X won’t change later in the turn even if your devotion to green changes."
@@ -329,9 +335,7 @@ fn march_of_burgeoning_life_cant_cost_less_than_g() {
     t.answer(P0, DecisionKind::OptionalCost, Answer::Number(2));
     t.answer_choose(P0, &[obj(a)]);
     t.answer_choose(P0, &[obj(b)]);
-    let r = t.cast(P0, march).x(3).target(bears).try_go();
-    for (p, d) in t.asked() { if !matches!(d, Decision::Priority{..}) { eprintln!("{p:?} {d:?}"); } }
-    r.unwrap();
+    t.cast(P0, march).x(3).target(bears).go();
     assert_eq!(t.zone(t.g.current(a)), Zone::Exile);
     assert_eq!(t.zone(t.g.current(b)), Zone::Exile);
     assert_eq!(tapped_lands(&t, P0), 1);
@@ -455,8 +459,8 @@ fn natural_order_and_magus_sacrifice_exactly_one_green_creature() {
     t.resolve_all();
     assert!(!t.on_battlefield(a));
     assert!(t.on_battlefield(b));
-    let found = t.named_on_battlefield("Craw Wurm").len()
-        + t.named_on_battlefield("Kalonian Tusker").len();
+    let found =
+        t.named_on_battlefield("Craw Wurm").len() + t.named_on_battlefield("Kalonian Tusker").len();
     assert_eq!(found, 1);
     // Magus: with two other green creatures, it sacrifices itself and exactly one of them.
     let mut t = TestGame::new(2);
@@ -539,7 +543,7 @@ fn patron_of_the_orochi_once_each_turn_even_after_a_control_change() {
 
 #[test]
 fn stampeding_wildebeests_returns_an_untargetable_creature_or_itself() {
-    cr!("603.3d", "702.16b", "608.2");
+    cr!("603.3d", "702.16b", "702.18a", "608.2");
     ruling!(
         "Stampeding Wildebeests",
         "The ability that returns a creature doesn’t target anything. You can return a creature with shroud or protection from green, for example. You don’t decide which creature to return until the ability resolves. If you control no other green creatures, you must return Stampeding Wildebeests itself."
@@ -556,25 +560,31 @@ fn stampeding_wildebeests_returns_an_untargetable_creature_or_itself() {
     );
     def.faces[0].chars.colors = ColorSet::single(Color::Green);
     let pro = t.custom(P0, def, Zone::Battlefield);
-    let wolf = t.battlefield(P0, "Sacred Wolf");
     t.answer_choose(P0, &[obj(pro)]);
     t.advance_to(P1, Step::Upkeep);
     t.advance_to(P0, Step::Upkeep);
     t.resolve_all();
     assert_eq!(t.zone(t.g.current(pro)), Zone::Hand(P0));
     assert!(t.on_battlefield(beasts));
-    // And the shroud creature on the next upkeep, which was a choice on resolution among
-    // all three.
-    let from = t.asked().len();
-    t.answer_choose(P0, &[obj(wolf)]);
+    // On the next upkeep, a creature with shroud (Mist Leopard) that arrives after the
+    // trigger was put on the stack: the creature is chosen as the ability resolves, from
+    // the green creatures P0 controls then (the Wildebeests among them).
+    supported("Mist Leopard");
     t.advance_to(P1, Step::Upkeep);
     t.advance_to(P0, Step::Upkeep);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    let leopard = t.battlefield(P0, "Mist Leopard");
+    let from = t.asked().len();
+    t.answer_choose(P0, &[obj(leopard)]);
     t.resolve_all();
-    assert_eq!(t.zone(t.g.current(wolf)), Zone::Hand(P0));
+    assert_eq!(t.zone(t.g.current(leopard)), Zone::Hand(P0));
     assert!(t.on_battlefield(beasts));
-    assert!(asked_since(&t, from)
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::ChooseEntities { candidates, .. } if candidates.contains(&obj(beasts)))));
+    assert!(asked_since(&t, from).iter().any(|(_, d)| matches!(
+        d,
+        Decision::ChooseEntities { candidates, .. }
+            if candidates.contains(&obj(beasts)) && candidates.contains(&obj(leopard))
+    )));
     // Alone, it returns itself.
     let mut t = TestGame::new(2);
     let beasts = t.battlefield(P0, "Stampeding Wildebeests");
@@ -764,7 +774,7 @@ fn xenagos_type_change_works_only_on_the_battlefield() {
 
 #[test]
 fn xenagos_enters_as_a_creature_only_with_enough_devotion_including_its_own_cost() {
-    cr!("700.5", "614.12", "603.6a");
+    cr!("700.5", "603.6a", "603.6b", "603.10");
     ruling!(
         "Xenagos, God of Revels",
         "When Xenagos enters the battlefield, your devotion to red and green will determine if a creature entered the battlefield or not for abilities that trigger whenever a creature enters the battlefield. The mana symbols in Xenagos's own mana cost are counted when determining this."
@@ -859,13 +869,21 @@ fn hunt_the_hunter_needs_both_targets() {
     let hunt = t.hand(P0, "Hunt the Hunter");
     assert!(t.cast(P0, hunt).target(bears).try_go().is_err());
     let theirs = t.battlefield(P1, "Grizzly Bears");
-    assert!(t.cast(P0, hunt).target(bears).target(theirs).try_go().is_ok());
+    assert!(t
+        .cast(P0, hunt)
+        .target(bears)
+        .target(theirs)
+        .try_go()
+        .is_ok());
 }
 
 #[test]
 fn rofelloss_gift_reveals_and_chooses_on_resolution() {
     cr!("608.2", "701.20a");
-    ruling!("Rofellos's Gift", "You reveal and you choose cards during the resolution.");
+    ruling!(
+        "Rofellos's Gift",
+        "You reveal and you choose cards during the resolution."
+    );
     let mut t = TestGame::new(2);
     let a = t.graveyard(P0, "Pacifism");
     t.graveyard(P0, "Pacifism");
@@ -907,5 +925,3 @@ fn yeva_flash_permission_still_needs_the_mana_cost() {
     assert!(t.cast(P0, bears).try_go().is_ok());
     assert_eq!(tapped_lands(&t, P0), 2);
 }
-
-

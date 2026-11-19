@@ -201,10 +201,20 @@ fn bard_class_level_three_cards_must_be_played_this_turn() {
     assert_eq!(t.zone(bolt), Zone::Exile);
     // This turn it could be cast; on P0's next turn it can't, and it stays exiled.
     t.lands(P0, "Mountain", 1);
-    assert!(crate::r_s02_common::can_cast(&mut t, P0, bolt, CastMethod::Normal));
+    assert!(crate::r_s02_common::can_cast(
+        &mut t,
+        P0,
+        bolt,
+        CastMethod::Normal
+    ));
     t.advance_to(P1, Step::Upkeep);
     t.advance_to(P0, Step::PrecombatMain);
-    assert!(!crate::r_s02_common::can_cast(&mut t, P0, bolt, CastMethod::Normal));
+    assert!(!crate::r_s02_common::can_cast(
+        &mut t,
+        P0,
+        bolt,
+        CastMethod::Normal
+    ));
     assert_eq!(t.zone(bolt), Zone::Exile);
 }
 
@@ -222,7 +232,10 @@ fn bard_class_lets_either_face_of_an_exiled_mdfc_be_cast() {
         let lib = stack_library(
             &mut t,
             P0,
-            &["Valentin, Dean of the Vein // Lisette, Dean of the Root", "Mountain"],
+            &[
+                "Valentin, Dean of the Vein // Lisette, Dean of the Root",
+                "Mountain",
+            ],
         );
         cast_new(&mut t, P0, "Isamaru, Hound of Konda", &[]);
         t.resolve_all();
@@ -266,7 +279,10 @@ fn eomer_sees_legends_dying_with_it() {
     t.g.tap(bears);
     let wurm = t.battlefield(P1, "Craw Wurm");
     let ogre = t.battlefield(P1, "Gray Ogre");
-    t.attack(&[(eomer, pl(P1)), (isamaru, pl(P1))], &[(wurm, eomer), (ogre, isamaru)]);
+    t.attack(
+        &[(eomer, pl(P1)), (isamaru, pl(P1))],
+        &[(wurm, eomer), (ogre, isamaru)],
+    );
     t.resolve_all();
     assert!(!t.on_battlefield(eomer));
     assert!(!t.on_battlefield(isamaru));
@@ -567,7 +583,9 @@ fn serah_farron_checks_her_condition_twice() {
         t.settle();
         (t, serah, legends)
     }
-    let transformed = |t: &TestGame, s: ObjectId| t.obj_now(t.g.current(s)).chars.name.as_str() == "Crystallized Serah";
+    let transformed = |t: &TestGame, s: ObjectId| {
+        t.obj_now(t.g.current(s)).chars.name.as_str() == "Crystallized Serah"
+    };
     // One other legend: no trigger.
     let (t, _, _) = game(1);
     assert_eq!(t.stack_len(), 0);
@@ -700,16 +718,19 @@ fn jayas_immolating_inferno_cant_target_a_player_twice() {
         "Jaya's Immolating Inferno",
         "You can't target the same target more than once to have Jaya's Immolating Inferno deal more damage to it."
     );
+    // The targets the spell on the stack has.
+    fn targets(t: &TestGame, spell: ObjectId) -> Vec<Entity> {
+        t.g.obj(spell).stack.as_ref().unwrap().chosen[0].targets[0].clone()
+    }
+    // One instance of "target" (up to three): P1 chosen twice isn't a legal choice, so
+    // the answer is refused, and the spell doesn't have P1 as a target twice.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Isamaru, Hound of Konda");
     t.lands(P0, "Mountain", 4);
     let jaya = t.hand(P0, "Jaya's Immolating Inferno");
     let from = t.asked().len();
     t.answer_targets(P0, &[pl(P1), pl(P1)]);
-    let r = t.cast(P0, jaya).x(2).try_go();
-    t.resolve_all();
-    // However the answer is treated, P1 is dealt 2 damage at most once.
-    assert!(t.life(P1) >= 18, "{r:?}");
+    let spell = t.cast(P0, jaya).x(2).go();
     let slots: Vec<u32> = t.asked()[from..]
         .iter()
         .filter_map(|(_, d)| match d {
@@ -718,6 +739,26 @@ fn jayas_immolating_inferno_cant_target_a_player_twice() {
         })
         .collect();
     assert_eq!(slots, vec![3]);
+    let chosen = targets(&t, spell);
+    assert!(
+        chosen.iter().filter(|e| **e == pl(P1)).count() <= 1,
+        "{chosen:?}"
+    );
+    t.resolve_all();
+    assert!(t.life(P1) >= 18);
+    // Three different targets: each is dealt 2 damage, once.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Isamaru, Hound of Konda");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Mountain", 4);
+    let jaya = t.hand(P0, "Jaya's Immolating Inferno");
+    t.answer_targets(P0, &[pl(P1), obj(bears), pl(P0)]);
+    let spell = t.cast(P0, jaya).x(2).go();
+    assert_eq!(targets(&t, spell), vec![pl(P1), obj(bears), pl(P0)]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    assert_eq!(t.life(P0), 18);
+    assert!(!t.on_battlefield(bears));
 }
 
 #[test]
@@ -756,6 +797,8 @@ fn kethis_casts_from_the_graveyard_paying_all_costs() {
     t.resolve_all();
     let r = t.named_on_battlefield("Ragavan, Nimble Pilferer");
     assert_eq!(r.len(), 1);
+    // Dashed (not cast for its mana cost, {R} after the reduction too): it has haste.
+    assert!(crate::r_s06_common::has_kw(&t, r[0], KeywordKind::Haste));
 }
 
 #[test]

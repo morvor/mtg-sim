@@ -2,9 +2,9 @@
 //! of legendary sources (CR 707.10), Acclaimed Contender's intervening "if" (CR 603.4),
 //! permanents entering together (CR 603.6a) and the legend rule (CR 704.5j), Senu entering
 //! attacking (CR 508.4), Mobilized District's P/T layers (CR 613.4), last known information
-//! (Gríma Wormtongue, CR 603.10a), Gríma's life-gain lock (CR 119.7, 119.8), illegal
+//! (Gríma Wormtongue, CR 608.2h), Gríma's life-gain lock (CR 119.5), illegal
 //! targets on resolution (Ancient Animus, Friendly Rivalry, Mjölnir: CR 608.2b), copies of
-//! uncounterable spells (CR 707.10) and Goryo's Vengeance's delayed exile (CR 610.3).
+//! uncounterable spells (CR 707.10) and Goryo's Vengeance's delayed exile (CR 603.7c).
 
 use crate::r_s01_common::*;
 use crate::r_s02_common::can_attack;
@@ -318,7 +318,14 @@ fn primevals_returns_every_legend_and_stacks_triggers_after_the_legend_rule() {
         &mut t,
         P0,
         |d| matches!(d, Decision::ChooseEntities { prompt, .. } if prompt.to_lowercase().contains("legend")),
-        |g| (g.stack.len(), g.permanents().filter(|o| o.chars.name == "Bosco, Just a Bear").count()),
+        |g| {
+            (
+                g.stack.len(),
+                g.permanents()
+                    .filter(|o| o.chars.name == "Bosco, Just a Bear")
+                    .count(),
+            )
+        },
     );
     cast_new(&mut t, P0, "Primevals' Glorious Rebirth", &[]);
     t.resolve_all();
@@ -357,7 +364,14 @@ fn senu_enters_attacking_without_attack_triggers() {
     t.resolve_all();
     let senu = t.named_on_battlefield("Senu, Keen-Eyed Protector");
     assert_eq!(senu.len(), 1);
-    assert!(t.g.combat.as_ref().unwrap().attackers.iter().any(|a| a.id == senu[0]));
+    assert!(t
+        .g
+        .combat
+        .as_ref()
+        .unwrap()
+        .attackers
+        .iter()
+        .any(|a| a.id == senu[0]));
     assert_eq!(t.counters(repo, "charge"), 1);
     // Master's Guidance didn't trigger: no counters.
     assert_eq!(t.counters(isamaru, "+1/+1"), 0);
@@ -529,7 +543,11 @@ fn mobilized_district_counts_a_legendary_planeswalker_creature_once() {
         assert!(t.obj_now(gideon).is(CardType::Planeswalker));
         add_mana(&mut t, P0, ManaType::C, mana);
         t.g.tap(district);
-        assert_eq!(t.activate(P0, district, 1, &[]).is_ok(), mana == 1, "{mana}");
+        assert_eq!(
+            t.activate(P0, district, 1, &[]).is_ok(),
+            mana == 1,
+            "{mana}"
+        );
     }
 }
 
@@ -572,7 +590,7 @@ fn bosco_counts_himself() {
 
 #[test]
 fn grima_checks_legendary_as_the_creature_last_existed() {
-    cr!("603.10a", "608.2h", "701.47a");
+    cr!("608.2h", "701.47a");
     ruling!(
         "Gríma Wormtongue",
         "Gríma Wormtongue's activated ability checks whether the sacrificed creature was legendary as it last existed on the battlefield. It doesn't matter whether or not it's legendary in the graveyard."
@@ -674,8 +692,9 @@ fn heroes_podium_bonus_applies_as_the_legend_rule_is_applied() {
 fn heroes_podium_counts_itself_only_as_a_creature() {
     // The card's own behavior: "Each legendary creature you control gets +1/+1 for each
     // other legendary creature you control." (Its ruling's "in addition to being a land" is
-    // left uncited; see the batch report.)
-    cr!("613.4c", "205.4d");
+    // left uncited for the coordinator: docs/RULING_DISCREPANCIES.md, "Not yet
+    // investigated".)
+    cr!("613.4c", "613.1d");
     supported("March of the Machines");
     let mut t = TestGame::new(2);
     let podium = t.battlefield(P0, "Heroes' Podium");
@@ -689,6 +708,36 @@ fn heroes_podium_counts_itself_only_as_a_creature() {
     t.g.recompute();
     assert_eq!(t.pt(isamaru), (3, 3));
     assert_eq!(t.pt(podium), (6, 6));
+}
+
+#[test]
+fn run_counts_the_other_attacking_creatures_for_each_one() {
+    // A group's "for each other" in a one-shot effect, as in Heroes' Podium's static
+    // ability: Run, "Attacking creatures you control get +1/+0 until end of turn for each
+    // other attacking creature." With three attackers, each gets +2/+0 (an attacking
+    // creature isn't another attacking creature to itself); the creature that isn't
+    // attacking gets nothing.
+    cr!("608.2h", "611.2c");
+    supported("Hit // Run");
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P0, "Hill Giant");
+    let home = t.battlefield(P0, "Gray Ogre");
+    crate::r_s01_common::attack_with(&mut t, &[(a, pl(P1)), (b, pl(P1)), (giant, pl(P1))]);
+    t.resolve_all();
+    t.lands(P0, "Mountain", 1);
+    t.lands(P0, "Forest", 1);
+    t.lands(P0, "Wastes", 3);
+    let run = t.hand(P0, "Hit // Run");
+    t.cast(P0, run)
+        .method(mtg_engine::object::CastMethod::Half(1))
+        .go();
+    t.resolve_all();
+    assert_eq!(t.pt(a), (4, 2));
+    assert_eq!(t.pt(b), (4, 2));
+    assert_eq!(t.pt(giant), (5, 3));
+    assert_eq!(t.pt(home), (2, 2));
 }
 
 // ---------------------------------------------------------------------------
@@ -721,13 +770,11 @@ fn ancient_animus_targets_and_illegal_targets() {
     let mut t = TestGame::new(2);
     let isamaru = t.battlefield(P0, "Isamaru, Hound of Konda");
     let ogre = t.battlefield(P1, "Gray Ogre");
-    let wall = t.battlefield(P1, "Wall of Stone");
     cast_new(&mut t, P0, "Ancient Animus", &[obj(isamaru), obj(ogre)]);
     move_to(&mut t, ogre, Zone::Hand(P1));
     t.resolve_all();
     assert_eq!(t.counters(isamaru, "+1/+1"), 1);
     assert_eq!(crate::r_s07_common::damage_on(&t, isamaru), 0);
-    let _ = wall;
     // P0's creature leaves: no counter, no damage to the other.
     let mut t = TestGame::new(2);
     let isamaru = t.battlefield(P0, "Isamaru, Hound of Konda");
@@ -751,9 +798,13 @@ fn friendly_rivalry_with_illegal_targets() {
         "If the last target is an illegal target as Friendly Rivalry resolves, or if both of the first targets are illegal targets, no creature deals or is dealt damage."
     );
     supported("Friendly Rivalry");
-    // (which of P0's targets leaves, the damage dealt to Wall of Stone)
-    for (gone, dealt) in [
-        (vec![0usize], 2u32),
+    // (which targets become illegal, the damage dealt to Wall of Stone). P0's creatures
+    // become illegal by leaving the battlefield; the Wall stays on the battlefield and
+    // becomes illegal when P0 gains control of it ("target creature you don't control"),
+    // so damage dealt to it would show.
+    for (illegal, dealt) in [
+        (vec![], 5u32),
+        (vec![0usize], 2),
         (vec![1], 3),
         (vec![0, 1], 0),
         (vec![2], 0),
@@ -769,17 +820,23 @@ fn friendly_rivalry_with_illegal_targets() {
             &[obj(giant), obj(isamaru), obj(wall)],
         );
         let ids = [giant, isamaru, wall];
-        for i in &gone {
-            let owner = if *i == 2 { P1 } else { P0 };
-            move_to(&mut t, ids[*i], Zone::Hand(owner));
+        for i in &illegal {
+            if *i == 2 {
+                give_control(&mut t, wall, P0);
+            } else {
+                move_to(&mut t, ids[*i], Zone::Hand(P0));
+            }
         }
         t.resolve_all();
-        if t.on_battlefield(wall) {
-            assert_eq!(crate::r_s07_common::damage_on(&t, wall), dealt, "{gone:?}");
-        }
+        assert!(t.on_battlefield(wall));
+        assert_eq!(
+            crate::r_s07_common::damage_on(&t, wall),
+            dealt,
+            "{illegal:?}"
+        );
         for c in [giant, isamaru] {
             if t.on_battlefield(c) {
-                assert_eq!(crate::r_s07_common::damage_on(&t, c), 0, "{gone:?}");
+                assert_eq!(crate::r_s07_common::damage_on(&t, c), 0, "{illegal:?}");
             }
         }
     }
@@ -871,5 +928,3 @@ fn mjolnir_with_an_illegal_target_deals_no_damage() {
         assert_eq!(t.life(P1), if leaves { 20 } else { 18 }, "{leaves}");
     }
 }
-
-
