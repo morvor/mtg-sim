@@ -3,9 +3,9 @@
 //! copiable values (CR 707.2, 608.2h), including copy effects then applying to it (CR
 //! 707.3); a token copy copies only copiable values (CR 707.2) except for the stated
 //! exceptions (CR 707.9b); tokens put onto the battlefield attacking weren't declared as
-//! attackers (CR 508.4); a token copy's enters abilities (CR 603.6a, 707.9a); conditions
-//! checked on resolution (CR 608.2c); the legend rule (CR 704.5j); face-down permanents and
-//! their copies (CR 708.2, 708.9); a search of several zones (CR 701.23, 400.11b).
+//! attackers (CR 508.4); a token copy's enters abilities (CR 603.6a, 614.1c, 707.9a);
+//! conditions checked on resolution (CR 608.2c); the legend rule (CR 704.5j); face-down
+//! permanents and their copies (CR 708.2, 708.9).
 
 use crate::r_p030_common::{kill, tokens_named};
 use crate::r_s01_common::{attack_with, supported};
@@ -210,9 +210,9 @@ fn a_myriad_token_s_enters_abilities_work() {
     supported("Scurry of Squirrels");
     supported("Callidus Assassin");
     supported("Flesh Duplicate");
-    // Scurry of Squirrels' printed abilities have no "enters" ability of any kind; its
-    // myriad tokens copy a creature that has its myriad, so the copied creature is a copy
-    // of Scurry of Squirrels whose copy effect gave it one (CR 707.9a).
+    // Scurry of Squirrels' printed abilities include no "enters" ability of any kind, so
+    // the creature its myriad tokens copy here is a copy of it (with its myriad) whose copy
+    // effect gave it one (CR 707.9a).
     //
     // An "enters" triggered ability: Callidus Assassin enters as a copy of Scurry of
     // Squirrels, except it has "When this creature enters, destroy up to one other target
@@ -585,62 +585,76 @@ fn a_copy_of_magar_s_face_down_creature_doesn_t_know_the_noted_name() {
         "If a creature enters the battlefield as a copy of a face-down creature (or if a token is created that’s a copy of one), that copy has the same characteristics as the face-down creature (in this case, it’s a 3/3 creature with the two abilities and no other characteristics), even though the copy is face up. Importantly, the noted name is not part of the face-down creature’s copiable values, so copies of the face-down creature won’t know the noted name. If one deals combat damage to a player, its controller won’t create a copy of any card."
     );
     supported("Clone");
+    supported("Cackling Counterpart");
     let mut t = TestGame::new(2);
     let fd = magar_face_down(&mut t);
-    // Clone enters as a copy of it: a face-up 3/3 with no name and the two abilities.
+    // Clone enters as a copy of it, and Cackling Counterpart ("Create a token that's a
+    // copy of target creature you control.") creates a token that's a copy of it: each is
+    // a face-up 3/3 with no name and the two abilities.
     t.answer_yes(P0, true);
     t.answer_choose(P0, &[obj(fd)]);
     let clone = t.enter(P0, "Clone");
     t.resolve_all();
-    let c = t.obj_now(clone);
-    assert!(!c.face_down);
-    assert_eq!(t.pt(clone), (3, 3));
-    assert!(c.chars.name.is_empty());
-    assert_eq!(
-        c.chars
-            .mana_cost
-            .as_ref()
-            .map(|m| format!("{m}"))
-            .unwrap_or_default(),
-        ""
-    );
-    assert_eq!(c.chars.colors, ColorSet::default());
-    assert!(c.chars.subtypes.is_empty());
-    let texts: Vec<String> = c
-        .chars
-        .abilities
-        .iter()
-        .map(|a| a.text.to_string())
-        .collect();
-    assert!(
-        texts
+    let before = t.g.battlefield.clone();
+    cast_new(&mut t, P0, "Cackling Counterpart", &[obj(fd)]);
+    t.resolve_all();
+    let token =
+        *t.g.battlefield
             .iter()
-            .any(|x| x.contains("deals combat damage to a player")),
-        "{texts:?}"
-    );
-    assert!(
-        texts.iter().any(|x| x.contains("exile it instead")),
-        "{texts:?}"
-    );
-    // It and the face-down creature hit P1: the face-down creature's ability creates a
-    // copy of Lightning Bolt, cast at P1 (CR 707.14); the Clone's creates no copy of any
-    // card. (The answers would let it cast a second Bolt at P1.) P1 takes 3 + 3 combat
-    // damage and 3 from the one Bolt.
+            .find(|o| !before.contains(o) && t.obj(**o).is_token())
+            .expect("the token copy");
     let clone = t.g.current(clone);
-    for c in [clone, fd] {
+    for c in [clone, token] {
+        let o = t.obj_now(c);
+        assert!(!o.face_down);
+        assert_eq!(t.pt(c), (3, 3));
+        assert!(o.chars.name.is_empty());
+        assert_eq!(
+            o.chars
+                .mana_cost
+                .as_ref()
+                .map(|m| format!("{m}"))
+                .unwrap_or_default(),
+            ""
+        );
+        assert_eq!(o.chars.colors, ColorSet::default());
+        assert!(o.chars.subtypes.is_empty());
+        let texts: Vec<String> = o
+            .chars
+            .abilities
+            .iter()
+            .map(|a| a.text.to_string())
+            .collect();
+        assert!(
+            texts
+                .iter()
+                .any(|x| x.contains("deals combat damage to a player")),
+            "{texts:?}"
+        );
+        assert!(
+            texts.iter().any(|x| x.contains("exile it instead")),
+            "{texts:?}"
+        );
+    }
+    // They and the face-down creature hit P1: the face-down creature's ability creates a
+    // copy of Lightning Bolt, cast at P1 (CR 707.14); the Clone's and the token's create
+    // no copy of any card. (The answers would let each cast a Bolt at P1.) P1 takes 3 + 3
+    // + 3 combat damage and 3 from the one Bolt.
+    for c in [clone, token, fd] {
         t.g.untap(c);
         t.g.objects[c.0 as usize].summoning_sick = false;
     }
-    for _ in 0..4 {
+    for _ in 0..6 {
         t.answer_yes(P0, true);
     }
-    t.answer_targets(P0, &[pl(P1)]);
-    t.answer_targets(P0, &[pl(P1)]);
-    attack_with(&mut t, &[(clone, pl(P1)), (fd, pl(P1))]);
+    for _ in 0..3 {
+        t.answer_targets(P0, &[pl(P1)]);
+    }
+    attack_with(&mut t, &[(clone, pl(P1)), (token, pl(P1)), (fd, pl(P1))]);
     t.resolve_all();
     t.advance_to(P0, Step::EndOfCombat);
     t.resolve_all();
-    assert_eq!(t.life(P1), 11);
+    assert_eq!(t.life(P1), 8);
     assert!(t.g.stack.is_empty());
 }
 
@@ -692,5 +706,3 @@ fn magar_s_face_down_card_is_revealed_as_it_leaves() {
     assert!(t.g.result.is_some());
     assert!(revealed(&t, from, fd), "revealed as the game ended");
 }
-
-// --- Invasion of Arcavios ----------------------------------------------------------------------
