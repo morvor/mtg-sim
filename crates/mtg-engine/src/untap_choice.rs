@@ -54,9 +54,9 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
             && !o.phased_out
             && o.tapped
             && (!control || o.controller == ctx.controller)
-            && !ctx
-                .stack_obj
-                .is_some_and(|a| untapped_while_on_stack(g, s, a))
+            && !ctx.stack_obj.is_some_and(|a| {
+                untapped_while_on_stack(g, s, a, control.then_some(ctx.controller))
+            })
     }))
 }
 
@@ -64,9 +64,16 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
 /// effect, whose resolution context is the condition's — was put on the stack: its "for as
 /// long as ~ remains tapped" duration then ended before the effect could begin, even if
 /// `src` was tapped again (CR 611.2b; Rubinia Soulsinger and Entrancing Lyre rulings).
+/// With `controller` ("for as long as you control ~ and ~ remains tapped"), so did that
+/// player losing control of `src`, even if they regained it (Willow Satyr ruling).
 /// Once an effect exists (its condition is checked without a resolving ability), only an
 /// untap after that ends it, not one before another ability of `src` was activated.
-fn untapped_while_on_stack(g: &Game, src: ObjectId, ability: ObjectId) -> bool {
+fn untapped_while_on_stack(
+    g: &Game,
+    src: ObjectId,
+    ability: ObjectId,
+    controller: Option<PlayerId>,
+) -> bool {
     use crate::events::Event;
     use crate::object::StackKind;
     let top = ability;
@@ -90,6 +97,11 @@ fn untapped_while_on_stack(g: &Game, src: ObjectId, ability: ObjectId) -> bool {
                 put_on_stack = true;
             }
             Event::Untapped { obj } if put_on_stack && *obj == src => return true,
+            Event::ControlChanged { obj, from, .. }
+                if put_on_stack && *obj == src && Some(*from) == controller =>
+            {
+                return true
+            }
             _ => {}
         }
     }
