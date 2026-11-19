@@ -168,8 +168,9 @@ fn melira_the_living_cure_infect_and_toxic_damage_give_one_poison_counter() {
         "Once Melira's replacement effect has been applied in a turn, additional events that would put poison counters on a player don't happen, regardless of any other replacement effects involved."
     );
     // Sheoldred's Headcleaver (toxic 2) with Glistening Oil (infect): its combat damage
-    // gives poison counters twice over, the infect damage's and toxic's. Melira's effect
-    // applies to the first; the second is an additional event and doesn't happen.
+    // gives poison counters twice over, the infect damage's and toxic's (two events,
+    // `infect-and-toxic-poison-counters-are-separate-events`). Melira's effect applies to
+    // the first; the second is an additional event and doesn't happen.
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Melira, the Living Cure");
     let cleaver = t.battlefield(P1, "Sheoldred's Headcleaver");
@@ -186,6 +187,24 @@ fn melira_the_living_cure_infect_and_toxic_damage_give_one_poison_counter() {
     attack_with(&mut t, &[(cleaver, Entity::Player(P0))]);
     block_and_finish(&mut t, P0, &[]);
     assert_eq!(poison(&t, P0), 4);
+}
+
+#[test]
+fn infect_and_toxic_poison_counters_are_two_events() {
+    cr!("120.3b", "120.3g", "614.1a");
+    interp!("infect-and-toxic-poison-counters-are-separate-events");
+    // Winding Constrictor: "If you would get one or more counters, you get that many plus
+    // one of each of those kinds of counters instead." Sheoldred's Headcleaver (toxic 2)
+    // with Glistening Oil (infect) deals 2 combat damage to the Constrictor's controller:
+    // 2 + 1 poison counters for the infect damage, and 2 + 1 for toxic.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Winding Constrictor");
+    let cleaver = t.battlefield(P1, "Sheoldred's Headcleaver");
+    attach_new(&mut t, P1, "Glistening Oil", obj(cleaver));
+    t.set_step(P1, mtg_engine::turn::Step::BeginningOfCombat);
+    attack_with(&mut t, &[(cleaver, Entity::Player(P0))]);
+    block_and_finish(&mut t, P0, &[]);
+    assert_eq!(poison(&t, P0), 6);
 }
 
 // --- Vizier of Remedies -----------------------------------------------------------------------

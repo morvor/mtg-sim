@@ -335,6 +335,11 @@ fn holy_justiciar_taps_then_exiles_an_untapped_zombie() {
     activate(&mut t, P0, j, "Tap target creature", &[obj(zombie)]);
     t.resolve_all();
     assert!(t.in_exile("Walking Corpse"));
+    // It became tapped first.
+    assert!(t.g.turn_events.iter().chain(t.g.events.iter()).any(|e| matches!(
+        e,
+        mtg_engine::events::Event::Tapped { obj, .. } if *obj == zombie
+    )));
     // A creature that isn't a Zombie is just tapped.
     untap(&mut t, j);
     t.lands(P0, "Plains", 3);

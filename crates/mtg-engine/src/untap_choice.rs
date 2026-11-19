@@ -1,7 +1,7 @@
 //! "You may choose not to untap ~ during your untap step." (CR 502.3: the active player
 //! determines which permanents they control will untap) and the durations that go with
-//! it, "for as long as ~ remains tapped" (CR 611.2b), with what of them and of "for as long
-//! as you control ~" ended while the ability creating the effect was on the stack.
+//! it, "for as long as ~ remains tapped" (CR 611.2b), and whether that duration or "for as
+//! long as you control ~" ended while the ability creating the effect was on the stack.
 
 use crate::ability::{Condition, Duration, Restriction};
 use crate::eval::Ctx;
