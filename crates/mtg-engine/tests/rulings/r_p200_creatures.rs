@@ -951,3 +951,68 @@ fn brutal_cathar_card_returns_when_its_owner_leaves_the_game() {
     assert!(t.on_battlefield(bears));
     assert_eq!(t.obj_now(bears).controller, P1);
 }
+
+/// P0's Squad Captain tokens made by a spell, other than `before`.
+fn new_captain_tokens(t: &TestGame, p: PlayerId, before: &[ObjectId]) -> Vec<ObjectId> {
+    t.named_on_battlefield("Squad Captain")
+        .into_iter()
+        .filter(|o| t.obj(*o).is_token() && t.obj(*o).controller == p && !before.contains(o))
+        .collect()
+}
+
+#[test]
+fn parallel_evolution_creates_all_its_copies_at_the_same_time() {
+    cr!("608.2f", "614.12", "614.1c");
+    ruling!(
+        "Squad Captain",
+        "It counts only creatures that are already on the battlefield."
+    );
+    supported("Parallel Evolution");
+    // "For each creature token on the battlefield, its controller creates a token that's a
+    // copy of that creature." Two Squad Captain tokens: their two copies enter together,
+    // each counting the Captain and the two tokens already there, not the other copy.
+    let mut t = TestGame::new(2);
+    let captain = t.battlefield(P0, "Squad Captain");
+    let tokens: Vec<ObjectId> = (0..2)
+        .flat_map(|_| crate::r_s17_common::token_copy(&mut t, P0, captain))
+        .collect();
+    assert_eq!(tokens.len(), 2);
+    t.lands(P0, "Forest", 5);
+    let spell = t.hand(P0, "Parallel Evolution");
+    t.cast(P0, spell).go();
+    t.resolve();
+    let copies = new_captain_tokens(&t, P0, &tokens);
+    assert_eq!(copies.len(), 2);
+    for c in copies {
+        assert_eq!(t.counters(c, counters::PLUS1), 3);
+    }
+}
+
+#[test]
+fn clone_legion_creates_all_its_copies_at_the_same_time() {
+    cr!("608.2f", "614.12", "614.1c");
+    ruling!(
+        "Clone Legion",
+        "The token creatures all enter the battlefield at the same time."
+    );
+    ruling!(
+        "Squad Captain",
+        "It counts only creatures that are already on the battlefield."
+    );
+    supported("Clone Legion");
+    // "For each creature target player controls, create a token that's a copy of that
+    // creature." P1's two Squad Captains: P0's two copies enter together, and P0 controls
+    // no other creature, so neither gets a counter.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "Squad Captain");
+    t.battlefield(P1, "Squad Captain");
+    t.lands(P0, "Island", 9);
+    let spell = t.hand(P0, "Clone Legion");
+    t.cast(P0, spell).target(P1).go();
+    t.resolve();
+    let copies = new_captain_tokens(&t, P0, &[]);
+    assert_eq!(copies.len(), 2);
+    for c in copies {
+        assert_eq!(t.counters(c, counters::PLUS1), 0);
+    }
+}

@@ -39,3 +39,27 @@ fn a_win_while_each_player_draws_ends_the_game_before_anyone_chooses_a_discard()
     assert_eq!(t.graveyard_size(P1), 0);
     assert!(t.in_hand(P1, "Island"));
 }
+
+#[test]
+fn a_win_while_each_player_draws_ends_the_game_before_anyone_sacrifices() {
+    cr!("104.1", "104.2b", "608.2e");
+    // "Each player draws a card, then sacrifices all creatures they control." (The
+    // sacrifice asks nothing, and is performed for all the players together.) P0's draw
+    // wins the game: nobody sacrifices anything.
+    use crate::r608_each_player_common::*;
+    use mtg_engine::ability::*;
+    let body = each_player(Effect::Seq(vec![
+        draw(1),
+        Effect::SacrificeObjects {
+            what: Sel::All(creature_you_control()),
+        },
+    ]));
+    let mut t = TestGame::new(2);
+    let maniac = t.battlefield(P0, "Laboratory Maniac");
+    t.g.players[0].library.clear();
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    cast_body(&mut t, body);
+    t.resolve_all();
+    assert_eq!(t.g.result, Some(GameResult::Win(vec![P0])));
+    assert!(t.on_battlefield(maniac) && t.on_battlefield(bears));
+}
