@@ -26,7 +26,7 @@ Investigated (Nov 19) by an independent investigator. **Conclusion D (no source 
 
 **Ruled out.**
 - **Not A:** there is no conflict between sources to reconcile; the question is a gap. The reading N + 1 makes every source fit, but so, more awkwardly, does 2N, since none of them speaks of a "for each ..., copy" instruction's event.
-- **Not B:** no dated rules change bears on it. 608.2f's sentence (2020-11-20) came after the tempting offer rulings (2013) and Twinning Staff's (2020-04-17), and it supports N + 1; the 2013 wording was reused unchanged for Tempt with Bunnies (2024-07-26).
+- **Not B:** no dated rules change bears on it. 608.2f's sentence (2020-11-20) came after the tempting offer rulings (2013) and Twinning Staff's (2020-04-17), and it supports N + 1; the 2013 wording was reused, but for a comma, for Tempt with Bunnies (2024-07-26).
 - **Not C:** no ruling decides it. Twinning Staff's "If a spell is being copied more than once" ruling fits Feather only if Feather's copies are one copying, which is the question.
 
 **Engine: changed (from 2N to N + 1).**
@@ -92,6 +92,13 @@ Investigated (Nov 19) by an independent investigator. **Conclusion D (no source 
 - `copying_a_spell_twice_is_one_copy_event`: Repeated Reverberation ("copy that spell or ability twice") with 0, 1, 2 Staffs: 2, 3, 4 copies. Pins the unchanged single-instruction case the entry says the "for each" form now matches.
 - `mizzixs_mastery_copies_cards_so_twinning_staff_adds_none`: overloaded Mizzix's Mastery, two cards, a Staff: two cast card copies, no copied spell. Cites Twinning Staff's card-copy ruling.
 - **Mutation check:** with the engine change stashed, the Feather and Zevlor tests fail (4 copies, not 3); the other two pass, as they pin unchanged behavior.
+
+**Checks run** (Nov 19, in this worktree, on the committed state).
+- `cargo fmt --all -- --check`: clean. `cargo build --workspace --all-targets`: exit 0, no warnings.
+- `cargo test --workspace`: exit 0. mtg-engine: rulings 19,937 passed (the four new tests among them), cr 2,895, cards 6,657, keywords 1,678, actions 258, properties 17, smoke 10, 158 unit tests. mtg-data (its `discrepancies` and `interpretations` tests among them), mtg-api, mtg-sim and mtg-tools passed; `cargo test -p mtg-data` run again after the last edit to docs/RULING_DISCREPANCIES.md, passed.
+- `cargo run --release -q -p mtg-tools -- rulings-coverage --check`: exit 0. 29,386 of 33,955 ruling texts cited (29,384 before: Twinning Staff's new-targets and card-copy rulings are now cited), 194 exempt, 2,511 open.
+- `cargo run --release -q -p mtg-tools -- interpretations --check`: exit 0 (160 entries, 5 provisional, 0 problems); docs/INTERPRETATIONS.md regenerated.
+- The mutation check under "Tests".
 
 **Noticed, not investigated.**
 - **The same question for tokens, counters and life, where the engine is inconsistent.** With Xorn, Brass's Bounty ("For each land you control, create a Treasure token.") makes N + 1 Treasures (it compiles to one `CreateToken` with a count), but with Peregrin Took, Endless Ranks of HYDRA ("For each opponent, you create a 2/1 ... token") makes a Food per opponent (it compiles to `Repeat`), and Tempting Contract with Xorn would add one per opponent (`ForEachPlayer`; `create_tokens_together` replaces each player-frame's creation separately). The rule registered here for copies (one instruction, one event) points to one additional token for all of them, as Tempting Contract's ruling ("you create your Treasure tokens all at the same time") suggests. A follow-up item could apply it to tokens, counters and life.
