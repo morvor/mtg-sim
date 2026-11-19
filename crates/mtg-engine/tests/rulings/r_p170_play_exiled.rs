@@ -36,7 +36,7 @@ fn abbot_exile(t: &mut TestGame, card: &str) -> ObjectId {
 
 #[test]
 fn abbot_of_keral_keep_exiles_face_up_and_normal_timing_applies() {
-    cr!("601.2", "601.3", "307.1", "305.2", "406.3");
+    cr!("601.2", "601.3", "302.1", "305.2", "406.3");
     ruling!(
         "Abbot of Keral Keep",
         "The card exiled by Abbot of Keral Keep's ability is exiled face up."
@@ -104,7 +104,7 @@ fn thrasher_exile(t: &mut TestGame, card: &str) -> ObjectId {
 
 #[test]
 fn party_thrasher_lands_follow_the_normal_timing_rules() {
-    cr!("305.1", "305.2", "505.6b");
+    cr!("305.1", "505.6b");
     ruling!(
         "Party Thrasher",
         "You pay all costs and follow all normal timing rules for cards played using Party Thrasher's second ability. For example, if the chosen exiled card is a land card, you may play it only during your main phase while the stack is empty."
@@ -135,7 +135,10 @@ fn party_thrasher_convoke_with_x_chooses_x_first() {
     );
     // (lands, whether it can be cast): a white creature and the red Party Thrasher pay
     // {W} and {1} of {3}{W}{W}; {2}{W} remains.
-    for (lands, ok) in [(&["Plains", "Wastes", "Wastes"][..], true), (&["Plains", "Wastes"][..], false)] {
+    for (lands, ok) in [
+        (&["Plains", "Wastes", "Wastes"][..], true),
+        (&["Plains", "Wastes"][..], false),
+    ] {
         let mut t = TestGame::new(2);
         let wrath = thrasher_exile(&mut t, "Wrath of the Skies");
         let thrasher = t.named_on_battlefield("Party Thrasher")[0];
@@ -161,7 +164,7 @@ fn party_thrasher_convoke_with_x_chooses_x_first() {
 
 #[test]
 fn rassilons_exiled_land_waits_for_the_main_phase() {
-    cr!("305.1", "305.2");
+    cr!("305.1");
     ruling!(
         "Rassilon, the War President",
         "You must pay all costs and follow all normal timing rules for playing a card exiled this way. For example, you may play a land this way only during your main phase while the stack is empty."

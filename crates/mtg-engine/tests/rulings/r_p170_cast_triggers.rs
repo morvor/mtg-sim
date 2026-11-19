@@ -60,7 +60,10 @@ fn run(cases: &[Case]) {
 
 #[test]
 fn noncreature_cast_triggers_resolve_first_even_if_the_spell_leaves() {
-    cr!("603.3", "601.2i", "608.2", "701.6a");
+    // 603.4: Prompto's, Sahagin's and The Prima Vista's "if at least four mana was spent
+    // to cast it" is checked again as the trigger resolves; 608.2h: Shantotto's X (the
+    // mana spent) comes from the spell's last known information once it has left.
+    cr!("603.3", "601.2i", "603.4", "608.2h", "701.6a");
     ruling!(
         "Primeval Bounty",
         "Primeval Bounty's first and second abilities will each resolve before the spell that caused them to trigger. They will resolve even if that spell is countered or otherwise leaves the stack without resolving."

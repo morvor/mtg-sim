@@ -63,9 +63,9 @@ fn becoming_unblockable_after_blocks_doesnt_undo_them() {
     // Memnite's power is less than its: still blocked.
     let mut t = TestGame::new(2);
     let otter = t.battlefield(P0, "Elusive Otter // Grove's Bounty");
-    let thopter = t.battlefield(P1, "Memnite");
-    add_counters(&mut t, thopter, "+1/+1", 1);
-    blocked_by(&mut t, otter, thopter);
+    let memnite = t.battlefield(P1, "Memnite");
+    add_counters(&mut t, memnite, "+1/+1", 1);
+    blocked_by(&mut t, otter, memnite);
     cast_card(&mut t, P0, "Giant Growth", &[obj(otter)]);
     t.resolve_all();
     assert_eq!(t.pt(otter), (5, 5), "prowess and Giant Growth");
@@ -248,7 +248,10 @@ fn quiet_contemplation_taps_and_tracks_the_creature() {
     assert_eq!(t.obj_now(giant).controller, P0);
     t.advance_to(P1, Step::Upkeep);
     t.advance_to(P0, Step::Upkeep);
-    assert!(t.obj_now(giant).tapped, "not untapped in its new controller's untap step");
+    assert!(
+        t.obj_now(giant).tapped,
+        "not untapped in its new controller's untap step"
+    );
     t.advance_to(P1, Step::Upkeep);
     t.advance_to(P0, Step::Upkeep);
     assert!(!t.obj_now(giant).tapped);
@@ -307,7 +310,13 @@ fn noncreature_card_types_and_graveyard_card_types() {
     // types; a battle card is the fourth.
     let mut t = TestGame::new(2);
     let drc = t.battlefield(P0, "Dragon's Rage Channeler");
-    for c in ["Snow-Covered Forest", "Forest", "Kitsa, Otterball Elite", "Grizzly Bears", "Opt"] {
+    for c in [
+        "Snow-Covered Forest",
+        "Forest",
+        "Kitsa, Otterball Elite",
+        "Grizzly Bears",
+        "Opt",
+    ] {
         t.graveyard(P0, c);
     }
     assert_eq!(t.pt(drc), (1, 1));
@@ -326,7 +335,13 @@ fn noncreature_card_types_and_graveyard_card_types() {
     let top = crate::r_s01_common::stack_library(
         &mut t,
         P0,
-        &["Lightning Bolt", "Divination", "Ornithopter", "Grizzly Bears", "Forest"],
+        &[
+            "Lightning Bolt",
+            "Divination",
+            "Ornithopter",
+            "Grizzly Bears",
+            "Forest",
+        ],
     );
     let from = t.asked().len();
     t.advance_to(P0, Step::End);
@@ -349,7 +364,7 @@ fn noncreature_card_types_and_graveyard_card_types() {
 
 #[test]
 fn sudden_substitutions_exchange_lasts_indefinitely() {
-    cr!("701.12b", "611.2a", "702.61a");
+    cr!("701.12b", "611.2a");
     ruling!(
         "Sudden Substitution",
         "The exchange lasts indefinitely. It doesn't expire for the spell if the creature changes zones or leaves the game, or vice versa."
@@ -361,7 +376,12 @@ fn sudden_substitutions_exchange_lasts_indefinitely() {
     let lions = t.battlefield(P0, "Savannah Lions");
     t.set_step(P1, Step::PrecombatMain);
     let anthem = cast_card(&mut t, P1, "Glorious Anthem", &[]);
-    cast_card(&mut t, P0, "Sudden Substitution", &[obj(anthem), obj(bears)]);
+    cast_card(
+        &mut t,
+        P0,
+        "Sudden Substitution",
+        &[obj(anthem), obj(bears)],
+    );
     t.resolve();
     assert_eq!(t.obj_now(anthem).controller, P0);
     assert_eq!(t.obj_now(bears).controller, P1);
@@ -380,7 +400,12 @@ fn sudden_substitutions_exchange_lasts_indefinitely() {
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.set_step(P1, Step::PrecombatMain);
     let anthem = cast_card(&mut t, P1, "Glorious Anthem", &[]);
-    cast_card(&mut t, P0, "Sudden Substitution", &[obj(anthem), obj(bears)]);
+    cast_card(
+        &mut t,
+        P0,
+        "Sudden Substitution",
+        &[obj(anthem), obj(bears)],
+    );
     t.resolve_all();
     t.advance_to(P1, Step::Upkeep);
     t.advance_to(P0, Step::Upkeep);
@@ -410,7 +435,8 @@ fn goblin_wizardry_tokens_are_named_goblin_wizard_token() {
 
 #[test]
 fn rediscover_the_ways_chapter_three_trigger_works_all_turn() {
-    cr!("603.7a", "603.7c", "714.4");
+    // 603.7b: "this turn" is a stated duration, so it triggers more than once.
+    cr!("603.7a", "603.7b", "714.4");
     ruling!(
         "Rediscover the Way",
         "The triggered ability created by the chapter III ability may trigger multiple times during the turn, even though Rediscover the Way will likely no longer be on the battlefield."
@@ -531,6 +557,8 @@ fn vivi_ornitiers_mana_ability_doesnt_use_the_stack() {
 #[test]
 fn groves_bounty_divides_counters_as_its_cast() {
     cr!("601.2d", "122.1a");
+    // The rejected division is replaced by the default one.
+    interp!("default-division");
     ruling!(
         "Elusive Otter // Grove's Bounty",
         "You choose how the counters will be distributed as you cast Grove's Bounty. Each target must receive at least one +1/+1 counter."
@@ -634,7 +662,7 @@ fn loot_effects_happen_within_one_resolution() {
 
 #[test]
 fn emeria_captains_counters_come_from_a_trigger_players_can_respond_to() {
-    cr!("603.3", "603.6a", "704.5f");
+    cr!("603.3", "603.6a", "704.5g");
     ruling!(
         "Emeria Captain",
         "Because Emeria Captain receives its +1/+1 counters from a triggered ability rather than a replacement effect, players may take actions while that triggered ability is on the stack and Emeria Captain’s toughness is just 1."

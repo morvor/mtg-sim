@@ -119,9 +119,9 @@ fn stenn_option(name: &str) -> usize {
     t.asked()
         .iter()
         .find_map(|(_, d)| match d {
-            Decision::ChooseOption { options, .. } => options
-                .iter()
-                .position(|o| o.eq_ignore_ascii_case(name)),
+            Decision::ChooseOption { options, .. } => {
+                options.iter().position(|o| o.eq_ignore_ascii_case(name))
+            }
             _ => None,
         })
         .expect("Stenn offers the card type")
@@ -237,4 +237,20 @@ fn kasmina_adds_two_once_however_many_of_your_permanents_are_targeted() {
     let card = t.hand(P1, "Electrolyze");
     let paid = cast_paying(&mut t, P1, card, CastMethod::Normal).expect("cast");
     assert_spent(&paid.spent, "{1}{U}{R}", "targeting P1's creature");
+    // The increase comes before the reduction: P1's Unsummon ({U}) on P0's Bears costs
+    // {2}{U}, and {1}{U} with P1's Stormcatch Mentor. (Reduced first, {U} has no generic
+    // mana to lose, and {2}{U} would remain.)
+    for (mentor, cost) in [(false, "{2}{U}"), (true, "{1}{U}")] {
+        let mut t = main_phase(2);
+        t.battlefield(P0, "Kasmina, Enigmatic Mentor");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        if mentor {
+            t.battlefield(P1, "Stormcatch Mentor");
+        }
+        t.answer_targets(P1, &[obj(bears)]);
+        let card = t.hand(P1, "Unsummon");
+        let paid = cast_paying(&mut t, P1, card, CastMethod::Normal).expect("cast");
+        assert_spent(&paid.spent, cost, &format!("Unsummon, mentor {mentor}"));
+        assert_eq!(paid.mv, 1);
+    }
 }

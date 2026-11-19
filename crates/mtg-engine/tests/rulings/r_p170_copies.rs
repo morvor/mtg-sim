@@ -26,7 +26,7 @@ fn count_asked(t: &TestGame, from: usize, f: fn(&Decision) -> bool) -> usize {
 
 #[test]
 fn repeated_reverberation_copies_even_if_the_spell_was_countered() {
-    cr!("603.7c", "707.10", "608.2");
+    cr!("603.7a", "707.10", "405.2");
     ruling!(
         "Repeated Reverberation",
         "Copies are created even if the spell or ability that caused Repeated Reverberation’s ability to trigger has been countered by the time that ability resolves. The copies resolve before the original spell or ability."
@@ -141,7 +141,9 @@ fn repeated_reverberation_copies_may_change_any_number_of_targets() {
 
 #[test]
 fn repeated_reverberations_compound() {
-    cr!("603.7c", "707.10");
+    // 603.7b: each delayed trigger copies only the next spell (the first Reverberation's
+    // doesn't copy the Shock too).
+    cr!("603.7b", "707.10");
     ruling!(
         "Repeated Reverberation",
         "If you cast one Repeated Reverberation after another, you’ll copy the second Repeated Reverberation twice. Each resolves, creating three delayed triggered abilities. The next spell you cast or loyalty ability you activate after that will be copied six times."
@@ -262,7 +264,7 @@ fn feathers_copies_copy_kicker_without_paying_it() {
 
 #[test]
 fn feathers_copies_are_yours_above_the_original() {
-    cr!("707.10", "405.2");
+    cr!("707.10", "405.2", "405.3");
     ruling!(
         "Feather, Radiant Arbiter",
         "You control all the copies, and you choose the order the copies are put on the stack. The original spell will be on the stack beneath those copies and will resolve last."
@@ -312,7 +314,9 @@ fn kitsa_with_opt(t: &mut TestGame) -> (ObjectId, ObjectId) {
 
 #[test]
 fn kitsas_copy_ability_resolves_even_if_her_power_drops() {
-    cr!("602.5b", "608.2");
+    // 602.1b: "Activate only if ..." is an activation instruction, not part of the effect;
+    // 113.7a: once activated, the ability is independent of its source.
+    cr!("602.1b", "113.7a");
     ruling!(
         "Kitsa, Otterball Elite",
         "Once you’ve activated Kitsa’s last ability, any changes to Kitsa’s power won’t stop the ability from resolving."
@@ -411,7 +415,13 @@ fn capricious_hellraiser_exiles_at_random_and_may_find_nothing_to_copy() {
     );
     supported("Capricious Hellraiser");
     let mut t = TestGame::new(2);
-    for n in ["Grizzly Bears", "Forest", "Hill Giant", "Plains", "Llanowar Elves"] {
+    for n in [
+        "Grizzly Bears",
+        "Forest",
+        "Hill Giant",
+        "Plains",
+        "Llanowar Elves",
+    ] {
         t.graveyard(P0, n);
     }
     let from = t.asked().len();
@@ -436,7 +446,13 @@ fn capricious_hellraiser_exiles_at_random_and_may_find_nothing_to_copy() {
                 ..Default::default()
             },
         );
-        for n in ["Grizzly Bears", "Forest", "Hill Giant", "Plains", "Llanowar Elves"] {
+        for n in [
+            "Grizzly Bears",
+            "Forest",
+            "Hill Giant",
+            "Plains",
+            "Llanowar Elves",
+        ] {
             t.graveyard(P0, n);
         }
         t.enter(P0, "Capricious Hellraiser");

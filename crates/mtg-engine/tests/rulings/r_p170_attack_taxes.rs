@@ -6,6 +6,7 @@
 
 use crate::r_p061_common::declare_from;
 use crate::r_p170_common::*;
+use crate::r_s09_common::legal_attack;
 use mtg_engine::decision::Decision;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -33,6 +34,8 @@ fn p1_taxes(t: &mut TestGame, tax: &str) {
 #[test]
 fn a_creature_that_attacks_if_able_isnt_forced_to_pay_the_tax() {
     cr!("508.1d", "508.1h");
+    // Without a tax, the illegal empty declaration is replaced by the least legal one.
+    interp!("default-combat-declarations");
     ruling!(
         "Sivitri, Dragon Master",
         "A player who controls a creature that “attacks if able” can decline to pay additional costs to have that creature attack. If they do and there’s no other player or planeswalker to attack, that creature simply doesn’t attack."
@@ -62,6 +65,10 @@ fn a_creature_that_attacks_if_able_isnt_forced_to_pay_the_tax() {
         let jugg = t.battlefield(P0, "Juggernaut");
         let lands = t.lands(P0, "Wastes", 2);
         t.set_step(P0, Step::BeginningOfCombat);
+        // Not attacking obeys the requirement as well as it can be obeyed without paying
+        // (CR 508.1d) only when attacking costs something; attacking is legal either way.
+        assert_eq!(legal_attack(&mut t, &[]), !tax.is_empty(), "{tax}");
+        assert!(legal_attack(&mut t, &[(jugg, pl(P1))]), "{tax}");
         let attacks = declare_from(&mut t, P0, &[]);
         if tax.is_empty() {
             assert_eq!(attacks, vec![(jugg, pl(P1))], "it attacks when it's free");
@@ -76,6 +83,8 @@ fn a_creature_that_attacks_if_able_isnt_forced_to_pay_the_tax() {
 #[test]
 fn attack_taxes_dont_cover_the_teammate_in_two_headed_giant() {
     cr!("810.7", "805.10b", "508.1h");
+    // The control's unpayable declaration is replaced by the least legal one.
+    interp!("default-combat-declarations");
     ruling!(
         "Sivitri, Dragon Master",
         "In a Two-Headed Giant game, creatures can attack your teammate and planeswalkers your teammate controls without requiring a life payment."
@@ -154,6 +163,8 @@ fn attack_taxes_dont_cover_the_teammate_in_two_headed_giant() {
 #[test]
 fn forbidding_spirits_effect_covers_new_creatures_and_outlasts_it() {
     cr!("611.2c", "611.2a", "508.1h");
+    // The unpayable declaration is replaced by the least legal one.
+    interp!("default-combat-declarations");
     ruling!(
         "Forbidding Spirit",
         "Because it doesn’t modify the characteristics of creatures, Forbidding Spirit’s triggered ability can affect creatures that enter the battlefield after that ability resolves."
@@ -216,6 +227,8 @@ fn orzhov_advokists_counters_go_on_chosen_creatures_without_targeting() {
 #[test]
 fn orzhov_advokists_gift_stops_every_attack_on_you_until_your_next_turn() {
     cr!("611.2c", "611.2a", "508.1c");
+    // The illegal declarations are replaced by the least legal one.
+    interp!("default-combat-declarations");
     ruling!(
         "Orzhov Advokist",
         "If a player chooses to accept Orzhov Advokist's gift, that player can't attack you or a planeswalker you control with any creatures during their next turn, even creatures that weren't on the battlefield as Orzhov Advokist's ability resolved."
@@ -240,11 +253,13 @@ fn orzhov_advokists_gift_stops_every_attack_on_you_until_your_next_turn() {
         if !leaves {
             decl.push((bears, obj(jace)));
         }
+        for d in decl.iter().chain(&[(giant, obj(jace))]) {
+            assert!(!legal_attack(&mut t, &[*d]), "leaves {leaves}: {d:?}");
+        }
         let attacks = declare_from(&mut t, P1, &decl);
         assert!(attacks.is_empty(), "leaves {leaves}: {attacks:?}");
     }
-    // Counters moved to another creature (the Bears die after giving them away): still
-    // no attacks.
+    // The counters moved from the Bears to another creature: still no attacks.
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     advokist_accepted(&mut t, bears);
@@ -252,8 +267,23 @@ fn orzhov_advokists_gift_stops_every_attack_on_you_until_your_next_turn() {
     t.g.remove_counters(Entity::Object(bears), "+1/+1", 2);
     add_counters(&mut t, giant, "+1/+1", 2);
     t.advance_to(P1, Step::BeginningOfCombat);
+    for d in [(giant, pl(P0)), (bears, pl(P0))] {
+        assert!(!legal_attack(&mut t, &[d]), "{d:?}");
+    }
     let attacks = declare_from(&mut t, P1, &[(giant, pl(P0)), (bears, pl(P0))]);
     assert!(attacks.is_empty());
+    // The control: P1 declines the gift, and both may attack.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P0, "Orzhov Advokist");
+    t.answer_yes(P0, false);
+    t.answer_yes(P1, false);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    assert_eq!(t.counters(bears, "+1/+1"), 0);
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.advance_to(P1, Step::BeginningOfCombat);
+    assert!(legal_attack(&mut t, &[(giant, pl(P0)), (bears, pl(P0))]));
 }
 
 #[test]

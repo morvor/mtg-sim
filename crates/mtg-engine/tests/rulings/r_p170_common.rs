@@ -43,15 +43,21 @@ pub enum Leaves {
 
 pub const ALL_LEAVES: [Leaves; 3] = [Leaves::Stays, Leaves::Countered, Leaves::Bounced];
 
-/// The spell `spell` (controlled by `p`) leaves the stack as `how` says.
+/// The spell `spell` (controlled and owned by `p`) leaves the stack as `how` says: a
+/// countered spell goes to its owner's graveyard (CR 701.6a), a bounced one to the hand.
 pub fn leave(t: &mut TestGame, spell: ObjectId, p: PlayerId, how: Leaves) {
     match how {
         Leaves::Stays => {}
-        Leaves::Countered => assert!(t.g.counter(spell, None), "the spell is countered"),
+        Leaves::Countered => {
+            assert!(t.g.counter(spell, None), "the spell is countered");
+            assert_eq!(t.zone(spell), Zone::Graveyard(p), "countered");
+        }
         Leaves::Bounced => {
             move_to(t, spell, Zone::Hand(p));
+            assert_eq!(t.zone(spell), Zone::Hand(p), "bounced");
         }
     }
+    assert_eq!(t.g.stack.contains(&spell), how == Leaves::Stays);
 }
 
 /// The tokens `p` controls whose name is `name`.

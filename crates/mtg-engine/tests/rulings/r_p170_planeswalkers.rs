@@ -172,19 +172,20 @@ fn the_elderspell_works_without_your_own_planeswalker_or_targets() {
     t.resolve_all();
     assert!(t.in_graveyard(P1, "Jace Beleren"));
     assert!(t.in_graveyard(P1, "Ajani Goldmane"));
-    // No targets at all.
+    // No targets at all: it resolves (it isn't removed for having no legal target).
     let mut t = TestGame::new(2);
     let a = t.battlefield(P1, "Jace Beleren");
     t.answer_targets(P0, &[]);
-    cast_card(&mut t, P0, "The Elderspell", &[]);
+    let spell = cast_card(&mut t, P0, "The Elderspell", &[]);
     t.resolve_all();
+    assert!(crate::r_p108_common::resolved(&t, spell));
     assert!(t.in_graveyard(P0, "The Elderspell"));
     assert!(t.on_battlefield(a));
 }
 
 #[test]
 fn planebound_accomplices_planeswalker_is_sacrificed_even_without_the_accomplice() {
-    cr!("603.7", "603.7c");
+    cr!("603.7", "603.7a");
     ruling!(
         "Planebound Accomplice",
         "At the beginning of the next end step, you’ll sacrifice the planeswalker if it’s still on the battlefield, even if Planebound Accomplice has left the battlefield."
@@ -208,7 +209,9 @@ fn planebound_accomplices_planeswalker_is_sacrificed_even_without_the_accomplice
 
 #[test]
 fn stenn_exiled_during_an_end_step_returns_at_the_next_one() {
-    cr!("603.7c", "513.1");
+    // 603.7a: a delayed trigger created after its event (this end step began) waits for
+    // the next one.
+    cr!("603.7a", "513.1");
     ruling!(
         "Stenn, Paranoid Partisan",
         "If Stenn's controller activates its last ability during a player's end step, the delayed triggered ability that returns it to the battlefield won't trigger until the next time an end step begins, usually during the next player's turn."
@@ -274,11 +277,8 @@ fn devouring_hellion_can_sacrifice_only_permanents_already_there() {
         Answer::Entities(vec![obj(giant)]),
     );
     let from = t.asked().len();
-    let objs = crate::r_p116_common::enter_together(
-        &mut t,
-        P0,
-        &["Devouring Hellion", "Grizzly Bears"],
-    );
+    let objs =
+        crate::r_p116_common::enter_together(&mut t, P0, &["Devouring Hellion", "Grizzly Bears"]);
     t.settle();
     let candidates: Vec<Entity> = t.asked()[from..]
         .iter()
@@ -289,7 +289,9 @@ fn devouring_hellion_can_sacrifice_only_permanents_already_there() {
         .flatten()
         .collect();
     assert!(candidates.contains(&obj(giant)));
-    assert!(!candidates.iter().any(|e| objs.iter().any(|o| obj(*o) == *e)));
+    assert!(!candidates
+        .iter()
+        .any(|e| objs.iter().any(|o| obj(*o) == *e)));
     let hellion = objs
         .iter()
         .copied()
@@ -470,7 +472,7 @@ fn gideons_sacrifice_redirects_without_changing_source_or_combat() {
 
 #[test]
 fn gideons_sacrifice_needs_its_permanent_and_one_to_choose() {
-    cr!("614.9", "608.2b");
+    cr!("614.9", "609.3");
     ruling!(
         "Gideon's Sacrifice",
         "If the chosen creature or planeswalker isn't on the battlefield or isn't a creature or planeswalker at the time damage would be dealt, the damage won't be redirected."
@@ -487,6 +489,20 @@ fn gideons_sacrifice_needs_its_permanent_and_one_to_choose() {
     cast_card(&mut t, P1, "Lightning Bolt", &[pl(P0)]);
     t.resolve_all();
     assert_eq!(t.life(P0), 17);
+    // The chosen Bears is still there but no longer a creature (Imprisoned in the Moon
+    // makes it a land): P0 takes the damage, the land none.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    gideons_sacrifice(&mut t, Some(bears));
+    cast_card(&mut t, P0, "Imprisoned in the Moon", &[obj(bears)]);
+    t.resolve_all();
+    assert!(t.on_battlefield(bears));
+    let land = mtg_engine::types::CardType::Land;
+    assert!(!t.obj_now(bears).is_creature() && t.obj_now(bears).is(land));
+    cast_card(&mut t, P1, "Lightning Bolt", &[pl(P0)]);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 17);
+    assert_eq!(t.obj_now(bears).damage, 0);
     // No creature or planeswalker: nothing happens; a Bears arriving later doesn't help.
     let mut t = TestGame::new(2);
     gideons_sacrifice(&mut t, None);
