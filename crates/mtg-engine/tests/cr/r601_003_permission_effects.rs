@@ -1,11 +1,14 @@
 //! A permission to play cards from a zone puts only the cards in that zone among the cards
 //! a player may play (`permissions::effect_permitted_cards`, read through
 //! `Game::permitted_cards`): the top card of *your* library (Future Sight), the top card of
-//! *your* graveyard (Bösium Strip), *your* hand (Omniscience). The list matters by itself for
-//! a way of casting that doesn't ask the permissions again: mutate's way (`kw/mutate.rs`) is
-//! offered for any card the list holds, and `Game::cast_options` keeps only the ways some
-//! permission allows (`permissions::attach`) just for a card some permission's zone holds
-//! (`permissions::may_be_permitted`). A card listed from outside the zone would be cast for
+//! *your* graveyard (Bösium Strip), *your* hand (Omniscience); and an effect's permission for
+//! a card puts it there only for the player the permission is for (Fires of Mount Doom's, for
+//! the player who activated it). The list matters by itself for a way of casting that
+//! doesn't ask the permissions again: mutate's way (`kw/mutate.rs`) is offered for any card
+//! the list holds, and `Game::cast_options` keeps only the ways some permission allows
+//! (`permissions::attach`) just for a card that some permission's zone holds or that an
+//! effect's permission of the player's is for (`permissions::may_be_permitted`). A card
+//! listed from outside the zone, or for a player whose permission it isn't, would be cast for
 //! its mutate cost with no permission at all, which CR 601.3 doesn't allow. Written for
 //! survivors of the November 2026 mutation run of `permissions.rs` (docs/MUTATION.md).
 
@@ -141,4 +144,45 @@ fn omniscience_doesnt_offer_mutate_for_a_card_in_another_players_hand() {
     let spell = t.cast(P0, theirs).method(MUTATE).target(bears).go();
     assert_eq!(t.zone(spell), Zone::Stack);
     assert_eq!(t.obj_now(spell).controller, P0);
+}
+
+/// Kills `permissions.rs:455:28` and `455:53` (in `effect_permitted_cards`, `gnt.player == p
+/// && g.is_live(gnt.object) && !out.contains(&gnt.object)` with the first or the second `&&`
+/// as `||`). Both list the card of an effect's permission given to another player (the first
+/// also the objects of the player's own permissions that are gone, CR 400.7; the second those
+/// of anyone's). Fires of Mount Doom's "You may play that card this turn" is P1's, who
+/// activated the ability ("you", CR 109.5), so only P1 may play the Sea-Dasher Octopus it
+/// exiled. With either mutant the Octopus is among the cards P0 may play too, though no
+/// permission of P0's covers it (`may_be_permitted` is false): `cast_options` returns its ways
+/// unchecked, and P0 casts it for its mutate cost onto P1's Bears.
+#[test]
+fn another_players_permission_for_a_card_doesnt_offer_you_mutate_for_it() {
+    cr!("601.3", "109.5", "702.140a");
+    let mut t = TestGame::new(2);
+    let fires = t.battlefield(P1, "Fires of Mount Doom");
+    t.lands(P1, "Mountain", 3);
+    let their_bears = t.battlefield(P1, "Grizzly Bears");
+    let top = t.library_top(P1, "Sea-Dasher Octopus");
+    // P1 activates Fires during P0's turn: the Octopus is exiled, and P1 may play it.
+    t.activate(P1, fires, 0, &[]).unwrap();
+    t.resolve_all();
+    let octopus = t.g.current(top);
+    assert_eq!(t.zone(octopus), Zone::Exile);
+    t.lands(P0, "Island", 2);
+    t.lands(P1, "Island", 2);
+    // Not P0's permission: no mutate way, and P0 can't cast it onto P1's Bears (a creature
+    // with the same owner, the one it would target).
+    assert_eq!(mutate_ways(&mut t, octopus), 0);
+    assert!(t
+        .cast(P0, octopus)
+        .method(MUTATE)
+        .target(their_bears)
+        .try_go()
+        .is_err());
+    t.clear_answers();
+    assert_eq!(t.zone(octopus), Zone::Exile);
+    // P1 casts it for its mutate cost with that permission (it has flash).
+    let spell = t.cast(P1, octopus).method(MUTATE).target(their_bears).go();
+    assert_eq!(t.zone(spell), Zone::Stack);
+    assert_eq!(t.obj_now(spell).controller, P1);
 }
