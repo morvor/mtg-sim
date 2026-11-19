@@ -1,5 +1,5 @@
 //! Rulings batch P103 — permanents that mill or exile from libraries: Glacierwood Siege's
-//! chosen ability (CR 614.12, 305.1, 707.2), Ashiok, Dream Render (CR 701.23), Founding
+//! chosen ability (CR 614.12, 305.1), Ashiok, Dream Render (CR 701.23), Founding
 //! the Third Path's free cast and copy (CR 601.2b, 118.9, 707.12), Relic Golem (CR
 //! 506.4, 509.1), Dread Summons (CR 614.6, 603.6), Crumbling Sanctuary (CR 614.1a),
 //! Psychic Surgery (CR 701.24), Mind Grind's X (CR 107.3b), and Undead Alchemist (CR
@@ -75,7 +75,7 @@ fn glacierwood_siege_sultai_doesnt_allow_activating_from_the_graveyard() {
 
 #[test]
 fn glacierwood_siege_without_a_choice_has_neither_ability() {
-    cr!("614.12", "707.2");
+    cr!("614.12");
     ruling!(
         "Glacierwood Siege",
         "If you somehow control Glacierwood Siege and no choice was made for it (perhaps because another permanent on the battlefield became a copy of it), it has neither of the two abilities."

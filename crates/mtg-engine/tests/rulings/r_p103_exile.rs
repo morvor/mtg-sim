@@ -66,7 +66,7 @@ fn jesters_scepter_you_choose_the_exiled_card_to_pay_with() {
 
 #[test]
 fn jesters_scepter_counters_a_split_half_with_the_split_card() {
-    cr!("709.3", "201.2a");
+    cr!("709.3b", "709.4", "201.2a");
     ruling!(
         "Jester's Scepter",
         "If half of a split card is cast (for example, Hit), and you put one of those split cards into its owner’s graveyard with Jester’s Scepter (for example, Hit/Run), the spell is countered."
@@ -115,7 +115,7 @@ fn thief(t: &mut TestGame, top: &[&str]) -> (ObjectId, Vec<ObjectId>) {
 
 #[test]
 fn grimoire_thief_counters_both_halves_of_a_split_card_name() {
-    cr!("709.3", "201.2a", "708.8");
+    cr!("709.3b", "709.4", "201.2a");
     ruling!(
         "Grimoire Thief",
         "If a split card is turned face up, the ability counters all spells with the same name as either side of that split card."
@@ -454,7 +454,7 @@ fn drawing_cost_artifact() -> mtg_engine::card::CardDef {
 
 #[test]
 fn chains_of_mephistopheles_replaces_a_draw_paid_as_a_cost() {
-    cr!("614.1a", "118.3", "601.2h");
+    cr!("614.1a", "602.2b", "601.2h");
     ruling!(
         "Chains of Mephistopheles",
         "Cards which are drawn as a cost are affected by this card because replacement effects can alter the payment of costs."

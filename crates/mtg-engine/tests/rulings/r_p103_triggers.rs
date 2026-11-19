@@ -241,7 +241,7 @@ fn circu_stops_every_opponent_not_just_the_owner() {
 
 #[test]
 fn circu_stops_both_halves_of_an_exiled_split_card() {
-    cr!("709.3", "201.2c");
+    cr!("601.3", "709.4", "201.2a");
     ruling!(
         "Circu, Dimir Lobotomist",
         "If a split card is exiled this way, opponents can't cast either half of the split card."
@@ -506,7 +506,7 @@ fn mystic_redaction_in_cleanup_gets_priority_then_another_cleanup() {
 
 #[test]
 fn necromaster_dragon_pays_two_once_per_trigger() {
-    cr!("603.2", "118.3", "510.3a");
+    cr!("603.2", "510.3a");
     ruling!(
         "Necromaster Dragon",
         "Necromaster Dragon’s last ability will trigger once for each player it deals combat damage to. For each of these abilities, you may pay {2} only once."
@@ -591,4 +591,61 @@ fn the_master_of_lake_town_counts_its_own_card_in_the_graveyard() {
     t.resolve_all();
     assert_eq!(t.graveyard_size(P0), 7);
     assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
+fn tinybones_joins_up_discards_are_chosen_in_turn_order_then_made_together() {
+    cr!("101.4", "701.9a", "608.2e");
+    ruling!(
+        "Tinybones Joins Up",
+        "When Tinybones Joins Up’s first ability resolves, the next target player in turn order (or, if it’s a target player’s turn, that player) chooses a card in hand without revealing it, then each other target player in turn order (if any) does the same. All chosen cards are then discarded at the same time."
+    );
+    supported("Tinybones Joins Up");
+    // (active player, targets, the order the targets choose in)
+    for (active, targets, order) in [
+        (P0, vec![P2, P1], vec![P1, P2]),
+        (P1, vec![P0, P2], vec![P2, P0]),
+        (P2, vec![P0, P1, P2], vec![P2, P0, P1]),
+    ] {
+        let mut t = TestGame::new(3);
+        t.set_step(active, Step::PrecombatMain);
+        let cards: Vec<ObjectId> = [P0, P1, P2]
+            .iter()
+            .map(|p| t.hand(*p, "Grizzly Bears"))
+            .collect();
+        for p in [P0, P1, P2] {
+            t.hand(p, "Island");
+            t.answer_choose(p, &[obj(cards[p.idx()])]);
+        }
+        // Whenever a player chooses, whether any chosen card has left its hand yet.
+        let seen: Vec<_> = [P0, P1, P2]
+            .iter()
+            .map(|p| {
+                crate::r_s01_common::watch(
+                    &mut t,
+                    *p,
+                    |d| matches!(d, Decision::ChooseEntities { .. }),
+                    |g| g.players.iter().map(|q| q.graveyard.len()).sum::<usize>(),
+                )
+            })
+            .collect();
+        t.answer_targets(P0, &targets.iter().map(|p| pl(*p)).collect::<Vec<_>>());
+        let from = t.asked().len();
+        t.enter(P0, "Tinybones Joins Up");
+        t.g.flush_events();
+        t.resolve_all();
+        let choosers: Vec<PlayerId> = t.asked()[from..]
+            .iter()
+            .filter(|(_, d)| matches!(d, Decision::ChooseEntities { .. }))
+            .map(|(p, _)| *p)
+            .collect();
+        assert_eq!(choosers, order, "{active:?}");
+        for p in &targets {
+            assert_eq!(t.zone(cards[p.idx()]), Zone::Graveyard(*p));
+        }
+        // Nothing was discarded until everyone had chosen.
+        for s in seen {
+            assert!(s.lock().unwrap().iter().all(|n| *n == 0));
+        }
+    }
 }
