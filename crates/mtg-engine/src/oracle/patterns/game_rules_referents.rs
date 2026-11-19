@@ -133,6 +133,14 @@ fn if_that_spell_targets_instead(l: &str, prev: &mut Effect, b: &mut Builder) ->
     if !end(tail).is_empty() {
         return false;
     }
+    // CR 109.2: a description that doesn't say "spell" or "card" means a permanent (Bane's
+    // Contingency: "a commander you control" is a commander on the battlefield, not a
+    // commander spell; its ruling).
+    let f = if obj.contains("spell") || obj.contains("card") {
+        f
+    } else {
+        Filter::And(vec![Filter::Permanent, f])
+    };
     let saved_it = std::mem::replace(&mut b.it, spell.clone());
     // "counter that spell, scry 2, then draw a card": a list of instructions.
     let rest = rest.replace("that spell", "it").replace(", then ", ", ");
