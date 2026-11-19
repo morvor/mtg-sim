@@ -162,6 +162,34 @@ impl Game {
                     if exiles_whole_set(effect) {
                         ctx.prev_happened = true;
                     }
+                    // "You may gain control of target permanent ... If you do, untap it"
+                    // (also "you may have that player gain control of equipped creature"):
+                    // choosing to apply the effect to a permanent the player already
+                    // controls still counts (Dominus of Fealty ruling); one that's gone (an
+                    // illegal target, a permanent that left) doesn't (Iroh, Tea Master
+                    // ruling). Only selections that involve no choice are looked at again.
+                    if let Effect::GainControl { what, who, .. } = &**effect {
+                        if matches!(
+                            what,
+                            Sel::Target(_)
+                                | Sel::This
+                                | Sel::AttachedTo
+                                | Sel::TriggerObject
+                                | Sel::Var(_)
+                        ) {
+                            let gainer = self.eval_player(who, ctx);
+                            let objs = self.resolve_objects(what, ctx);
+                            if !objs.is_empty()
+                                && objs.iter().all(|o| {
+                                    self.is_live(*o)
+                                        && !crate::kw::phasing::is_phased_out(self, *o)
+                                        && Some(self.obj(*o).controller) == gainer
+                                })
+                            {
+                                ctx.prev_happened = true;
+                            }
+                        }
+                    }
                 }
                 // Set after the offered instruction ran, so a "you may" inside it doesn't
                 // stand in for this one (`Condition::PrevChosen`).
