@@ -184,12 +184,16 @@ fn acclaimed_contender_gets_at_most_one_card() {
     let hand = t.hand_size(P0);
     let from = t.asked().len();
     t.answer_yes(P0, true);
-    t.answer_choose(P0, &[obj(lib[0]), obj(lib[1])]);
+    t.answer_choose(P0, &[obj(lib[0])]);
     t.enter(P0, "Acclaimed Contender");
     t.resolve_all();
-    assert!(choices_since(&t, from).iter().all(|(_, max)| *max <= 1));
-    assert!(t.hand_size(P0) <= hand + 1);
-    assert_eq!(t.library_size(P0), 30 + 5 - (t.hand_size(P0) - hand));
+    // The choice among the four eligible cards is of one card.
+    let c = choices_since(&t, from);
+    assert_eq!(c.len(), 1);
+    assert_eq!(c[0].0.len(), 4);
+    assert_eq!(c[0].1, 1);
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(t.zone(t.g.current(lib[0])), Zone::Hand(P0));
 }
 
 #[test]
@@ -232,7 +236,7 @@ fn acclaimed_contender_checks_for_a_knight_twice() {
 
 #[test]
 fn key_to_the_side_door_doesnt_unblock_a_blocked_creature() {
-    cr!("509.1h", "506.4");
+    cr!("509.1h");
     ruling!(
         "Key to the Side-Door",
         "Activating the first ability of Key to the Side-Door after a creature has become blocked won't cause that creature to become unblocked."
@@ -555,7 +559,7 @@ fn arvad_leaving_can_make_marked_damage_lethal() {
 
 #[test]
 fn bosco_counts_himself() {
-    cr!("603.2", "111.10a");
+    cr!("603.2", "111.10b");
     ruling!(
         "Bosco, Just a Bear",
         "Bosco will count himself as a legendary creature for his first ability. He's a bit of a legend around Ba Sing Se!"
@@ -599,7 +603,7 @@ fn grima_checks_legendary_as_the_creature_last_existed() {
 
 #[test]
 fn grima_stops_opponents_life_from_rising() {
-    cr!("119.7", "119.5");
+    cr!("119.5");
     ruling!(
         "Gríma Wormtongue",
         "If an effect says to set an opponent's life total to a number that's higher than the opponent's current life total while Gríma Wormtongue is on the battlefield, the player's life total doesn't change."
@@ -824,7 +828,7 @@ fn delighted_halfling_copy_of_the_spell_can_be_countered() {
 
 #[test]
 fn goryos_vengeance_leaves_a_creature_that_moved_alone() {
-    cr!("610.3c", "400.7");
+    cr!("603.7c", "400.7");
     ruling!(
         "Goryo's Vengeance",
         "If the returned creature leaves the battlefield before the end step, it will remain in its current zone. It won't be exiled."

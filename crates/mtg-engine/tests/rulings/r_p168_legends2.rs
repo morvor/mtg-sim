@@ -98,7 +98,7 @@ fn we_ride_at_dawn_follows_the_commanders_owner() {
 
 #[test]
 fn we_ride_at_dawn_triggers_for_each_commander() {
-    cr!("903.3c", "603.2");
+    cr!("903.3", "603.2");
     ruling!(
         "We Ride at Dawn",
         "If you have two commanders and they’re both declared as attackers, We Ride at Dawn’s last ability will trigger twice."
@@ -210,7 +210,7 @@ fn bard_class_level_three_cards_must_be_played_this_turn() {
 
 #[test]
 fn bard_class_lets_either_face_of_an_exiled_mdfc_be_cast() {
-    cr!("712.11", "716.2a");
+    cr!("712.11b", "716.2a");
     ruling!(
         "Bard Class",
         "If you exile a modal double-faced card this way, you may cast either face of that card."

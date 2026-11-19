@@ -557,7 +557,7 @@ fn historic_cast_triggers_dont_trigger_without_a_cast() {
 
 #[test]
 fn historic_cast_triggers_ignore_legendary_lands() {
-    cr!("305.1", "601.2i", "701.28a");
+    cr!("305.1", "601.2i", "701.27a");
     ruling!(
         "Artificer's Assistant",
         "Lands are never cast, so abilities that trigger “whenever you cast a historic spell” won’t trigger if you play a legendary land. They also won’t trigger if a card on the battlefield transforms into a legendary land, as the Ixalan and Rivals of Ixalan double-faced cards do."
@@ -611,7 +611,7 @@ fn historic_cast_triggers_ignore_legendary_lands() {
 
 #[test]
 fn banish_to_another_universe_gone_before_its_trigger_resolves_exiles_nothing() {
-    cr!("610.3c", "603.3");
+    cr!("610.3b", "603.3");
     ruling!(
         "Banish to Another Universe",
         "If Banish to another Universe leaves the battlefield before its triggered ability resolves, the target permanent will not be exiled."
@@ -871,7 +871,7 @@ fn nimbus_maze_checks_land_types_not_names() {
 
 #[test]
 fn tempest_djinn_is_0_4_off_the_battlefield() {
-    cr!("611.3a", "208.3");
+    cr!("611.3a", "113.6");
     ruling!(
         "Tempest Djinn",
         "Tempest Djinn's ability that modifies its power applies only while it's on the battlefield. In all other zones, it's a 0/4 creature card."

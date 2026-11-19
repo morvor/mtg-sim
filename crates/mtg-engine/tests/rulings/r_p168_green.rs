@@ -657,7 +657,7 @@ fn baru_triggers_on_any_forest_but_pumps_only_your_creatures() {
 
 #[test]
 fn barus_wurm_size_is_fixed_on_resolution() {
-    cr!("608.2h", "702.103a");
+    cr!("608.2h");
     ruling!(
         "Baru, Fist of Krosa",
         "The size of the Wurm token is determined when the activated ability resolves. It won't change as the number of lands you control changes."
@@ -731,7 +731,7 @@ fn rhonass_monument_cant_target_the_creature_spell() {
 
 #[test]
 fn xenagos_type_change_works_only_on_the_battlefield() {
-    cr!("700.5", "611.3a");
+    cr!("700.5", "611.3a", "113.6");
     ruling!(
         "Xenagos, God of Revels",
         "The type-changing ability that can make Xenagos not be a creature functions only on the battlefield. It's always a creature card in other zones, regardless of your devotion to red and green. It's always a creature spell while it's on the stack."
