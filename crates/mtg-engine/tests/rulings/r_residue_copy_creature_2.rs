@@ -267,7 +267,7 @@ fn copies_have_the_copied_creatures_enters_abilities() {
 
 #[test]
 fn token_copies_of_cards_have_the_copied_cards_enters_abilities() {
-    cr!("707.2", "603.6a", "614.1c", "707.9b", "111.10");
+    cr!("707.2", "603.6a", "614.1c", "707.9b");
     ruling!(
         "Foggy Swamp Visions",
         "Any enters abilities of the copied card will trigger when the token enters. Any \"as [this creature] enters\" or \"[this creature] enters with\" abilities of the chosen creature will also work."

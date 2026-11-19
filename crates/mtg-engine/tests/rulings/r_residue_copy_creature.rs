@@ -710,7 +710,7 @@ fn copies_of_a_token_copy_its_original_characteristics() {
 
 #[test]
 fn cursed_mirror_copying_a_token_isnt_a_token_and_a_token_mirror_stays_one() {
-    cr!("707.2", "111.1", "614.1c");
+    cr!("707.2", "111.1", "614.1c", "613.2a", "707.9b");
     ruling!(
         "Cursed Mirror",
         "If the copied creature is a token, Cursed Mirror copies the original characteristics of that token as stated by the effect that created the token. Copying a token doesn't make Cursed Mirror a token. Similarly, if Cursed Mirror itself is a token, copying a nontoken permanent doesn't make it stop being a token."

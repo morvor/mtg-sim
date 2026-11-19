@@ -169,7 +169,7 @@ fn token_copies_of_cards_copy_only_the_printed_card() {
 
 #[test]
 fn mirror_march_copies_the_printed_creature_or_what_it_copies() {
-    cr!("707.2", "707.3", "608.2h", "603.2");
+    cr!("707.2", "707.3", "603.2");
     ruling!(
         "Mirror March",
         "Each token copies exactly what is printed on the creature and nothing else (unless that creature is copying something else; see below). It doesn’t copy whether that creature is tapped or untapped, whether it has any counters on it or Auras and/or Equipment attached to it, or any non-copy effects that changed its power, toughness, types, color, and so on."
@@ -260,7 +260,7 @@ fn march_of_progress_copies_only_the_printed_artifact_creature() {
 
 #[test]
 fn copied_x_is_0() {
-    cr!("107.3m", "202.3e", "707.2", "707.9b");
+    cr!("107.3m", "202.3e", "707.2");
     ruling!(
         "March of Progress",
         "If the copied artifact creature has {X} in its mana cost, X is 0."
@@ -371,7 +371,7 @@ fn curie_exiles(t: &mut TestGame, what: ObjectId) -> ObjectId {
 
 #[test]
 fn curie_copies_the_exiled_creature_not_its_state() {
-    cr!("707.2", "707.9a", "608.2h");
+    cr!("707.2", "707.9a");
     ruling!(
         "Curie, Emergent Intelligence",
         "Curie's last ability won't copy whether the exiled creature was tapped or untapped, whether it had any counters on it or Auras attached to it, or any non-copy effects that changed its power, toughness, types, color, and so on."

@@ -109,7 +109,7 @@ const VOLRATH: &str = "Volrath, the Shapestealer";
 
 #[test]
 fn volrath_copying_before_combat_loses_its_combat_trigger_and_can_copy_after_it() {
-    cr!("707.9a", "613.1a", "507.1", "117.3a");
+    cr!("707.9a", "613.1a", "507.2", "117.3a");
     ruling!(
         "Volrath, the Shapestealer",
         "Activating Volrath's last ability causes it to lose its first ability until your next turn, so if you activate it before the beginning of combat step, it won't trigger during that turn. Players can cast instant spells and activate abilities (such as the second ability) during the beginning of combat step after that first ability has triggered or resolved but before attackers are chosen in the declare attackers step."
@@ -349,7 +349,7 @@ fn effects_and_counters_from_before_becoming_a_copy_still_apply() {
 
 #[test]
 fn becoming_a_copy_doesnt_apply_the_copied_enters_abilities() {
-    cr!("707.2", "603.6a", "614.1c", "718.2a");
+    cr!("707.2", "603.6a", "614.1c");
     ruling!(
         "March from Velis Vel",
         "Because the lands aren't entering the battlefield when they become copies of the creature, any \"When [this creature] enters the battlefield\" or \"[This creature] enters the battlefield with\" abilities of the copied creature won't apply."

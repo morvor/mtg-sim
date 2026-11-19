@@ -20,7 +20,7 @@ use mtg_engine::*;
 
 #[test]
 fn copiers_cant_copy_what_enters_at_the_same_time() {
-    cr!("614.12", "707.5", "603.6a");
+    cr!("614.12", "614.12a", "707.5");
     ruling!(
         "Altered Ego",
         "If Altered Ego somehow enters at the same time as another creature, Altered Ego can't become a copy of that creature. You may choose only a creature that's already on the battlefield."
@@ -103,7 +103,7 @@ fn saheeli_rai_artifacts_enter_together() {
 
 #[test]
 fn exile_until_it_leaves_does_nothing_if_it_already_left() {
-    cr!("610.3c", "603.2");
+    cr!("610.3b", "603.2");
     ruling!(
         "Assimilation Aegis",
         "If Assimilation Aegis leaves the battlefield before its first ability resolves, the target creature won't be exiled at all."
@@ -129,7 +129,7 @@ fn exile_until_it_leaves_does_nothing_if_it_already_left() {
 
 #[test]
 fn dual_nature_token_stays_if_dual_nature_left_first() {
-    cr!("603.7", "610.3", "603.6c");
+    cr!("603.6a", "603.6c", "113.7a");
     ruling!(
         "Dual Nature",
         "If Dual Nature leaves the battlefield between when it triggers and when a token is put onto the battlefield, that token remains on the battlefield indefinitely. It missed the separate ability which would have exiled the token."
@@ -159,7 +159,7 @@ fn dual_nature_token_stays_if_dual_nature_left_first() {
 
 #[test]
 fn gogo_copying_a_legend_keeps_its_name() {
-    cr!("704.5j", "707.9b", "201.2");
+    cr!("704.5j", "707.9b", "201.2a");
     ruling!(
         "Gogo, Mysterious Mime",
         "If Gogo copies a legendary creature, Gogo will also be legendary, but because its name remains Gogo, Mysterious Mime, the \"legend rule\" won't cause either of them to be put into the graveyard."
@@ -307,7 +307,7 @@ fn body_double_copying_vesuvan_shapeshifter_turned_face_down_can_morph_up() {
 
 #[test]
 fn gyrus_put_onto_the_battlefield_has_no_counters_and_dies() {
-    cr!("614.1c", "704.5f", "107.3m");
+    cr!("614.1c", "704.5f");
     ruling!(
         "Gyrus, Waker of Corpses",
         "If Gyrus enters the battlefield without being cast, then no mana was spent to cast it. It enters the battlefield without any +1/+1 counters. If no other effects are increasing its toughness at that time, it will be put into its owner's graveyard as a state-based action."
@@ -333,7 +333,9 @@ fn gyrus_put_onto_the_battlefield_has_no_counters_and_dies() {
 
 #[test]
 fn imposter_mech_copying_a_creature_planeswalker_is_neither() {
-    cr!("707.9b", "205.1a", "606.3", "306.5", "120.3c", "508.1b");
+    cr!(
+        "707.9b", "205.1a", "606.3", "306.5", "306.5b", "120.3c", "120.3e", "702.122a", "508.1b"
+    );
     ruling!(
         "Imposter Mech",
         "If Imposter Mech enters the battlefield as a copy of a creature that was also a planeswalker, it loses both the planeswalker and creature card types. Its controller may activate any loyalty abilities it now has as normal, but it notably cannot be attacked and it does not lose loyalty counters when it is dealt damage."
@@ -357,19 +359,28 @@ fn imposter_mech_copying_a_creature_planeswalker_is_neither() {
     assert_eq!(o.chars.name, "Feline Walker");
     assert!(o.is(CardType::Artifact) && o.chars.has_subtype("Vehicle"));
     assert!(!o.is(CardType::Creature) && !o.is(CardType::Planeswalker));
+    // Not a planeswalker, it entered with no loyalty counters (CR 306.5b).
+    assert_eq!(t.counters(mech, counters::LOYALTY), 0);
     // Its loyalty abilities can be activated as normal: +1 (a loyalty counter, 1 life).
     t.set_step(P0, Step::PrecombatMain);
     let life = t.life(P0);
     crate::r_s06_common::activate_containing(&mut t, P0, mech, "+1").expect("loyalty ability");
     t.resolve_all();
     assert_eq!(t.life(P0), life + 1);
-    let loyalty = t.counters(mech, counters::LOYALTY);
-    assert!(loyalty >= 1);
-    // Damage doesn't remove its loyalty counters.
+    assert_eq!(t.counters(mech, counters::LOYALTY), 1);
+    // Crewed by a Hill Giant, it's an artifact creature (a 2/2, still no planeswalker):
+    // damage dealt to it is marked on it and doesn't remove its loyalty counter.
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.answer_choose(P0, &[obj(giant)]);
+    crate::r_s06_common::activate_containing(&mut t, P0, mech, "Crew").expect("crew");
+    t.resolve_all();
+    let o = t.obj_now(mech);
+    assert!(o.is(CardType::Creature) && !o.is(CardType::Planeswalker));
     let src = t.battlefield(P1, "Prodigal Pyromancer");
     crate::r_s06_common::damage(&mut t, src, 1, mech);
     assert!(t.on_battlefield(mech));
-    assert_eq!(t.counters(mech, counters::LOYALTY), loyalty);
+    assert_eq!(t.obj_now(mech).damage, 1);
+    assert_eq!(t.counters(mech, counters::LOYALTY), 1);
     // It can't be attacked: P1's attackers can attack only P0.
     // (A planeswalker P0 controls could be attacked.)
     let pw = t.battlefield(P0, "Gideon Jura");
@@ -515,8 +526,13 @@ fn doubled_token_copies_are_all_sacrificed_or_exiled() {
     crate::r_s06_common::activate_containing(&mut t, P0, jaxis, "Create a token").unwrap();
     t.resolve_all();
     let toks = new_tokens(&t, P0, &before);
+    for _ in 0..3 {
+        t.library_top(P0, "Island");
+    }
+    let hand = t.hand_size(P0);
     at_end_step(&mut t, &toks);
-    // Each sacrificed token died: two cards drawn... (at least the tokens are gone).
+    // Both were sacrificed: each died and drew a card.
+    assert_eq!(t.hand_size(P0), hand + 2, "{}", t.dump_log());
     // Mordor on the March: "Exile a creature card from your graveyard. Create a token
     // that's a copy of it. It gains haste until end of turn. Exile it at the beginning of
     // the next end step."
@@ -576,7 +592,7 @@ fn myrkul_survives_lethal_damage_dealt_as_its_controllers_life_halves() {
 
 #[test]
 fn dermotaxi_doesnt_crew() {
-    cr!("702.122a", "702.122d", "707.2");
+    cr!("702.122a", "702.122b", "707.2");
     ruling!(
         "Dermotaxi",
         "Dermotaxi does not have a crew ability. Activating the ability to have it become a copy of the exiled card doesn't count as crewing a Vehicle. If a creature you tap to activate the ability has a triggered ability that triggers whenever it crews a Vehicle (such as that of Gearshift Ace), that ability won't trigger."
@@ -652,5 +668,54 @@ fn cursed_mirror_becomes_a_copy_however_it_enters() {
         t.set_step(P1, Step::End);
         t.advance_to(P0, Step::Upkeep);
         assert_eq!(name_of(&t, m), "Cursed Mirror");
+    }
+}
+
+#[test]
+fn cursed_mirror_copy_has_the_copied_enters_with_abilities_however_it_enters() {
+    cr!("614.1c", "614.12", "707.2", "603.6a");
+    ruling!(
+        "Cursed Mirror",
+        "Any \"As [this creature] enters the battlefield\" or \"[This creature] enters the battlefield with\" abilities of the copied creature will also work."
+    );
+    // Regression: the effect Cursed Mirror's "as this enters" ability creates is part of
+    // the permanent as it would exist on the battlefield, so the replacement effects
+    // applied after it see a copy of Aven Riftwatcher ("Vanishing 3": it enters with three
+    // time counters), whether it's cast, put onto the battlefield from a graveyard or by an
+    // effect. Its copied "When this creature enters or leaves the battlefield, you gain 2
+    // life." triggers too.
+    supported("Cursed Mirror");
+    for how in ["cast", "graveyard", "effect"] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let rift = t.battlefield(P0, crate::r_p020_common::RIFTWATCHER);
+        let life = t.life(P0);
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[obj(rift)]);
+        let m = match how {
+            "cast" => {
+                t.lands(P0, "Mountain", 3);
+                let c = t.hand(P0, "Cursed Mirror");
+                t.cast(P0, c).go();
+                c
+            }
+            "graveyard" => {
+                let c = t.graveyard(P0, "Cursed Mirror");
+                t.g.move_object(
+                    c,
+                    Zone::Battlefield,
+                    mtg_engine::events::MoveCause::Effect,
+                    Some(P0),
+                );
+                c
+            }
+            _ => t.enter(P0, "Cursed Mirror"),
+        };
+        t.settle();
+        t.resolve_all();
+        let m = t.g.current(m);
+        assert_eq!(name_of(&t, m), crate::r_p020_common::RIFTWATCHER, "{how}");
+        assert_eq!(t.counters(m, counters::TIME), 3, "{how}: no vanishing counters");
+        assert_eq!(t.life(P0), life + 2, "{how}: {}", t.dump_log());
     }
 }

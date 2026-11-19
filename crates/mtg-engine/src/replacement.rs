@@ -1144,6 +1144,24 @@ impl Game {
         let as_entered = |e: &[Modification]| -> Vec<Modification> {
             e.iter().chain(&m.etb.copiable_mods).cloned().collect()
         };
+        // The copy effects a later "enter as a copy" replacement overrode, before the one
+        // it enters with (`EtbInfo::earlier_copies`, as `perform_move` creates them).
+        for (_, values, exceptions, eid) in &m.etb.earlier_copies {
+            self.effects.push(ContinuousEffect {
+                id: *eid,
+                source: Some(id),
+                controller,
+                timestamp: saved_next_ts,
+                duration: Duration::Permanent,
+                affected: Affected::Objects(vec![id]),
+                mods: vec![],
+                layer1: Some(Layer1::Copy {
+                    values: values.clone(),
+                    exceptions: exceptions.clone(),
+                }),
+                created_turn: self.turn.number,
+            });
+        }
         if let Some(src) = m.etb.copy_of {
             let values = Box::new(m.etb.copied_values(self, src).clone());
             self.effects.push(ContinuousEffect {
@@ -1172,6 +1190,17 @@ impl Game {
                 layer1: Some(Layer1::Copiable(as_entered(&[]))),
                 created_turn: self.turn.number,
             });
+        }
+        // Effects its "as this enters" replacements already created (Cursed Mirror becoming
+        // a copy of a creature, `EtbInfo::as_enters_effects`), after the copy effect it
+        // enters with, as `perform_move` applies them: the replacement effects applied after
+        // them see the permanent with them (CR 614.12; the copied creature's "enters with"
+        // abilities apply, Cursed Mirror's rulings).
+        for e in &m.etb.as_enters_effects {
+            let mut e = e.clone();
+            e.affected = Affected::Objects(vec![id]);
+            e.timestamp = saved_next_ts;
+            self.effects.push(e);
         }
         // What an effect says the permanent "is" as it enters (CR 611.3c, 614.1c).
         if let Some((source, ctl, mods)) = &m.etb.with_mods {
