@@ -4315,6 +4315,16 @@ pub enum TriggerCond {
         blocker: Filter,
         n: u32,
     },
+    /// "Whenever [blocker] blocks N or more [attackers]" (CR 509.3e): as blockers are
+    /// declared, if it blocks at least N attackers matching `attacker`, and when an effect
+    /// makes it block a matching attacker that brings their number to N (not when it's
+    /// put onto the battlefield blocking, as with "blocks", CR 509.3a–b). Once, not once
+    /// for each. Event object = the blocker, objects = those attackers.
+    BlocksN {
+        blocker: Filter,
+        attacker: Filter,
+        n: u32,
+    },
     /// "Whenever [source filter] deals (combat) damage to [recipient]".
     DealsDamage {
         source: Filter,

@@ -4280,6 +4280,32 @@ pub fn combat_trigger_matches(
                     .collect(),
             )
         }
+        (
+            TriggerCond::BlocksN {
+                blocker,
+                attacker,
+                n,
+            },
+            Event::BlockersDeclared { blocks },
+        ) => {
+            let mut per: BTreeMap<ObjectId, Vec<ObjectId>> = BTreeMap::new();
+            for (b, a) in blocks {
+                if g.matches(*a, attacker, ctx) {
+                    per.entry(*b).or_default().push(*a);
+                }
+            }
+            Some(
+                per.into_iter()
+                    .filter(|(b, as_)| as_.len() as u32 >= *n && g.matches(*b, blocker, ctx))
+                    .map(|(b, as_)| EventInfo {
+                        object: Some(b),
+                        amount: as_.len() as i32,
+                        objects: as_,
+                        ..Default::default()
+                    })
+                    .collect(),
+            )
+        }
         // Blocks added by effects or by creatures entering blocking (CR 509.3a–e, 509.4).
         (
             cond,
@@ -4357,6 +4383,45 @@ pub fn combat_trigger_matches(
                             vec![EventInfo {
                                 object: Some(a),
                                 amount: count as i32,
+                                ..Default::default()
+                            }]
+                        } else {
+                            vec![]
+                        },
+                    )
+                }
+                // CR 509.3e: an effect making it block one more matching attacker can
+                // make their number reach N; never when it enters blocking (as with
+                // "blocks", CR 509.3a–b).
+                TriggerCond::BlocksN {
+                    blocker,
+                    attacker,
+                    n,
+                } => {
+                    let blocked: Vec<ObjectId> = g
+                        .combat
+                        .as_ref()
+                        .and_then(|c| c.blockers.iter().find(|x| x.id == b))
+                        .map(|bi| {
+                            bi.blocking
+                                .iter()
+                                .copied()
+                                .filter(|x| g.matches(*x, attacker, ctx))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let count = blocked.len() as u32;
+                    Some(
+                        if !entered
+                            && g.matches(a, attacker, ctx)
+                            && count >= *n
+                            && count.saturating_sub(1) < *n
+                            && g.matches(b, blocker, ctx)
+                        {
+                            vec![EventInfo {
+                                object: Some(b),
+                                amount: count as i32,
+                                objects: blocked,
                                 ..Default::default()
                             }]
                         } else {
