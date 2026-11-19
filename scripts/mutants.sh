@@ -6,6 +6,10 @@
 #                                                # mutants, into <stem>-rerun
 #   RERUN=1 ONLY='mana.rs:1019' scripts/mutants.sh mana   # only the survivors matching
 #   SAMPLE=1 scripts/mutants.sh trigger_timing   # every mutant instead of a 1-in-N sample
+#   FULL=1 scripts/mutants.sh permissions        # the same: every mutant (a full run)
+#   FULL=1 RESUME=1 scripts/mutants.sh permissions   # continue an interrupted run: cargo-mutants
+#                                                # --iterate skips the mutants already caught
+#                                                # (the old mutants.out is kept as mutants.out.bak)
 #   TIMEOUT=900 scripts/mutants.sh layers        # a longer test timeout per mutant (default 600 s;
 #                                                # the unmutated mtg-engine suite takes ~290 s)
 #
@@ -36,6 +40,7 @@ for stem in "$@"; do
   n=$(cd "$MS" && cargo mutants --list -f "$file" | wc -l)
   k=$SAMPLE
   ((n < 60)) && k=1
+  [[ -n "${FULL:-}" ]] && k=1
   dest=$OUT/$stem
   args=(mutants --in-place -d "$MS" -f "$file" --timeout "$TIMEOUT" --build-timeout 900
     --cap-lints true --test-package mtg-engine)
@@ -127,6 +132,11 @@ PY
     continue
   elif ((k > 1)); then
     args+=(--shard "0/$k" --sharding round-robin)
+  fi
+  if [[ -n "${RESUME:-}" && -d "$dest/mutants.out" ]]; then
+    rm -rf "$dest/mutants.out.bak"
+    cp -a "$dest/mutants.out" "$dest/mutants.out.bak"
+    args+=(--iterate)
   fi
   args+=(-o "$dest")
   echo "== $stem: $n mutants, sample 1/$k: cargo ${args[*]}"
