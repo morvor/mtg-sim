@@ -233,7 +233,7 @@ fn a_commander_and_its_background_are_tracked_separately() {
 
 #[test]
 fn street_urchin_commander_can_sacrifice_itself_if_its_an_artifact() {
-    cr!("602.2", "701.21a", "113.7a");
+    cr!("602.2", "701.21a", "113.7a", "608.2h");
     ruling!(
         "Street Urchin",
         "If your commander is an artifact creature, you may sacrifice it to pay the cost of this ability."
@@ -488,7 +488,7 @@ fn granted_attack_abilities_compare_only_the_attacking_players_opponents() {
 
 #[test]
 fn veteran_soldier_creates_a_token_attacking_each_opponent() {
-    cr!("508.4", "506.2");
+    cr!("508.4", "506.2", "802.2");
     ruling!(
         "Veteran Soldier",
         "Veteran Soldier has received an update to its Oracle text to clarify its function. Specifically, a Soldier creature token is created for each opponent of the controller of the attacking commander."

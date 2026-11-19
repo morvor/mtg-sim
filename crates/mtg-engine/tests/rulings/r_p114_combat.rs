@@ -168,7 +168,7 @@ fn jeska_twice_multiplies_by_nine() {
 
 #[test]
 fn francisco_triggers_for_each_player_dealt_damage() {
-    cr!("603.2c", "510.2", "506.2");
+    cr!("603.2c", "510.2", "506.2", "802.2");
     ruling!(
         "Francisco, Fowl Marauder",
         "If one or more Pirates you control deal damage to multiple players at once (for example, in combat, or with an ability such as that of Lightning-Rig Crew), Francisco, Fowl Marauder's ability triggers once for each of those players."
