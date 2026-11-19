@@ -333,3 +333,69 @@ fn ties_for_greatest_or_least_are_broken_by_the_sacrificing_player() {
     assert_eq!(offer, vec![b1, b2], "Witch-king");
     assert!(!t.on_battlefield(b2) && t.on_battlefield(b1) && t.on_battlefield(giant));
 }
+
+#[test]
+fn acererak_the_equipped_creature_cant_pay_for_the_zombie() {
+    cr!("118.3", "118.12a", "701.21a");
+    ruling!(
+        "Assault Suit",
+        "You also can't sacrifice it to pay a cost that requires you to sacrifice a creature."
+    );
+    supported("Acererak the Archlich");
+    supported("Assault Suit");
+    // "For each opponent, you create a 2/2 black Zombie creature token unless that player
+    // sacrifices a creature." P1's Bears wear Assault Suit ("Equipped creature ... can't be
+    // sacrificed."): only the Lion can pay; an answer naming the Bears isn't valid.
+    let mut t = TestGame::new(2);
+    let acererak = t.battlefield(P0, "Acererak the Archlich");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    crate::r_s06_common::attach_new(&mut t, P1, "Assault Suit", bears);
+    let lion = t.battlefield(P1, "Silvercoat Lion");
+    t.answer_yes(P1, true);
+    t.answer_choose(P1, &[obj(bears)]);
+    let from = t.asked().len();
+    attack_with(&mut t, &[(acererak, pl(P1))]);
+    t.resolve_all();
+    let offered: Vec<Vec<Entity>> = asked_since(&t, from)
+        .into_iter()
+        .filter_map(|(p, d)| match d {
+            decision::Decision::ChooseEntities {
+                prompt, candidates, ..
+            } if p == P1 && prompt.contains("(cost)") => Some(candidates),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(offered, vec![vec![obj(lion)]]);
+    assert!(t.on_battlefield(bears) && !t.on_battlefield(lion));
+    // P1 paid with the Lion: no Zombie.
+    assert_eq!(
+        permanents_of(&t, P0)
+            .iter()
+            .filter(|o| t.obj(**o).is_token())
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn highcliff_felidar_no_opponent_is_recorded_as_choosing() {
+    cr!("101.4", "101.4b");
+    supported("Highcliff Felidar");
+    // "When this creature enters, for each opponent, choose a creature with the greatest
+    // power among creatures that player controls. Destroy those creatures." P0 makes every
+    // choice; neither opponent chooses anything, so none of the choices is known as an
+    // opponent's.
+    let mut t = TestGame::new(3);
+    t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    t.battlefield(P2, "Llanowar Elves");
+    let wurm = t.battlefield(P2, "Craw Wurm");
+    let seen: Seen<Vec<(PlayerId, Option<Vec<ObjectId>>)>> =
+        watch(&mut t, P0, is_choose, |g| g.known_apnap_choices(PlayerId(0)));
+    t.enter(P0, "Highcliff Felidar");
+    t.resolve_all();
+    assert!(!t.on_battlefield(giant) && !t.on_battlefield(wurm));
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen.len(), 2, "one choice for each opponent");
+    assert!(seen.iter().flatten().all(|(who, _)| *who == P0), "{seen:?}");
+}

@@ -2131,11 +2131,9 @@ fn parse_damage_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)
                 },
                 // "put a +1/+1 counter on each of those creatures": the sources.
                 Sel::TriggerObjects,
-                if by_opponent {
-                    PlayerRef::ControllerOf(Box::new(Sel::TriggerObjects))
-                } else {
-                    PlayerRef::TriggerPlayer
-                },
+                // The player dealt damage, or (grouped by opponent) the opponent whose
+                // creatures dealt it, as it triggered (`that-opponent-fixed-as-it-triggers`).
+                PlayerRef::TriggerPlayer,
             ),
             rest,
         ));

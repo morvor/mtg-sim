@@ -318,3 +318,86 @@ fn public_execution_weakens_the_other_creatures_of_that_player() {
     assert_eq!(t.pt(other_player), (3, 3));
     assert_eq!(t.pt(mine), (3, 3));
 }
+
+#[test]
+fn any_player_may_have_damage_an_earlier_players_choice_counts() {
+    cr!("101.4", "608.2e");
+    ruling!("Vexing Devil", "If any of them do, you sacrifice Vexing Devil.");
+    assert_supported(&["Browbeat", "Vexing Devil"]);
+    // Browbeat: P0 (first in turn order) takes the 5 damage, P1 declines: someone did, so
+    // the target doesn't draw.
+    let mut t = TestGame::new(2);
+    for _ in 0..5 {
+        t.library_top(P0, "Island");
+    }
+    t.lands(P0, "Mountain", 3);
+    let s = t.hand(P0, "Browbeat");
+    let hand = t.hand_size(P0);
+    t.answer_yes(P0, true);
+    t.answer_yes(P1, false);
+    t.cast(P0, s).target(P0).go();
+    t.resolve();
+    assert_eq!(t.life(P0), 15);
+    assert_eq!(t.hand_size(P0), hand - 1);
+    // Vexing Devil with two opponents: P1 takes the 4 damage, P2 declines.
+    let mut t = TestGame::new(3);
+    t.lands(P0, "Mountain", 1);
+    let d = t.hand(P0, "Vexing Devil");
+    t.answer_yes(P1, true);
+    t.answer_yes(P2, false);
+    t.cast(P0, d).go();
+    t.resolve_all();
+    assert!(t.named_on_battlefield("Vexing Devil").is_empty());
+    assert!(t.in_graveyard(P0, "Vexing Devil"));
+    assert_eq!((t.life(P1), t.life(P2)), (16, 20));
+}
+
+#[test]
+fn browbeat_damage_to_every_player_who_takes_it_is_one_event() {
+    cr!("101.4", "603.2c", "608.2f");
+    assert_supported(&["Browbeat", "Master of Barbs"]);
+    // "Any player may have Browbeat deal 5 damage to them." Two opponents take it: the
+    // damage is dealt to both at once (CR 101.4), one event, so Master of Barbs ("Whenever
+    // one or more opponents are dealt noncombat damage, creatures you control get +1/+0
+    // until end of turn.") triggers once.
+    let mut t = TestGame::new(3);
+    let master = t.battlefield(P0, "Master of Barbs");
+    for _ in 0..5 {
+        t.library_top(P0, "Island");
+    }
+    t.lands(P0, "Mountain", 3);
+    let s = t.hand(P0, "Browbeat");
+    t.answer_yes(P0, false);
+    t.answer_yes(P1, true);
+    t.answer_yes(P2, true);
+    t.cast(P0, s).target(P0).go();
+    t.resolve();
+    t.settle();
+    assert_eq!((t.life(P1), t.life(P2)), (15, 15));
+    assert_eq!(t.stack_len(), 1, "one trigger for both opponents' damage");
+    t.resolve_all();
+    assert_eq!(t.pt(master), (3, 1));
+}
+
+#[test]
+fn vexing_devil_with_lifelink_dealing_damage_to_two_opponents_is_one_life_gain() {
+    cr!("101.4", "120.3f", "608.2f", "603.2c");
+    ruling!(
+        "Ajani's Pridemate",
+        "The ability of Ajani's Pridemate triggers just once for each life-gaining event"
+    );
+    assert_supported(&["Vexing Devil", "Whip of Erebos", "Ajani's Pridemate"]);
+    // Whip of Erebos gives Vexing Devil lifelink. Both opponents take the 4 damage: it's
+    // dealt to them at once, so P0 gains 8 life in one event and Ajani's Pridemate ("Whenever
+    // you gain life, put a +1/+1 counter on this creature.") triggers once.
+    let mut t = TestGame::new(3);
+    t.battlefield(P0, "Whip of Erebos");
+    let pridemate = t.battlefield(P0, "Ajani's Pridemate");
+    t.answer_yes(P1, true);
+    t.answer_yes(P2, true);
+    t.enter(P0, "Vexing Devil");
+    t.resolve_all();
+    assert_eq!((t.life(P1), t.life(P2)), (16, 16));
+    assert_eq!(t.life(P0), 28);
+    assert_eq!(t.counters(pridemate, mtg_engine::types::counters::PLUS1), 1);
+}
