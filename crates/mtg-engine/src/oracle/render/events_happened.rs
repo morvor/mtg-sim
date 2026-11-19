@@ -188,6 +188,8 @@ impl Renderer<'_> {
                 format!("during {poss} last combat")
             }
             HistoryWindow::ThisGame => "this game".into(),
+            // "if it's the first time ... this turn": this turn, as of the trigger event.
+            HistoryWindow::ThisTurnUntilTriggered => "this turn".into(),
         }
     }
 
@@ -989,7 +991,11 @@ impl Renderer<'_> {
         let s = match self.said(c, q, amount, iter)? {
             Said::Def(d) => d.say(q)?,
             Said::Clause(s) => s,
-            Said::Full(s) => return w.is_none().then_some(s),
+            // Full clauses say "this turn" themselves ("it's the first time ... this
+            // turn").
+            Said::Full(s) => {
+                return matches!(w, None | Some(HistoryWindow::ThisTurnUntilTriggered)).then_some(s)
+            }
         };
         // "if it attacked during its controller's last turn": the controller of the
         // object the events are about.
