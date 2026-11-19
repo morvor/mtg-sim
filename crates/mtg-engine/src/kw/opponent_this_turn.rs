@@ -31,16 +31,9 @@ pub fn had_enter(n: u32, t: CardType) -> String {
 }
 
 fn card_type(s: &str) -> Option<CardType> {
-    [
-        CardType::Artifact,
-        CardType::Creature,
-        CardType::Enchantment,
-        CardType::Land,
-        CardType::Planeswalker,
-        CardType::Battle,
-    ]
-    .into_iter()
-    .find(|t| format!("{t:?}") == s)
+    CardType::PERMANENT_TYPES
+        .into_iter()
+        .find(|t| format!("{t:?}") == s)
 }
 
 /// Whether some opponent of `ctx.controller` did it this turn.
