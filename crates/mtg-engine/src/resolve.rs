@@ -1302,6 +1302,10 @@ impl Game {
                             && matches!(self.obj(now).zone, Zone::Graveyard(_) | Zone::Exile)
                         {
                             moved.push(Entity::Object(now));
+                        } else if self.obj(o).kind == crate::object::ObjKind::StackAbility {
+                            // A countered ability ceases to exist (CR 701.6b), but "each
+                            // spell and ability countered this way" still counts it.
+                            moved.push(Entity::Object(o));
                         }
                     }
                 }
