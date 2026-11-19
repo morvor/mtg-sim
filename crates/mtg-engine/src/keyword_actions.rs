@@ -31,12 +31,17 @@ pub fn perform(
     match action {
         // CR 701.16a: create a Clue token ("investigate X times" with X = 0: none).
         KeywordAction::Investigate => {
-            for p in players {
-                for _ in 0..k {
-                    // Investigating several times is sequential: each Clue is created by
-                    // its own event, so "whenever one or more tokens enter" triggers once
-                    // per Clue (Tamiyo Meets the Story Circle's ruling; CR 603.2c).
+            for i in 0..k {
+                // Investigating several times is sequential: each Clue is created by its
+                // own event, so "whenever one or more tokens enter" triggers once per Clue
+                // (Tamiyo Meets the Story Circle's ruling; CR 603.2c; register
+                // `sequential-investigations-are-separate-events`). Players investigating
+                // at the same time still do so simultaneously (CR 101.4): one event for
+                // each round of their investigations.
+                if i > 0 {
                     g.end_event_batch();
+                }
+                for &p in &players {
                     // "Whenever you investigate": each time (Erdwal Illuminator).
                     g.emit(crate::events::Event::Custom {
                         name: INVESTIGATED.into(),

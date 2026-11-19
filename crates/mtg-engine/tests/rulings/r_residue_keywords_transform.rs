@@ -22,7 +22,7 @@ fn transformed(t: &TestGame, id: ObjectId) -> bool {
 
 #[test]
 fn chandra_checks_her_damage_only_as_her_ability_resolves() {
-    cr!("608.2h", "712.18", "602.1");
+    cr!("608.2h", "400.7", "602.1");
     ruling!(
         "Chandra, Fire of Kaladesh // Chandra, Roaring Flame",
         "The last sentence of Chandra, Fire of Kaladesh's activated ability isn't a separate ability. The check happens only as that activated ability resolves. You must activate the ability in order to exile Chandra and return her to the battlefield transformed, even if Chandra has already dealt 3 or more damage during the turn."
@@ -81,7 +81,7 @@ fn gwen_stacy_exiled_card_stays_playable_after_she_transforms() {
 
 #[test]
 fn innocent_traveler_opponents_choose_in_turn_order_and_sacrifice_together() {
-    cr!("101.4", "101.4a", "701.21a");
+    cr!("101.4", "701.21a");
     ruling!(
         "Innocent Traveler // Malicious Invader",
         "When Innocent Traveler's ability resolves, the next opponent in turn order chooses whether they want to sacrifice a creature at all and which creature to sacrifice if so, then each other opponent in turn order does the same, knowing the choices made before them. Then all the chosen creatures are sacrificed at the same time. If no creatures are sacrificed this way, Innocent Traveler is transformed."
@@ -190,7 +190,7 @@ fn garruk_keeps_his_loyalty_and_cant_activate_again_after_transforming() {
 
 #[test]
 fn olag_chooses_its_copy_as_it_transforms() {
-    cr!("712.14", "707.9b", "607.2a");
+    cr!("712.20", "707.9b", "607.2a");
     ruling!(
         "Ludevic, Necrogenius // Olag, Ludevic's Hubris",
         "You choose which exiled creature card Olag is copying as it transforms. It doesn't transform and then become a copy."

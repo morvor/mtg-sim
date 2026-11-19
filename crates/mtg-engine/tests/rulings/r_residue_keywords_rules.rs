@@ -10,7 +10,7 @@
 use crate::r_residue_keywords_common::*;
 use mtg_engine::ability::*;
 use mtg_engine::decision::{Answer, Decision};
-use mtg_engine::keywords::KeywordKind;
+use mtg_engine::keywords::{Keyword, KeywordKind};
 use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -90,23 +90,45 @@ fn surge_engine_abilities_check_defender_and_blue_however_they_changed() {
 
 #[test]
 fn rohirrim_chargers_equipment_enters_unattached_if_the_creature_left() {
-    cr!("301.5c", "303.4h", "608.2h");
+    cr!("301.5e", "702.16d");
     ruling!(
         "Rohirrim Chargers",
         "If the exerted creature is no longer on the battlefield or the Equipment can't legally be attached to that creature, that Equipment will enter the battlefield unattached."
     );
     supported("Rohirrim Chargers");
-    let mut t = TestGame::new(2);
-    let c = t.battlefield(P0, "Rohirrim Chargers");
-    stack_library(&mut t, P0, &["Forest", "Short Sword"]);
-    t.answer_yes(P0, true);
-    attack_with(&mut t, &[(c, Entity::Player(P1))]);
-    assert_eq!(t.stack_len(), 1);
-    move_to(&mut t, c, Zone::Hand(P0));
-    t.resolve_all();
-    let sword = t.named_on_battlefield("Short Sword");
-    assert_eq!(sword.len(), 1, "{}", t.dump_log());
-    assert!(t.obj_now(sword[0]).attached_to.is_none());
+    // The exerted Chargers stays (the Sword is attached to it), leaves the battlefield,
+    // or gains protection from artifacts (the Sword can't legally be attached to it).
+    for case in ["stays", "left", "protection"] {
+        let mut t = TestGame::new(2);
+        let c = t.battlefield(P0, "Rohirrim Chargers");
+        stack_library(&mut t, P0, &["Forest", "Short Sword"]);
+        t.answer_yes(P0, true);
+        attack_with(&mut t, &[(c, Entity::Player(P1))]);
+        assert_eq!(t.stack_len(), 1);
+        match case {
+            "left" => {
+                move_to(&mut t, c, Zone::Hand(P0));
+            }
+            "protection" => modify(
+                &mut t,
+                c,
+                Modification::AddKeyword(Keyword::with_filter(
+                    KeywordKind::Protection,
+                    Filter::Type(CardType::Artifact),
+                )),
+            ),
+            _ => {}
+        }
+        t.resolve_all();
+        let sword = t.named_on_battlefield("Short Sword");
+        assert_eq!(sword.len(), 1, "{case}: {}", t.dump_log());
+        let attached = t.obj_now(sword[0]).attached_to;
+        if case == "stays" {
+            assert_eq!(attached, Some(obj(c)), "{case}");
+        } else {
+            assert!(attached.is_none(), "{case}: {attached:?}");
+        }
+    }
 }
 
 #[test]
@@ -133,7 +155,7 @@ fn combat_celebrant_gives_a_combat_even_if_it_dies() {
 
 #[test]
 fn several_combat_celebrants_give_several_combats_but_untap_only_once() {
-    cr!("500.8", "500.9", "701.43a");
+    cr!("500.8", "701.43a");
     ruling!(
         "Combat Celebrant",
         "If you exert multiple Combat Celebrants in one combat phase, you'll have that many additional combat phases, but all of your creatures are untapped only during the current combat phase. You'll need to exert the Combat Celebrants one at a time, in multiple combat phases, to untap your attacking creatures and attack with them in each combat step."
@@ -208,6 +230,29 @@ fn dragon_grip_ferocious_is_checked_only_as_it_is_cast() {
     let spell = t.cast(P0, g).target(bears).go();
     // The 4-power creature leaves in response; Dragon Grip stays and resolves.
     move_to(&mut t, wurm, Zone::Hand(P0));
+    t.resolve_all();
+    assert!(resolved(&t, spell));
+    assert_eq!(pt_now(&mut t, bears), (4, 2));
+    // The 4-power creature is sacrificed for mana while Dragon Grip is cast: still cast.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::BeginningOfCombat);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let brute = t.custom(
+        P0,
+        custom_card(
+            "Mana Brute",
+            "Creature — Beast",
+            "{3}",
+            Some((4, 4)),
+            "Sacrifice this creature: Add {R}.",
+        ),
+        Zone::Battlefield,
+    );
+    t.lands(P0, "Mountain", 2);
+    let g = t.hand(P0, "Dragon Grip");
+    let spell = t.cast(P0, g).target(bears).go();
+    assert!(!t.on_battlefield(brute), "{}", t.dump_log());
+    assert_eq!(t.zone(spell), Zone::Stack);
     t.resolve_all();
     assert!(resolved(&t, spell));
     assert_eq!(pt_now(&mut t, bears), (4, 2));
@@ -378,7 +423,7 @@ fn cloud_spirit_without_flying_can_block_nothing() {
 
 #[test]
 fn inniaz_gives_away_an_attacker_and_resolves_whatever_the_attackers_became() {
-    cr!("506.4", "603.4", "108.4", "800.4a");
+    cr!("506.4", "603.2");
     ruling!(
         "Inniaz, the Gale Force",
         "If you give away a creature you control with flying that attacked, it’s removed from combat. It will still be tapped if it was tapped, so it won’t be able to block."
@@ -616,7 +661,7 @@ fn prison_barricade_kicked_attacks_until_it_leaves() {
 
 #[test]
 fn coastal_breach_cost_stays_once_determined() {
-    cr!("601.2f", "601.2g", "605.1a", "702.125a", "800.4a");
+    cr!("601.2f", "601.2g", "605.1a", "702.125a");
     ruling!(
         "Coastal Breach",
         "Causing an opponent to lose the game after you’ve announced that you’re casting a spell with undaunted and determined its total cost won’t cause you to have to pay more mana."

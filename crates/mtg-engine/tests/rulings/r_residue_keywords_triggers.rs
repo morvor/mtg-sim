@@ -100,7 +100,7 @@ fn the_ancient_one_stays_in_combat_once_it_attacked() {
 
 #[test]
 fn intellect_devourer_gone_before_its_ability_resolves_exiles_nothing() {
-    cr!("610.3c", "610.3");
+    cr!("610.3", "610.3b");
     ruling!(
         "Intellect Devourer",
         "If Intellect Devourer leaves the battlefield before the Devour Intellect ability resolves, opponents won't exile any cards from their hands."
@@ -271,6 +271,54 @@ fn tamiyo_investigates_one_clue_at_a_time() {
 }
 
 #[test]
+fn opponents_investigating_at_once_create_their_clues_together() {
+    cr!("101.4", "603.2c", "701.16a");
+    interp!("sequential-investigations-are-separate-events");
+    supported("Wernog, Rider's Chaplain");
+    use mtg_engine::ability::{Effect, KeywordAction, PlayerRef, Sel, Value};
+    // "Whenever one or more tokens enter" (whoever controls them): P0 gains 1 life.
+    let watcher = || {
+        custom_card(
+            "Token Watcher",
+            "Enchantment",
+            "{1}",
+            None,
+            "Whenever one or more tokens enter, you gain 1 life.",
+        )
+    };
+    // Wernog: both opponents investigate at the same time (one event), then P0
+    // investigates three times, one at a time (three events).
+    let mut t = TestGame::new(3);
+    t.custom(P0, watcher(), Zone::Battlefield);
+    t.answer_yes(P1, true);
+    t.answer_yes(P2, true);
+    t.enter(P0, "Wernog, Rider's Chaplain");
+    t.resolve_all();
+    assert_eq!(tokens_of(&t, P1, "Clue") + tokens_of(&t, P2, "Clue"), 2);
+    assert_eq!(tokens_of(&t, P0, "Clue"), 3);
+    assert_eq!(t.life(P0), 24, "{}", t.dump_log());
+    // "Each opponent investigates twice" (no printed card says so): the opponents
+    // investigate together, one event for each round of their investigations.
+    let mut t = TestGame::new(3);
+    t.custom(P0, watcher(), Zone::Battlefield);
+    run_from(
+        &mut t,
+        P0,
+        None,
+        Effect::KeywordAction {
+            action: KeywordAction::Investigate,
+            who: PlayerRef::EachOpponent,
+            what: Sel::None,
+            n: Value::c(2),
+        },
+        &[],
+    );
+    t.resolve_all();
+    assert_eq!(tokens_of(&t, P1, "Clue") + tokens_of(&t, P2, "Clue"), 4);
+    assert_eq!(t.life(P0), 22, "{}", t.dump_log());
+}
+
+#[test]
 fn dihadas_ploy_counts_the_jump_start_discard() {
     cr!("702.133a", "701.9a", "601.2h");
     ruling!(
@@ -362,30 +410,44 @@ fn spiny_starfish_counts_on_resolution_and_not_after() {
 
 #[test]
 fn debt_of_loyalty_needs_a_regeneration_this_turn() {
-    cr!("701.19a", "701.19b", "514.2");
+    cr!("701.19a", "514.2");
     ruling!(
         "Debt of Loyalty",
         "If you cast Debt of Loyalty but nothing happens to the targeted creature for the rest of the turn that would cause it to be destroyed, Debt of Loyalty has no visible effect. The regeneration shield wears off at the end of the turn. If the creature regenerates during a later turn, you won’t gain control of it."
     );
     supported("Debt of Loyalty");
-    let mut t = TestGame::new(2);
-    let boa = t.battlefield(P1, "River Boa");
-    cast_new(&mut t, P0, "Debt of Loyalty", &[obj(boa)]);
-    t.resolve_all();
-    assert_eq!(controller(&mut t, boa), P1);
-    t.advance_to(P1, Step::PrecombatMain);
-    // A later turn: P1's own shield regenerates it; P0 doesn't gain control.
-    t.lands(P1, "Forest", 1);
-    t.activate(P1, boa, 0, &[]).unwrap();
-    t.resolve_all();
-    destroy(&mut t, boa);
-    assert!(t.on_battlefield(boa));
-    assert_eq!(controller(&mut t, boa), P1);
+    for own_shield in [false, true] {
+        let mut t = TestGame::new(2);
+        let boa = t.battlefield(P1, "River Boa");
+        cast_new(&mut t, P0, "Debt of Loyalty", &[obj(boa)]);
+        t.resolve_all();
+        // No visible effect this turn.
+        assert_eq!(controller(&mut t, boa), P1);
+        assert!(!tapped(&t, boa));
+        t.advance_to(P1, Step::PrecombatMain);
+        if own_shield {
+            // A later turn: P1's own shield regenerates it; P0 doesn't gain control.
+            t.lands(P1, "Forest", 1);
+            t.activate(P1, boa, 0, &[]).unwrap();
+            t.resolve_all();
+        }
+        destroy(&mut t, boa);
+        // Debt of Loyalty's shield wore off at the end of its turn: without another
+        // shield, the Boa is destroyed.
+        assert_eq!(
+            t.on_battlefield(boa),
+            own_shield,
+            "own shield: {own_shield}"
+        );
+        if own_shield {
+            assert_eq!(controller(&mut t, boa), P1);
+        }
+    }
 }
 
 #[test]
 fn debt_of_loyalty_on_your_own_creature() {
-    cr!("701.19a", "108.4");
+    cr!("701.19a");
     ruling!(
         "Debt of Loyalty",
         "You may cast Debt of Loyalty targeting a creature you already control. If you do, and that creature would be destroyed later in the turn, it will regenerate and you’ll gain control of it (though gaining control of a creature you already control usually has no visible effect)."
@@ -425,7 +487,7 @@ fn zaffai_uses_the_triggering_spells_mana_value() {
 
 #[test]
 fn banes_contingency_only_counts_commanders_on_the_battlefield() {
-    cr!("903.3", "608.2c");
+    cr!("903.3d", "608.2c");
     ruling!(
         "Bane's Contingency",
         "A \"commander you control\" means a permanent on the battlefield that is a commander and is under your control. It can be your commander or one owned by another player. It doesn't refer to your commander in any other zone. Notably, if a player uses Bane's Contingency to counter a spell that would counter their commander, they do not scry or draw a card."

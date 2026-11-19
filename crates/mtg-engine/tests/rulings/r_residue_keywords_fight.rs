@@ -116,7 +116,7 @@ fn earth_rumble_fight_with_an_illegal_target_deals_no_damage() {
 
 #[test]
 fn scab_clan_giant_that_left_or_an_illegal_target_means_no_fight() {
-    cr!("608.2b", "701.14b", "608.2h");
+    cr!("608.2b", "701.14b");
     ruling!(
         "Scab-Clan Giant",
         "If Scab-Clan Giant leaves the battlefield before its ability resolves, no fight will happen and neither creature will deal damage. Also, if the target creature is an illegal target when the ability tries to resolve, it won't resolve and no fight will happen."
@@ -219,7 +219,7 @@ fn unnatural_aggression_exiles_the_creature_if_it_dies_later_in_the_turn() {
 
 #[test]
 fn the_last_agni_kai_excess_damage_with_deathtouch() {
-    cr!("120.4a", "702.2c", "120.10");
+    cr!("120.4a", "120.10");
     ruling!(
         "The Last Agni Kai",
         "In some cases, the creature you control that is fighting may have deathtouch. Even 1 damage dealt to a creature from a source with deathtouch is considered lethal damage, so any amount greater than that will cause excess damage to be dealt, even if the total amount of damage isn't greater than the opponent's creature's toughness."
@@ -511,9 +511,17 @@ fn barroom_brawl_copy_may_target_a_creature_that_will_die() {
     cast_new(&mut t, P0, "Barroom Brawl", &[obj(mine), obj(theirs)]);
     t.resolve();
     assert_eq!(t.stack_len(), 1, "P1's copy: {}", t.dump_log());
+    // The copy has the targets P1 chose: its own Bears, lethally damaged but still on the
+    // battlefield as it was chosen, and P0's Giant.
+    let copy = *t.g.stack.last().unwrap();
+    assert_eq!(
+        crate::r_s25_common::targets_of(&t, copy),
+        vec![obj(theirs), obj(giant)]
+    );
     // State-based actions put both Bears into graveyards before the copy resolves.
     assert!(!t.on_battlefield(mine) && !t.on_battlefield(theirs));
     t.resolve_all();
+    // The first target is illegal: no fight, the Giant is dealt no damage.
     assert_eq!(damage_on(&t, giant), 0);
 }
 

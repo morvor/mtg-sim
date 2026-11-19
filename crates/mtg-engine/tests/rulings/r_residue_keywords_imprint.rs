@@ -106,7 +106,7 @@ fn spellweaver_helix_copies_in_exile_and_casts_the_copy_for_free() {
 
 #[test]
 fn spellweaver_helix_makes_no_copy_if_the_card_left_exile() {
-    cr!("608.2h", "707.12", "400.7");
+    cr!("607.2a", "707.12", "400.7");
     ruling!(
         "Spellweaver Helix",
         "If the imprinted card leaves the exile zone while the ability to make a copy is on the stack, then no copy will be made."
@@ -149,7 +149,7 @@ fn taxi_ability(t: &mut TestGame, taxi: ObjectId) {
 
 #[test]
 fn dermotaxi_with_nothing_exiled_does_nothing() {
-    cr!("607.2a", "608.2h");
+    cr!("607.2a");
     ruling!(
         "Dermotaxi",
         "If you activate the ability, but there's no exiled card to reference (perhaps because there wasn't one in any graveyard to imprint), the ability does nothing. Dermotaxi won't become a copy of anything."
@@ -164,7 +164,7 @@ fn dermotaxi_with_nothing_exiled_does_nothing() {
 
 #[test]
 fn dermotaxi_refers_only_to_the_card_its_imprint_ability_exiled() {
-    cr!("607.2a", "607.2b", "707.2");
+    cr!("607.2a", "607.2b", "607.5", "707.2");
     ruling!(
         "Dermotaxi",
         "The imprint ability is linked to the activated ability that makes Dermotaxi a creature. This means that the second ability refers only to the card exiled by the first, even if it becomes a copy of something that later exiles other cards."
@@ -187,6 +187,9 @@ fn dermotaxi_refers_only_to_the_card_its_imprint_ability_exiled() {
     t.set_step(P0, Step::PrecombatMain);
     taxi_ability(&mut t, taxi);
     assert_eq!(name_now(&t, taxi), "Death-Mask Duplicant");
+    // A new copy effect gives it a new pair of linked abilities (CR 607.5): Wind Drake was
+    // exiled by the earlier copy's imprint ability, not with this one, so no flying.
+    assert!(!has(&mut t, taxi, KeywordKind::Flying));
 }
 
 #[test]
@@ -244,7 +247,7 @@ fn foundry_token(t: &mut TestGame, f: ObjectId, mv: usize) {
 
 #[test]
 fn soul_foundry_token_isnt_cast_and_pays_no_optional_cost() {
-    cr!("111.1", "707.2", "601.1", "702.33d");
+    cr!("111.1", "707.2", "702.33d");
     ruling!(
         "Soul Foundry",
         "Soul Foundry puts a token copy of the imprinted card onto the battlefield. The token is put onto the battlefield, not cast."
@@ -335,7 +338,7 @@ fn soulflayer_ignores_keywords_a_card_grants_itself() {
 
 #[test]
 fn ethereal_forager_finds_its_delved_cards_after_it_left() {
-    cr!("607.2a", "702.66a", "603.10a");
+    cr!("607.2a", "702.66a", "113.7a");
     ruling!(
         "Ethereal Forager",
         "If Ethereal Forager leaves the battlefield while its triggered ability is on the stack, that ability can still find the cards exiled with Ethereal Forager’s delve ability."

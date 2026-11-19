@@ -133,10 +133,11 @@ fn if_that_spell_targets_instead(l: &str, prev: &mut Effect, b: &mut Builder) ->
     if !end(tail).is_empty() {
         return false;
     }
-    // CR 109.2: a description that doesn't say "spell" or "card" means a permanent (Bane's
-    // Contingency: "a commander you control" is a commander on the battlefield, not a
-    // commander spell; its ruling).
-    let f = if obj.contains("spell") || obj.contains("card") {
+    // A description that names no zone and doesn't say "card", "spell" or "source" means
+    // a permanent (CR 109.2); "a commander you control" is a commander on the battlefield,
+    // not a commander spell (CR 903.3d; Bane's Contingency's ruling).
+    let f = if f.zone().is_some() || ["card", "spell", "source"].iter().any(|w| obj.contains(w))
+    {
         f
     } else {
         Filter::And(vec![Filter::Permanent, f])

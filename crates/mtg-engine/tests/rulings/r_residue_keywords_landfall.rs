@@ -115,7 +115,7 @@ fn angel_exiles(t: &mut TestGame, target: ObjectId) {
 
 #[test]
 fn admonition_angel_returns_only_cards_its_landfall_ability_exiled() {
-    cr!("607.1", "607.2a", "610.3");
+    cr!("607.1", "607.2a");
     ruling!(
         "Admonition Angel",
         "Admonition Angel's landfall ability and its last ability are linked. The last ability refers only to cards exiled with its landfall ability."
@@ -146,7 +146,7 @@ fn admonition_angel_returns_only_cards_its_landfall_ability_exiled() {
 
 #[test]
 fn admonition_angel_leaving_with_landfall_on_the_stack_exiles_forever() {
-    cr!("603.6c", "603.3b", "610.3c", "607.2a");
+    cr!("603.6c", "603.3b", "607.2a");
     ruling!(
         "Admonition Angel",
         "If Admonition Angel's landfall ability triggers, but the Angel leaves the battlefield before it resolves, its last ability will trigger and resolve first. All previously exiled cards will be returned to the battlefield. Then the landfall ability will resolve and exile the targeted permanent forever."
