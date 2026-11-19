@@ -143,7 +143,8 @@ PY
     (cd "$dest/mutants.out" && cat caught.txt missed.txt timeout.txt unviable.txt \
       previously_caught.txt 2>/dev/null | sort -u >previously_caught.new &&
       mv previously_caught.new previously_caught.txt)
-    args+=(--iterate)
+    # The baseline passed when the run started (same REV): don't spend a suite run on it again.
+    args+=(--iterate --baseline skip)
   fi
   args+=(-o "$dest")
   echo "== $stem: $n mutants, sample 1/$k: cargo ${args[*]}"
