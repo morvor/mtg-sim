@@ -59,16 +59,14 @@ pub fn in_zone(t: &TestGame, id: ObjectId, zone: Zone) -> bool {
     t.zone(id) == zone
 }
 
-/// Taps the object directly.
+/// Taps the object (as an effect would: the primitive, with its events).
 pub fn tap(t: &mut TestGame, id: ObjectId) {
-    let id = t.g.current(id);
-    t.g.obj_mut(id).tapped = true;
+    crate::r_p209_common::tap(t, id);
 }
 
-/// Untaps the object directly.
+/// Untaps the object (as an effect would: the primitive, with its events).
 pub fn untap(t: &mut TestGame, id: ObjectId) {
-    let id = t.g.current(id);
-    t.g.obj_mut(id).tapped = false;
+    crate::r_p209_common::untap(t, id);
 }
 
 /// From wherever the game is, plays on (everyone passing) to `p`'s next untap step and
