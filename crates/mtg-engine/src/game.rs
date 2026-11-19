@@ -669,10 +669,12 @@ pub struct Game {
     pub events: Vec<Event>,
     /// All events this turn (for look-back queries).
     pub turn_events: Vec<Event>,
-    /// While triggers are detected for an event: the excess damage events that follow it
-    /// in the same batch, which happened as that damage was dealt (CR 120.10: "was dealt
-    /// excess damage this turn" checks after the damage).
-    pub excess_ahead: Vec<Event>,
+    /// While triggers are detected for an event: the events that follow it in the same
+    /// batch of simultaneous events. They happened at the same time, so "this turn"
+    /// queries made as the ability triggers count them (CR 603.4: an intervening "if" is
+    /// checked immediately after the trigger event; Tunnel Ignus's ruling; CR 120.10:
+    /// excess damage dealt along with the damage being looked at).
+    pub batch_ahead: Vec<Event>,
     /// The events of the latest turns before this one, for "last turn", "during your last
     /// turn" and "since your last turn" (see `history_query.rs`).
     pub past_turns: Vec<crate::history_query::PastTurn>,
@@ -933,7 +935,7 @@ impl Game {
             agents: Agents(Arc::new(Mutex::new(agents))),
             events: vec![],
             turn_events: vec![],
-            excess_ahead: vec![],
+            batch_ahead: vec![],
             past_turns: vec![],
             turn_start: Default::default(),
             game_events: vec![],
