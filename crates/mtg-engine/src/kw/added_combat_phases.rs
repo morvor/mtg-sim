@@ -60,7 +60,10 @@ pub fn parse_after(name: &str) -> Option<(bool, u32, Vec<TurnPart>)> {
 
 /// Whether `s` (following `prev`) begins a new phase in a turn's schedule.
 fn starts_phase(s: Step, prev: Step) -> bool {
-    s.phase() != prev.phase() || s.is_main() || matches!(s, Step::Untap | Step::BeginningOfCombat) || s < prev
+    s.phase() != prev.phase()
+        || s.is_main()
+        || matches!(s, Step::Untap | Step::BeginningOfCombat)
+        || s < prev
 }
 
 /// Index in the schedule of the first step after the phase the step at `i` (or, for
@@ -170,12 +173,9 @@ impl KeywordRules for AddedCombatPhases {
         let Some((main, nth, parts)) = parse_after(name) else {
             return false;
         };
-        // CR 500.10a: only the active player's turn gets phases (the effect's controller
-        // is the one who'd get them, "this turn" being their turn).
-        if !g.is_active_player(ctx.controller) {
-            ctx.nums.remove(&ADDED_COMBAT);
-            return true;
-        }
+        // "There's an additional combat phase" adds it to this turn, whoever's turn it is
+        // (CR 500.8; only "you get" is limited to its controller's turns, CR 500.10a): an
+        // opponent's turn gets it too (Swinging Ship's ruling).
         match add_after_nth(g, main, nth, &parts) {
             Some(n) => {
                 ctx.nums.insert(ADDED_COMBAT, n as i64);

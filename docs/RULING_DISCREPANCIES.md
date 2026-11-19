@@ -377,6 +377,16 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: as the rulings say, for Titania, Gaea Incarnate: the land stays a creature with no end, and activating twice on the same land puts eight counters on it.
 - Recorded: test `tests/rulings/r_p105_costs.rs` (`titania_gaea_incarnate_animates_lands_indefinitely_and_repeatedly`), citing both under Argoth, which takes part: it melds with Titania, Voice of Gaea into the Titania, Gaea Incarnate that activates the ability.
 
+### Abuelo, Ancestral Echo: Abuelo's Awakening's rulings about the returned 1/1 creature
+- Kind: misattached
+- Status: open for review
+- Ruling, Abuelo, Ancestral Echo (2023-11-10): "An artifact creature card or enchantment creature card returned this way will have base power and toughness 1/1."
+- Ruling, Abuelo, Ancestral Echo (2023-11-10): "If another effect causes one of the returned permanents to become a creature and sets its base power and toughness as it does so, that creature will have that power and toughness; it won't be 1/1. Notably, crewing a Vehicle does not set its power and toughness, so a Vehicle will remain a 1/1 if you crew it."
+- Conflicts with: Abuelo's ability returns a permanent unchanged and sets no power or toughness: "Flying, ward {2} / {1}{W}{U}: Exile another target creature or artifact you control. Return it to the battlefield under its owner's control at the beginning of the next end step." Both rulings describe Abuelo's Awakening: "Return target artifact or non-Aura enchantment card from your graveyard to the battlefield with X additional +1/+1 counters on it. It's a 1/1 Spirit creature with flying in addition to its other types."
+- Evidence: both are The Lost Caverns of Ixalan cards (rulings dated 2023-11-10); Abuelo's Awakening has no rulings in the data, and Abuelo's other rulings (a token exiled this way ceases to exist; a double-faced card returns front face up; the exiled card returns even if Abuelo has left) are about its own ability. Excava, the Risen Past, whose ability makes a returned card "a 1/1 Spirit creature with flying in addition to its other types" too, has the same two rulings (2026-03-20, the second reworded for Spacecraft). The set's release notes are past the ormos mirror's end (2022), so they weren't compared. Abuelo's ruling "An Equipment that's also a creature can't be attached to anything. ..." (2023-11-10), true of any Equipment creature and cited by its own test, likely has the same origin. Found in work item rulings-P149.
+- Engine: as the rulings say, for Abuelo's Awakening (layer 7b in timestamp order, CR 613.4b, 613.7a; crewing sets no power or toughness, CR 702.122a).
+- Recorded: tests `tests/rulings/r_p149_exile_until.rs` (`returned_artifact_and_enchantment_creature_cards_are_base_1_1`, `returned_permanents_take_later_base_pt_but_stay_1_1_when_crewed`), citing them under Abuelo, Ancestral Echo, which can't take part (its ability returns no card as a creature).
+
 ## Outdated rulings
 
 ### Souls of the Faultless: "you may choose either member of the attacking team"

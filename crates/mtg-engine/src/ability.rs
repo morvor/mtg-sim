@@ -4646,7 +4646,9 @@ pub enum Effect {
         effect: Box<Effect>,
     },
     /// "[Player] may pay [cost]. If they do, [then]. If they don't, [otherwise]."
-    /// Also covers "unless [player] pays" (swap then/otherwise).
+    /// Also covers "unless [player] pays" (swap then/otherwise). With several players
+    /// ("any opponent may", "unless any player pays"), each in turn order is offered the
+    /// cost, even after one has paid; `then` follows the first payment (CR 118.12a).
     PayOptional {
         who: PlayerRef,
         cost: Cost,

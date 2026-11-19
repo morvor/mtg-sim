@@ -456,7 +456,8 @@ enum PayerPhrase<'a> {
     ControllerOfIt(&'a str),
     /// A player phrase `player_ref` reads ("you", "target opponent", "defending player").
     Phrase(&'a str, &'a str),
-    /// "any player", "a player": any one of them may (each in turn until one does).
+    /// "any player", "a player": each of them in turn order is offered the payment, even
+    /// after one has paid (`unless-any-player-pays-offers-everyone`).
     Any(PlayerRef, &'a str),
 }
 
