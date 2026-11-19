@@ -95,6 +95,29 @@ fn combat_trigger(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         }
         let attacker = object_filter(x)?;
         let blocker = object_filter(b)?;
+        // "Whenever equipped creature becomes blocked by one or more colorless creatures"
+        // (Hedron Blade): once per combat, if any of its blockers matches (CR 509.3c), not
+        // once for each of them (CR 509.3d is "a creature").
+        if b.starts_with("one or more ") {
+            if !matches!(x, "equipped creature" | "enchanted creature") {
+                return None;
+            }
+            return Some((
+                TriggerCond::Where {
+                    trigger: Box::new(TriggerCond::BecomesBlocked(Filter::AttachedToSource)),
+                    cond: Condition::Exists(Filter::and(vec![
+                        blocker,
+                        Filter::BlockRelation {
+                            rel: BlockRel::Blocking,
+                            other: Box::new(Sel::AttachedTo),
+                            when: BlockWhen::Now,
+                        },
+                    ])),
+                },
+                Sel::AttachedTo,
+                PlayerRef::You,
+            ));
+        }
         return Some((
             TriggerCond::BlockedByCreature { attacker, blocker },
             obj,
