@@ -611,3 +611,46 @@ fn dermotaxi_doesnt_crew() {
         mtg_engine::keywords::KeywordKind::FirstStrike
     ));
 }
+
+// --- "As this enters, you may have it become a copy" from any zone ---------------------------
+
+#[test]
+fn cursed_mirror_becomes_a_copy_however_it_enters() {
+    cr!("614.1c", "614.12", "707.2");
+    // Regression: Cursed Mirror ("As this artifact enters, you may have it become a copy
+    // of any creature on the battlefield until end of turn, except it has haste.") put
+    // onto the battlefield from a graveyard (as a reanimation spell would) or by an
+    // effect, not cast, becomes the copy too, until end of turn.
+    supported("Cursed Mirror");
+    for from_graveyard in [true, false] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let giant = t.battlefield(P1, "Hill Giant");
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[obj(giant)]);
+        let m = if from_graveyard {
+            let c = t.graveyard(P0, "Cursed Mirror");
+            t.g.move_object(
+                c,
+                Zone::Battlefield,
+                mtg_engine::events::MoveCause::Effect,
+                Some(P0),
+            );
+            t.g.current(c)
+        } else {
+            let c = t.enter(P0, "Cursed Mirror");
+            t.g.current(c)
+        };
+        t.settle();
+        assert_eq!(
+            name_of(&t, m),
+            "Hill Giant",
+            "from graveyard: {from_graveyard}"
+        );
+        assert!(has_kw(&t, m, mtg_engine::keywords::KeywordKind::Haste));
+        assert_eq!(t.pt(m), (3, 3));
+        t.set_step(P1, Step::End);
+        t.advance_to(P0, Step::Upkeep);
+        assert_eq!(name_of(&t, m), "Cursed Mirror");
+    }
+}
