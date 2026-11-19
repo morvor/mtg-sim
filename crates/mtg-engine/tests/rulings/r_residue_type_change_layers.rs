@@ -14,7 +14,7 @@ use mtg_engine::*;
 
 #[test]
 fn the_master_base_pt_under_counters_and_pumps() {
-    cr!("613.4b", "613.4c", "613.4c");
+    cr!("613.4b", "613.4c");
     ruling!(
         "The Master, Transcendent",
         "Effects that modify a creature's power and/or toughness will still apply to the creature as normal. The same is true for any counters that change its power and/or toughness."
@@ -128,7 +128,7 @@ fn shadow_puppeteers_base_pt_under_pumps_and_counters() {
 
 #[test]
 fn shadow_puppeteers_overwrites_earlier_setting_and_later_setting_overwrites_it() {
-    cr!("613.4b", "613.7a", "613.7");
+    cr!("613.4b", "613.7b", "613.7");
     ruling!(
         "Shadow Puppeteers",
         "Shadow Puppeteers's last ability overwrites any previous effects that set the creature's power and/or toughness to specific values."
@@ -181,6 +181,7 @@ fn shadow_puppeteers_on_a_creature_that_stopped_being_a_creature() {
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Shadow Puppeteers");
     let crow = t.battlefield(P0, "Storm Crow");
+    let giants = [t.battlefield(P0, "Hill Giant"), t.battlefield(P0, "Hill Giant")];
     puppeteers_attack(&mut t, crow);
     // Swift Reconfiguration (flash) makes the Crow a Vehicle artifact, not a creature.
     cast_new(&mut t, P0, "Swift Reconfiguration", &[obj(crow)]);
@@ -190,10 +191,15 @@ fn shadow_puppeteers_on_a_creature_that_stopped_being_a_creature() {
     assert!(has_color(&mut t, crow, Color::Red) && has_color(&mut t, crow, Color::Blue));
     assert!(!subtype(&mut t, crow, "Dragon"));
     assert!(subtype(&mut t, crow, "Vehicle"));
-    // A noncreature permanent has no power or toughness: the base 4/4 does nothing.
+    // A noncreature permanent has no power or toughness: the base 4/4 does nothing ...
     t.g.recompute();
     assert_eq!(t.obj_now(crow).chars.power, None);
     assert_eq!(t.obj_now(crow).chars.toughness, None);
+    // ... unless it becomes a creature this turn (crewed: the Storm Crow is 1/2).
+    assert!(crate::r_s04_common::crew(&mut t, P0, crow, &giants));
+    t.resolve_all();
+    assert!(is_type(&mut t, crow, CardType::Creature));
+    assert_eq!(pt_now(&mut t, crow), (4, 4));
 }
 
 #[test]

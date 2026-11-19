@@ -14,7 +14,7 @@ use mtg_engine::*;
 
 #[test]
 fn whispering_specter_choice_and_poison_count_on_resolution() {
-    cr!("608.2c", "608.2h", "702.90b");
+    cr!("608.2c", "608.2h", "702.90b", "118.12");
     ruling!(
         "Whispering Specter",
         "You choose whether or not to sacrifice Whispering Specter, and the number of poison counters the player has is counted, when the triggered ability resolves."
@@ -27,26 +27,34 @@ fn whispering_specter_choice_and_poison_count_on_resolution() {
     }
     t.set_step(P0, Step::PrecombatMain);
     attack_with(&mut t, &[(spec, Entity::Player(P1))]);
+    // Whether P0 was asked whether to sacrifice it since `from`.
+    let asked_yes_no = |t: &TestGame, from: usize| {
+        asked_since(t, from)
+            .iter()
+            .any(|(p, d)| *p == P0 && matches!(d, Decision::YesNo { .. }))
+    };
+    let from = t.asked().len();
     t.advance_to(P0, Step::CombatDamage);
     t.settle();
     assert_eq!(t.g.player(P1).counter("poison"), 1);
     assert_eq!(triggers_on_stack(&t, "sacrifice"), 1);
-    // Two more poison counters while the trigger waits; the choice isn't made yet.
-    let from = t.asked().len();
+    // Two more poison counters while the trigger waits. P0 hasn't chosen yet: the choice
+    // is made as the ability resolves.
     crate::r_p035_common::put(&mut t, Entity::Player(P1), "poison", 2);
-    assert!(!asked_since(&t, from)
-        .iter()
-        .any(|(_, d)| matches!(d, Decision::YesNo { .. })));
+    assert!(!asked_yes_no(&t, from));
     t.answer_yes(P0, true);
+    let from = t.asked().len();
     t.resolve_all();
+    assert!(asked_yes_no(&t, from));
     assert_eq!(t.zone(t.g.current(spec)), Zone::Graveyard(P0));
+    // Three poison counters as it resolves: three cards.
     assert_eq!(t.hand_size(P1), 3);
     assert_eq!(t.graveyard_size(P1), 3);
 }
 
 #[test]
 fn body_snatcher_discard_chosen_on_resolution() {
-    cr!("608.2c", "603.3d");
+    cr!("608.2c", "118.12a");
     ruling!(
         "Body Snatcher",
         "You choose whether to discard a card or not as the enters-the-battlefield ability resolves."
@@ -68,7 +76,7 @@ fn body_snatcher_discard_chosen_on_resolution() {
 
 #[test]
 fn phyrexian_dreadnought_trigger_chosen_on_resolution() {
-    cr!("603.2", "608.2c", "701.21a");
+    cr!("603.2", "608.2c", "118.12a", "701.21a");
     ruling!(
         "Phyrexian Dreadnought",
         "Reverted to its original wording, this now has an \"enters\" triggered ability. During resolution of the triggered ability, you choose one option or the other."
@@ -143,7 +151,7 @@ fn aysen_bureaucrats_checks_power_on_activation_and_resolution() {
 
 #[test]
 fn viashino_bey_is_a_constraint_on_declaring_attackers() {
-    cr!("508.1d", "508.1c");
+    cr!("508.1d", "508.1a", "508.1c");
     interp!("requirements-of-creatures-unable-to-attack");
     ruling!(
         "Viashino Bey",
@@ -154,12 +162,16 @@ fn viashino_bey_is_a_constraint_on_declaring_attackers() {
     let bey = t.battlefield(P0, "Viashino Bey");
     let bears = t.battlefield(P0, "Grizzly Bears");
     t.set_step(P0, Step::BeginningOfCombat);
-    // A summoning-sick creature and a tapped one can't attack: Viashino Bey can still
-    // attack without them (regression: their requirements counted as obeyed only when
-    // Bey didn't attack, so Bey couldn't attack at all).
+    // A summoning-sick creature, a tapped one and one that can't attack (Pacifism) aren't
+    // able to attack: Viashino Bey can still attack without them (regression: their
+    // requirements counted as obeyed only when Bey didn't attack, so Bey couldn't attack
+    // at all).
     t.battlefield_sick(P0, "Hill Giant");
     let tapped_elves = t.battlefield(P0, "Llanowar Elves");
     t.g.objects[tapped_elves.0 as usize].tapped = true;
+    let pacified = t.battlefield(P0, "Serra Angel");
+    let pacifism = t.battlefield(P1, "Pacifism");
+    assert!(t.g.attach(pacifism, obj(pacified)));
     let p1 = Entity::Player(P1);
     let opts = attack_options(&t.g);
     assert!(!attack_declaration_legal(&t.g, &opts, &[(bey, p1)]));
@@ -170,8 +182,51 @@ fn viashino_bey_is_a_constraint_on_declaring_attackers() {
         &[(bey, p1), (bears, p1)]
     ));
     attack_with(&mut t, &[(bey, p1), (bears, p1)]);
+    assert!(t.g.is_attacking(bey) && t.g.is_attacking(bears));
     // No triggered ability: nothing goes on the stack.
     assert_eq!(t.stack_len(), 0);
+}
+
+#[test]
+fn conditional_requirements_of_creatures_that_cant_attack_ask_nothing() {
+    cr!("508.1d", "508.1a");
+    interp!("requirements-of-creatures-unable-to-attack");
+    supported("Ekundu Cyclops");
+    supported("War's Toll");
+    let p1 = Entity::Player(P1);
+    // Ekundu Cyclops: "If a creature you control attacks, this creature also attacks if
+    // able." Able to attack, it attacks along with another attacker ...
+    let mut t = TestGame::new(2);
+    let cyclops = t.battlefield(P0, "Ekundu Cyclops");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.set_step(P0, Step::BeginningOfCombat);
+    let opts = attack_options(&t.g);
+    assert!(!attack_declaration_legal(&t.g, &opts, &[(bears, p1)]));
+    assert!(attack_declaration_legal(
+        &t.g,
+        &opts,
+        &[(bears, p1), (cyclops, p1)]
+    ));
+    // ... but tapped, it doesn't stop the Bears from attacking alone.
+    t.g.objects[cyclops.0 as usize].tapped = true;
+    let opts = attack_options(&t.g);
+    assert!(attack_declaration_legal(&t.g, &opts, &[(bears, p1)]));
+    // War's Toll: "If a creature an opponent controls attacks, all creatures that opponent
+    // controls attack if able." P0's summoning-sick creature doesn't stop the others from
+    // attacking together.
+    let mut t = TestGame::new(2);
+    t.battlefield(P1, "War's Toll");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let elves = t.battlefield(P0, "Llanowar Elves");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.battlefield_sick(P0, "Hill Giant");
+    let opts = attack_options(&t.g);
+    assert!(!attack_declaration_legal(&t.g, &opts, &[(bears, p1)]));
+    assert!(attack_declaration_legal(
+        &t.g,
+        &opts,
+        &[(bears, p1), (elves, p1)]
+    ));
 }
 
 #[test]
@@ -211,7 +266,7 @@ fn phantasmal_form_with_no_targets_or_only_illegal_targets() {
 
 #[test]
 fn minas_morgul_shadow_counter_grants_shadow_and_wraith() {
-    cr!("122.1b", "613.1d", "613.1f", "702.28b");
+    cr!("122.1b", "613.1d", "613.1f");
     ruling!(
         "Minas Morgul, Dark Fortress",
         "A permanent with a shadow counter on it has shadow."
@@ -237,7 +292,7 @@ fn minas_morgul_shadow_counter_grants_shadow_and_wraith() {
 
 #[test]
 fn aurification_gold_counter_makes_a_wall_with_defender() {
-    cr!("205.1b", "613.1d", "613.1f", "702.3b");
+    cr!("205.1b", "613.1d", "613.1f");
     ruling!(
         "Aurification",
         "Aurification gives the creature type “Wall” to creatures with gold counters on them in addition to granting them defender."

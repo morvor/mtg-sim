@@ -47,21 +47,35 @@ fn castable(t: &mut TestGame, card: ObjectId) -> bool {
 
 #[test]
 fn tomb_spell_is_a_vampire_on_the_stack_and_on_the_battlefield() {
-    cr!("400.7a", "601.3", "205.1b");
+    cr!("400.7a", "601.3", "205.1b", "611.2f", "601.2a", "601.2i");
     ruling!(
         "Tarrian's Journal // The Tomb of Aclazotz",
         "The creature spell you cast will be a Vampire in addition to its other types while on the stack. The resulting creature will be a Vampire in addition to its other types."
     );
+    supported("Voldaren Estate");
+    supported("Edgar Markov");
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let tomb = tomb(&mut t);
+    t.battlefield(P0, "Edgar Markov");
     let bears = t.graveyard(P0, "Grizzly Bears");
     use_tomb(&mut t, tomb);
-    t.lands(P0, "Forest", 2);
+    // P0's only mana: two Voldaren Estates, whose colored mana ("{T}, Pay 1 life: Add one
+    // mana of any color. Spend this mana only to cast a Vampire spell.") is the only {G}.
+    t.battlefield(P0, "Voldaren Estate");
+    t.battlefield(P0, "Voldaren Estate");
     let spell = t.cast(P0, bears).go();
     assert_eq!(t.zone(spell), Zone::Stack);
     assert!(subtype(&mut t, spell, "Vampire") && subtype(&mut t, spell, "Bear"));
+    // It was a Vampire from the moment it was put on the stack (CR 611.2f): as its cost
+    // was paid (with an Estate's colored mana) ...
+    assert!(t.life(P0) < 20);
+    // ... and as it became cast: Edgar Markov's "Whenever you cast another Vampire spell"
+    // triggered.
+    t.settle();
+    assert_eq!(t.stack_len(), 2);
     t.resolve_all();
+    assert_eq!(crate::r_s25_common::creature_tokens(&t, P0), 1);
     let b = t.named_on_battlefield("Grizzly Bears")[0];
     assert!(subtype(&mut t, b, "Vampire") && subtype(&mut t, b, "Bear"));
     assert_eq!(t.counters(b, "finality"), 1);
@@ -139,15 +153,16 @@ fn tomb_permissions_add_up() {
         "If you somehow activate The Tome of Aclazotz's ability more than once during a turn, you can cast a creature spell for each ability's permission."
     );
     supported("Lurrus of the Dream-Den");
-    // Two activations: two creature spells.
+    // Two activations: a creature spell for each, and no more.
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let tomb = tomb(&mut t);
     let bears = t.graveyard(P0, "Grizzly Bears");
     let elves = t.graveyard(P0, "Llanowar Elves");
+    let third = t.graveyard(P0, "Grizzly Bears");
     use_tomb(&mut t, tomb);
     use_tomb(&mut t, tomb);
-    t.lands(P0, "Forest", 3);
+    t.lands(P0, "Forest", 5);
     t.cast(P0, bears).go();
     t.resolve_all();
     assert!(castable(&mut t, elves));
@@ -155,6 +170,8 @@ fn tomb_permissions_add_up() {
     t.resolve_all();
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
     assert_eq!(t.named_on_battlefield("Llanowar Elves").len(), 1);
+    // Both permissions are used up (two Forests are still untapped).
+    assert!(!castable(&mut t, third));
     // Lurrus's permission first, then the Tomb's for another creature spell.
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);

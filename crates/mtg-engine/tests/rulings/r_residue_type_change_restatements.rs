@@ -82,7 +82,7 @@ fn restatement_rulings() {
         }),
         // gore vassal regeneration shield lasts until used or end of turn
         ("Gore Vassal", || {
-            cr!("701.19a", "701.19c", "514.2");
+            cr!("701.19a", "514.2");
             ruling!(
                 "Gore Vassal",
                 "The regeneration shield will last until the turn ends or until it’s used."
@@ -128,7 +128,7 @@ fn restatement_rulings() {
         }),
         // plaguemaw beast sacrifices itself for its own cost
         ("Plaguemaw Beast", || {
-            cr!("602.2b", "118.3", "701.34a");
+            cr!("602.2b", "601.2h", "113.7a", "701.34a");
             ruling!(
                 "Plaguemaw Beast",
                 "You can sacrifice Plaguemaw Beast to pay the cost of its own activated ability."
@@ -306,7 +306,7 @@ fn restatement_rulings() {
         }),
         // goblin test pilot can target itself
         ("Goblin Test Pilot", || {
-            cr!("115.1", "115.5");
+            cr!("115.1");
             ruling!(
                 "Goblin Test Pilot",
                 "Goblin Test Pilot is a legal target of its own ability."
@@ -325,9 +325,10 @@ fn restatement_rulings() {
             let pilot = t.battlefield(P0, "Goblin Test Pilot");
             t.battlefield(P1, "Grizzly Bears");
             activate_with(&mut t, pilot, 0, &[]);
-            // On the stack with its target chosen; P1 gets priority to respond.
+            // On the stack with its target chosen, and P0 has priority (then P1, to respond).
             assert_eq!(t.stack_len(), 1);
             assert_eq!(top_targets(&t).len(), 1);
+            assert_eq!(t.g.turn.priority, Some(P0));
         }),
         // goblin test pilot every legal target equally likely
         ("Goblin Test Pilot", || {
@@ -344,8 +345,8 @@ fn restatement_rulings() {
                 PilotTarget::Bears,
             ] {
                 let n = seen.iter().filter(|x| **x == k).count();
-                // Expected 50 of 200 each.
-                assert!((25..=80).contains(&n), "{k:?}: {n}");
+                // Expected 50 of 200 each (a target twice as likely as another is caught).
+                assert!((35..=65).contains(&n), "{k:?}: {n}");
             }
         }),
         // cyclopean mummy not exiled from elsewhere

@@ -121,4 +121,4 @@ Judgment calls about attacking, blocking and combat damage (CR 506–511). Forma
 - Why: "attacks if able" binds only a creature able to attack; the rulings treat a creature that can't attack as simply not attacking, never as constraining the rest of the declaration. Not counting it changes nothing for unconditional requirements (no declaration obeys them).
 - Affects: Viashino Bey, Ekundu Cyclops, Magnetic Web, War's Toll ("attack together" requirements) with a creature that can't attack.
 - Code: `crates/mtg-engine/src/combat.rs` (`attack_requirements`).
-- Tests: `tests/rulings/r_residue_type_change_abilities.rs` (`viashino_bey_is_a_constraint_on_declaring_attackers`).
+- Tests: `tests/rulings/r_residue_type_change_abilities.rs` (`viashino_bey_is_a_constraint_on_declaring_attackers`, `conditional_requirements_of_creatures_that_cant_attack_ask_nothing`).

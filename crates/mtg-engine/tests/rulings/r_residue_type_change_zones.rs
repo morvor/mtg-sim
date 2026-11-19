@@ -67,7 +67,7 @@ fn cloning_of_shredder_copies_only_the_printed_card() {
 
 #[test]
 fn cloning_of_shredder_exceptions_are_copiable_values() {
-    cr!("707.9b", "707.2", "205.4");
+    cr!("707.9b", "707.2", "704.5j");
     ruling!(
         "The Cloning of Shredder",
         "The token isn't legendary and is a Mutant in addition to its other creature types. This is a copiable value of the token that other effects may copy."
@@ -340,7 +340,7 @@ fn the_master_cant_target_a_card_put_into_a_graveyard_without_milling() {
 
 #[test]
 fn witness_protection_name_cant_be_named() {
-    cr!("201.3", "201.4");
+    cr!("201.4");
     ruling!(
         "Witness Protection",
         "If an effect instructs a player to choose a card name, that player may not name \"Legitimate Businessperson,\" even if a creature currently has that name."
@@ -412,7 +412,7 @@ fn etrata(hits: usize) -> TestGame {
 
 #[test]
 fn etrata_is_shuffled_into_its_owners_library_regardless() {
-    cr!("608.2c", "104.3e", "800.4a");
+    cr!("608.2c", "104.3e", "800.4");
     ruling!(
         "Etrata, the Silencer",
         "Etrata's owner shuffles it into their library as the triggered ability resolves, regardless of how many cards are in exile or whether the player loses the game."
@@ -522,7 +522,7 @@ fn xantcha_activator_draws_controller_loses_life() {
 
 #[test]
 fn xantcha_enters_under_the_opponents_control_by_replacement() {
-    cr!("614.1c", "614.12", "603.6a");
+    cr!("614.1d", "614.12", "603.6a");
     ruling!(
         "Xantcha, Sleeper Agent",
         "Xantcha's first ability is a replacement effect that modifies how it enters the battlefield, not a triggered ability."
