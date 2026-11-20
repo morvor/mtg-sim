@@ -784,6 +784,60 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   kept in the game and copied with it), so they can't collide and stay the same across recomputation. Tests:
   `tests/cr/r607_005_acquired_links.rs` (two Cryptolith Rites; Necrotic Ooze with two Sisters of Stone Death,
   each placed 0x4000 ids after the first). The gap is removed from docs/PROPERTIES.md "Remaining gaps".
+  Release properties runs with the final code (after merging small-fixes-5, whose `PlayTerms::given_by_link`
+  tells two instances of a gained ability apart by these links): snapshot 200 games and determinism 200
+  games, no violations (also before the merge).
+
+### Residual: liveness of object ids in the primitives (gaps-residual-2 part 3, closed Nov 20)
+- Every zone change makes a new object (CR 400.7); the actions.rs primitives did nothing to an id of an object
+  that had left, silently, so a stale id that should have been followed (CR 400.7j) or read as last known
+  information went unnoticed. In debug builds the primitives now assert that the ids they act on are live
+  (`liveness.rs`, `Game::assert_live`: move, tap, untap, destroy, sacrifice, put/remove counters, damage
+  recipients, attach, unattach; a damage source may have left, it deals the damage as it last existed, CR
+  608.2h), and code that knowingly holds ids of objects that may have left passes them through
+  `Game::present` / `all_present` / `present_entity` (an instruction about an object that has left does
+  nothing to it).
+- Test suite (debug): 174 firings. 168 in the effect interpreter (`resolve.rs`: Destroy 17, Tap 7, Untap 4,
+  DealDamage recipients 8, AddCounters 108, RemoveCounters 7, Attach 17), all instructions about an object
+  that had left doing nothing as they should (the tests pin it): now explicit. 3 in the state-based actions,
+  which moved again an object a replaced loss had already moved (Lich's Mirror, Exquisite Archangel; CR
+  400.6): no effect, now not attempted. 1 in the untap step, which untapped a land returned "as you untap"
+  (Undiscovered Paradise): no effect, now not attempted. 2 test errors: tests that destroyed an object that
+  had already died (Aminatou at 0 loyalty, CR 704.5i; a Hill Giant dealt deathtouch damage, CR 704.5h), now
+  asserting that it died. Reading the interpreter's other calls: AttachAsCreature and Unattach got the same
+  treatment (an object that left would have been "unattached" as last known information).
+- Every-card chunk in a debug build (`--from 0 --count 4000`, 3 threads): 4,000 cards, 8,000 games in 8,500 s;
+  3 panics, all liveness assertions, 2 distinct paths: `Effect::PutCountersOf` ("double the number of +1/+1
+  counters on that creature" after it died: Sword of Hours, Primordial Hydra; no rules effect, now explicit)
+  and one engine bug: the payment planner reserved a cost's source only for {T}, {Q} and
+  sacrifice/exile/return-self costs, so for Thopter Squadron's "{1}, Remove a +1/+1 counter from this
+  creature", with Ashnod's Altar the only mana, it sacrificed the Squadron for the {1} and the counter cost
+  then failed on the new object: the ability was offered though it couldn't be activated, and the attempt
+  was reversed (CR 601.2g-h, 602.2b, 733.1; with another creature the planner sacrificed that one). Every
+  cost part paid with the source now reserves it, and a part paid with a source that has left fails (for
+  "sacrifice this" it counted as paid, which the reservation kept unreachable). 3 slow games (the 60 s
+  cap, debug speed). The 3 panicking games pass after the fixes (`--names`).
+- Properties fuzz in a debug build (`--properties --games 500 --jobs 3`, after merging origin): 500 games for
+  each of the five properties. Rollback 500 held; determinism 498 and snapshot 499 held (the rest slow: the
+  debug time limit). Replay: 497 held, 2 slow, 1 panic, a liveness assertion and an engine bug: turning a
+  face-down permanent face up (megamorph) paid the {2} with a mana ability that sacrificed the permanent
+  itself (Ashnod's Altar), then turned the departed object face up, put the megamorph counter on it, and
+  succeeded. A special action's payment now keeps its source (`SpendContext::keep_source`), and one whose
+  source left as the cost was paid fails and is reversed (CR 400.7, 116.2b, 702.37e, 733.1), unless the cost
+  moves the source itself (Circling Vultures); test with Rattleclaw Mystic; the game passes after the fix.
+  Seat: 497 held, 1 slow, 2 violations not from this item (both reproduce with the release binary built
+  before part 3 and before merging origin): game 175 (4 players, seed 1000178), the nameless face-down
+  objects in the command zone before the first turn have different owners in the rotated game; game 405 (2
+  players, seed 1000408), an "Order objects entering the battlefield" decision lists Watchful Giant and
+  Deepway Navigator in a different order. Left for the coordinator (`mtg-sim --properties --property seat
+  --seed 1 --only 175 --players 4 --max-turns 40`, `... --only 405 --players 2 ...`).
+- Bugs found by the assertions: 2 engine bugs (the payment planner sacrificing a cost's source when the cost
+  removes counters from it, so an activation that can't be completed was offered; a face-down permanent
+  sacrificed for its own mana turned face up) and 1 latent one found reading the cost code they pointed to
+  (`CostPart::SacrificeSelf` counted as paid when the source had already left, unreachable while the planner
+  reserved the source; now fails); 0 compiler fixes; 2 test errors. The other firings were instructions about
+  objects that had left doing nothing as they should, now explicit (the SBA re-move and the untap included).
+  The assertions stay (debug builds only).
 
 ---
 
