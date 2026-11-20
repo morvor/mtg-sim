@@ -70,6 +70,91 @@ fn helm_of_obedience_mills_the_whole_library_against_leyline_of_the_void() {
     assert!(t.on_battlefield(helm));
 }
 
+/// Helm of Obedience activated for `x` against P1, whose library is `library` from the top.
+fn helm_against(x: i64, library: &[&str], wheel: bool) -> (TestGame, ObjectId) {
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let helm = t.battlefield(P0, "Helm of Obedience");
+    if wheel {
+        // Wheel of Sun and Moon enchanting P1: "If a card would be put into enchanted
+        // player's graveyard from anywhere, instead that card is revealed and put on the
+        // bottom of that player's library."
+        let w = t.battlefield(P0, "Wheel of Sun and Moon");
+        t.g.obj_mut(w).attached_to = Some(Entity::Player(P1));
+    }
+    t.lands(P0, "Plains", x as usize);
+    for c in library.iter().rev() {
+        t.library_top(P1, c);
+    }
+    t.answer(P0, DecisionKind::X, Answer::Number(x));
+    t.activate(P0, helm, 0, &[Entity::Player(P1)]).unwrap();
+    t.resolve();
+    (t, helm)
+}
+
+#[test]
+fn helm_of_obedience_goes_on_past_a_card_shuffled_back_into_the_library() {
+    // Darksteel Colossus: "If Darksteel Colossus would be put into a graveyard from
+    // anywhere, reveal Darksteel Colossus and shuffle it into its owner's library
+    // instead." It is never put into the graveyard, so it neither counts toward X nor
+    // stops the process as a creature card; Helm goes on with the next card.
+    cr!("701.17a", "614.1a", "608.2c");
+    interp!("mill-until-stops-when-nothing-moves");
+    supported("Helm of Obedience");
+    supported("Darksteel Colossus");
+    let lib = [
+        "Darksteel Colossus",
+        "Island",
+        "Forest",
+        "Mountain",
+        "Swamp",
+        "Plains",
+    ];
+    let (t, helm) = helm_against(3, &lib, false);
+    // The shuffle randomizes which cards follow; three of them are put into the graveyard.
+    assert_eq!(t.graveyard_size(P1), 3);
+    assert!(!t.in_graveyard(P1, "Darksteel Colossus"));
+    assert_eq!(
+        t.g.player(P1)
+            .library
+            .iter()
+            .filter(|c| t.obj(**c).chars.name == "Darksteel Colossus")
+            .count(),
+        1
+    );
+    assert!(t.named_on_battlefield("Darksteel Colossus").is_empty());
+    assert!(t.on_battlefield(helm));
+}
+
+#[test]
+fn helm_of_obedience_against_wheel_of_sun_and_moon_ends_after_one_pass_a_known_deviation() {
+    // Every milled card goes to the bottom of the library instead, so no card is ever put
+    // into the graveyard and the process would repeat forever: CR 104.4b makes that a
+    // draw. The engine ends the process once every card left in the library has been
+    // milled by it, and the game goes on (a known deviation pending the loops work).
+    cr!("701.17a", "614.1a");
+    interp!("mill-until-stops-when-nothing-moves");
+    supported("Wheel of Sun and Moon");
+    let lib = ["Island", "Forest", "Grizzly Bears", "Mountain"];
+    let (t, helm) = helm_against(2, &lib, true);
+    assert_eq!(t.graveyard_size(P1), 0);
+    // The harness's library: the four named cards on top of fillers.
+    let names: Vec<&str> = t
+        .g
+        .player(P1)
+        .library
+        .iter()
+        .rev()
+        .map(|c| t.obj(*c).chars.name.as_str())
+        .collect();
+    // Each card went to the bottom once, in order: the library is back as it was.
+    assert_eq!(names[..4], lib);
+    assert!(names[4..].iter().all(|n| !lib.contains(n)));
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    assert!(t.on_battlefield(helm));
+    assert!(t.g.result.is_none(), "not a draw (the deviation)");
+}
+
 #[test]
 fn forgotten_lore_the_opponent_chooses_again_while_you_pay() {
     cr!("608.2c", "608.2d");
