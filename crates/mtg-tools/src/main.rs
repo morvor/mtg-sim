@@ -27,8 +27,9 @@
 //!   sheets are deferred and left out unless named with `--card`.
 //! * `interpretations [--write [PATH]] [--check]` — the interpretation register
 //!   (`docs/interpretations/`): prints its problems (see `mtg_data::interpretations::check`)
-//!   and the index; `--write` writes the index to `docs/INTERPRETATIONS.md` (or PATH);
-//!   `--check` exits with status 1 on a problem or when that file is out of date.
+//!   and the index; `--write` writes the index to `docs/INTERPRETATIONS.md` (or PATH) and
+//!   the decisions log (`mtg_data::decisions`) to `DECISIONS.md` beside it; `--check` exits
+//!   with status 1 on a problem or when either file is out of date.
 //! * `structure-coverage [--write PATH] [--limit N] [--logs DIR] [--card NAME]` — groups
 //!   supported cards' abilities by compiled structure and reports the structures no test
 //!   exercises (see `structure_coverage.rs` for the command sequence).
@@ -1265,7 +1266,8 @@ fn manual_check() {
     }
 }
 
-/// The interpretation register: problems, and the index `docs/INTERPRETATIONS.md`.
+/// The interpretation register: problems, the index `docs/INTERPRETATIONS.md` and the
+/// decisions log `docs/DECISIONS.md` (written beside the index).
 fn interpretations(args: &[String]) {
     use mtg_data::interpretations as reg;
     let root = repo_root();
@@ -1298,24 +1300,38 @@ fn interpretations(args: &[String]) {
         println!("{p}");
     }
     let index = reg::render_index(&entries);
+    let plan = std::fs::read_to_string(root.join(mtg_data::decisions::PLAN)).unwrap_or_default();
+    let log = std::fs::read_to_string(root.join(mtg_data::discrepancies::LOG)).unwrap_or_default();
+    let decisions = mtg_data::decisions::render_from(&entries, &plan, &log);
     let provisional = entries.iter().filter(|e| e.status == "provisional").count();
     println!(
         "{} entries ({provisional} provisional), {} problems",
         entries.len(),
         problems.len()
     );
+    for (section, n) in mtg_data::decisions::section_counts(&entries, &plan, &log) {
+        println!("  {}: {section}: {n}", mtg_data::decisions::OUTPUT);
+    }
     let mut stale = false;
     if let Some(path) = &write {
         std::fs::write(path, &index).expect("write index");
         println!("wrote {}", path.display());
+        // The decisions log goes beside the index.
+        let log_path = path.with_file_name("DECISIONS.md");
+        std::fs::write(&log_path, &decisions).expect("write decisions log");
+        println!("wrote {}", log_path.display());
     } else {
-        let current =
-            std::fs::read_to_string(root.join("docs/INTERPRETATIONS.md")).unwrap_or_default();
-        if current != index {
-            stale = true;
-            println!(
-                "docs/INTERPRETATIONS.md is out of date: run `mtg-tools interpretations --write`"
-            );
+        for (file, text) in [
+            ("docs/INTERPRETATIONS.md", &index),
+            (mtg_data::decisions::OUTPUT, &decisions),
+        ] {
+            let current = std::fs::read_to_string(root.join(file))
+                .unwrap_or_default()
+                .replace("\r\n", "\n");
+            if &current != text {
+                stale = true;
+                println!("{file} is out of date: run `mtg-tools interpretations --write`");
+            }
         }
     }
     if check && (!problems.is_empty() || stale) {
