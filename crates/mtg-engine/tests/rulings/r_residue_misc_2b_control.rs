@@ -240,6 +240,7 @@ fn confusion_in_the_ranks_exchanges_only_if_both_are_there_and_still_share_a_typ
 #[test]
 fn preacher_target_must_stay_controlled_by_the_chosen_opponent() {
     cr!("608.2b", "115.7");
+    interp!("controller-picks-the-choosing-opponent");
     ruling!(
         "Preacher",
         "The target of the ability is a creature the chosen opponent controls. As the ability resolves, if the target isn’t a creature controlled by the chosen opponent, the ability won’t resolve. If the ability’s target is changed somehow, the new target must be a creature controlled by the chosen opponent."

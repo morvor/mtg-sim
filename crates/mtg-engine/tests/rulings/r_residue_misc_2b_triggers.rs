@@ -46,6 +46,7 @@ fn bronze_bombshell_is_a_state_trigger_that_waits_and_retriggers() {
 #[test]
 fn bronze_bombshell_deals_damage_only_if_its_ability_sacrificed_it() {
     cr!("603.8", "608.2c", "701.21a");
+    interp!("that-opponent-fixed-as-it-triggers");
     ruling!(
         "Bronze Bombshell",
         "Bronze Bombshell deals 7 damage only if it was sacrificed as a result of its ability. If it leaves the battlefield or changes controllers before the ability resolves, it can’t be sacrificed and won’t deal damage."

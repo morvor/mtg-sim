@@ -380,6 +380,7 @@ fn the_elderspell_chooses_the_planeswalker_for_counters_as_it_resolves() {
 #[test]
 fn arsenal_thresher_may_reveal_an_artifact_entering_with_it() {
     cr!("614.12", "614.1c");
+    interp!("entering-cards-may-be-revealed");
     ruling!(
         "Arsenal Thresher",
         "If Arsenal Thresher and another artifact are entering from your hand at the same time, you may reveal that other artifact for Arsenal Thresher. If that artifact is a second Arsenal Thresher, you may reveal each Arsenal Thresher for the other."
@@ -979,4 +980,69 @@ fn ferris_wheel_must_target_if_it_can_and_keeps_counters_while_phased_out() {
     roll(&mut t, 3);
     assert!(!t.obj_now(bears).phased_out);
     assert_eq!(t.counters(bears, counters::PLUS1), 2);
+}
+
+// --- Market Gnome -------------------------------------------------------------------------------
+
+#[test]
+fn market_gnome_triggers_if_exiled_by_a_mana_ability_while_paying_for_craft() {
+    cr!("605.3a", "702.167a", "601.2g");
+    interp!("automatic-mana-payment");
+    ruling!(
+        "Market Gnome",
+        "Most of the time, Market Gnome's last ability will trigger because it was exiled as one of the components used in the craft ability. However, in some uncommon cases, the ability will also trigger if Market Gnome is exiled while you're activating mana abilities as part of paying for that craft ability."
+    );
+    // A mana ability that exiles a creature you control as its cost.
+    let altar = custom_card(
+        "Exiling Altar",
+        "Artifact",
+        "{1}",
+        None,
+        "Exile a creature you control: Add {W}{W}{W}.",
+    );
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let landmark = t.battlefield(P0, "Oteclan Landmark");
+    t.custom(P0, altar, Zone::Battlefield);
+    let gnome = t.battlefield(P0, "Market Gnome");
+    let thopter = t.battlefield(P0, "Ornithopter");
+    // The craft material is the Ornithopter; the Gnome is exiled by the Altar's mana
+    // ability while the craft cost is paid.
+    t.answer_choose(P0, &[obj(thopter)]);
+    t.answer_choose(P0, &[obj(gnome)]);
+    t.g.turn.priority = Some(P0);
+    t.g.recompute();
+    let uid = t
+        .obj_now(landmark)
+        .chars
+        .abilities
+        .iter()
+        .find(|ab| {
+            matches!(ab.kind, mtg_engine::ability::AbilityKind::Activated(_))
+                && ab.text.starts_with("Craft")
+        })
+        .unwrap()
+        .uid;
+    let r = t.g.activate_ability(P0, landmark, uid);
+    t.g.flush_events();
+    t.settle();
+    assert!(r.is_ok(), "{r:?} {}", t.dump_log());
+    assert!(t.in_exile("Market Gnome") && t.in_exile("Ornithopter"));
+    // The Gnome went as the Altar's cost, the Ornithopter as the craft material.
+    let cause_of = |id: ObjectId| {
+        t.g.turn_events.iter().find_map(|e| match e {
+            mtg_engine::events::Event::ZoneChange { old, cause, .. } if *old == id => Some(*cause),
+            _ => None,
+        })
+    };
+    assert_eq!(cause_of(gnome), Some(mtg_engine::events::MoveCause::Cost));
+    assert_eq!(
+        cause_of(thopter),
+        Some(mtg_engine::events::MoveCause::Exile)
+    );
+    // The Gnome's ability is above the craft ability.
+    assert_eq!(triggers_of(&t, "Market Gnome").len(), 1, "{}", t.dump_log());
+    let hand = t.hand_size(P0);
+    t.resolve();
+    assert_eq!((t.life(P0), t.hand_size(P0)), (21, hand + 1));
 }
