@@ -312,9 +312,25 @@ fn a_copy_of_an_activated_ability_has_a_period_of_its_own_too() {
     interp!("copied-ability-duration-starts-as-the-copy-is-created");
     supported("Rings of Brighthearth");
     // Rings of Brighthearth: "Whenever you activate an ability, if it isn't a mana ability,
-    // you may pay {2}. If you do, copy that ability." Seasinger's ability is copied; then
-    // control of Seasinger is lost and regained while the copy and the original wait.
-    for lost in [false, true] {
+    // you may pay {2}. If you do, copy that ability." Seasinger's ability is copied as the
+    // Rings' trigger resolves (`copy`), and the copy resolves before the original.
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    enum Case {
+        Untouched,
+        // Control lost and regained while the copy and the original wait.
+        LostAfterCopy,
+        // Seasinger untapped before the copy is made and tapped again after: the copy's
+        // duration never started ("remains tapped").
+        UntappedBeforeCopy,
+        // Control lost before the copy is made and regained after: never started either.
+        LostBeforeCopy,
+    }
+    for case in [
+        Case::Untouched,
+        Case::LostAfterCopy,
+        Case::UntappedBeforeCopy,
+        Case::LostBeforeCopy,
+    ] {
         let mut t = TestGame::new(2);
         t.battlefield(P0, "Rings of Brighthearth");
         t.lands(P0, "Wastes", 2);
@@ -323,16 +339,26 @@ fn a_copy_of_an_activated_ability_has_a_period_of_its_own_too() {
         let s = t.battlefield(P0, "Seasinger");
         let bears = t.battlefield(P1, "Grizzly Bears");
         activate(&mut t, P0, s, "Gain control", &[obj(bears)]);
+        match case {
+            Case::UntappedBeforeCopy => untap(&mut t, s),
+            Case::LostBeforeCopy => give_control(&mut t, s, P1),
+            _ => {}
+        }
         t.answer_yes(P0, true);
         t.resolve();
-        assert_eq!(t.stack_len(), 2, "lost={lost}");
-        if lost {
-            give_control(&mut t, s, P1);
-            give_control(&mut t, s, P0);
+        assert_eq!(t.stack_len(), 2, "{case:?}");
+        match case {
+            Case::LostAfterCopy => {
+                give_control(&mut t, s, P1);
+                give_control(&mut t, s, P0);
+            }
+            Case::UntappedBeforeCopy => tap(&mut t, s),
+            Case::LostBeforeCopy => give_control(&mut t, s, P0),
+            Case::Untouched => {}
         }
         t.resolve_all();
-        let want = if lost { P1 } else { P0 };
-        assert_eq!(controller(&t, bears), want, "lost={lost}");
+        let want = if case == Case::Untouched { P0 } else { P1 };
+        assert_eq!(controller(&t, bears), want, "{case:?}");
     }
 }
 
