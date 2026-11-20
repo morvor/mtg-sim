@@ -1372,9 +1372,10 @@ fn shelob_copies_a_dying_creature_a_spider_of_yours_damaged_this_turn() {
     t.g.flush_events();
     t.resolve_all();
     assert!(t.named_on_battlefield("Grizzly Bears").is_empty(), "not damaged by a Spider");
-    t.g.destroy(hit, None);
-    t.g.flush_events();
-    t.resolve_all();
+    // The Hill Giant was dealt deathtouch damage by the Spider ("Other Spiders you control
+    // have deathtouch"), so it died as state-based actions were checked (CR 704.5h).
+    assert!(!t.g.is_live(hit));
+    assert!(t.in_graveyard(P1, "Hill Giant"));
     let copies = t.named_on_battlefield("Hill Giant");
     assert_eq!(copies.len(), 1);
     let c = &t.g.obj(copies[0]).chars;

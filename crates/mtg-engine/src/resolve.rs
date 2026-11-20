@@ -449,7 +449,10 @@ impl Game {
 
             // --- Objects -------------------------------------------------------
             Effect::Destroy { what, no_regen } => {
+                // What has left the battlefield isn't destroyed (CR 400.7), nor what it
+                // became.
                 let objs = self.resolve_objects(what, ctx);
+                let objs = self.all_present(objs);
                 let res = self.destroy_all_by(
                     objs.clone(),
                     crate::event_causes::Cause::of(ctx),
@@ -679,7 +682,9 @@ impl Game {
                     }
                     _ => Some(ctx.controller),
                 };
-                for o in self.resolve_objects(what, ctx) {
+                // What has left the battlefield isn't tapped (CR 400.7).
+                let objs = self.resolve_objects(what, ctx);
+                for o in self.all_present(objs) {
                     if self.tap_with(o, false, by, false) {
                         tapped.push(Entity::Object(o));
                     }
@@ -689,7 +694,8 @@ impl Game {
                 ctx.set_var(vars::TAPPED, tapped);
             }
             Effect::Untap { what } => {
-                for o in self.resolve_objects(what, ctx) {
+                let objs = self.resolve_objects(what, ctx);
+                for o in self.all_present(objs) {
                     self.untap(o);
                 }
             }
@@ -719,7 +725,9 @@ impl Game {
                 } else {
                     self.damage_source(source, ctx).into_iter().collect()
                 };
+                // An object that has left isn't dealt damage (CR 400.7).
                 let recipients = self.resolve_sel(to, ctx);
+                let recipients = self.all_present_entities(recipients);
                 if !srcs.is_empty() {
                     let mut evs = Vec::new();
                     for &src in &srcs {
@@ -878,6 +886,11 @@ impl Game {
                 let mut got = Vec::new();
                 for t in self.resolve_sel(what, ctx) {
                     let t = self.found_after_move(t, ctx);
+                    // An object that has left its zone is a new object (CR 400.7): nothing
+                    // is put on it, so "if you do" sees no counters put (Thought Gorger).
+                    let Some(t) = self.present_entity(t) else {
+                        continue;
+                    };
                     let n = self.put_counters(t, kind, k, crate::event_causes::CounterPut::of(ctx));
                     if n > 0 {
                         got.push(t);
@@ -905,7 +918,10 @@ impl Game {
             Effect::RemoveCounters { what, kind, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let mut total = 0;
-                for t in self.resolve_sel(what, ctx) {
+                // Counters can't be removed from an object that has left its zone, nor
+                // from its last known information (CR 400.7).
+                let targets = self.resolve_sel(what, ctx);
+                for t in self.all_present_entities(targets) {
                     match kind {
                         Some(kind) => {
                             total += self.remove_counters_by(t, kind, k, Some(ctx.controller))
@@ -1688,8 +1704,12 @@ impl Game {
                 let to = &crate::attach::recipient_for_all(self, to, &objs, ctx);
                 let named = self.resolve_sel(to, ctx);
                 if let Some(t) = crate::attach::choose_recipient(self, named, &objs, ctx) {
-                    for o in objs {
-                        any |= self.attach(o, t);
+                    // An object that has left the battlefield isn't attached, and nothing is
+                    // attached to one (CR 400.7, 701.3b).
+                    if self.present_entity(t).is_some() {
+                        for o in self.all_present(objs) {
+                            any |= self.attach(o, t);
+                        }
                     }
                 }
                 ctx.prev_happened = any;

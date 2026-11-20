@@ -50,6 +50,12 @@ impl Game {
     /// Moves several objects simultaneously. Returns, for each proposed move, the new id
     /// of that object after the (possibly replaced) move.
     pub fn move_objects(&mut self, moves: Vec<MoveEv>) -> Vec<Option<ObjectId>> {
+        for m in &moves {
+            // (Or a newly created object that hasn't been put anywhere yet, `can_move`.)
+            if !self.is_new_object(m.obj) {
+                self.assert_live(m.obj, "move");
+            }
+        }
         if self.dirty {
             self.recompute();
         }
@@ -376,11 +382,17 @@ impl Game {
         {
             return false;
         }
-        self.is_live(id)
-            || (o.zone == Zone::Nowhere
-                && o.next.is_none()
-                && o.prev.is_none()
-                && o.kind != ObjKind::StackAbility)
+        self.is_live(id) || self.is_new_object(id)
+    }
+
+    /// Whether `id` is a newly created object (a token or card) that hasn't been put
+    /// anywhere yet.
+    pub(crate) fn is_new_object(&self, id: ObjectId) -> bool {
+        let o = self.obj(id);
+        o.zone == Zone::Nowhere
+            && o.next.is_none()
+            && o.prev.is_none()
+            && o.kind != ObjKind::StackAbility
     }
 
     /// The player who will control a permanent entering the battlefield with this move.
@@ -1348,6 +1360,7 @@ impl Game {
         by: Option<PlayerId>,
         attacking: bool,
     ) -> bool {
+        self.assert_live(obj, "tap");
         let o = self.obj(obj);
         // Only a permanent: an object that has left the battlefield keeps its zone as
         // last known information, but it's no longer there to tap (CR 400.7); a phased-out
@@ -1368,6 +1381,7 @@ impl Game {
     }
 
     pub fn untap(&mut self, obj: ObjectId) -> bool {
+        self.assert_live(obj, "untap");
         let o = self.obj(obj);
         // A phased-out permanent can't be affected (CR 702.26b): it stays tapped.
         if !self.is_in_zone(obj, Zone::Battlefield) || !o.tapped || o.phased_out {
@@ -1423,6 +1437,7 @@ impl Game {
     /// Destroys a permanent (CR 701.8); `cause` is the spell or ability doing it (none for
     /// a state-based action). Returns true if it left the battlefield.
     pub fn destroy_by(&mut self, obj: ObjectId, cause: crate::event_causes::Cause) -> bool {
+        self.assert_live(obj, "destroy");
         if self.dirty {
             self.recompute();
         }
@@ -1475,7 +1490,12 @@ impl Game {
         let (source, by) = (cause.obj, cause.by);
         let mut moves = Vec::new();
         let mut causes: Vec<(Option<ObjectId>, Option<PlayerId>)> = Vec::new();
+        for obj in &objs {
+            self.assert_live(*obj, "destroy");
+        }
         for obj in objs {
+            // (One may leave as an earlier one's destruction is replaced: "destroy this
+            // Aura instead", CR 702.89a.)
             // Not a phased-out permanent (CR 702.26b; see `destroy_by`).
             if !self.is_live(obj)
                 || self.obj(obj).zone != Zone::Battlefield
@@ -1552,6 +1572,7 @@ impl Game {
 
     /// Sacrifices a permanent (CR 701.21). Only the controller can sacrifice.
     pub fn sacrifice(&mut self, obj: ObjectId, by: PlayerId) -> Option<ObjectId> {
+        self.assert_live(obj, "sacrifice");
         if self.dirty {
             self.recompute();
         }
@@ -1635,6 +1656,9 @@ impl Game {
         n: u32,
         how: crate::event_causes::CounterPut,
     ) -> u32 {
+        if let Some(o) = target.object() {
+            self.assert_live(o, "put counters");
+        }
         // An object that has left its zone is a new object (CR 400.7): nothing is put on
         // it, so "if you do" sees no counters put (Thought Gorger).
         if n == 0 || target.object().is_some_and(|o| !self.is_live(o)) {
@@ -1731,6 +1755,9 @@ impl Game {
         n: u32,
         by: Option<PlayerId>,
     ) -> u32 {
+        if let Some(o) = target.object() {
+            self.assert_live(o, "remove counters");
+        }
         // CR 810.10b: a player losing poison counters in Two-Headed Giant: the team does.
         if let Some(k) =
             crate::multiplayer::two_headed::remove_team_poison(self, target, kind, n, by)
@@ -1938,6 +1965,13 @@ impl Game {
 
     /// Deals several damage events simultaneously (e.g. combat damage, CR 510.2).
     pub fn deal_damage_batch(&mut self, events: Vec<(ObjectId, Entity, u32)>, combat: bool) {
+        // The source may have left: it deals the damage as it last existed (CR 608.2h).
+        // The recipient is the object as it is now.
+        for (_, t, _) in &events {
+            if let Some(o) = t.object() {
+                self.assert_live(o, "deal damage to");
+            }
+        }
         if self.dirty {
             self.recompute();
         }
@@ -2442,6 +2476,10 @@ impl Game {
     }
 
     fn attach_checked(&mut self, obj: ObjectId, to: Entity, as_creature: bool) -> bool {
+        self.assert_live(obj, "attach");
+        if let Some(o) = to.object() {
+            self.assert_live(o, "attach to");
+        }
         if self.dirty {
             self.recompute();
         }
@@ -2475,6 +2513,7 @@ impl Game {
     }
 
     pub fn unattach(&mut self, obj: ObjectId) {
+        self.assert_live(obj, "unattach");
         if let Some(prev) = self.obj(obj).attached_to {
             // Remembered only when it became unattached because what it was attached to
             // left the battlefield (CR 704.5n): "Equipment attached to that creature" then
