@@ -127,6 +127,18 @@ fn rohirrim_chargers_equipment_enters_unattached_if_the_creature_left() {
             assert_eq!(attached, Some(obj(c)), "{case}");
         } else {
             assert!(attached.is_none(), "{case}: {attached:?}");
+            // It entered unattached: it wasn't attached first and then unattached (by the
+            // state-based action of CR 702.16d).
+            assert!(
+                !t.g.turn_events.iter().any(|e| matches!(
+                    e,
+                    mtg_engine::events::Event::Attached { obj, .. }
+                        | mtg_engine::events::Event::Unattached { obj, .. }
+                        if t.g.current(*obj) == sword[0]
+                )),
+                "{case}: {}",
+                t.dump_log()
+            );
         }
     }
 }
