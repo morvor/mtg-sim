@@ -115,3 +115,28 @@ named reason in docs/rulings-uncovered.tsv. Report counts: cited, exempt, uncove
   crew effect adds the creature type without them). Reading "the entire time the object's card
   type is removed" as ending when the object has the card type again would give it back Bird
   and Dragon. Settling it needs a register entry (provisional).
+- **Rulings older than the Dominaria planeswalker errata that say "a player" where the card now
+  says "target player or planeswalker"** (found by `rulings-residue-burn-freeze`'s review,
+  Nov 20; no exemption made: they are cited for player targets, as the earlier P009 rounds
+  cited the same class, Punish the Enemy's in `tests/rulings/r_p009_targets.rs` and
+  Blightning's in `tests/rulings/r_p009_replacement.rs`). The Dominaria Oracle Changes (Eli Shiffrin, 2018-04-13;
+  ormos mirror `archive/en/articles/archive/news/2018/04/dominaria-oracle-changes-2018-04-13.md`,
+  Wayback capture 2018-04-13 16:31:32; the Oracle update that went with the CR effective
+  2018-04-27): "Abilities that damage or prevent damage to "target player" have been changed to
+  "target player or planeswalker."", listing each card below. Soul of Shandalar (2014-07-18):
+  "To activate either ability, you must target a player, but you can choose to not target any
+  creatures."; Chandra, Pyromaster (2014-07-18): "To activate the first ability, you must
+  target a player but you can choose to not target any creatures."; Searing Blaze
+  (2010-03-01): "You must choose two targets as you cast Searing Blaze: a player and a creature
+  that player controls. ..."; Sarkhan the Mad (2010-06-15): "You choose a single target as you
+  activate the third ability. All your Dragons deal damage to that player."; Vengeful Archon
+  (2010-08-15): "The only target of Vengeful Archon’s ability is the player it may deal damage
+  to. ..."; Flames of the Blood Hand (2005-02-01): "The damage is unpreventable, and the
+  targeted player’s life gain that turn is replaced with nothing." and "The replacement effect
+  applies only to the target player, ..."; cited earlier, Punish the Enemy (2013-04-15): "You
+  must be able to target a player and a creature in order to cast Punish the Enemy." and
+  Blightning (2008-10-01): "The targeted player will discard two cards even if ...". The engine
+  follows the Oracle text (a planeswalker may be the target). Under the brief's "outdated"
+  policy their "a player" parts would be exempt in part, each with an entry in
+  docs/RULING_DISCREPANCIES.md; a class decision like `pre-battle-rulings-give-way-to-the-cr`
+  would settle them all (the P008/P009 "burn planeswalker" batches hold more of them).
