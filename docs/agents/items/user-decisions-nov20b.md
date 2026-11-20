@@ -17,3 +17,11 @@ Implementation item (effort high; review at max). Mark each entry's Status `deci
 13. Housekeeping: `pre-dominaria-player-target-rulings-give-way`'s Decision should quote the user's words: "21. Agreed" (Nov 20).
 
 `cargo test --workspace` passes; yield row; follow worker.md's one-item-per-session rule and notify the coordinator.
+
+## Results (Nov 20, implementer)
+
+- Decided (Status and Decision): 24 `simultaneous-entries-ordered-by-controller` (low confidence, Revisit later), 25–28 (low confidence, one grouped Revisit later bullet), 31, 32, 33, 34 (the user's reasoning in Why), 36 `counter-choice-excludes-what-cant-have-them`, 38 (`automatic-mana-payment`'s exile extension), 13 (`pre-dominaria-player-target-rulings-give-way` quotes "21. Agreed"). 37 `x-announced-before-modes` left provisional.
+- Renamed and rewritten as decided: `attack-total-cost-contains-x` → `each-attack-tax-is-its-own-cost`; `own-permission-first` → `permission-choice-always-asked`.
+- New provisional entry (a further judgment call of item 9): `kept-for-counters-none-able-all-sacrificed` (Promise of Loyalty with Melira's Keepers as a player's only creature: no vow counter, the Keepers sacrificed).
+- Engine: `Game::replace_rec` adds back the effects determined at the proposal whenever the permanent still enters the same way (not only once a permanent left); `combat::Taxes` pays the taxes with {X} apart from the others; `permissions::attach` / `choose_land_permission` / `choose_cast_permission` offer the card's own permission with effects' outside the owner's hand and default to the card's own; `kw::counter_choice::narrowed_stored_choices` (Eye of Doom, Mikey & Mona, Promise of Loyalty) and bolster's choice offer only what can have the counters.
+- Seraph's 2007-09-16 ruling: "it will cease to exist after being exiled" exempt (`docs/rulings-exemptions/rulings-P176.tsv`), template-error entry in `docs/RULING_DISCREPANCIES.md`, the rest cited.
