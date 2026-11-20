@@ -344,11 +344,13 @@ Each was fixed, with a regression test citing the rules:
 
 Not bugs in the rules, but found and handled by the properties:
 
-* Ability ids, some links (CR 607.5: links of abilities an effect gives come from the
-  ability-id counter), mana riders' ids and replacement keys are drawn from a counter shared
-  by the whole process, so they differ between two runs of the same game in one process,
-  and between a protocol game and its replay (a Clue's ability as a player investigates,
-  a delayed trigger's ability as it triggers). The comparisons rename them consistently.
+* Ability ids, mana riders' ids and replacement keys are drawn from a counter shared by
+  the whole process, so they differ between two runs of the same game in one process, and
+  between a protocol game and its replay (a Clue's ability as a player investigates, a
+  delayed trigger's ability as it triggers). The comparisons rename them consistently, and
+  links too (CR 607.5), though the links of abilities effects give are now numbered per
+  game (`ability_grants::FreshLinks`; `acquired_links` for continuously reevaluated
+  effects, gaps-residual-2).
 * Prompts name players by seat ("attacking P2") and objects by id ("Forest #53"); the
   comparison renames those.
 * Properties 5–8 found these to be the rules, not bugs: a copy of a card with an "as this

@@ -535,8 +535,9 @@ pub struct SpendContext {
     /// {G}" helps pay its "{2}, Sacrifice this creature").
     pub reserve_may_tap: bool,
     /// The payment's source must stay where it is whatever the cost: a special action
-    /// that acts on it once the cost is paid ("turn it face up", CR 116.2b, 702.37e). No
-    /// mana ability may sacrifice it (see `reserve_may_tap`).
+    /// that acts on it once the cost is paid ("turn it face up", CR 116.2b, 702.37e;
+    /// unlocking a door, 116.2m; `special_actions::pay_keeping_source`). No mana ability
+    /// may sacrifice it (see `reserve_may_tap`).
     pub keep_source: bool,
     /// What the cost is paid for beyond casting or activating ([`SpendPurpose`]).
     pub purpose: Option<SpendPurpose>,

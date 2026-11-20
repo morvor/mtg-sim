@@ -822,22 +822,55 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   debug time limit). Replay: 497 held, 2 slow, 1 panic, a liveness assertion and an engine bug: turning a
   face-down permanent face up (megamorph) paid the {2} with a mana ability that sacrificed the permanent
   itself (Ashnod's Altar), then turned the departed object face up, put the megamorph counter on it, and
-  succeeded. A special action's payment now keeps its source (`SpendContext::keep_source`), and one whose
-  source left as the cost was paid fails and is reversed (CR 400.7, 116.2b, 702.37e, 733.1), unless the cost
-  moves the source itself (Circling Vultures); test with Rattleclaw Mystic; the game passes after the fix.
-  Seat: 497 held, 1 slow, 2 violations not from this item (both reproduce with the release binary built
-  before part 3 and before merging origin): game 175 (4 players, seed 1000178), the nameless face-down
-  objects in the command zone before the first turn have different owners in the rotated game; game 405 (2
-  players, seed 1000408), an "Order objects entering the battlefield" decision lists Watchful Giant and
-  Deepway Navigator in a different order. Left for the coordinator (`mtg-sim --properties --property seat
-  --seed 1 --only 175 --players 4 --max-turns 40`, `... --only 405 --players 2 ...`).
+  succeeded. A special action that acts on its permanent once the cost is paid (turning it face up,
+  unlocking a door) now pays keeping it (`special_actions::pay_keeping_source`, `SpendContext::keep_source`:
+  no mana ability sacrifices it), is offered only if it can be paid so (`Game::can_pay_cost_keeping_source`,
+  review), and if the permanent leaves anyway as the cost is paid it's reversed (CR 400.7, 116.2b, 702.37e,
+  733.1); tests with Rattleclaw Mystic and Raven Guild Initiate; the game passes after the fix. Seat: 497
+  held, 1 slow, 2 violations not from this item (see "Found, not fixed" below).
 - Bugs found by the assertions: 2 engine bugs (the payment planner sacrificing a cost's source when the cost
   removes counters from it, so an activation that can't be completed was offered; a face-down permanent
-  sacrificed for its own mana turned face up) and 1 latent one found reading the cost code they pointed to
-  (`CostPart::SacrificeSelf` counted as paid when the source had already left, unreachable while the planner
-  reserved the source; now fails); 0 compiler fixes; 2 test errors. The other firings were instructions about
+  sacrificed for its own mana turned face up) and 1 found reading the cost code they pointed to
+  (`CostPart::SacrificeSelf` counted as paid when the source had already left; now fails. The implementer
+  called it unreachable; the review reached it: Withercrown's granted "you lose 1 life unless you sacrifice
+  this creature" with the creature returned to its owner's hand before it resolved lost no life, CR 400.7,
+  118.3, 118.12a; test in `tests/cr/r400_007_instructions_about_departed_objects.rs`); 0 compiler fixes; 2
+  test errors. The other firings were instructions about
   objects that had left doing nothing as they should, now explicit (the SBA re-move and the untap included).
   The assertions stay (debug builds only).
+- Review (Nov 20). Every site the item made an explicit no-op was logged with the test reaching it (223
+  filtered ids over the engine tests): each is an instruction about an object that had left before it was
+  carried out (a creature that died with its trigger on the stack, an Equipment gone before its attach), and
+  none is an object an earlier part of the same effect moved (CR 400.7j: the Animate Dead family attaches to
+  the returned creature, which `present` passes); the SBA and untap-step filters are behavior-preserving
+  (`move_objects` and `untap` already did nothing to such ids). Problems found and fixed: (1) the check
+  after paying a special action's cost reversed every special action whose source had left, though only
+  turning a permanent face up and unlocking a door act on their source afterwards: sacrificing Volrath's
+  Curse (or Damping Engine) itself to ignore its effect, a legal action that worked before (CR 116.2d,
+  701.21a), was reversed; now only `pay_keeping_source` checks, and the Circling Vultures exception isn't
+  needed (its discard goes through `special_actions::pay` like every action that doesn't act on its source
+  afterwards). (2) Turning a face-down permanent face up and unlocking a door were still offered when only
+  sacrificing that permanent could pay (the availability checks didn't keep the source; the
+  `|| spend.keep_source` added to the planning check was dead code there). (3) The Thopter Squadron test
+  caught bug 1 only through the debug assertion (in a release build it passed without the fix); it now
+  asserts the ability isn't offered, and the Rattleclaw Mystic test what's offered; nothing reached the
+  reversal of a special action whose permanent left during the payment (with the payment keeping it, only a
+  cost part choosing the permanent itself does): test with Raven Guild Initiate returned for its own morph
+  cost under Arcane Adaptation. The reservation of a cost's source is recorded under the existing policy
+  `automatic-mana-payment` (docs/interpretations/stack-casting-costs.md), which the tests now cite.
+- Part 4 of the item (Inquisitor Eisenhorn's "this way" trigger for a card drawn while casting, CR 121.8)
+  moved to small-fixes-4, which landed it (`kw/reveal_first_draw.rs`, `tests/cr/r121_8_reveal_as_drawn.rs`).
+- Found, not fixed (seat symmetry, `--properties --games 500`; not from this item, which changes nothing
+  that depends on seats or on the order of object ids, and neither difference is in its code): game 175 (4 players, seed
+  1000178): before the first turn the nameless face-down objects in the command zone (conspiracies) have
+  different owners in the rotated game (rotation 3: `command[O240 "" own0 ...]` against `own3`), so the
+  canonical renaming pairs different objects, or the objects are placed differently;
+  `cargo run --release -p mtg-sim -- --properties --property seat --seed 1 --only 175 --players 4 --max-turns 40`.
+  Game 405 (2 players, seed 1000408, rotation 1): at turn 17 an "Order objects entering the battlefield"
+  decision lists Watchful Giant and Deepway Navigator in the opposite order (`actions.rs`,
+  `order_simultaneous_entries` lists the simultaneous moves in the order they were proposed; probably an
+  order of object ids, which differ between seats); `cargo run --release -p mtg-sim -- --properties --property seat
+  --seed 1 --only 405 --players 2 --max-turns 40`.
 
 ---
 

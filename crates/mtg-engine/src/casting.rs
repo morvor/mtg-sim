@@ -3715,7 +3715,16 @@ impl Game {
             .into_iter()
             .collect();
         let snow = terms.is_some_and(|t| t.snow_as_any_color);
-        self.can_pay_cost_optimistic_spending(p, cost, Some(card), chars, &ctx, &any_color, snow)
+        self.can_pay_cost_optimistic_spending(
+            p,
+            cost,
+            Some(card),
+            chars,
+            &ctx,
+            &any_color,
+            snow,
+            false,
+        )
     }
 
     /// [`Self::can_pay_cost_optimistic`] with the parts' values read in `ctx` (e.g. with
@@ -3728,12 +3737,13 @@ impl Game {
         chars: &Characteristics,
         ctx: &Ctx,
     ) -> bool {
-        self.can_pay_cost_optimistic_spending(p, cost, src, chars, ctx, &[], false)
+        self.can_pay_cost_optimistic_spending(p, cost, src, chars, ctx, &[], false, false)
     }
 
     /// [`Self::can_pay_cost_optimistic_in`], where mana of the types `any_color` (and, with
     /// `snow_any_color`, mana from snow sources) may also be spent as though it were mana
-    /// of any color (CR 609.4b).
+    /// of any color (CR 609.4b). With `keep_source`, no mana ability may sacrifice the
+    /// source, whatever the cost ([`SpendContext::keep_source`]).
     #[allow(clippy::too_many_arguments)]
     fn can_pay_cost_optimistic_spending(
         &self,
@@ -3744,6 +3754,7 @@ impl Game {
         ctx: &Ctx,
         any_color: &[ManaType],
         snow_any_color: bool,
+        keep_source: bool,
     ) -> bool {
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
         // "{X}, where X is ...": that much generic mana.
@@ -3822,7 +3833,7 @@ impl Game {
             // As when paying: only a cost that uses the source itself keeps the source's own
             // mana abilities from paying the mana (Midnight Clock's "{T}: Add {U}" pays for
             // its "{2}{U}: Put an hour counter on this artifact").
-            let reserve = if reserves_source(cost) || spend.keep_source {
+            let reserve = if reserves_source(cost) || keep_source {
                 src
             } else {
                 None
@@ -3838,6 +3849,30 @@ impl Game {
     }
 
     pub fn can_pay_cost(&self, p: PlayerId, cost: &Cost, src: Option<ObjectId>, ctx: &Ctx) -> bool {
+        self.can_pay_cost_with(p, cost, src, ctx, false)
+    }
+
+    /// [`Self::can_pay_cost`] for the cost of a special action that acts on `src` once
+    /// it's paid, which the payment keeps where it is: no mana ability may sacrifice it
+    /// (`special_actions::pay_keeping_source`, [`SpendContext::keep_source`]).
+    pub fn can_pay_cost_keeping_source(
+        &self,
+        p: PlayerId,
+        cost: &Cost,
+        src: Option<ObjectId>,
+        ctx: &Ctx,
+    ) -> bool {
+        self.can_pay_cost_with(p, cost, src, ctx, true)
+    }
+
+    fn can_pay_cost_with(
+        &self,
+        p: PlayerId,
+        cost: &Cost,
+        src: Option<ObjectId>,
+        ctx: &Ctx,
+        keep_source: bool,
+    ) -> bool {
         let chars = src.map(|s| self.obj(s).chars.clone()).unwrap_or_default();
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
         // What the cost's parts name ("you may pay {1} and exile it": the object the
@@ -3856,7 +3891,7 @@ impl Game {
         c.resolving_controller = ctx
             .resolving_controller
             .or((ctx.controller != p).then_some(ctx.controller));
-        self.can_pay_cost_optimistic_in(p, cost, src, &chars, &c)
+        self.can_pay_cost_optimistic_spending(p, cost, src, &chars, &c, &[], false, keep_source)
     }
 
     /// Pays a cost during resolution ("you may pay ..."). Returns true if paid.
