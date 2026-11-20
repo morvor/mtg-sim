@@ -250,7 +250,7 @@ New tests in `tests/cr/r113_6e_self_granted_flash.rs`:
 
 **Remaining gaps:**
 - **The judge-forum thread** was read only through search results. Allowing apps.magicjudges.org would let it be quoted.
-- **"This spell has cascade as long as ..."** (Bloodbraid Marauder) still functions everywhere. Whether only on the stack matters for nothing but a search for "a card with cascade".
+- **"This spell has cascade as long as ..."** (Bloodbraid Marauder) still functions everywhere. Whether only on the stack matters for nothing but a search for "a card with cascade". (Fixed by small-fixes-6: it functions only on the stack; register `self-granted-cascade-functions-on-the-stack`.)
 - **Tiers:** the changed zone changes the structure fingerprint of the affected statics on Crashing Tide, Supernatural Rescue, Mutual Destruction, Colossal Rattlewurm, Take for a Ride and Graveyard Shift. Their tiers in docs/verified-cards.tsv are refreshed at the next sweep.
 - **Untested permission sources:** Past in Flames and Mission Briefing as the permission are covered only by the investigator's scratch tests, which weren't committed.
 

@@ -862,7 +862,7 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   no panics.
 - Part 4 of the item (Inquisitor Eisenhorn's "this way" trigger for a card drawn while casting, CR 121.8)
   moved to small-fixes-4, which landed it (`kw/reveal_first_draw.rs`, `tests/cr/r121_8_reveal_as_drawn.rs`).
-- Found, not fixed (seat symmetry, `--properties --games 500`; not from this item: both reproduce
+- Found, not fixed then, fixed by small-fixes-6 (seat symmetry, `--properties --games 500`; not from this item: both reproduce
   identically, in a debug build, with the engine as it was without it, origin at 9a650bd6).
   Game 175 (4 players, seed 1000178, rotation 3): before the first turn the nameless face-down objects in
   the command zone (conspiracies) have different owners in the rotated game (`command[O240 "" own0 ...]`
@@ -874,6 +874,13 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   simultaneous moves in the order they were proposed, probably an order of object ids, which differ between
   seats). `cargo run --release -p mtg-sim -- --properties --property seat --seed 1 --only 405 --players 2
   --max-turns 40`.
+  Fixed by small-fixes-6: game 175's face-down objects weren't conspiracies but supplementary-deck cards
+  (Attraction and scheme cards, which random decks include). `shuffle_attraction_decks`,
+  `shuffle_scheme_decks` and `shuffle_planar_decks` shuffled them with the game's randomness and made them
+  new objects in seat order; they now go in APNAP order with each owner's randomness (`Game::rng_for`), and
+  vanguards and conspiracies get their start-of-game timestamps in APNAP order (CR 613.7m; `variants::begin_game`
+  used the command zone's order). Game 405: `order_simultaneous_entries` now lists each player's objects by
+  owner in APNAP order, then creation order (register `simultaneous-entries-listed-by-owner-then-creation`).
 
 ---
 
