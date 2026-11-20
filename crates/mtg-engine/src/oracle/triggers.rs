@@ -495,17 +495,22 @@ fn trigger_splits(t: &str) -> Vec<(&str, &str)> {
 ///
 /// The built-in forms below are tried first, then the patterns registered in
 /// `oracle/patterns/` (which receive the text after "when"/"whenever", or the whole text
-/// for "at ..." conditions).
+/// for "at ..." conditions). "That player" of an object the condition names with its
+/// controller ("a creature an opponent controls") is fixed as the ability triggers
+/// (`patterns::that_player_named_controller`).
 pub fn parse_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     let l = l.trim();
-    if let Some(x) = core_trigger_condition(l) {
-        return Some(x);
-    }
-    let r = l
-        .strip_prefix("whenever ")
-        .or_else(|| l.strip_prefix("when "))
-        .unwrap_or(l);
-    crate::oracle_ext::parse_trigger_ext(r)
+    let parsed = match core_trigger_condition(l) {
+        Some(x) => x,
+        None => {
+            let r = l
+                .strip_prefix("whenever ")
+                .or_else(|| l.strip_prefix("when "))
+                .unwrap_or(l);
+            crate::oracle_ext::parse_trigger_ext(r)?
+        }
+    };
+    Some(super::patterns::that_player_named_controller::fix_that_player(parsed))
 }
 
 fn core_trigger_condition(l: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
