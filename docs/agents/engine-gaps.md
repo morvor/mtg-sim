@@ -875,7 +875,7 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   seats). `cargo run --release -p mtg-sim -- --properties --property seat --seed 1 --only 405 --players 2
   --max-turns 40`.
   Fixed by small-fixes-6: game 175's face-down objects weren't conspiracies but supplementary-deck cards
-  (Attraction and scheme cards, which random decks include). `shuffle_attraction_decks`,
+  (Attraction or scheme cards, which random decks can include; planes, the other face-down supplementary cards, are renumbered only in Planechase games). `shuffle_attraction_decks`,
   `shuffle_scheme_decks` and `shuffle_planar_decks` shuffled them with the game's randomness and made them
   new objects in seat order; they now go in APNAP order with each owner's randomness (`Game::rng_for`), and
   vanguards and conspiracies get their start-of-game timestamps in APNAP order (CR 613.7m; `variants::begin_game`
