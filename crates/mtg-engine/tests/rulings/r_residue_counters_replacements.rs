@@ -143,10 +143,10 @@ fn thieves_of_blood_entering_together_one_gets_the_counters() {
         "If more than one Thief of Blood enters the battlefield at the same time, you can apply the replacement effect of any of them."
     );
     // The Thief whose replacement effect applies first removes all three counters and
-    // enters with them; the other then removes none and enters with none. (The engine
-    // applies them in the order the entering objects are given rather than asking: for
-    // identical Thieves, whose timestamp order P0 chooses either way (CR 613.7m), every
-    // choice the ruling allows gives the same game.)
+    // enters with them; the other then removes none and enters with none. (P0 chooses
+    // which applies first; without an answer, the first of the moves. The choice itself is
+    // tested in `entering_together_order.rs`, interpretation
+    // `simultaneous-entries-ordered-by-controller`.)
     let mut t = TestGame::new(2);
     let bears = with_counters(&mut t, P1, "Grizzly Bears", 3);
     let ids = enter_together(&mut t, &[(P0, "Thief of Blood"), (P0, "Thief of Blood")]);
