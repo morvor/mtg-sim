@@ -1012,8 +1012,11 @@ fn plan(
         }
         Effect::ChooseOne { who, options } => {
             let chooser = g.eval_player(who, ctx).unwrap_or(ctx.controller);
-            let labels = options.iter().map(|(l, _)| l.clone()).collect();
-            let i = g.ask_option(chooser, ctx.source, "Choose one", labels);
+            // Not an impossible option while another can be done (CR 608.2d).
+            let ok = crate::impossible_options::choosable(g, options, ctx);
+            let labels = ok.iter().map(|i| options[*i].0.clone()).collect();
+            let k = g.ask_option(chooser, ctx.source, "Choose one", labels);
+            let i = ok.get(k).copied().unwrap_or(usize::MAX);
             match options.get(i) {
                 Some((_, chosen)) => plan(g, chosen, ctx, p, earlier),
                 None => Plan::Nothing,

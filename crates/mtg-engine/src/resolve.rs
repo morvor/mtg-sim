@@ -408,8 +408,11 @@ impl Game {
                 let i = match hinted {
                     Some(i) => i,
                     None => {
-                        let labels = options.iter().map(|(l, _)| l.clone()).collect();
-                        self.ask_option(p, ctx.source, "Choose one", labels)
+                        // Not an impossible option while another can be done (CR 608.2d).
+                        let ok = crate::impossible_options::choosable(self, options, ctx);
+                        let labels = ok.iter().map(|i| options[*i].0.clone()).collect();
+                        let k = self.ask_option(p, ctx.source, "Choose one", labels);
+                        ok.get(k).copied().unwrap_or(usize::MAX)
                     }
                 };
                 if let Some((_, eff)) = options.get(i) {
@@ -455,7 +458,9 @@ impl Game {
 
             // --- Objects -------------------------------------------------------
             Effect::Destroy { what, no_regen } => {
-                let objs = self.resolve_objects(what, ctx);
+                // A permanent chosen as it's destroyed must be one that can be (CR 702.12b).
+                let what = crate::impossible_options::destroyable_choice(what);
+                let objs = self.resolve_objects(&what, ctx);
                 let res = self.destroy_all_by(
                     objs.clone(),
                     crate::event_causes::Cause::of(ctx),

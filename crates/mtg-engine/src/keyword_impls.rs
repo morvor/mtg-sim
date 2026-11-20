@@ -225,8 +225,17 @@ pub fn affinity_reduction(g: &Game, p: PlayerId, card: ObjectId, kw: &Keyword) -
 /// effects tied to how it was cast.
 pub fn resolved_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosition) {
     let o = g.obj(id);
-    // A spell cast as an Adventure or an Omen (CR 715.3d, 720.3d).
+    // A spell cast as an Adventure or an Omen (CR 715.3d, 720.3d). An Omen that would be
+    // shuffled into its owner's library is exiled instead if a keyword it was cast with
+    // exiles it "instead of putting it anywhere else" (flashback, CR 702.34a; Lier's
+    // ruling: "A spell cast using flashback will always be exiled afterward"), whichever of
+    // the two is applied first (CR 616.1).
     if let Some(d) = crate::adventure::resolved_destination(g, id) {
+        if d.0 != Zone::Exile {
+            if let Some((exile, _)) = crate::kw::anywhere_else_destination(g, id) {
+                return exile;
+            }
+        }
         return d;
     }
     // Flashback (CR 702.34a), buyback (CR 702.27a), and other keywords: see `kw/`.
