@@ -525,6 +525,73 @@ fn two_planeswalkers_with_the_same_subtype_both_stay() {
 }
 
 #[test]
+fn lier_flashback_for_an_adventure_only() {
+    cr!("601.3e", "715.3a", "702.34a", "715.4");
+    ruling!(
+        "Lier, Disciple of the Drowned",
+        "if you control Lier and you have Bonecrusher Giant in your graveyard, you can cast Stomp with flashback, but not Bonecrusher Giant."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Lier, Disciple of the Drowned");
+    let giant = t.graveyard(P0, "Bonecrusher Giant // Stomp");
+    // In the graveyard it's a creature card, with no flashback (CR 715.4).
+    assert!(!t.obj_now(giant).chars.has_keyword(KeywordKind::Flashback));
+    fill_pool(&mut t, P0, 3);
+    t.g.turn.priority = Some(P0);
+    t.g.recompute();
+    let opts = t.cast_options(P0, giant);
+    assert!(!opts.is_empty(), "Stomp can be cast with flashback");
+    assert!(
+        opts.iter()
+            .all(|o| o.face == mtg_engine::object::FaceState::Half(1)
+                && o.method == CastMethod::Keyword(KeywordKind::Flashback)),
+        "only the Adventure, with flashback"
+    );
+    let s = t
+        .cast(P0, giant)
+        .method(CastMethod::Keyword(KeywordKind::Flashback))
+        .target(P1)
+        .go();
+    assert_eq!(t.obj_now(s).chars.name, "Stomp");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+    // Exiled as it resolves.
+    assert_eq!(t.zone(t.g.current(giant)), Zone::Exile);
+    // Without Lier, nothing.
+    let mut t = TestGame::new(2);
+    let giant = t.graveyard(P0, "Bonecrusher Giant // Stomp");
+    fill_pool(&mut t, P0, 3);
+    assert!(t.cast_options(P0, giant).is_empty());
+}
+
+#[test]
+fn lier_flashback_for_an_omen() {
+    cr!("601.3e", "720.3a", "702.34a");
+    ruling!(
+        "Lier, Disciple of the Drowned",
+        "Lier's last ability allows you to cast adventurer cards in your graveyard as Adventures and omen cards in your graveyard as Omens using the flashback it grants."
+    );
+    // Dirgur Island Dragon // Skimming Strike ({1}{U} instant Omen: "Tap up to one target
+    // creature. Draw a card.").
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Lier, Disciple of the Drowned");
+    let card = t.graveyard(P0, "Dirgur Island Dragon // Skimming Strike");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    fill_pool(&mut t, P0, 2);
+    let hand = t.hand_size(P0);
+    let s = t
+        .cast(P0, card)
+        .method(CastMethod::Keyword(KeywordKind::Flashback))
+        .target(bears)
+        .go();
+    assert_eq!(t.obj_now(s).chars.name, "Skimming Strike");
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert!(t.obj_now(bears).tapped);
+    assert_ne!(t.zone(t.g.current(card)), Zone::Graveyard(P0));
+}
+
+#[test]
 fn elspeth_resplendent_puts_both_counters_at_once() {
     cr!("122.1", "122.6");
     ruling!(
