@@ -64,6 +64,7 @@ impl Game {
                         self.obj(*o).controller == p
                             && self.may_sacrifice_for_cost(*o, ctx)
                             && Some(*o) != self.mana_reserve
+                            && !self.mana_keep.contains(o)
                     })
                     .collect();
                 Some((cands, filter, false))

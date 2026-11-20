@@ -3860,7 +3860,7 @@ impl Renderer<'_> {
             Effect::AtNext { step, effect } => {
                 let s = match step {
                     TriggerStep::EndOfCombat => "at end of combat".to_string(),
-                    TriggerStep::Upkeep => "at the beginning of the next turn's upkeep".to_string(),
+                    TriggerStep::Upkeep => "at the beginning of the next upkeep".to_string(),
                     other => format!("at the beginning of the next {}", self.step_name(*other)),
                 };
                 let e = self.effect(effect);
@@ -10627,6 +10627,9 @@ impl Renderer<'_> {
     /// end step", "at the beginning of your next main phase", "at the beginning of that
     /// player's next end step", "at this turn's next end of combat".
     pub(crate) fn delay_text(&self, t: &TriggerCond) -> Option<String> {
+        if crate::turn_structure::is_next_turns_upkeep(t) {
+            return Some("at the beginning of the next turn's upkeep".to_string());
+        }
         let (inner, this_turn) = match t {
             TriggerCond::ThisTurn(i) => (&**i, true),
             other => (other, false),
@@ -10658,9 +10661,6 @@ impl Renderer<'_> {
                 "at this turn's next end of combat".to_string()
             }
             (TriggerStep::EndOfCombat, PlayerRel::Any) => "at end of combat".to_string(),
-            (TriggerStep::Upkeep, PlayerRel::Any) if !this_turn => {
-                "at the beginning of the next turn's upkeep".to_string()
-            }
             (_, PlayerRel::Any) => format!("at the beginning of the next {step}{turn}"),
             (_, PlayerRel::You) => format!("at the beginning of your next {step}{turn}"),
             (_, PlayerRel::Var(_)) => {
