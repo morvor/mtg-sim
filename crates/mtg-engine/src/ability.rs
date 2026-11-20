@@ -3228,6 +3228,15 @@ pub enum Restriction {
     CantEnterBattlefield(Filter),
     /// "doesn't untap during its controller's untap step".
     DoesntUntap(Filter),
+    /// "[Permanents] don't untap during [a player]'s untap step": the permanents matching
+    /// `what`, whoever controls them, don't untap during the untap step of a player
+    /// matching `who` (CR 502.3) — "Creatures don't untap during target player's next
+    /// untap step" (Blinding Beam) covers creatures other players control that would
+    /// untap then (Seedborn Muse), as its ruling says.
+    DoesntUntapDuringUntapStepOf {
+        who: PlayerFilter,
+        what: Filter,
+    },
     /// "[Players] can't untap more than [n] [objects] during their untap steps"
     /// (modifies CR 502.3).
     MaxUntaps {

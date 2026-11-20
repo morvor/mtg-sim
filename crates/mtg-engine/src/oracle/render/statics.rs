@@ -2881,6 +2881,11 @@ impl Renderer<'_> {
                 };
                 format!("{s} doesn't untap during {whose} untap step")
             }
+            Restriction::DoesntUntapDuringUntapStepOf { who, what } => {
+                let s = subj(self, what);
+                let w = self.player_filter_subject(who);
+                format!("{s} don't untap during {w}'s untap steps")
+            }
             Restriction::MaxUntaps { who, what, n } => {
                 let w = self.player_filter_subject(who);
                 let x = if *n == 1 {

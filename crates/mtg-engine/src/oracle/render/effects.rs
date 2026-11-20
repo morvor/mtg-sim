@@ -2327,6 +2327,11 @@ impl Renderer<'_> {
                         );
                     }
                 }
+                if let Restriction::DoesntUntapDuringUntapStepOf { who, what } = restriction {
+                    if let Some(s) = self.doesnt_untap_during_players_step(who, what, duration) {
+                        return s;
+                    }
+                }
                 // "The tokens are goaded for the rest of the game": the tokens just
                 // created; a resolving effect with no duration lasts for the rest of the
                 // game (CR 611.2a), as cards say or not.
