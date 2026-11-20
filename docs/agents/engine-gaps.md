@@ -754,6 +754,11 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   creates its tokens together (Xorn adds one). Fix: one creation for one instruction's tokens, as one copy
   event for one instruction's copies (register `copy-for-each-one-copy-event`; myriad's and Tempting
   Contract's rulings say their "for each" tokens are created at the same time). Size S-M.
+  Fixed (small-fixes-3, Nov 20): `for_each_events.rs` makes one instruction's tokens, counters and life
+  gained one event in every shape (`Repeat`, per-player and per-object loops), register
+  `for-each-tokens-counters-life-one-event` (provisional). Left: tokens that attack different players
+  (Adeline, Stampede Surfer, myriad) and token copies of several objects are still one creation per kind,
+  and a "for each" part of several actions (Tempt with Bunnies' draw and Rabbit) is performed per player.
 
 ---
 

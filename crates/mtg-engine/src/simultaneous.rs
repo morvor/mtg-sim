@@ -25,7 +25,13 @@
 //!   destroyed this way, its controller may search ...": a player searching the same
 //!   library again continues the same search, one search for all those cards, then shuffles
 //!   that library once, CR 701.23h);
-//! * life gained or lost: each amount is determined before anyone's life total changes;
+//! * life gained or lost: each amount is determined before anyone's life total changes,
+//!   and the life the instruction has one player gain is one life gain event;
+//! * the tokens they create are created together, the same tokens for the same player as
+//!   one creation, and the counters put on objects no one chooses are put on each object
+//!   as one event for each player putting them ("for each opponent, you create a token",
+//!   "for each opponent who does, put a +1/+1 counter on each creature you control": one
+//!   instruction, one event; `for_each_events`);
 //! * control changes: every player's objects are determined (and chosen, by whoever
 //!   chooses them, each chooser knowing the earlier choices) before any control changes,
 //!   then control of all of them changes at the same time ("each player gains control of
@@ -686,6 +692,9 @@ enum Plan {
     /// other players' (CR 101.4, 614.12).
     Tokens {
         tokens: Vec<(PlayerId, TokenCreate, u32, Option<ObjectId>)>,
+        /// Planned from a plain creation instruction, recorded as `Effect::CreateToken`
+        /// records it ("that many", "if you do").
+        as_creation: bool,
     },
     /// Life the player gains, gained with what the other players' parts gain them: one
     /// life gain event for each player (`for_each_events`).
@@ -1339,7 +1348,10 @@ fn plan(
                     tokens.push((q, spec, n, ctx.source));
                 }
             }
-            Plan::Tokens { tokens }
+            Plan::Tokens {
+                tokens,
+                as_creation: false,
+            }
         }
         // "Any player may have ~ deal 5 damage to them" (and the note that a player did):
         // one action with what records it, planned like the action alone, so the damage is
@@ -1391,7 +1403,10 @@ fn plan(
         Effect::CreateToken {
             attacking: false, ..
         } => match token_plan(g, e, ctx) {
-            Some(Plan::Tokens { tokens }) => Plan::Tokens { tokens },
+            Some(Plan::Tokens { tokens, .. }) => Plan::Tokens {
+                tokens,
+                as_creation: true,
+            },
             _ => Plan::Exec(e.clone()),
         },
         other => Plan::Exec(other.clone()),
@@ -1428,7 +1443,10 @@ fn token_plan(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Plan> {
             (q, tc, n, ctx.source)
         })
         .collect();
-    Some(Plan::Tokens { tokens })
+    Some(Plan::Tokens {
+        tokens,
+        as_creation: false,
+    })
 }
 
 /// Performs one instruction for every player (see the module documentation).
@@ -1796,7 +1814,7 @@ fn perform_plans(
     let mut tokens = Vec::new();
     let mut created_by = Vec::new();
     for (i, plan) in plans.iter().enumerate() {
-        if let Some(Plan::Tokens { tokens: these }) = plan {
+        if let Some(Plan::Tokens { tokens: these, .. }) = plan {
             for t in these {
                 tokens.push(t.clone());
                 created_by.push(i);
@@ -1823,8 +1841,13 @@ fn perform_plans(
         g.gain_life(p, n);
     }
     // Counters: one event for each object and player putting them (`for_each_events`).
-    let mut puts: Vec<(crate::event_causes::CounterPut, Entity, CounterKind, u32, Vec<usize>)> =
-        Vec::new();
+    let mut puts: Vec<(
+        crate::event_causes::CounterPut,
+        Entity,
+        CounterKind,
+        u32,
+        Vec<usize>,
+    )> = Vec::new();
     for (i, plan) in plans.iter().enumerate() {
         if let Some(Plan::Counters { how, what, kind, n }) = plan {
             for t in what {
@@ -1916,7 +1939,11 @@ fn record(g: &mut Game, plan: Plan, outcome: Outcome, ctx: &mut Ctx) {
                 ctx.set_var(vars::IT, outcome.countered);
             }
         }
-        Plan::Tokens { .. } => {
+        Plan::Tokens { as_creation, .. } => {
+            if as_creation {
+                ctx.prev_value = outcome.created.len() as i64;
+                ctx.prev_happened = !outcome.created.is_empty();
+            }
             // As `Effect::CreateTokenCopy` records them: "tokens created with ~" (CR
             // 607.1d), "the exiled card" of an ability the exceptions gave them, and
             // "those tokens".
