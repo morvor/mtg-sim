@@ -69,6 +69,18 @@ fn a_source_sacrificed_for_mana_cant_have_counters_removed_as_its_cost() {
     assert!(t.activate(P0, squadron, 0, &[]).is_err());
     assert!(t.on_battlefield(squadron));
     assert_eq!(t.counters(squadron, "+1/+1"), 3);
+    // With another creature for the Altar, that one is sacrificed for the {1}.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Ashnod's Altar");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let squadron = t.battlefield(P0, "Thopter Squadron");
+    t.g.add_counters(Entity::Object(squadron), "+1/+1", 3, None);
+    assert!(t.activate(P0, squadron, 0, &[]).is_ok(), "{}", t.dump_log());
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
+    assert!(t.on_battlefield(squadron));
+    assert_eq!(t.counters(squadron, "+1/+1"), 2);
     // With a land for the {1}, it can, and the Squadron stays.
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
