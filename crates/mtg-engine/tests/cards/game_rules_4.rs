@@ -68,6 +68,46 @@ fn commanders_plate_protects_from_colors_outside_the_commanders_identity() {
 }
 
 #[test]
+fn commanders_plate_uses_the_equipped_creatures_controllers_commander() {
+    // P0's Commander's Plate ("Equipped creature gets +3/+3 and has protection from each
+    // color that's not in your commander's color identity.") is attached to P1's
+    // creature: the "you" of the ability it grants is the creature's controller.
+    cr!("903.4", "702.16a");
+    interp!("commander-identity-protection-player");
+    ruling!(
+        "Armory Automaton",
+        "However, if the Equipment says that the equipped creature has an ability, the word \"you\" in that ability refers to you, the controller of the creature."
+    );
+    ruling!(
+        "Cloak and Dagger",
+        "\"you\" in any abilities granted to the creature refers to that player."
+    );
+    let mut t = TestGame::with_config(
+        2,
+        GameConfig {
+            variant: Variant::Commander,
+            ..Default::default()
+        },
+    );
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let plate = t.battlefield(P0, "Commander's Plate");
+    t.g.attach(plate, Entity::Object(bears));
+    // P0's commander is white, P1's red.
+    let serra = t.command(P0, "Serra Angel");
+    make_commander(&mut t, P0, serra);
+    let shivan = t.command(P1, "Shivan Dragon");
+    make_commander(&mut t, P1, shivan);
+    assert_eq!(t.obj_now(plate).controller, P0);
+    assert_eq!(t.obj_now(bears).controller, P1);
+    let bolt = t.hand(P0, "Lightning Bolt");
+    let swords = t.hand(P0, "Swords to Plowshares");
+    assert_eq!(t.pt(bears), (5, 5));
+    // Protection from white, blue, black and green (outside P1's red identity), not red.
+    assert!(t.g.protected_from(bears, swords));
+    assert!(!t.g.protected_from(bears, bolt));
+}
+
+#[test]
 fn commanders_plate_with_a_colorless_commander_protects_from_each_color() {
     cr!("903.4");
     ruling!(

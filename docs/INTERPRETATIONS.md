@@ -9,8 +9,8 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | Kind | Decided | Provisional |
 |---|---:|---:|
 | interpretation | 123 | 6 |
-| deviation | 12 | 0 |
-| policy | 39 | 0 |
+| deviation | 13 | 0 |
+| policy | 38 | 0 |
 
 ## Provisional entries
 
@@ -85,7 +85,7 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | `draft-three-colors-default` | Colors chosen as a card is drafted default to three different colors at random | policy | decided | [decisions-policies](interpretations/decisions-policies.md) |
 | `external-agent-invalid-answers` | External agents get three more tries after an invalid answer, then the engine's default | policy | decided | [decisions-policies](interpretations/decisions-policies.md) |
 | `hidden-information` | In-process agents see everything; mtg-api views follow the hidden-information rules | policy | decided | [decisions-policies](interpretations/decisions-policies.md) |
-| `mill-until-stops-when-nothing-moves` | A "mill until" process ends when the library is empty or milling moves nothing | policy | decided | [decisions-policies](interpretations/decisions-policies.md) |
+| `mill-until-stops-when-nothing-moves` | A "mill until" process goes on past milled cards that come back to the library, and ends when the library is empty, a mill moves nothing, or only cards it milled are left | deviation | decided | [decisions-policies](interpretations/decisions-policies.md) |
 | `number-guess-range` | A player guessing "which number you chose" names one of the numbers of the choice's range | interpretation | decided | [decisions-policies](interpretations/decisions-policies.md) |
 | `opponents-choice-untargeted` | "A land of an opponent's choice" is chosen by an opponent the controller picks | interpretation | decided | [decisions-policies](interpretations/decisions-policies.md) |
 | `player-destroys-chosen-permanents` | "[Player] destroys N lands they control": chosen by that player among those that can be destroyed | interpretation | decided | [decisions-policies](interpretations/decisions-policies.md) |
