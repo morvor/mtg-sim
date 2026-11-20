@@ -1995,9 +1995,11 @@ fn filter_mentions_attached(f: &Filter) -> bool {
 }
 
 /// Whether the description of target slot `spec` refers to the target chosen for slot
-/// `j` ("that player", "with equal or lesser mana value": `Sel::Target(j)`).
+/// `j` ("that player", "with equal or lesser mana value": `Sel::Target(j)`; "that player or
+/// that planeswalker's controller", Searing Blaze: `PlayerRel::TargetOrController(j)`).
 fn mentions_target(spec: &TargetSpec, j: usize) -> bool {
-    format!("{:?}", spec.what).contains(&format!("Target({j})"))
+    let what = format!("{:?}", spec.what);
+    what.contains(&format!("Target({j})")) || what.contains(&format!("TargetOrController({j})"))
 }
 
 fn distinct(v: &[Entity]) -> bool {

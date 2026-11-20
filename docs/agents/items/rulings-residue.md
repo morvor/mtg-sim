@@ -149,7 +149,7 @@ named reason in docs/rulings-uncovered.tsv. Report counts: cited, exempt, uncove
   docs/RULING_DISCREPANCIES.md; a class decision like `pre-battle-rulings-give-way-to-the-cr`
   would settle them all (the P008/P009 "burn planeswalker" batches hold more of them).
   **Decided** by the user, Nov 20 (work item user-decisions-nov20): treat them like the battle rulings
-  (register `pre-dominaria-player-target-rulings-give-way`, docs/interpretations/sources.md): 22
-  rulings on 20 cards exempt in part as outdated (`docs/rulings-exemptions/pre-dominaria-player-rulings.tsv`),
+  (register `pre-dominaria-player-target-rulings-give-way`, docs/interpretations/sources.md): 24
+  rulings on 22 cards exempt in part as outdated (`docs/rulings-exemptions/pre-dominaria-player-rulings.tsv`),
   one grouped entry in docs/RULING_DISCREPANCIES.md, a planeswalker-target test per card
   (`tests/rulings/pre_dominaria_player_target_rulings.rs`).

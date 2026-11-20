@@ -10,7 +10,7 @@
 
 use crate::r_residue_burn_freeze_common::*;
 use crate::r_s01_common::with_subtype;
-use mtg_engine::decision::{Action, Answer, SpecialAction};
+use mtg_engine::decision::{Action, Answer, Decision, SpecialAction};
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::CastMethod;
 use mtg_engine::testing::*;
@@ -36,6 +36,26 @@ fn salve(t: &mut TestGame, to: Entity) {
     t.g.turn.priority = Some(P1);
     t.cast(P1, s).modes(&[1]).target(to).go();
     t.resolve();
+}
+
+/// Whether casting `card` is among `p`'s legal actions now.
+fn castable(t: &mut TestGame, p: PlayerId, card: ObjectId) -> bool {
+    t.g.turn.priority = Some(p);
+    t.g.recompute();
+    t.g.legal_actions(p)
+        .iter()
+        .any(|a| matches!(a, Action::Cast { card: c, .. } if *c == card))
+}
+
+/// The candidates of each target choice `p` was asked to make since the `from`th decision.
+fn target_choices(t: &TestGame, p: PlayerId, from: usize) -> Vec<Vec<Entity>> {
+    t.asked()[from..]
+        .iter()
+        .filter_map(|(q, d)| match d {
+            Decision::ChooseTargets { candidates, .. } if *q == p => Some(candidates.clone()),
+            _ => None,
+        })
+        .collect()
 }
 
 /// The special actions offered by effects that `p` could take now (Quenchable Fire's).
@@ -70,7 +90,11 @@ fn soul_of_shandalar_targets_a_planeswalker() {
         let wurm = t.battlefield(P1, "Craw Wurm");
         t.lands(P0, "Mountain", 5);
         t.answer_targets(P0, &[obj(w)]);
-        let creature: Vec<Entity> = if from_graveyard { vec![] } else { vec![obj(wurm)] };
+        let creature: Vec<Entity> = if from_graveyard {
+            vec![]
+        } else {
+            vec![obj(wurm)]
+        };
         t.answer_targets(P0, &creature);
         t.activate(P0, soul, usize::from(from_graveyard), &[])
             .unwrap_or_else(|e| panic!("graveyard {from_graveyard}: {e:?}"));
@@ -110,36 +134,61 @@ fn searing_blaze_targets_a_planeswalker_and_a_creature_its_controller_controls()
         "If you can't (because there are no creatures on the battlefield, perhaps), then you can't cast the spell."
     );
     supported("Searing Blaze");
-    // The planeswalker and its controller's creature.
+    // The planeswalker and a creature its controller controls: castable (a legal action),
+    // and cast.
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let w = walker(&mut t, 6);
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.lands(P0, "Mountain", 2);
     let blaze = t.hand(P0, "Searing Blaze");
+    assert!(castable(&mut t, P0, blaze), "a legal action");
     t.answer_targets(P0, &[obj(w)]);
     t.answer_targets(P0, &[obj(bears)]);
     t.cast(P0, blaze).try_go().expect("Searing Blaze");
     t.resolve_all();
     assert_eq!((loyalty_of(&t, w), dmg(&t, bears), t.life(P1)), (5, 1, 20));
-    // With the planeswalker targeted, a creature its controller doesn't control can't be
-    // the second target; with no creature of P1's, the spell can't be cast.
+    // No creature on the battlefield (the ruling's case): a planeswalker to target doesn't
+    // make it castable.
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let w = walker(&mut t, 6);
+    t.lands(P0, "Mountain", 2);
+    let blaze = t.hand(P0, "Searing Blaze");
+    assert!(!castable(&mut t, P0, blaze), "no legal action");
+    t.answer_targets(P0, &[obj(w)]);
+    assert!(t.cast(P0, blaze).try_go().is_err());
+    assert_eq!(t.stack_len(), 0);
+    // A planeswalker whose controller controls no creature isn't offered as the first
+    // target: only P0, who controls a creature, can be (with P0's creature as the second).
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    walker(&mut t, 6);
     let mine = t.battlefield(P0, "Grizzly Bears");
     t.lands(P0, "Mountain", 2);
     let blaze = t.hand(P0, "Searing Blaze");
-    t.answer_targets(P0, &[obj(w)]);
+    assert!(castable(&mut t, P0, blaze), "P0 and P0's creature");
+    let from = t.asked().len();
+    t.answer_targets(P0, &[pl(P0)]);
     t.answer_targets(P0, &[obj(mine)]);
-    assert!(t.cast(P0, blaze).try_go().is_err());
-    assert_eq!(t.stack_len(), 0);
+    t.cast(P0, blaze).try_go().expect("Searing Blaze");
+    assert_eq!(
+        target_choices(&t, P0, from),
+        vec![vec![pl(P0)], vec![obj(mine)]],
+        "neither the planeswalker nor P1 is a first target"
+    );
+    t.resolve_all();
+    assert_eq!((t.life(P0), dmg(&t, mine)), (19, 1));
 }
 
 #[test]
 fn sarkhan_the_mad_dragons_deal_damage_to_a_planeswalker() {
     cr!("115.1", "120.3c", "606.3");
     interp!("pre-dominaria-player-target-rulings-give-way");
+    ruling!(
+        "Sarkhan the Mad",
+        "You choose a single target as you activate the third ability."
+    );
     supported("Sarkhan the Mad");
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
@@ -147,7 +196,11 @@ fn sarkhan_the_mad_dragons_deal_damage_to_a_planeswalker() {
     t.battlefield(P0, "Shivan Dragon");
     t.battlefield(P0, "Shivan Dragon");
     let w = walker(&mut t, 12);
+    let from = t.asked().len();
     loyalty(&mut t, P0, s, 2, &[obj(w)]);
+    let choices = target_choices(&t, P0, from);
+    assert_eq!(choices.len(), 1, "one target for every Dragon");
+    assert!(choices[0].contains(&obj(w)));
     t.resolve_all();
     assert_eq!(loyalty_of(&t, w), 2, "5 from each Dragon");
     assert_eq!(t.life(P1), 20);
@@ -171,9 +224,20 @@ fn vengeful_archon_deals_the_prevented_damage_to_a_planeswalker() {
     t.activate(P0, archon, 0, &[obj(w)])
         .expect("Vengeful Archon");
     t.resolve_all();
+    let from = t.asked().len();
     hit_player(&mut t, bears, P0, 2);
+    assert!(
+        !t.asked()[from..]
+            .iter()
+            .any(|(_, d)| matches!(d, Decision::ChooseTargets { .. })),
+        "no target is chosen as it prevents damage"
+    );
     assert_eq!(t.life(P0), 20, "prevented");
-    assert_eq!(loyalty_of(&t, w), 4, "the Archon deals 2 to the planeswalker");
+    assert_eq!(
+        loyalty_of(&t, w),
+        4,
+        "the Archon deals 2 to the planeswalker"
+    );
     assert_eq!(t.life(P1), 20);
 }
 
@@ -221,7 +285,11 @@ fn two_target_burn_targets_a_planeswalker_and_a_creature() {
         assert_eq!(dmg(&t, wurm), to_creature, "{name}");
         assert_eq!(t.life(P1), 20, "{name}");
         if name == "Cunning Strike" {
-            assert_eq!(t.hand_size(P0), hand, "drew a card (the spell left the hand)");
+            assert_eq!(
+                t.hand_size(P0),
+                hand,
+                "drew a card (the spell left the hand)"
+            );
         }
     }
 }
@@ -253,7 +321,10 @@ fn bonfire_and_chandras_fury_target_a_planeswalker_and_hit_its_controllers_creat
         "Chandra’s Fury will deal 1 damage to a creature with hexproof, for example."
     );
     // (spell, X, damage to the planeswalker and to each of its controller's creatures)
-    for (name, x, n) in [("Bonfire of the Damned", Some(2), 2u32), ("Chandra's Fury", None, 1)] {
+    for (name, x, n) in [
+        ("Bonfire of the Damned", Some(2), 2u32),
+        ("Chandra's Fury", None, 1),
+    ] {
         let mut t = TestGame::new(2);
         let w = walker(&mut t, 6);
         let bogle = t.battlefield(P1, "Slippery Bogle");
@@ -266,7 +337,10 @@ fn bonfire_and_chandras_fury_target_a_planeswalker_and_hit_its_controllers_creat
         t.resolve_all();
         let to_walker = if name == "Chandra's Fury" { 4 } else { n };
         assert_eq!(loyalty_of(&t, w), 6 - to_walker, "{name}");
-        assert!(!t.on_battlefield(bogle), "{name}: hexproof creature dealt damage");
+        assert!(
+            !t.on_battlefield(bogle),
+            "{name}: hexproof creature dealt damage"
+        );
         assert_eq!(dmg(&t, wurm), n, "{name}");
         assert_eq!(dmg(&t, mine), 0, "{name}: not the caster's creatures");
         assert_eq!(t.life(P1), 20, "{name}: not the player");
@@ -297,7 +371,7 @@ fn flames_of_the_blood_hand_stops_the_planeswalkers_controllers_life_gain() {
 
 #[test]
 fn blightning_and_rakdos_s_return_make_the_planeswalkers_controller_discard() {
-    cr!("608.2c", "615.1", "120.3c");
+    cr!("608.2c", "615.1");
     interp!("pre-dominaria-player-target-rulings-give-way");
     ruling!(
         "Blightning",
@@ -445,4 +519,70 @@ fn firestorm_and_chandra_the_firebrand_target_planeswalkers_among_their_targets(
     assert_eq!(loyalty_of(&t, w), 2);
     assert_eq!(t.life(P1), 14);
     assert!(t.in_graveyard(P1, "Craw Wurm"));
+}
+
+#[test]
+fn angrath_minotaur_pirate_targets_a_planeswalker_with_its_first_ability_only() {
+    cr!("115.1", "115.10a", "120.3c");
+    interp!("pre-dominaria-player-target-rulings-give-way");
+    ruling!(
+        "Angrath, Minotaur Pirate",
+        "Creatures with hexproof that player controls will be affected."
+    );
+    supported("Angrath, Minotaur Pirate");
+    // +2: 1 damage to P1's planeswalker and to each creature P1 (its controller) controls,
+    // a hexproof one too; none to P1 or to P0's creatures.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let a = pw(&mut t, P0, "Angrath, Minotaur Pirate", 5);
+    let w = walker(&mut t, 6);
+    let bogle = t.battlefield(P1, "Slippery Bogle");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let mine = t.battlefield(P0, "Craw Wurm");
+    loyalty(&mut t, P0, a, 0, &[obj(w)]);
+    t.resolve_all();
+    assert_eq!(loyalty_of(&t, w), 5);
+    assert!(
+        !t.on_battlefield(bogle),
+        "the hexproof creature is dealt damage"
+    );
+    assert_eq!((dmg(&t, wurm), dmg(&t, mine)), (1, 0));
+    assert_eq!(t.life(P1), 20);
+    // −11 ("Destroy all creatures target opponent controls. Angrath deals damage to that
+    // player equal to their total power.") still targets only an opponent: the
+    // planeswalker isn't offered.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let a = pw(&mut t, P0, "Angrath, Minotaur Pirate", 11);
+    let w = walker(&mut t, 6);
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let from = t.asked().len();
+    loyalty(&mut t, P0, a, 2, &[pl(P1)]);
+    assert_eq!(target_choices(&t, P0, from), vec![vec![pl(P1)]]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(wurm));
+    assert_eq!(t.life(P1), 14, "Craw Wurm's power");
+    assert_eq!(loyalty_of(&t, w), 6);
+}
+
+#[test]
+fn scalding_tongs_targets_a_planeswalker() {
+    cr!("603.3d", "120.3c");
+    interp!("pre-dominaria-player-target-rulings-give-way");
+    supported("Scalding Tongs");
+    // "At the beginning of your upkeep, if you have three or fewer cards in hand, this
+    // artifact deals 1 damage to target opponent or planeswalker."
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Scalding Tongs");
+    let w = walker(&mut t, 6);
+    t.set_step(P1, Step::End);
+    let from = t.asked().len();
+    t.answer_targets(P0, &[obj(w)]);
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    let choices = target_choices(&t, P0, from);
+    assert_eq!(choices.len(), 1);
+    assert!(choices[0].contains(&obj(w)) && choices[0].contains(&pl(P1)));
+    assert_eq!(loyalty_of(&t, w), 5);
+    assert_eq!(t.life(P1), 20);
 }
