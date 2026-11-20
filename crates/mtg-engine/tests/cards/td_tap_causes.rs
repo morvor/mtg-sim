@@ -168,18 +168,26 @@ fn hylda_of_the_icy_crown_pays_and_chooses_a_mode_when_you_tap_an_opponents_crea
     assert!(t.g.tap_with(theirs, false, Some(P0), false));
     t.settle();
     assert_eq!(t.stack_len(), 1);
-    t.resolve_all();
+    // As it resolves P0 pays {1}; the reflexive ability then triggers and goes on the stack
+    // (CR 603.12), its mode chosen as it does (CR 700.2b).
+    t.resolve();
     assert!(t.obj_now(island).tapped, "{{1}} paid");
+    assert_eq!(t.stack_len(), 1, "the reflexive trigger");
+    assert_eq!(t.counters(hylda, "+1/+1"), 0);
+    t.resolve_all();
     assert_eq!(t.counters(hylda, "+1/+1"), 1);
     assert_eq!(t.counters(bears, "+1/+1"), 1);
     assert_eq!(t.counters(theirs, "+1/+1"), 0);
-    // Declining to pay: no reflexive trigger.
+    // Declining to pay: Hylda triggers again, but no reflexive trigger.
     let (theirs, island) = (t.g.current(theirs), t.g.current(island));
     t.g.objects[theirs.0 as usize].tapped = false;
     t.g.untap(island);
     t.answer_yes(P0, false);
     assert!(t.g.tap_with(theirs, false, Some(P0), false));
-    t.resolve_all();
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve();
+    assert_eq!(t.stack_len(), 0);
     assert!(!t.obj_now(island).tapped);
     assert_eq!(t.counters(hylda, "+1/+1"), 1);
 }
