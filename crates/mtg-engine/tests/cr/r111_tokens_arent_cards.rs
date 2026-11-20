@@ -45,3 +45,12 @@ fn the_number_of_cards_in_a_graveyard_doesnt_include_tokens() {
     let (t, _, _) = run(3, text);
     assert_eq!(t.life(P0), 23, "{}", t.dump_log());
 }
+
+#[test]
+fn a_creature_token_in_a_graveyard_isnt_a_creature_card() {
+    cr!("108.2b", "111.7");
+    let text = "Sacrifice a creature token. Then you gain life equal to the number of creature cards in your graveyard.";
+    // Three Grizzly Bears cards and the sacrificed token (a creature, but not a card).
+    let (t, _, _) = run(3, text);
+    assert_eq!(t.life(P0), 23, "{}", t.dump_log());
+}

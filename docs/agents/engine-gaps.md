@@ -754,6 +754,14 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   creates its tokens together (Xorn adds one). Fix: one creation for one instruction's tokens, as one copy
   event for one instruction's copies (register `copy-for-each-one-copy-event`; myriad's and Tempting
   Contract's rulings say their "for each" tokens are created at the same time). Size S-M.
+- **Status (gaps-residual-2, Nov 20).** The graveyard-count bit was already fixed (`Value::GraveyardSize`,
+  `PlayerFilter::GraveyardSize` and `multiplayer::zone_size` count only cards, CR 108.2b, 111.7) and tested
+  (`tests/cr/r111_tokens_arent_cards.rs`); verified, with a test added for "creature cards" (a creature token
+  isn't one). The meld bit was already fixed (`merge::meld_pair` finds a copy's meld result by the card it's
+  named after; the instruction exiles both, and what can't be melded stays in exile, CR 701.42b-c) and tested
+  with a Clone (`tests/actions/a701_042_meld.rs`); verified, with a test added for a token copy (Cackling
+  Counterpart: both exiled, nothing melds, the token ceases to exist). Engine unchanged for both. The "for
+  each" bit is small-fixes-3's.
 
 ---
 
