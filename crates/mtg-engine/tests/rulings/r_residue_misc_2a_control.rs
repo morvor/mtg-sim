@@ -42,7 +42,7 @@ fn captured_by_the_consulate_triggers_on_its_controller_s_opponents() {
     assert_eq!(t.life(P2), 18, "{}", t.dump_log());
     assert_eq!(dmg(&t, bears), 0);
     // P2 (P0's opponent) casts Shock at P0: the target becomes the Bears.
-    let (mut t, bears) = captured();
+    let (mut t, _) = captured();
     t.set_step(P2, Step::PrecombatMain);
     cast_new(&mut t, P2, "Shock", &[pl(P0)]);
     t.resolve_all();
