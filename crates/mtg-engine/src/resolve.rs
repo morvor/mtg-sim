@@ -446,7 +446,9 @@ impl Game {
 
             // --- Objects -------------------------------------------------------
             Effect::Destroy { what, no_regen } => {
-                let objs = self.resolve_objects(what, ctx);
+                // A permanent chosen as it's destroyed must be one that can be (CR 702.12b).
+                let what = crate::impossible_options::destroyable_choice(what);
+                let objs = self.resolve_objects(&what, ctx);
                 let res = self.destroy_all_by(
                     objs.clone(),
                     crate::event_causes::Cause::of(ctx),

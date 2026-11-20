@@ -294,6 +294,18 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Code: `crates/mtg-engine/src/oracle/patterns/paper_players.rs` (`player_destroys`).
 - Tests: `tests/cards/paper_players.rs` (`burning_of_xinye_each_player_chooses_their_own_lands_to_destroy`).
 
+## chosen-permanents-to-destroy-can-be-destroyed: A permanent a player chooses to destroy as the effect is performed must be one that can be destroyed
+- Kind: interpretation
+- Status: provisional
+- Rules: 608.2d "If an effect of a spell or ability offers any choices other than choices already made as part of casting the spell, activating the ability, or otherwise putting the spell or ability on the stack, the player announces these while applying the effect. The player can’t choose an option that’s illegal or impossible, ..." / 702.12b "A permanent with indestructible can’t be destroyed. ..." / Drop of Honey's and Porphyry Nodes's ruling: "If one of the creatures with the least power has indestructible, you must destroy one without indestructible. If all creatures with the least power have indestructible, you don't destroy any creature."
+- Question: "Destroy the creature with the least power. [...] If two or more creatures are tied for least power, you choose one of them." With a tie between an indestructible creature and another, may the controller choose the indestructible one (destroying nothing)?
+- Decision: Whenever an instruction destroys permanents a player chooses as it's performed (`Effect::Destroy` of a `Sel::Choose`), only permanents without indestructible may be chosen; if none qualifies, nothing is destroyed. The selection itself ("the creature with the least power") is still made among all the permanents it names, so an indestructible creature with less power than every other creature means nothing is destroyed. Extends `player-destroys-chosen-permanents` (Burning of Xinye's "Neither of you can choose to destroy a land with indestructible", a compile-time filter there) to every such choice, at run time (`impossible_options::destroyable_choice`).
+- Alternatives: (A) Let the player choose an indestructible permanent, which then survives (destroying it is attempted, not impossible): contradicts the rulings. (B) Exclude indestructible permanents before finding the least power: contradicts the second sentence of the ruling.
+- Why: The rulings, generalized to the same kind of choice on any card. Provisional: 608.2d forbids only illegal or impossible options, and a judge could hold that choosing a permanent that wouldn't be destroyed isn't one outside these cards' rulings (Celestial Judgment's ruling lets a player choose freely, but there the chosen creatures are the ones spared).
+- Affects: Drop of Honey, Porphyry Nodes, and any "destroy [an object chosen as it's performed]".
+- Code: `crates/mtg-engine/src/impossible_options.rs` (`destroyable_choice`); `crates/mtg-engine/src/resolve.rs` (`Effect::Destroy`).
+- Tests: `tests/rulings/r_residue_misc_1_sacrifice.rs` (`drop_of_honey_and_porphyry_nodes_skip_indestructible_least_power`).
+
 ## mill-until-stops-when-nothing-moves: A "mill until" process ends when the library is empty or milling moves nothing
 - Kind: policy
 - Status: decided

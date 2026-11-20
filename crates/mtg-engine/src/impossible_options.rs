@@ -97,3 +97,36 @@ pub fn choosable(g: &Game, options: &[(String, Effect)], ctx: &Ctx) -> Vec<usize
         ok
     }
 }
+
+/// "Destroy the creature with the least power. [...] If two or more creatures are tied for
+/// least power, you choose one of them." (Drop of Honey, Porphyry Nodes): when a player
+/// chooses as the destruction is performed which permanents it destroys (`Sel::Choose`),
+/// only permanents that can be destroyed may be chosen: not one with indestructible
+/// (CR 702.12b). With none, nothing is destroyed (their rulings: "If one of the creatures
+/// with the least power has indestructible, you must destroy one without indestructible. If
+/// all creatures with the least power have indestructible, you don't destroy any
+/// creature."; interpretation `chosen-permanents-to-destroy-can-be-destroyed`). Any other
+/// selection is returned unchanged.
+pub fn destroyable_choice(what: &Sel) -> std::borrow::Cow<'_, Sel> {
+    match what {
+        Sel::Choose {
+            chooser,
+            filter,
+            count,
+            up_to,
+            store,
+        } => std::borrow::Cow::Owned(Sel::Choose {
+            chooser: chooser.clone(),
+            filter: Filter::and(vec![
+                filter.clone(),
+                Filter::not(Filter::HasKeyword(
+                    crate::keywords::KeywordKind::Indestructible,
+                )),
+            ]),
+            count: count.clone(),
+            up_to: *up_to,
+            store: store.clone(),
+        }),
+        _ => std::borrow::Cow::Borrowed(what),
+    }
+}
