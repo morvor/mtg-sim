@@ -7,7 +7,9 @@
 //! option can be. A villainous choice is the exception (CR 701.55b; `kwa/villainous.rs`
 //! asks its own question).
 //!
-//! An option counts as impossible only when every instruction in it is one this module
+//! An option counts as impossible only when its words are the instruction itself (not a word
+//! such as "self" whose consequences follow it, which can always be chosen: Feed the
+//! Machine's ruling) and every instruction in it is one this module
 //! knows to be impossible now — discarding with no card in hand that could be discarded,
 //! sacrificing with no permanent that could be sacrificed — besides bookkeeping
 //! (`Store`, `Noop`). Anything else is treated as possible.
@@ -66,12 +68,28 @@ fn impossible(g: &Game, e: &Effect, ctx: &Ctx) -> bool {
     }
 }
 
+/// Whether the option's words are the instruction itself ("discard a card", "sacrifice a
+/// permanent"), not a word whose consequences the text gives afterward ("chooses self or
+/// others. If that player chooses self, ...", Feed the Machine: "The targeted player may
+/// choose “self” even if they can’t perform the resulting action."). Only such an option
+/// is an impossible choice when its instruction can't be done.
+fn names_its_instruction(label: &str) -> bool {
+    let first = label.split_whitespace().next().unwrap_or("").to_lowercase();
+    matches!(
+        first.as_str(),
+        "discard" | "discards" | "sacrifice" | "sacrifices"
+    )
+}
+
 /// The indices of the options of an `Effect::ChooseOne` its chooser may choose now: those
 /// not known to be impossible, or all of them if every one is (CR 608.2d; then the chosen
 /// one does as much as it can, CR 609.3).
 pub fn choosable(g: &Game, options: &[(String, Effect)], ctx: &Ctx) -> Vec<usize> {
     let ok: Vec<usize> = (0..options.len())
-        .filter(|i| !impossible(g, &options[*i].1, ctx))
+        .filter(|i| {
+            let (label, e) = &options[*i];
+            !(names_its_instruction(label) && impossible(g, e, ctx))
+        })
         .collect();
     if ok.is_empty() {
         (0..options.len()).collect()

@@ -400,7 +400,7 @@ impl Game {
                         let ok = crate::impossible_options::choosable(self, options, ctx);
                         let labels = ok.iter().map(|i| options[*i].0.clone()).collect();
                         let k = self.ask_option(p, ctx.source, "Choose one", labels);
-                        ok.get(k).copied().unwrap_or(ok[0])
+                        ok.get(k).copied().unwrap_or(usize::MAX)
                     }
                 };
                 if let Some((_, eff)) = options.get(i) {

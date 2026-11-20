@@ -60,6 +60,7 @@ const OTHERS: usize = 1;
 #[test]
 fn the_targeted_player_may_choose_self_even_if_it_does_nothing() {
     cr!("608.2d");
+    interp!("impossible-choice-options-not-offered");
     ruling!(
         "Feed the Machine",
         "The targeted player may choose “self” even if they can’t perform the resulting action."
