@@ -117,8 +117,10 @@ pub fn tap(t: &mut TestGame, id: ObjectId) {
     t.settle();
 }
 
+pub use crate::r_p007_common::divide;
 pub use crate::r_p079_common::concede;
 pub use crate::r_p084_common::shuffles_since;
 pub use crate::r_s01_common::stack_library;
 pub use crate::r_s01_common::watch;
 pub use crate::r_s01_common::{creatures, with_subtype};
+pub use crate::r_s24_common::choose_creature_type;
