@@ -1267,11 +1267,12 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
             " until the end of your next turn",
             Duration::UntilEndOfYourNextTurn,
         ),
-        // CR 611.2b: a continuous effect "until ~ leaves the battlefield" lasts for as
-        // long as it remains there.
+        // A continuous effect "until ~ leaves the battlefield" lasts while it remains
+        // there, phased out or not (CR 702.26d; register
+        // `phasing-out-ends-a-waiting-for-as-long-as-duration`).
         (
             " until ~ leaves the battlefield",
-            Duration::WhileSourceOnBattlefield,
+            Duration::UntilSourceLeavesBattlefield,
         ),
         (
             " for as long as ~ remains on the battlefield",

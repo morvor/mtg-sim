@@ -98,6 +98,7 @@ fn doesnt_untap_for_as_long_as(l: &str, b: &mut Builder) -> Option<Effect> {
         dur,
         Duration::WhileCondition(_)
             | Duration::WhileSourceOnBattlefield
+            | Duration::UntilSourceLeavesBattlefield
             | Duration::WhileYouControlSource
             // "for as long as it has a paralyzation counter on it" (Dread Wight).
             | Duration::WhileAffectedHasCounter(_)

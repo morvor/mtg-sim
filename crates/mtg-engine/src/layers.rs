@@ -282,6 +282,8 @@ impl Game {
         if self.dependent_effects_shape() != before {
             self.compute_characteristics(true);
         }
+        // The same conditions of the durations of abilities waiting on the stack.
+        crate::duration_windows::watch(self);
     }
 
     /// How many effects from resolved spells and abilities exist, and how many objects
@@ -848,6 +850,10 @@ impl Game {
             Duration::WhileSourceOnBattlefield => source.is_none_or(|s| {
                 !self.is_live(s) || self.obj(s).zone != Zone::Battlefield || self.obj(s).phased_out
             }),
+            // Phasing out isn't leaving the battlefield (CR 702.26d).
+            Duration::UntilSourceLeavesBattlefield => {
+                source.is_none_or(|s| !self.is_live(s) || self.obj(s).zone != Zone::Battlefield)
+            }
             Duration::WhileYouControlSource => source.is_none_or(|s| {
                 !self.is_live(s)
                     || self.obj(s).zone != Zone::Battlefield

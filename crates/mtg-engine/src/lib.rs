@@ -74,6 +74,7 @@ pub mod draft;
 pub mod draw_rules;
 pub mod dungeons;
 pub mod duration_refs;
+pub mod duration_windows;
 pub mod end_turn;
 pub mod entry_costs;
 pub mod entry_replacement_order;

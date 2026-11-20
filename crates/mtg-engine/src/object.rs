@@ -445,6 +445,10 @@ pub struct StackInfo {
     /// creature" stays legal when the Equipment is moved in response (Plasma Caster).
     #[serde(default)]
     pub source_attached_to: Option<Entity>,
+    /// The period of the "for as long as" durations of its effects while it waits (CR
+    /// 611.2b; see `duration_windows`).
+    #[serde(default)]
+    pub window: crate::duration_windows::Window,
 }
 
 /// Values chosen for a permanent ("as this enters, choose a color").
