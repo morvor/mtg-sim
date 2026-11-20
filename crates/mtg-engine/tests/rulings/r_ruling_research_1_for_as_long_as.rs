@@ -4,22 +4,24 @@
 //! doesn't begin again before the ability resolves, even if its condition holds again
 //! (control regained, the source tapped again), whatever kind of effect it is (a control
 //! change, a play permission, a player effect, a rule effect). Also: the trigger time,
-//! copies of abilities, the source phasing out, durations about other objects, durations the
-//! resolution sets up, and the resolution itself.
+//! copies of abilities, the source phasing out (and "until ~ leaves the battlefield", which
+//! phasing doesn't end), durations about other objects, durations the resolution sets up,
+//! and the resolution itself.
 
 use crate::r_p086_common::*;
 use crate::r_s03_common::run_effect;
 use crate::r_s06_common::activate_containing;
 use crate::r_s17_common::enter_transformed;
 use mtg_engine::ability::{
-    AbilityKind, Condition, Duration, Effect, Modification, PlayerRef, Sel, Value,
+    AbilityKind, Condition, Duration, Effect, Filter, Modification, PlayerRef, Sel, TargetKind,
+    Value,
 };
 use mtg_engine::card::CardDef;
 use mtg_engine::decision::Answer;
 use mtg_engine::object::Zone;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
-use mtg_engine::types::CardType;
+use mtg_engine::types::{CardType, Subtype};
 use mtg_engine::*;
 
 // --- Seasinger --------------------------------------------------------------------------------
@@ -185,15 +187,21 @@ fn great_synthesis_lost_and_regained_while_chapter_one_waits_keeps_the_maximum_h
     supported("Jin-Gitaxias // The Great Synthesis");
     // Chapter I: "Draw cards equal to the number of cards in your hand. You have no maximum
     // hand size for as long as you control this Saga."
-    let mut t = TestGame::new(2);
-    let saga = enter_transformed(&mut t, P0, "Jin-Gitaxias // The Great Synthesis");
-    assert_eq!(t.stack_len(), 1);
-    give_control(&mut t, saga, P1);
-    give_control(&mut t, saga, P0);
-    t.resolve_all();
-    assert_eq!(controller(&t, saga), P0);
-    t.g.recompute();
-    assert_eq!(t.g.player(P0).max_hand_size, Some(7));
+    for regained in [false, true] {
+        let mut t = TestGame::new(2);
+        let saga = enter_transformed(&mut t, P0, "Jin-Gitaxias // The Great Synthesis");
+        assert_eq!(t.stack_len(), 1);
+        if regained {
+            give_control(&mut t, saga, P1);
+            give_control(&mut t, saga, P0);
+        }
+        t.resolve_all();
+        assert_eq!(controller(&t, saga), P0);
+        t.g.recompute();
+        // Untouched, P0 has no maximum hand size; lost and regained, still seven.
+        let want = if regained { Some(7) } else { None };
+        assert_eq!(t.g.player(P0).max_hand_size, want, "regained={regained}");
+    }
 }
 
 // --- When the period starts: the trigger, a copy ----------------------------------------------
@@ -408,6 +416,63 @@ fn the_source_phasing_out_and_in_while_its_ability_waits_ends_the_duration() {
     assert_eq!(controller(&t, bears), P1);
 }
 
+/// Whether the land has the land type `ty` now.
+fn has_land_type(t: &mut TestGame, land: ObjectId, ty: &str) -> bool {
+    t.g.recompute();
+    t.obj_now(land)
+        .chars
+        .subtypes
+        .iter()
+        .any(|s| *s == Subtype::from(ty))
+}
+
+#[test]
+fn until_the_source_leaves_the_battlefield_isnt_ended_by_phasing() {
+    cr!("702.26d", "611.2a");
+    interp!("phasing-out-ends-a-waiting-for-as-long-as-duration");
+    supported("Gaea's Liege");
+    supported("Graceful Antelope");
+    // Phasing out isn't leaving the battlefield (CR 702.26d), unlike "for as long as this
+    // creature remains on the battlefield" (Sower of Temptation above), which can't see a
+    // phased-out permanent (CR 702.26f). Gaea's Liege: "{T}: Target land becomes a Forest
+    // until this creature leaves the battlefield." It phases out and in while its ability
+    // waits, and again once the land is a Forest; then it leaves.
+    let mut t = TestGame::new(2);
+    t.lands(P0, "Forest", 2); // the Liege's toughness is the number of P0's Forests
+    let liege = t.battlefield(P0, "Gaea's Liege");
+    let land = t.lands(P1, "Mountain", 1)[0];
+    activate(&mut t, P0, liege, "becomes a Forest", &[obj(land)]);
+    phase_out_and_in(&mut t, liege);
+    t.resolve_all();
+    assert!(has_land_type(&mut t, land, "Forest"));
+    phase_out_and_in(&mut t, liege);
+    assert!(has_land_type(&mut t, land, "Forest"));
+    destroy(&mut t, liege);
+    assert!(has_land_type(&mut t, land, "Mountain"));
+    assert!(!has_land_type(&mut t, land, "Forest"));
+    // Graceful Antelope: "Whenever this creature deals combat damage to a player, you may
+    // have target land become a Plains until this creature leaves the battlefield."
+    let mut t = TestGame::new(2);
+    let land = t.lands(P1, "Mountain", 1)[0];
+    let antelope = t.battlefield(P0, "Graceful Antelope");
+    t.set_step(P0, Step::BeginningOfCombat);
+    t.answer(
+        P0,
+        DecisionKind::Attackers,
+        Answer::Attackers(vec![(antelope, Entity::Player(P1))]),
+    );
+    t.answer_targets(P0, &[obj(land)]);
+    t.answer_yes(P0, true);
+    t.advance_to(P0, Step::CombatDamage);
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    phase_out_and_in(&mut t, antelope);
+    t.resolve_all();
+    assert!(has_land_type(&mut t, land, "Plains"));
+    phase_out_and_in(&mut t, antelope);
+    assert!(has_land_type(&mut t, land, "Plains"));
+}
+
 // --- Durations about other objects ------------------------------------------------------------
 
 /// The creature gets +`n`/+0 until end of turn.
@@ -500,6 +565,88 @@ fn garland_opponent_stops_and_becomes_the_monarch_again_while_its_trigger_waits(
     t.resolve_all();
     assert_eq!(controller(&t, goblin), P0);
     assert_eq!(controller(&t, bears), P1);
+}
+
+#[test]
+fn rootwater_matriarch_needs_the_creature_enchanted_from_activation_to_resolution() {
+    cr!("611.2b");
+    // Read with the period: "an unenchanted creature" is one unenchanted as it's targeted.
+    ruling!(
+        "Rootwater Matriarch",
+        "Can target an unenchanted creature but has no effect on that creature."
+    );
+    interp!("duration-about-another-object-ends-while-the-ability-waits");
+    supported("Rootwater Matriarch");
+    // "{T}: Gain control of target creature for as long as that creature is enchanted."
+    // (Untouched, an enchanted creature is stolen and an unenchanted one isn't: r_p176.)
+    // Enchanted as the ability is activated, its Aura destroyed and another one attached
+    // while the ability waits: the duration ended. Unenchanted as the ability is activated
+    // and enchanted while it waits: the duration never started (it didn't begin during the
+    // resolution). Either way the creature is enchanted as the ability resolves.
+    for enchanted_first in [true, false] {
+        let mut t = TestGame::new(2);
+        let m = t.battlefield(P0, "Rootwater Matriarch");
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        let aura = enchanted_first.then(|| attach_new(&mut t, P1, "Pacifism", obj(bears)));
+        activate(&mut t, P0, m, "Gain control", &[obj(bears)]);
+        if let Some(a) = aura {
+            destroy(&mut t, a);
+        }
+        attach_new(&mut t, P1, "Pacifism", obj(bears));
+        t.resolve_all();
+        assert_eq!(controller(&t, bears), P1, "enchanted_first={enchanted_first}");
+    }
+}
+
+/// Old Man of the Sea ("{T}: Gain control of target creature with power less than or equal
+/// to this creature's power for as long as this creature remains tapped and that creature's
+/// power remains less than or equal to this creature's power.", a 2/3) able to target any
+/// creature, whose ability first gives it +1/+0 until end of turn as it resolves.
+fn old_man_growing_first() -> CardDef {
+    let mut def = (*card("Old Man of the Sea")).clone();
+    def.name = "Old Man of the Sea Probe".into();
+    let chars = &mut def.faces[0].chars;
+    chars.name = "Old Man of the Sea Probe".into();
+    for a in chars.abilities.iter_mut() {
+        let a = std::sync::Arc::make_mut(a);
+        if let AbilityKind::Activated(act) = &mut a.kind {
+            act.body.targets[0].what = TargetKind::Object(Filter::Type(CardType::Creature));
+            let grow = Effect::Modify {
+                what: Sel::This,
+                mods: vec![Modification::ModifyPT(Value::Const(1), Value::Const(0))],
+                duration: Duration::EndOfTurn,
+            };
+            act.body.effect = Effect::Seq(vec![grow, act.body.effect.clone()]);
+        }
+    }
+    def
+}
+
+#[test]
+fn a_condition_about_another_object_can_begin_during_the_resolution() {
+    cr!("611.2b");
+    interp!("duration-about-another-object-ends-while-the-ability-waits");
+    // The probe (2/3) targets a Hill Giant (3/3): the power condition doesn't hold as the
+    // ability is activated. Its resolution makes it hold (the probe becomes 3/3 first): the
+    // duration begins during the resolution, and P0 gains control. If another effect makes
+    // it hold while the ability waits instead, it doesn't begin during the resolution:
+    // nothing, though it holds as the ability resolves (the probe 4/3 by then).
+    for pumped_while_waiting in [false, true] {
+        let mut t = TestGame::new(2);
+        let old = t.custom(P0, old_man_growing_first(), Zone::Battlefield);
+        let giant = t.battlefield(P1, "Hill Giant");
+        activate(&mut t, P0, old, "Gain control", &[obj(giant)]);
+        if pumped_while_waiting {
+            pump(&mut t, old, 1);
+        }
+        t.resolve_all();
+        let want = if pumped_while_waiting { P1 } else { P0 };
+        assert_eq!(
+            controller(&t, giant),
+            want,
+            "pumped_while_waiting={pumped_while_waiting}"
+        );
+    }
 }
 
 #[test]

@@ -850,6 +850,10 @@ impl Game {
             Duration::WhileSourceOnBattlefield => source.is_none_or(|s| {
                 !self.is_live(s) || self.obj(s).zone != Zone::Battlefield || self.obj(s).phased_out
             }),
+            // Phasing out isn't leaving the battlefield (CR 702.26d).
+            Duration::UntilSourceLeavesBattlefield => {
+                source.is_none_or(|s| !self.is_live(s) || self.obj(s).zone != Zone::Battlefield)
+            }
             Duration::WhileYouControlSource => source.is_none_or(|s| {
                 !self.is_live(s)
                     || self.obj(s).zone != Zone::Battlefield

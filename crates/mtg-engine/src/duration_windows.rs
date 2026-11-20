@@ -21,15 +21,18 @@
 //!   turn's events since the period started: the source changing control, becoming tapped
 //!   or untapped, or phasing out or in (CR 702.26f: such durations "can no longer see it")
 //!   ends it ([`duration_ended`]). Leaving the battlefield makes it a new object (CR 400.7),
-//!   which the state at resolution already shows.
+//!   which the state at resolution already shows. "Until ~ leaves the battlefield" isn't
+//!   such a duration: phasing out isn't leaving the battlefield (CR 702.26d), so only the
+//!   source leaving ends it.
 //! - Other conditions of a duration about objects or players — "that creature's power
 //!   remains less than or equal to ~'s power", "for as long as that Aura is attached to
 //!   it", "for as long as they're the monarch" — are checked each time characteristics are
-//!   computed while the ability waits ([`watch`]), once they've held. Conditions an
-//!   ability's own instructions set up — a counter it puts on the object, a tap — are
-//!   checked as the effect begins, as is any condition that didn't hold while the ability
-//!   waited (the resolution can set it up: "you may have an opponent gain control of it. If
-//!   you do, it's goaded for as long as they control it").
+//!   computed while the ability waits ([`watch`]): one that stops holding, or that holds
+//!   only after not holding at first, has ended. Conditions an ability's own instructions
+//!   set up — a counter it puts on the object, a tap — are checked as the effect begins, as
+//!   is any condition that hasn't held at all while the ability waited (the resolution can
+//!   set it up: "you may have an opponent gain control of it. If you do, it's goaded for as
+//!   long as they control it").
 
 use crate::ability::{vars, AbilityKind, Condition, Duration, Effect, Filter, TriggerCond};
 use crate::eval::Ctx;
@@ -76,12 +79,16 @@ pub enum Watch {
     /// Not checked yet.
     #[default]
     Unseen,
-    /// None to check, or one that didn't hold when first checked (checked as the effect
-    /// begins).
+    /// None to check.
     Off,
+    /// It didn't hold when first checked, nor since: it can still begin during the
+    /// resolution, which the ability's own instructions can set it up in (checked as the
+    /// effect begins).
+    NotYet,
     /// It has held ever since it was first checked.
     Holding,
-    /// It was false at some point after holding: the duration ended.
+    /// It was false at some point after holding, or it held after not holding at first
+    /// (before the resolution, not during it): the duration ended or never started.
     Ended,
 }
 
@@ -159,8 +166,12 @@ struct Needs {
     control: bool,
     /// It's tapped.
     tapped: bool,
-    /// It's on the battlefield and phased in.
+    /// It's on the battlefield and phased in (a "for as long as" duration can't see a
+    /// phased-out permanent, CR 702.26f).
     present: bool,
+    /// It's on the battlefield, phased in or out ("until ~ leaves the battlefield":
+    /// phasing out isn't leaving, CR 702.26d).
+    remains: bool,
 }
 
 impl Needs {
@@ -169,6 +180,7 @@ impl Needs {
             control: self.control || o.control,
             tapped: self.tapped || o.tapped,
             present: self.present || o.present,
+            remains: self.remains || o.remains,
         }
     }
 }
@@ -188,6 +200,7 @@ fn cond_needs(c: &Condition) -> Needs {
             control: true,
             tapped: true,
             present: true,
+            ..Needs::default()
         },
         Condition::And(v) => v
             .iter()
@@ -205,6 +218,10 @@ fn needs(d: &Duration) -> Needs {
         },
         Duration::WhileSourceOnBattlefield => Needs {
             present: true,
+            ..Needs::default()
+        },
+        Duration::UntilSourceLeavesBattlefield => Needs {
+            remains: true,
             ..Needs::default()
         },
         Duration::WhileCondition(c) => cond_needs(c),
@@ -231,7 +248,7 @@ fn holds_now(g: &Game, src: ObjectId, n: Needs, controller: PlayerId) -> bool {
     let o = g.obj(src);
     g.is_live(src)
         && o.zone == Zone::Battlefield
-        && !o.phased_out
+        && (!n.present || !o.phased_out)
         && (!n.control || o.controller == controller)
         && (!n.tapped || o.tapped)
 }
@@ -321,6 +338,7 @@ pub fn tapped_source_changed(g: &Game, ctx: &Ctx, control: bool) -> bool {
         control,
         tapped: true,
         present: true,
+        ..Needs::default()
     };
     changed_while_waiting(g, src, ab, n, ctx.controller)
 }
@@ -539,8 +557,11 @@ fn watched_hold(g: &Game, id: ObjectId, effects: &[(&Effect, Condition, &[Vec<En
 /// of their effects' durations ([`watched_part`]): one that held and then didn't has ended,
 /// even if it holds again by the time the ability resolves (Old Man of the Sea ruling: "The
 /// same is true if the targeted creature's power becomes greater than Old Man of the Sea's
-/// power before the ability resolves."). One that didn't hold when first checked is checked
-/// as the effect begins instead. Called as characteristics are computed
+/// power before the ability resolves."). One that didn't hold when first checked never
+/// started: if it holds while the ability waits, it didn't begin during the resolution, so
+/// it has ended too (Rootwater Matriarch ruling: "Can target an unenchanted creature but has
+/// no effect on that creature."); one that holds only from the resolution on is checked as
+/// the effect begins (the resolution can set it up). Called as characteristics are computed
 /// (`Game::recompute`); the resolving ability isn't checked (CR 611.2b lets its duration
 /// begin again during the resolution).
 pub(crate) fn watch(g: &mut Game) {
@@ -563,12 +584,17 @@ pub(crate) fn watch(g: &mut Game) {
             continue;
         } else {
             let effects = watched_effects(g, id);
-            match (state, !effects.is_empty() && watched_hold(g, id, &effects)) {
-                (_, _) if effects.is_empty() => Watch::Off,
-                (Watch::Unseen, true) => Watch::Holding,
-                (Watch::Unseen, false) => Watch::Off,
-                (_, false) => Watch::Ended,
-                (s, true) => s,
+            if effects.is_empty() {
+                Watch::Off
+            } else {
+                match (state, watched_hold(g, id, &effects)) {
+                    (Watch::Unseen, true) => Watch::Holding,
+                    (Watch::Unseen, false) => Watch::NotYet,
+                    // It stopped holding, or it began to hold while the ability waited,
+                    // not during its resolution (CR 611.2b).
+                    (Watch::Holding, false) | (Watch::NotYet, true) => Watch::Ended,
+                    (s, _) => s,
+                }
             }
         };
         if next != state {
