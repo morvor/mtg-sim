@@ -501,3 +501,184 @@ fn tromokratis_is_attacking_through_the_combat_damage_step() {
     t.advance_to(P0, Step::PostcombatMain);
     assert!(has(&mut t, tromo, KeywordKind::Hexproof));
 }
+
+/// Puts `n` lore counters on the Saga.
+fn lore(t: &mut TestGame, saga: ObjectId, n: u32) {
+    t.g.objects[saga.0 as usize]
+        .counters
+        .insert(counters::LORE.into(), n);
+}
+
+#[test]
+fn tom_bombadil_returned_by_the_final_chapter_sees_it_finish() {
+    cr!("603.2", "714.2c", "608.2n");
+    ruling!(
+        "Tom Bombadil",
+        "if Tom Bombadil is returned to the battlefield by the final chapter ability of Elspeth Conquers Death, it will be on the battlefield in time to see that final chapter ability finish resolving and get removed from the stack, and thus Tom Bombadil's last ability will trigger."
+    );
+    let mut t = TestGame::new(2);
+    let ecd = t.battlefield(P0, "Elspeth Conquers Death");
+    lore(&mut t, ecd, 2);
+    let tom = t.graveyard(P0, "Tom Bombadil");
+    let saga = t.library_top(P0, "The Eldest Reborn");
+    t.answer_targets(P0, &[obj(tom)]);
+    t.set_step(P0, Step::Draw);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(tom)));
+    assert!(
+        t.on_battlefield(t.g.current(saga)),
+        "Tom's ability found a Saga"
+    );
+}
+
+#[test]
+fn tom_bombadil_dies_when_the_final_chapter_saga_is_sacrificed() {
+    cr!("704.3", "714.4", "704.5g");
+    ruling!(
+        "Tom Bombadil",
+        "If you control Tom Bombadil with at least 4 damage on it as well as a single Saga which has four or more lore counters on it, and that Saga leaves the battlefield later in the turn, Tom Bombadil will be destroyed. This will be true even if that Saga leaves the battlefield as a result of its final chapter ability leaving the stack"
+    );
+    let mut t = TestGame::new(2);
+    let tom = t.battlefield(P0, "Tom Bombadil");
+    // The First Iroan Games: a Saga with four chapters, its fourth about to trigger.
+    let games = t.battlefield(P0, "The First Iroan Games");
+    lore(&mut t, games, 3);
+    t.library_top(P0, "The Eldest Reborn");
+    t.set_step(P0, Step::Draw);
+    t.advance_to(P0, Step::PrecombatMain);
+    t.settle();
+    assert_eq!(t.counters(games, counters::LORE), 4);
+    assert!(has(&mut t, tom, KeywordKind::Indestructible));
+    damage(&mut t, tom, 4);
+    assert!(t.on_battlefield(tom));
+    t.resolve_all();
+    assert_eq!(t.zone(games), Zone::Graveyard(P0));
+    assert_eq!(t.zone(tom), Zone::Graveyard(P0));
+}
+
+#[test]
+fn myojin_copies_of_an_aura_spell_keep_its_target() {
+    cr!("707.10", "707.10c", "303.4d");
+    ruling!(
+        "Myojin of Cryptic Dreams",
+        "If you copy a permanent spell that has targets, such as an Aura spell, those targets remain unchanged."
+    );
+    let mut t = TestGame::new(2);
+    let myojin = t.battlefield(P0, "Myojin of Cryptic Dreams");
+    t.g.objects[myojin.0 as usize]
+        .counters
+        .insert("indestructible".into(), 1);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let pacifism = cast_new(&mut t, P0, "Pacifism", &[obj(bears)]);
+    t.answer_targets(P0, &[obj(pacifism)]);
+    t.activate(P0, myojin, 0, &[]).unwrap();
+    t.resolve_all();
+    let on_bears =
+        t.g.permanents()
+            .filter(|o| o.chars.name == "Pacifism" && o.attached_to == Some(obj(bears)))
+            .count();
+    assert_eq!(on_bears, 4);
+}
+
+#[test]
+fn risona_dies_when_its_indestructible_counter_is_removed() {
+    cr!("704.5g", "510.2", "603.2");
+    ruling!(
+        "Risona, Asari Commander",
+        "Removing the indestructible counter from Risona may cause it to die if it has taken lethal damage, usually because it blocked in the same combat that you took damage."
+    );
+    let mut t = TestGame::new(2);
+    let risona = t.battlefield(P0, "Risona, Asari Commander");
+    t.g.objects[risona.0 as usize]
+        .counters
+        .insert("indestructible".into(), 1);
+    assert!(has(&mut t, risona, KeywordKind::Indestructible));
+    let giant = t.battlefield(P1, "Hill Giant");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.set_step(P1, Step::BeginningOfCombat);
+    t.attack(
+        &[(giant, P0.into()), (bears, P0.into())],
+        &[(risona, giant)],
+    );
+    t.resolve_all();
+    assert_eq!(t.life(P0), 18);
+    assert_eq!(t.zone(risona), Zone::Graveyard(P0));
+}
+
+#[test]
+fn giant_slug_its_activator_chooses_the_landwalk() {
+    cr!("603.7d", "702.14c");
+    ruling!(
+        "Giant Slug",
+        "If the Slug changes controllers after the mana is spent, the player who activates this ability selects a landwalk during their next upkeep even if they don't control it at the time."
+    );
+    let mut t = TestGame::new(2);
+    let slug = t.battlefield(P0, "Giant Slug");
+    fill_pool(&mut t, P0, 1);
+    t.activate(P0, slug, 0, &[]).unwrap();
+    t.resolve_all();
+    give_control(&mut t, slug, P1);
+    assert_eq!(controller(&mut t, slug), P1);
+    t.set_step(P1, Step::End);
+    let from = t.asked().len();
+    t.answer(P0, DecisionKind::Option, Answer::Index(2));
+    t.advance_to(P0, Step::Upkeep);
+    t.resolve_all();
+    let choosers: Vec<PlayerId> = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, Decision::ChooseOption { .. }))
+        .map(|(p, _)| *p)
+        .collect();
+    assert_eq!(choosers, vec![P0]);
+    assert!(has(&mut t, slug, KeywordKind::Landwalk));
+}
+
+#[test]
+fn an_encore_token_that_cant_attack_its_player_isnt_forced_to_attack() {
+    cr!("702.141a", "508.1d");
+    ruling!(
+        "Eumidian Wastewaker",
+        "If an effect stops a token from attacking a specific player, that token can attack any player, planeswalker, or battle, or not attack at all."
+    );
+    ruling!(
+        "Eumidian Wastewaker",
+        "If the effect stops the token from attacking a specific player unless a cost is paid, you don’t have to pay that cost unless you want to attack that player."
+    );
+    // P1 controls Blazing Archon ("Creatures can't attack you."), P2 Ghostly Prison.
+    for attack_p2 in [false, true] {
+        let mut t = TestGame::new(3);
+        t.battlefield(P1, "Blazing Archon");
+        t.battlefield(P2, "Ghostly Prison");
+        let card = t.graveyard(P0, "Eumidian Wastewaker");
+        fill_pool(&mut t, P0, 3);
+        activate_containing(&mut t, P0, card, "Encore").unwrap();
+        t.resolve_all();
+        let tokens = crate::r_s01_common::tokens(&t, P0);
+        assert_eq!(tokens.len(), 2);
+        t.lands(P0, "Plains", 2);
+        let declared: Vec<(ObjectId, Entity)> = if attack_p2 {
+            // The token that must attack P1 attacks P2 instead, paying Ghostly Prison.
+            vec![(tokens[0], P2.into())]
+        } else {
+            vec![]
+        };
+        t.answer(
+            P0,
+            DecisionKind::Attackers,
+            Answer::Attackers(declared.clone()),
+        );
+        t.set_step(P0, Step::BeginningOfCombat);
+        t.advance_to(P0, Step::DeclareAttackers);
+        let attacking: Vec<ObjectId> = tokens
+            .iter()
+            .copied()
+            .filter(|x| is_attacking(&t, *x))
+            .collect();
+        if attack_p2 {
+            assert_eq!(attacking, vec![tokens[0]]);
+        } else {
+            assert!(attacking.is_empty(), "no attack was forced");
+        }
+    }
+}
