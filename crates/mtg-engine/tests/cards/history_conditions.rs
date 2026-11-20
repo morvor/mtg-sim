@@ -651,6 +651,39 @@ fn kotis_counts_creatures_that_entered_from_a_graveyard() {
     assert_eq!(t.counters(kotis, "+1/+1"), 2);
 }
 
+#[test]
+fn kotis_sees_itself_enter_from_a_graveyard() {
+    cr!("603.6a", "603.10", "603.2c", "603.4");
+    assert_supported("Kotis, Sibsig Champion");
+    assert_supported("Reanimate");
+    // "Whenever one or more creatures you control enter, if one or more of them entered from
+    // a graveyard or was cast from a graveyard, put two +1/+1 counters on Kotis." An enters
+    // ability doesn't look back in time (CR 603.10): every permanent on the battlefield after
+    // the event, the newcomers included (CR 603.6a), is checked, so Kotis returned from its
+    // owner's graveyard sees itself enter. (Its move left a graveyard, so the event carries
+    // a look-back record from before the move, which doesn't list Kotis: an ability that
+    // doesn't look back isn't checked against it.)
+    let mut t = TestGame::new(2);
+    let dead = t.graveyard(P0, "Kotis, Sibsig Champion");
+    let kotis = t
+        .g
+        .move_object(dead, Zone::Battlefield, events::MoveCause::Effect, Some(P0))
+        .expect("Kotis returns to the battlefield");
+    t.g.flush_events();
+    t.resolve_all();
+    assert_eq!(t.counters(kotis, "+1/+1"), 2);
+    // The same with a real spell: Reanimate puts it onto the battlefield.
+    let mut t = TestGame::new(2);
+    let dead = t.graveyard(P0, "Kotis, Sibsig Champion");
+    t.lands(P0, "Swamp", 1);
+    let r = t.hand(P0, "Reanimate");
+    t.cast(P0, r).target(dead).go();
+    t.resolve_all();
+    let kotis = t.named_on_battlefield("Kotis, Sibsig Champion")[0];
+    assert_eq!(t.counters(kotis, "+1/+1"), 2);
+    assert_eq!(t.life(P0), 17, "Reanimate: life equal to its mana value");
+}
+
 // --- How much mana was spent, and from what -----------------------------------------------
 
 #[test]

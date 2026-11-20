@@ -115,10 +115,7 @@ fn caused_event(t: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
         return None;
     }
     Some((
-        TriggerCond::Where {
-            trigger: Box::new(trigger),
-            cond,
-        },
+        super::trigger_grammar_events::where_events(trigger, cond),
         it,
         player,
     ))

@@ -82,6 +82,8 @@ impl Game {
                 }
                 if together {
                     self.batch_hold -= 1;
+                    // What replacement effects left for after the event (CR 615.5).
+                    self.run_post_replacement_effects();
                 }
             }
             Effect::If {

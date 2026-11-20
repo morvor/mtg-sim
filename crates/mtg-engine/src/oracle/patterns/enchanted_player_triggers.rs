@@ -23,19 +23,12 @@ fn enchanted_player_event(r: &str) -> Option<(TriggerCond, Sel, PlayerRef)> {
     }
     let enchanted =
         PlayerFilter::Ref(Box::new(PlayerRef::ControllerOf(Box::new(Sel::AttachedTo))));
-    let only_enchanted = |trigger: TriggerCond| TriggerCond::Where {
-        trigger: Box::new(trigger),
-        cond: Condition::PlayerMatches(PlayerRef::TriggerPlayer, enchanted),
-    };
     // A batched trigger ("is dealt damage", once per batch of simultaneous damage) is
     // matched event by event inside the batch.
-    let cond = match cond {
-        TriggerCond::Batched { trigger, per } => TriggerCond::Batched {
-            trigger: Box::new(only_enchanted(*trigger)),
-            per,
-        },
-        other => only_enchanted(other),
-    };
+    let cond = super::trigger_grammar_events::where_events(
+        cond,
+        Condition::PlayerMatches(PlayerRef::TriggerPlayer, enchanted),
+    );
     Some((cond, it, player))
 }
 

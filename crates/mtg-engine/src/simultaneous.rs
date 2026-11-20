@@ -162,8 +162,12 @@ fn run(g: &mut Game, mut frames: Frames, body: &Effect, ctx: &mut Ctx) {
         // One instruction, one event.
         g.end_event_batch();
         g.batch_hold += 1;
-        g.atomically(|g| perform_instruction(g, group, &mut frames, ctx));
-        g.batch_hold -= 1;
+        g.atomically(|g| {
+            perform_instruction(g, group, &mut frames, ctx);
+            g.batch_hold -= 1;
+            // What replacement effects left for after the event (CR 615.5).
+            g.run_post_replacement_effects();
+        });
         if g.result.is_some() || g.end.restart.is_some() {
             break;
         }

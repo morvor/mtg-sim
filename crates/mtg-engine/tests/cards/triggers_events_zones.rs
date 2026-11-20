@@ -293,6 +293,28 @@ fn one_or_more_cards_put_into_a_library_from_anywhere() {
 }
 
 #[test]
+fn one_or_more_cards_put_into_a_library_sees_its_own_permanent_put_there() {
+    cr!("603.10", "603.10a", "603.2c");
+    supported("Wan Shi Tong, All-Knowing");
+    supported("Dutiful Knowledge Seeker");
+    // "Whenever one or more cards are put into a library from anywhere, ...": an ability that
+    // triggers when an object all players can see is put into a library looks back in time
+    // (CR 603.10a). A permanent put into its owner's library from the battlefield had the
+    // ability immediately before, so it sees itself (and what goes with it) go there.
+    let mut t = TestGame::new(2);
+    let wst = t.battlefield(P0, "Wan Shi Tong, All-Knowing");
+    let seeker = t.battlefield(P0, "Dutiful Knowledge Seeker");
+    move_all(&mut t, &[wst, seeker], Zone::Library, MoveCause::Effect);
+    t.settle();
+    // One trigger each for the event (CR 603.2c), from permanents that are now cards in a
+    // library.
+    assert_eq!(t.stack_len(), 2);
+    t.resolve_all();
+    // Wan Shi Tong's two Spirits; the Seeker's counter has no creature to go on (CR 400.7).
+    assert_eq!(count_subtype(&t, "Spirit"), 2);
+}
+
+#[test]
 fn a_permanent_is_returned_to_your_hand() {
     cr!("603.10a");
     supported("Azorius Aethermage");

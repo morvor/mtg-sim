@@ -137,12 +137,16 @@ fn was_in_range(g: &Game, a: PlayerId, b: PlayerId) -> bool {
 
 /// Whether object `id` is within player `p`'s range of influence (CR 801.2d): it's
 /// controlled by a player within that range (a card in a zone where it has no controller
-/// counts as its owner's, CR 108.4a), or it's a battle protected by such a player.
+/// counts as its owner's, CR 108.4a), or it's a battle protected by such a player. An
+/// object that left the game with its owner is judged as it last existed.
 pub fn object_in_range(g: &Game, p: PlayerId, id: ObjectId) -> bool {
     if !option_used(g) {
         return true;
     }
     let o = g.obj(id);
+    if left_with_owner(g, id) {
+        return was_in_range(g, p, o.controller);
+    }
     let holder = match o.zone {
         Zone::Battlefield | Zone::Stack | Zone::Command => o.controller,
         _ => o.owner,
@@ -186,19 +190,34 @@ pub fn sees_object(g: &Game, controller: PlayerId, source: Option<ObjectId>, id:
     !option_used(g) || object_in_range(g, controller, id) || exempt_source(g, source)
 }
 
+/// Whether an object left the game with its owner (CR 800.4a): it stays its own last
+/// known information, in no zone (`remove_player_objects`), and is judged as it last
+/// existed, by the player who controlled it then (CR 603.6c, 603.10a, 801.7a).
+fn left_with_owner(g: &Game, id: ObjectId) -> bool {
+    let o = g.obj(id);
+    o.zone == Zone::Nowhere && g.multiplayer.departed.contains_key(&o.owner)
+}
+
 /// Whether an object involved in a trigger event is within `p`'s range, using the game
-/// state before or after the event as appropriate (CR 801.7a): an object now on the
-/// battlefield or stack by its controller after the event; one that left the battlefield
-/// or the stack by its controller as it last existed there; otherwise by its owner.
+/// state before or after the event as appropriate (CR 801.7a): an object that left the
+/// battlefield by its controller as it last existed there, wherever it went (the command
+/// zone too, CR 903.9b, or out of the game with its owner); an object now on the
+/// battlefield or stack (or in the command zone) by its controller after the event; one
+/// that left the stack by its controller there; otherwise by its owner.
 fn event_object_in_range(g: &Game, p: PlayerId, id: ObjectId, lki: Option<ObjectId>) -> bool {
+    let last = lki.and_then(|l| g.try_obj(l));
+    if let Some(l) = last.filter(|l| l.id != id && l.zone == Zone::Battlefield) {
+        return was_in_range(g, p, l.controller);
+    }
+    if left_with_owner(g, id) {
+        return was_in_range(g, p, g.obj(id).controller);
+    }
     let o = g.obj(id);
     if matches!(o.zone, Zone::Battlefield | Zone::Stack | Zone::Command) {
         return object_in_range(g, p, id);
     }
-    if let Some(l) = lki.and_then(|l| g.try_obj(l)) {
-        if matches!(l.zone, Zone::Battlefield | Zone::Stack) {
-            return was_in_range(g, p, l.controller);
-        }
+    if let Some(l) = last.filter(|l| matches!(l.zone, Zone::Battlefield | Zone::Stack)) {
+        return was_in_range(g, p, l.controller);
     }
     was_in_range(g, p, o.owner)
 }

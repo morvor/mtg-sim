@@ -167,7 +167,8 @@ pub fn entering_triggers_nothing(g: &Game, ev: &Event) -> bool {
 }
 
 /// Whether `ev` doesn't cause the triggered ability of `src` (controlled by `src_ctl`;
-/// no source: a delayed triggered ability without one)
+/// no source: a delayed triggered ability, which isn't an ability of the object that is
+/// its source, CR 113.7, `delayed-abilities-arent-abilities-of-permanents`)
 /// to trigger, the ability looking back in time (`look_back`, CR 603.10a) or not.
 /// `left_zone`: the ability's trigger event that matched `ev`, a card put onto the
 /// battlefield from another zone, is the card leaving that zone, which the permanent

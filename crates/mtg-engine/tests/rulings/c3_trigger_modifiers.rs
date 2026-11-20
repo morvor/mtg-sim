@@ -80,6 +80,78 @@ fn hushbringer_sacrifice_triggers_still_trigger() {
 }
 
 #[test]
+fn hushbringer_one_or_more_dies_abilities_dont_trigger_but_sacrifice_ones_do() {
+    cr!("603.2", "603.2c", "700.4");
+    ruling!(
+        "Hushbringer",
+        "as well as other triggered abilities that trigger when that creature enters the battlefield or dies"
+    );
+    ruling!(
+        "Hushbringer",
+        "An ability that triggers on an event that causes a creature to die will still trigger."
+    );
+    supported("Vengeful Townsfolk");
+    supported("Forge Boss");
+    // Vengeful Townsfolk: "Whenever one or more other creatures you control die, put a +1/+1
+    // counter on this creature." (checked once for each batch of deaths, CR 603.2c).
+    let mut t = TestGame::new(2);
+    let towns = t.battlefield(P0, "Vengeful Townsfolk");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    destroy(&mut t, bears);
+    assert_eq!(triggers_on_stack(&t, "die"), 1, "without Hushbringer it triggers");
+    t.resolve_all();
+    assert_eq!(t.counters(towns, counters::PLUS1), 1);
+    t.battlefield(P0, "Hushbringer");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    destroy(&mut t, bears);
+    assert_eq!(triggers_on_stack(&t, "die"), 0, "the Bears dying triggers nothing");
+    t.resolve_all();
+    assert_eq!(t.counters(towns, counters::PLUS1), 1);
+    // Forge Boss: "Whenever you sacrifice one or more other creatures, this creature deals 2
+    // damage to each opponent. This ability triggers only once each turn." The sacrifice is
+    // the event that causes the death, not the death: it still triggers.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Hushbringer");
+    t.battlefield(P0, "Forge Boss");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    t.g.sacrifice(bears, P0);
+    t.g.flush_events();
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "sacrifice one or more"), 1);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 18);
+}
+
+#[test]
+fn hushbringer_stops_searing_bloods_delayed_dies_ability() {
+    cr!("603.2", "603.7", "700.4");
+    ruling!(
+        "Hushbringer",
+        "as well as other triggered abilities that trigger when that creature enters the battlefield or dies"
+    );
+    supported("Hushbringer");
+    supported("Searing Blood");
+    // Searing Blood: "Searing Blood deals 2 damage to target creature. When that creature
+    // dies this turn, Searing Blood deals 3 damage to the creature's controller." Its
+    // delayed triggered ability (CR 603.7) is a triggered ability like any other: under
+    // Hushbringer ("Creatures entering or dying don't cause abilities to trigger."), the
+    // creature dying doesn't cause it to trigger.
+    for hush in [false, true] {
+        let mut t = TestGame::new(2);
+        if hush {
+            t.battlefield(P0, "Hushbringer");
+        }
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.lands(P0, "Mountain", 2);
+        let sb = t.hand(P0, "Searing Blood");
+        t.cast(P0, sb).target(bears).go();
+        t.resolve_all();
+        assert!(t.in_graveyard(P1, "Grizzly Bears"), "Hushbringer: {hush}");
+        assert_eq!(t.life(P1), if hush { 20 } else { 17 }, "Hushbringer: {hush}");
+    }
+}
+
+#[test]
 fn elesh_norn_stops_only_opponents_abilities() {
     cr!("603.2", "603.2d", "603.6a");
     ruling!(
@@ -114,6 +186,45 @@ fn elesh_norn_entering_at_the_same_time() {
     t.settle();
     t.resolve_all();
     assert_eq!(t.life(P1), 20);
+}
+
+#[test]
+fn elesh_norn_doesnt_stop_an_opponents_delayed_triggered_ability() {
+    cr!("603.7", "603.7e", "113.7");
+    interp!("delayed-abilities-arent-abilities-of-permanents");
+    ruling!(
+        "Elesh Norn, Mother of Machines",
+        "only who controls the permanent that has the triggered ability"
+    );
+    supported("Thunder of Unity");
+    supported("Elesh Norn, Mother of Machines");
+    // Thunder of Unity, chapter II: "Whenever a creature you control enters this turn, each
+    // opponent loses 1 life and you gain 1 life." The chapter ability creates a delayed
+    // triggered ability whose source is the Saga (CR 603.7e), but no permanent has it: it
+    // isn't one of the "abilities of permanents your opponents control" that Elesh Norn's
+    // "Permanents entering don't cause abilities of permanents your opponents control to
+    // trigger" stops.
+    let mut t = TestGame::new(2);
+    let saga = t.battlefield(P0, "Thunder of Unity");
+    for _ in 0..2 {
+        t.g.add_counters(Entity::Object(saga), counters::LORE, 1, None);
+        t.g.flush_events();
+        t.resolve_all();
+    }
+    assert_eq!(t.life(P0), 18, "chapter I: you draw two cards and you lose 2 life");
+    t.enter(P0, "Grizzly Bears");
+    t.settle();
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1)), (19, 19), "without Elesh Norn");
+    t.battlefield(P1, "Elesh Norn, Mother of Machines");
+    t.enter(P0, "Grizzly Bears");
+    t.settle();
+    t.resolve_all();
+    assert_eq!(
+        (t.life(P0), t.life(P1)),
+        (20, 18),
+        "with an opponent's Elesh Norn"
+    );
 }
 
 #[test]
