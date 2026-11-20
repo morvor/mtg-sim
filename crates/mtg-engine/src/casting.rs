@@ -918,12 +918,26 @@ impl Game {
             }
             // "You may cast spells from your hand without paying their mana costs"
             // (Omniscience): an alternative cost of nothing (CR 118.9), with normal timing.
+            // The card's own ways that aren't alternative costs combine with it too
+            // (CR 118.9a, 118.9d): "as though it had flash if you pay {2} more" (an
+            // additional cost, CR 601.3c) and fused (CR 702.102a).
             if in_hand {
-                for face in castable_faces(self, card) {
-                    let chars = self.face_characteristics(card, face);
+                let own_ways: Vec<CastOption> = out
+                    .iter()
+                    .filter(|o| {
+                        o.alt_cost.is_none()
+                            && !matches!(o.method, CastMethod::Normal | CastMethod::Half(_))
+                    })
+                    .cloned()
+                    .collect();
+                let faces = castable_faces(self, card).into_iter().map(|face| {
+                    let mut opt = CastOption::normal(face);
+                    opt.method = CastMethod::Free;
+                    opt
+                });
+                for mut opt in faces.chain(own_ways) {
+                    let chars = self.option_characteristics(card, &opt);
                     if let Some(c) = self.free_from_hand_permission(p, card, &chars) {
-                        let mut opt = CastOption::normal(face);
-                        opt.method = CastMethod::Free;
                         opt.alt_cost = Some(Cost::free());
                         // A once-each-turn permission is used up by casting with it.
                         if c.once.is_some() {

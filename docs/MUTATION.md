@@ -1406,4 +1406,7 @@ applied in the hand too). Changes:
   with "as though it had flash if you pay {2} more" (Rout, Harbinger of the Tides, Ghitu Fire,
   Mystical Tether, ...); the fix belongs with the offered alternative costs
   (`kw::offered_costs::extend_cast_options`, which already extends every way without an
-  alternative cost).
+  alternative cost). Fixed by small-fixes-5: `Game::permitted_cast_options` offers
+  Omniscience-style permissions with each of the card's own ways that has no alternative cost
+  (the flash way, and fused, CR 702.102a, which had the same gap); tests
+  `tests/cr/r601_003c_omniscience_own_flash_cost.rs`.
