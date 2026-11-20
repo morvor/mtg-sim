@@ -62,6 +62,13 @@ fn eye_of_doom_cant_choose_a_permanent_that_cant_have_counters() {
         assert!(asked, "{p:?} chose a permanent\n{}", t.dump_log());
         assert!(!keepers_offered, "{p:?} was offered Melira's Keepers");
     }
+    // The active player chose first, then the other player.
+    let choosers: Vec<PlayerId> = asked_since(&t, from)
+        .into_iter()
+        .filter(|(_, d)| matches!(d, Decision::ChooseEntities { .. }))
+        .map(|(p, _)| p)
+        .collect();
+    assert_eq!(choosers, vec![P0, P1], "{}", t.dump_log());
     assert_eq!(t.counters(keepers, "doom"), 0);
     assert!(t.counters(bears, "doom") >= 1, "P0's choice");
     // P1's invalid answer: another nonland permanent got P1's doom counter (by default the
@@ -143,10 +150,6 @@ fn promise_of_loyalty_with_only_a_creature_that_cant_have_counters_sacrifices_it
 fn bolster_chooses_among_the_least_toughness_creatures_that_can_have_counters() {
     cr!("701.39a", "608.2d");
     interp!("counter-choice-excludes-what-cant-have-them");
-    ruling!(
-        "Honor's Reward",
-        "You determine which creature to put counters on as the spell or ability that instructs you to bolster resolves."
-    );
     ruling!(
         "Melira's Keepers",
         "Melira's Keepers can't have any kind of counters placed on it, not just -1/-1 counters."

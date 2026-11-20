@@ -30,8 +30,9 @@
 //! down, Lotus Vale's "sacrifice two untapped lands instead") and another one reads the
 //! game or acts on it too (Golgari Grave-Troll counts the creature cards in its owner's
 //! graveyard, Clone chooses a creature to copy, a second Thief of Blood, an effect another
-//! permanent generates, which can count something about that permanent). Choices, conditions and life or energy payments (paid once all the
-//! choices are made, CR 614.12b, `entry_costs.rs`) change nothing as they're made, so
+//! permanent generates, which can count something about that permanent). Choices,
+//! conditions and life or energy payments (paid once all the choices are made, CR 614.12b,
+//! `entry_costs.rs`) change nothing as they're made, so
 //! permanents with only such effects, or only effects that read the game, are applied in
 //! the order of the moves without a question. When the order can matter, the player is
 //! asked, before each of those permanents' effects are applied, which of the remaining

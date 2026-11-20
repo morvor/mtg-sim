@@ -86,9 +86,10 @@ fn a_card_cast_from_hand_for_its_mana_cost_with_omniscience_out_asks_no_permissi
 /// mayhem ability, and Muldrotha's permission to play a land from the graveyard during each
 /// of P0's turns allows it too. P0 is asked which permission they're using; by default the
 /// land's own, which uses nothing up: Muldrotha's land is still available, and the Forest in
-/// P0's graveyard is played with it and Exploration's additional land play. (Also kills
-/// `permissions.rs:620:42`, the `||` of `choose_land_permission`'s first test as `&&`: the
-/// mutant took Muldrotha's permission for the land.)
+/// P0's graveyard is played with it and Exploration's additional land play. (Written to kill
+/// `permissions.rs:620:42` of the November 2026 mutation run, docs/MUTATION.md, before the
+/// choice was asked: that mutant, `||` as `&&` in `choose_land_permission`'s first test,
+/// took Muldrotha's permission for the land.)
 #[test]
 fn a_land_played_with_its_own_mayhem_ability_leaves_muldrothas_land_unused() {
     cr!("702.187c", "305.2");
@@ -157,8 +158,8 @@ fn a_mayhem_land_played_with_muldrothas_permission_uses_it_up() {
 }
 
 /// Ribbons, the aftermath half of Cut // Ribbons, may be cast from P0's graveyard by its own
-/// aftermath ability and with Kess, Dissident Mage's permission ("During each of your turns,
-/// you may cast an instant or sorcery spell from your graveyard."). P0 is asked which they're
+/// aftermath ability and with Kess, Dissident Mage's permission ("Once during each of your
+/// turns, you may cast an instant or sorcery spell from your graveyard."). P0 is asked which they're
 /// using: by default aftermath's, which leaves Kess's for another card (Divination);
 /// announcing Kess's records it on the spell and uses it up.
 #[test]

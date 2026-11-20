@@ -538,15 +538,12 @@ fn x_only_mana_pays_only_the_attack_taxes_with_x() {
     cr!("106.6", "508.1h", "508.1i");
     interp!("each-attack-tax-is-its-own-cost");
     ruling!(
-        "Norn's Annex",
-        "Multiple Norn's Annexes controlled by the same player will each impose a cost to attack. Players choose how they pay each cost individually."
-    );
-    ruling!(
         "Rosheen Meanderer",
         "You don’t have to spend all four mana on the same cost."
     );
     // Sphere of Safety (X = 2: it and Ghostly Prison are P1's enchantments) and Ghostly
-    // Prison ({2}) each impose a cost to attack. Rosheen's mana may pay Sphere's {X} but not
+    // Prison ({2}) each impose a cost to attack (as two Norn's Annexes do in their ruling,
+    // tested in r_p191_costs.rs). Rosheen's mana may pay Sphere's {X} but not
     // Ghostly Prison's {2}: with Rosheen alone the attack can't be paid for and is undone;
     // with two Wastes too, the Wastes pay Ghostly Prison's {2} and Rosheen Sphere's {2}.
     for wastes in [0usize, 2] {
@@ -574,10 +571,6 @@ fn x_only_mana_pays_only_the_attack_taxes_with_x() {
 fn x_only_mana_pays_only_the_block_taxes_with_x() {
     cr!("106.6", "509.1d", "509.1e");
     interp!("each-attack-tax-is-its-own-cost");
-    ruling!(
-        "Norn's Annex",
-        "Multiple Norn's Annexes controlled by the same player will each impose a cost to attack. Players choose how they pay each cost individually."
-    );
     supported("Archangel of Tithes");
     // War Cadence with X = 1 ("This turn, creatures can't block unless their controller pays
     // {X} for each blocking creature they control.") and an attacking Archangel of Tithes
