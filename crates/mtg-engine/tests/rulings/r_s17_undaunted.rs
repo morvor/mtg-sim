@@ -20,7 +20,7 @@ fn retarget_loss(e: &mut Effect, who: PlayerId) {
 
 /// A land with "{T}: Add {C}. [loser] loses the game." — a mana ability (CR 605.1a) whose
 /// activation, while a spell's costs are being paid, makes an opponent lose.
-fn doom_spring(loser: PlayerId) -> mtg_engine::card::CardDef {
+pub(crate) fn doom_spring(loser: PlayerId) -> mtg_engine::card::CardDef {
     let mut def = custom_card(
         "Doom Spring",
         "Land",
