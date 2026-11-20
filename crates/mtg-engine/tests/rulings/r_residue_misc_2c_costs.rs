@@ -292,6 +292,7 @@ fn brazen_cannonade_exiled_card_is_face_up_and_follows_normal_timing() {
 #[test]
 fn celestial_reunion_beholds_creatures_only_not_kindred_cards() {
     cr!("701.4a", "601.2b", "308.1");
+    interp!("choose-type-and-behold-payable-type");
     ruling!(
         "Celestial Reunion",
         "Notably, Celestial Reunion's behold instruction is limited to \"creatures.\" It doesn't allow you to behold kindred cards or kindred permanents, which are permitted for most other behold instructions."
