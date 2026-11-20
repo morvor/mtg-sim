@@ -232,3 +232,63 @@ effects created by resolving spells and abilities (CR 603, 610, 611). Format and
 - Affects: Botanical Brawler, Captain America, Living Legend (changed); Stalwart Successor, Vengevine, Alania, Divergent Storm, Codespell Cleric (unchanged; now pinned). Not affected: "for the first time each turn" trigger conditions (no intervening "if"; checked as the ability triggers, CR 603.2), "if this is the Nth time this ability has resolved this turn" (counted as it resolves, this resolution included), and conditions that can't stop being true (Fastbond's "if it wasn't the first land you played this turn", Tunnel Ignus's "if that player had another land enter ... this turn").
 - Code: `crates/mtg-engine/src/ability.rs` (`HistoryWindow::ThisTurnUntilTriggered`); `crates/mtg-engine/src/object.rs` (`EventInfo::turn_events_seen`); `crates/mtg-engine/src/triggers.rs` (`seen_as_triggered`, stamped where `detect_triggers` and `check_batch_triggers` create the pending triggers); `crates/mtg-engine/src/kw/value_results.rs` (`events_until_triggered`, `event_objects_until_triggered`); `crates/mtg-engine/src/history_query.rs` (`events_during`, `objects_during`, `window_events`); `crates/mtg-engine/src/oracle/patterns/history_conditions.rs` (`nth_time_counters`) and `history_conditions_4.rs` (`first_time_referent`); Stalwart Successor: `history_conditions_4.rs` (`first_time_counters`, `TriggerCond::FirstTimeEachTurn`); the spell ordinals: `kw/cast_history.rs` (`CAST_BY_THEN`).
 - Tests: `tests/rulings/first_time_recheck.rs` (`botanical_brawlers_first_time_stays_the_first_time_as_it_resolves`, `botanical_brawler_and_a_cursed_wombat_ability_resolve_in_either_order`, `captain_america_untaps_a_creature_tapped_again_while_its_ability_waits`, `stalwart_successors_first_time_stays_the_first_time_as_it_resolves`, `vengevine_returns_though_a_third_creature_spell_is_cast_in_response`, `alania_copies_the_first_instant_though_a_second_is_cast_in_response`, `codespell_cleric_is_still_the_second_spell_though_a_third_is_cast_in_response`, `conditions_not_about_the_trigger_event_see_what_happened_since`, `botanical_brawler_counts_the_first_counter_though_the_spell_then_puts_another`, `botanical_brawler_counters_put_on_two_permanents_at_once`, `a_copy_of_botanical_brawlers_ability_is_about_the_same_trigger_event`).
+
+## for-as-long-as-checked-continually-from-activation: STUB
+- Kind: interpretation
+- Status: provisional
+- Rules: stub
+- Question: stub
+- Decision: stub
+- Alternatives: stub
+- Why: stub
+- Affects: stub
+- Code: stub
+- Tests: stub
+
+## copied-ability-duration-starts-as-the-copy-is-created: STUB
+- Kind: interpretation
+- Status: provisional
+- Rules: stub
+- Question: stub
+- Decision: stub
+- Alternatives: stub
+- Why: stub
+- Affects: stub
+- Code: stub
+- Tests: stub
+
+## phasing-out-ends-a-waiting-for-as-long-as-duration: STUB
+- Kind: interpretation
+- Status: provisional
+- Rules: stub
+- Question: stub
+- Decision: stub
+- Alternatives: stub
+- Why: stub
+- Affects: stub
+- Code: stub
+- Tests: stub
+
+## duration-about-another-object-ends-while-the-ability-waits: STUB
+- Kind: interpretation
+- Status: provisional
+- Rules: stub
+- Question: stub
+- Decision: stub
+- Alternatives: stub
+- Why: stub
+- Affects: stub
+- Code: stub
+- Tests: stub
+
+## duration-the-resolution-sets-up-is-checked-as-the-effect-begins: STUB
+- Kind: interpretation
+- Status: provisional
+- Rules: stub
+- Question: stub
+- Decision: stub
+- Alternatives: stub
+- Why: stub
+- Affects: stub
+- Code: stub
+- Tests: stub

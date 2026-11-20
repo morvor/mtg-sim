@@ -282,6 +282,8 @@ impl Game {
         if self.dependent_effects_shape() != before {
             self.compute_characteristics(true);
         }
+        // The same conditions of the durations of abilities waiting on the stack.
+        crate::duration_windows::watch(self);
     }
 
     /// How many effects from resolved spells and abilities exist, and how many objects

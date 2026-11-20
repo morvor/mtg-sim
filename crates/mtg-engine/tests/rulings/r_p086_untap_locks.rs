@@ -78,7 +78,7 @@ fn tidebinder_mage_leaving_control_before_its_trigger_resolves_only_taps() {
 #[test]
 fn tidebinder_mage_control_lost_and_regained_before_its_trigger_resolves_only_taps() {
     cr!("611.2b");
-    interp!("control-lost-before-a-for-as-long-as-you-control-effect-begins");
+    interp!("for-as-long-as-checked-continually-from-activation");
     // The "for as long as you control" duration ended while the trigger was on the stack;
     // regaining control before it resolves doesn't begin it again.
     let mut t = TestGame::new(2);
@@ -234,7 +234,7 @@ fn willow_satyr_leaving_the_battlefield_ends_the_control_change() {
 #[test]
 fn willow_satyr_untapped_or_stolen_before_resolution_gains_nothing() {
     cr!("611.2b");
-    interp!("control-lost-before-a-for-as-long-as-you-control-effect-begins");
+    interp!("for-as-long-as-checked-continually-from-activation");
     ruling!(
         "Willow Satyr",
         "If Willow Satyr stops being tapped before its ability resolves — even if it becomes tapped again right away — you won’t gain control of the targeted creature at all. The same is true if you lose control of Willow Satyr before the ability resolves."
@@ -292,7 +292,7 @@ fn willow_satyr_effect_doesnt_care_whether_the_permanent_stays_a_legal_target() 
 #[test]
 fn olivia_voldaren_control_lost_and_regained_before_resolution_gains_nothing() {
     cr!("611.2b");
-    interp!("control-lost-before-a-for-as-long-as-you-control-effect-begins");
+    interp!("for-as-long-as-checked-continually-from-activation");
     // "{3}{B}{B}: Gain control of target Vampire for as long as you control Olivia
     // Voldaren." Control of Olivia lost and regained while the ability is on the stack.
     supported("Olivia Voldaren");

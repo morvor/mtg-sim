@@ -53,6 +53,7 @@ pub fn create_stack_ability(
         source_lki: source_lki.or_else(|| Some(Box::new(g.obj(source).chars.clone()))),
         chosen_values: Default::default(),
         source_attached_to: g.obj(source).attached_to,
+        window: Default::default(),
     }));
     let _ = ability;
     let id = ObjectId(g.objects.len() as u32);
@@ -1328,6 +1329,7 @@ impl Game {
         // CR 117.2e: no player has priority while a spell or ability is resolving.
         let priority = self.turn.priority.take();
         let outer = self.resolving.replace(top);
+        crate::duration_windows::resolution_begins(self, top);
         if is_spell {
             self.resolve_spell(top);
         } else {
