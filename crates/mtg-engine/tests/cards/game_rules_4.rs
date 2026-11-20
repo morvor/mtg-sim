@@ -69,19 +69,19 @@ fn commanders_plate_protects_from_colors_outside_the_commanders_identity() {
 
 #[test]
 fn commanders_plate_uses_the_equipped_creatures_controllers_commander() {
-    // P0's Commander's Plate ("Equipped creature gets +3/+3 and has protection from each
-    // color that's not in your commander's color identity.") is attached to P1's
-    // creature: the "you" of the ability it grants is the creature's controller.
-    cr!("903.4", "702.16a");
+    // P1's Armory Automaton ("Whenever this creature enters or attacks, you may attach any
+    // number of target Equipment to it. (Control of the Equipment doesn't change.)")
+    // attaches P0's Commander's Plate ("Equipped creature gets +3/+3 and has protection
+    // from each color that's not in your commander's color identity."): the "your" of the
+    // ability the Plate grants is the creature's controller (CR 109.5), so the protection
+    // follows P1's commander, not P0's.
+    cr!("109.5", "903.4", "702.16a");
     interp!("commander-identity-protection-player");
     ruling!(
         "Armory Automaton",
         "However, if the Equipment says that the equipped creature has an ability, the word \"you\" in that ability refers to you, the controller of the creature."
     );
-    ruling!(
-        "Cloak and Dagger",
-        "\"you\" in any abilities granted to the creature refers to that player."
-    );
+    assert_supported(&["Commander's Plate", "Armory Automaton"]);
     let mut t = TestGame::with_config(
         2,
         GameConfig {
@@ -89,22 +89,26 @@ fn commanders_plate_uses_the_equipped_creatures_controllers_commander() {
             ..Default::default()
         },
     );
-    let bears = t.battlefield(P1, "Grizzly Bears");
-    let plate = t.battlefield(P0, "Commander's Plate");
-    t.g.attach(plate, Entity::Object(bears));
     // P0's commander is white, P1's red.
     let serra = t.command(P0, "Serra Angel");
     make_commander(&mut t, P0, serra);
     let shivan = t.command(P1, "Shivan Dragon");
     make_commander(&mut t, P1, shivan);
+    let plate = t.battlefield(P0, "Commander's Plate");
+    t.answer_targets(P1, &[Entity::Object(plate)]);
+    t.answer_yes(P1, true);
+    let auto = t.enter(P1, "Armory Automaton");
+    t.resolve_all();
+    assert_eq!(t.obj_now(plate).attached_to, Some(Entity::Object(auto)));
     assert_eq!(t.obj_now(plate).controller, P0);
-    assert_eq!(t.obj_now(bears).controller, P1);
+    assert_eq!(t.obj_now(auto).controller, P1);
+    assert_eq!(t.pt(auto), (5, 5));
     let bolt = t.hand(P0, "Lightning Bolt");
     let swords = t.hand(P0, "Swords to Plowshares");
-    assert_eq!(t.pt(bears), (5, 5));
-    // Protection from white, blue, black and green (outside P1's red identity), not red.
-    assert!(t.g.protected_from(bears, swords));
-    assert!(!t.g.protected_from(bears, bolt));
+    // Protection from white, blue, black and green (outside P1's red identity), not red;
+    // P0's white identity would make it the other way round.
+    assert!(t.g.protected_from(auto, swords));
+    assert!(!t.g.protected_from(auto, bolt));
 }
 
 #[test]

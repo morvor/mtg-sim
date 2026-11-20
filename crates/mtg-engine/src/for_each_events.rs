@@ -22,18 +22,30 @@
 //!   amount multiplied ([`repeat_as_one`]);
 //! * `Effect::ForEachPlayer` and `Effect::ForEach`, performed for each player or object
 //!   (`simultaneous.rs`): the creations, counters and life gains of all of them are
-//!   combined ([`merge_creations`] in `Game::create_tokens_together`; the counter and life
+//!   combined ([`merge_creations`] in `Game::create_tokens_in_groups`; the counter and life
 //!   plans in `simultaneous::perform_plans`).
 //!
 //! What stays several events: what different players do (each player is a different "you":
-//! "each player creates a token", the opponents' part of a tempting offer), tokens of
-//! different kinds (a token copy of each of several creatures: one event to the rules, but
-//! the replacement pipeline's creation event carries one kind of token), separate
+//! "each player creates a token", the opponents' part of a tempting offer), separate
 //! instructions ("create a token. Then create ..."), a keyword action done several times
-//! (investigate twice: sequential, Tamiyo Meets the Story Circle's ruling), and a "for each"
-//! whose part for one player or object is itself several actions ("you draw a card and you
-//! create a 1/1 white Rabbit creature token", Tempt with Bunnies), performed for each in
-//! turn.
+//! (investigate twice: sequential, Tamiyo Meets the Story Circle's ruling), and each part's
+//! own tokens when a later instruction of the part refers to them ("For each opponent,
+//! create two 3/3 ... tokens with flying that attack that opponent this turn if able. They
+//! gain haste until end of turn.", Furygale Flocking): those are told apart by the part they
+//! belong to, as tokens created attacking each opponent are (Adeline, myriad: "If myriad
+//! creates more than one token for any given player (due to an effect such as the one
+//! Doubling Season creates), ..."), so each part's tokens are a creation of their own, made
+//! at the same time as the others' (`simultaneous::Instruction::tokens_apart`), and a
+//! doubling effect doubles each opponent's two.
+//!
+//! Not reached (gaps): tokens of different kinds (a token copy of each of several
+//! creatures: one event to the rules, but the replacement pipeline's creation event carries
+//! one kind of token), and a part performed for each player as one sequence of several
+//! actions ("For each opponent who does, you draw a card and you create a 1/1 white Rabbit
+//! creature token.", Tempt with Bunnies, compiled as one sequence performed for each
+//! opponent who accepted in turn: a creation each). Seize the Spotlight's "For each player
+//! who chose fortune, you draw a card and create a Treasure token." is two instructions,
+//! each performed for all of them, so its Treasures are one creation.
 
 use crate::ability::{Effect, Value};
 use crate::replacement::TokenCreate;
@@ -41,7 +53,9 @@ use crate::types::*;
 
 /// `effect` repeated `times` times as one instruction, if it's a single creation of
 /// tokens, putting of counters (on objects chosen by no one) or life gain: the same action
-/// with the amount multiplied.
+/// with the amount multiplied. (`Effect::Repeat` also carries "Repeat the following process
+/// X times." (Torment of Hailfire), whose repetitions are separate events; no card compiles
+/// that around a single creation, counter placement or life gain.)
 pub(crate) fn repeat_as_one(effect: &Effect, times: i64) -> Option<Effect> {
     if times < 2 {
         return None;
@@ -76,7 +90,7 @@ pub(crate) fn repeat_as_one(effect: &Effect, times: i64) -> Option<Effect> {
     }
 }
 
-/// One creation of tokens for [`Game::create_tokens_together`](crate::game::Game): the
+/// One creation of tokens for [`Game::create_tokens_in_groups`](crate::game::Game): the
 /// controller, the tokens, how many, the source, and which of the batch's entries it
 /// combines (index and count).
 pub(crate) type Creation = (
@@ -89,14 +103,18 @@ pub(crate) type Creation = (
 
 /// Combines the entries of a batch of token creations made by one instruction that create
 /// the same tokens for the same player from the same source into one creation (the count
-/// summed), keeping the batch's order of first appearance.
+/// summed), keeping the batch's order of first appearance. Only entries of the same group
+/// (`groups[i]`, 0 if missing) are combined: a part of a "for each" whose tokens a later
+/// instruction refers to has a group of its own (`simultaneous::Instruction::tokens_apart`).
 pub(crate) fn merge_creations(
     batch: Vec<(PlayerId, TokenCreate, u32, Option<ObjectId>)>,
+    groups: &[usize],
 ) -> Vec<Creation> {
     let mut out: Vec<Creation> = Vec::new();
     let mut keys: Vec<String> = Vec::new();
     for (i, (controller, spec, count, source)) in batch.into_iter().enumerate() {
-        let key = creation_key(controller, &spec, source);
+        let group = groups.get(i).copied().unwrap_or(0);
+        let key = format!("{group}|{}", creation_key(controller, &spec, source));
         match keys.iter().position(|k| *k == key) {
             Some(j) => {
                 out[j].2 += count;

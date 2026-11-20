@@ -25,7 +25,7 @@ Judgment calls about how characteristics are determined (CR 604.3, 613). Format 
 - Why: Protection abilities are evaluated for the permanent that has them; the two players are the same whenever Commander's Plate is equipped by its own ability, the usual case. The rulings in Rules (found by the audit decision-audit-1, Nov 20; quoted and the test added by small-fixes-3): Armory Automaton's and the 2008 Equipment rulings answer the Question for an ability the Equipment grants; Ardenn's and Enslave's are about the Equipment's own abilities that say "you" (its controller), which the first half of Armory Automaton's ruling also says, so they don't point the other way.
 - Affects: Commander's Plate.
 - Code: `crates/mtg-engine/src/kw/game_rules_4.rs` (`COLOR_OUTSIDE_COMMANDER_IDENTITY`); `crates/mtg-engine/src/stack.rs` (`protected_from`).
-- Tests: `tests/cards/game_rules_4.rs` (`commanders_plate_protects_from_colors_outside_the_commanders_identity`).; `tests/cards/game_rules_4.rs` (`commanders_plate_uses_the_equipped_creatures_controllers_commander`)
+- Tests: `tests/cards/game_rules_4.rs` (`commanders_plate_protects_from_colors_outside_the_commanders_identity`, `commanders_plate_uses_the_equipped_creatures_controllers_commander`: P1's Armory Automaton attaches P0's Commander's Plate, which then protects it from the colors outside P1's commander's identity).
 
 ## conditional-pt-setting-not-cda: "During your turn, ~'s power and toughness are each ... During turns other than yours, ... each 2" sets power and toughness in layer 7b on the battlefield
 - Kind: interpretation

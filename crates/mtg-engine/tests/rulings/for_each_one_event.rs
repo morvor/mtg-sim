@@ -8,7 +8,6 @@ use crate::r_s01_common::{supported, with_subtype};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
 use mtg_engine::types::counters;
-use mtg_engine::ability::{Effect, PlayerRef, Value};
 use mtg_engine::*;
 
 fn foods(t: &TestGame, p: PlayerId) -> usize {
@@ -203,34 +202,69 @@ fn cruel_grimnarchs_life_for_each_opponent_who_cant_is_one_life_gain() {
 
 #[test]
 fn each_players_own_tokens_stay_their_own_creations() {
-    // "Each player creates a Treasure token" is a creation by each player: Xorn adds one
-    // to its controller's only, and two players' identical tokens aren't combined.
+    // "Each player other than target player creates a 5/5 red Dragon creature token with
+    // flying." (Death by Dragons) is a creation by each player: Peregrin Took adds a Food
+    // to its controller's own only, and two players' identical tokens aren't combined.
     cr!("608.2f", "614.1a", "101.4");
     interp!("for-each-tokens-counters-life-one-event");
-    supported("Xorn");
-    let mut t = TestGame::new(3);
-    t.battlefield(P0, "Xorn");
-    t.battlefield(P1, "Xorn");
-    let spec = mtg_engine::tokens::predefined("Treasure").expect("predefined token");
-    let mut ctx = mtg_engine::eval::Ctx::new(None, P0);
-    t.g.exec(
-        &Effect::ForEachPlayer {
-            who: PlayerRef::EachPlayer,
-            effect: Box::new(Effect::AsPlayer {
-                who: PlayerRef::Iterated,
-                effect: Box::new(Effect::CreateToken {
-                    spec,
-                    count: Value::Const(1),
-                    controller: PlayerRef::You,
-                    tapped: false,
-                    attacking: false,
-                }),
-            }),
-        },
-        &mut ctx,
+    supported("Death by Dragons");
+    let mut t = TestGame::new(4);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Peregrin Took");
+    t.battlefield(P1, "Peregrin Took");
+    t.lands(P0, "Mountain", 6);
+    let s = t.hand(P0, "Death by Dragons");
+    t.cast(P0, s).target(Entity::Player(P3)).go();
+    t.resolve_all();
+    for (p, dragons, food) in [(P0, 1, 1), (P1, 1, 1), (P2, 1, 0), (P3, 0, 0)] {
+        assert_eq!(with_subtype(&t, p, "Dragon").len(), dragons, "{p:?}");
+        assert_eq!(foods(&t, p), food, "{p:?}");
+    }
+}
+
+#[test]
+fn furygale_flockings_tokens_for_each_opponent_are_each_opponents_own() {
+    // "For each opponent, create two 3/3 blue and red Elemental creature tokens with flying
+    // that attack that opponent this turn if able. They gain haste until end of turn." A
+    // later instruction refers to each opponent's tokens, so each opponent's two are a
+    // creation of their own (made at the same time as the others'): Anointed Procession
+    // ("If an effect would create one or more tokens under your control, it creates twice
+    // that many of those tokens instead.") doubles each opponent's two, and all four attack
+    // that opponent, not eight the first opponent and two each of the others.
+    cr!("608.2f", "614.1a", "508.1d");
+    interp!("for-each-tokens-counters-life-one-event");
+    ruling!(
+        "Furygale Flocking",
+        "Each of the tokens must attack the appropriate player if able"
     );
-    t.g.settle();
-    assert_eq!(treasures(&t, P0), 2);
-    assert_eq!(treasures(&t, P1), 2);
-    assert_eq!(treasures(&t, P2), 1);
+    ruling!(
+        "Anointed Procession",
+        "If the effect creating the tokens instructs you to do something with those tokens at a later time, like exiling them at the end of combat, you’ll do that for all the tokens."
+    );
+    supported("Furygale Flocking");
+    supported("Anointed Procession");
+    let mut t = TestGame::new(4);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Anointed Procession");
+    t.lands(P0, "Mountain", 10);
+    let s = t.hand(P0, "Furygale Flocking");
+    t.cast(P0, s).go();
+    t.resolve_all();
+    let els = with_subtype(&t, P0, "Elemental");
+    assert_eq!(els.len(), 12);
+    assert!(els
+        .iter()
+        .all(|e| t.obj_now(*e).has_keyword(keywords::KeywordKind::Haste)));
+    // Declaring no attackers is corrected to each token attacking its opponent.
+    t.answer(P0, DecisionKind::Attackers, Answer::Attackers(vec![]));
+    t.advance_to(P0, Step::DeclareBlockers);
+    let combat = t.g.combat.as_ref().expect("combat");
+    let mut by_player = [0; 4];
+    for e in &els {
+        match combat.attack_target(*e) {
+            Some(Entity::Player(p)) => by_player[p.idx()] += 1,
+            other => panic!("not attacking a player: {other:?}"),
+        }
+    }
+    assert_eq!(by_player, [0, 4, 4, 4]);
 }
