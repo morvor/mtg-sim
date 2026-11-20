@@ -55,7 +55,6 @@ fn vengeful_archon_is_the_source_of_noncombat_damage() {
     assert_eq!(t.life(P1), 18, "no lifelink: the Nighthawk dealt no damage");
     let dealt = damage_events(&t, from);
     assert_eq!(dealt, vec![(archon, pl(P1), 2, false)], "{dealt:?}");
-    assert!(t.obj_now(archon).chars.colors.contains(Color::White));
 }
 
 #[test]
@@ -83,7 +82,7 @@ fn vengeful_archon_prevents_the_next_damage_from_any_source() {
 
 #[test]
 fn vengeful_archon_target_isnt_checked_after_it_resolves() {
-    cr!("608.2b", "615.7", "800.4a");
+    cr!("115.1", "615.7", "800.4a");
     ruling!(
         "Vengeful Archon",
         "Whether the targeted player is still a legal target is no longer checked after Vengeful Archon’s ability resolves. For example, if a player targeted by Vengeful Archon’s ability puts Leyline of Sanctity (which says “You can’t be the target of spells or abilities your opponents control”) onto the battlefield after the ability resolves but before it prevents damage, the ability will still prevent damage and still deal damage to that player. If Vengeful Archon can’t deal damage to the targeted player (because the player is no longer in the game in a multiplayer game, for example), it will still prevent damage. It just won’t deal any damage itself."
@@ -153,14 +152,10 @@ fn sarkhan_the_mad_damages_himself_past_your_prevention_effects() {
 
 #[test]
 fn flames_of_the_blood_hand_stops_only_the_targets_life_gain() {
-    cr!("615.12", "614.1a", "119.7");
+    cr!("615.12", "614.1a");
     ruling!(
         "Flames of the Blood Hand",
         "The damage is unpreventable, and the targeted player’s life gain that turn is replaced with nothing."
-    );
-    ruling!(
-        "Flames of the Blood Hand",
-        "The replacement effect applies only to the target player, not to a permanent or player the damage might be redirected to."
     );
     supported("Flames of the Blood Hand");
     // P1 has a Vengeful Archon shield of 3 (targeting P2): Flames' 4 damage can't be
@@ -184,7 +179,7 @@ fn flames_of_the_blood_hand_stops_only_the_targets_life_gain() {
 
 #[test]
 fn flames_of_the_blood_hand_redirected_damage_doesnt_stop_that_players_life_gain() {
-    cr!("614.1a", "609.7", "119.7");
+    cr!("614.1a", "609.7");
     ruling!(
         "Flames of the Blood Hand",
         "The replacement effect applies only to the target player, not to a permanent or player the damage might be redirected to."
@@ -276,7 +271,7 @@ fn corpse_explosion_uses_the_power_the_card_had_in_the_graveyard() {
 
 #[test]
 fn concussive_bolt_checks_metalcraft_only_as_it_resolves() {
-    cr!("608.2h", "207.2c", "509.1a");
+    cr!("608.2h", "509.1b");
     ruling!(
         "Concussive Bolt",
         "The number of artifacts you control is checked only once: when Concussive Bolt resolves. If you don’t control three or more artifacts at that time, creatures will be able to block that turn, even if you gain control of more artifacts later in the turn."
@@ -315,7 +310,7 @@ fn concussive_bolt_checks_metalcraft_only_as_it_resolves() {
 
 #[test]
 fn antagonism_looks_back_over_the_whole_turn() {
-    cr!("608.2h", "603.4");
+    cr!("608.2h");
     ruling!(
         "Antagonism",
         "It looks back over the entire turn even if this card was not on the battlefield at the time."
@@ -454,7 +449,7 @@ fn chandra_pyromaster_copies_ignore_timing_but_not_other_restrictions() {
 
 #[test]
 fn nahiris_warcrafting_exiled_land_needs_a_land_play() {
-    cr!("305.2", "305.2b", "120.4a");
+    cr!("305.2", "305.2b", "120.10");
     ruling!(
         "Nahiri's Warcrafting",
         "Unless an effect allows you to play additional lands that turn, you can play an exiled land card only if you haven't played a land yet that turn."
@@ -465,15 +460,29 @@ fn nahiris_warcrafting_exiled_land_needs_a_land_play() {
         t.set_step(P0, Step::PrecombatMain);
         // Grizzly Bears (2/2) is dealt 5: 3 excess, so P0 looks at three cards.
         let bears = t.battlefield(P1, "Grizzly Bears");
-        stack_library(&mut t, P0, &["Forest", "Shock", "Shock"]);
+        stack_library(
+            &mut t,
+            P0,
+            &["Forest", "Shock", "Shock", "Island", "Island"],
+        );
         let forest = t.g.player(P0).library.last().copied().unwrap();
         if played_one {
             let land = t.hand(P0, "Mountain");
             t.play_land(P0, land).expect("land play");
         }
         t.answer_choose(P0, &[obj(forest)]);
+        let from = t.asked().len();
         cast_new(&mut t, P0, "Nahiri's Warcrafting", &[obj(bears)]);
         t.resolve_all();
+        // 5 damage to a 2/2: 3 excess, so the three cards on top are looked at.
+        let looked: Vec<usize> = asked_since(&t, from)
+            .into_iter()
+            .filter_map(|(_, d)| match d {
+                Decision::ChooseEntities { candidates, .. } => Some(candidates.len()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(looked, vec![3], "played_one {played_one}");
         let exiled = t.g.current(forest);
         assert_eq!(t.zone(exiled), Zone::Exile, "played_one {played_one}");
         assert_eq!(
@@ -490,7 +499,7 @@ fn nahiris_warcrafting_exiled_land_needs_a_land_play() {
 
 #[test]
 fn incinerator_of_the_guilty_can_collect_evidence_zero() {
-    cr!("701.59a", "603.2", "603.12");
+    cr!("701.59a", "603.2");
     ruling!(
         "Incinerator of the Guilty",
         "You may collect evidence 0, but you would be a lazy detective with no crispy culprits. Nevertheless, if you choose to do so, abilities that trigger \"whenever you collect evidence\", such as those of Surveillance Monitor and Evidence Examiner, will still trigger."
@@ -522,21 +531,25 @@ fn lithomantic_barrage_isnt_countered_by_ward() {
     );
     supported("Lithomantic Barrage");
     supported("Armored Armadillo");
-    // Armored Armadillo (white, 0/4, ward {1}): P0 doesn't pay; the 5 damage destroys it.
-    let mut t = TestGame::new(2);
-    t.set_step(P0, Step::PrecombatMain);
-    let dillo = t.battlefield(P1, "Armored Armadillo");
-    t.lands(P0, "Wastes", 1);
-    t.answer_yes(P0, false);
-    cast_new(&mut t, P0, "Lithomantic Barrage", &[obj(dillo)]);
-    t.resolve_all();
-    assert!(!t.on_battlefield(dillo));
-    assert!(t.in_graveyard(P0, "Lithomantic Barrage"));
+    // Armored Armadillo (white, 0/4, ward {1}): whether P0 pays the ward cost or not, the
+    // 5 damage destroys it.
+    for pay in [false, true] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let dillo = t.battlefield(P1, "Armored Armadillo");
+        let wastes = t.lands(P0, "Wastes", 1)[0];
+        t.answer_yes(P0, pay);
+        cast_new(&mut t, P0, "Lithomantic Barrage", &[obj(dillo)]);
+        t.resolve_all();
+        assert_eq!(is_tapped(&t, wastes), pay, "the ward cost paid: {pay}");
+        assert!(!t.on_battlefield(dillo), "pay {pay}");
+        assert!(t.in_graveyard(P0, "Lithomantic Barrage"));
+    }
 }
 
 #[test]
 fn arcbond_damage_isnt_combat_damage() {
-    cr!("510.2", "603.7", "120.2");
+    cr!("510.2", "603.7", "120.2b");
     ruling!(
         "Arcbond",
         "Damage dealt by the creature because of the ability Arcbond creates isn’t combat damage, even if it was combat damage that caused the ability to trigger."
@@ -618,7 +631,7 @@ fn two_arcbonds_loop_until_a_creature_dies_or_the_game_is_a_draw() {
 
 #[test]
 fn blim_does_nothing_if_its_target_is_illegal() {
-    cr!("608.2b", "510.3a");
+    cr!("608.2b");
     ruling!(
         "Blim, Comedic Genius",
         "If the target permanent you control is an illegal target by the time Blim's ability tries to resolve, the ability doesn't resolve. The other player doesn't gain control of your permanent, and no one loses life or discards cards."

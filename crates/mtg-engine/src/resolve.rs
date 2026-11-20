@@ -663,7 +663,10 @@ impl Game {
                 // player taps an untapped creature they control"; Solitary Sanctuary's
                 // rulings). "That player taps an untapped artifact, creature, or land they
                 // control" (Tangle Wire) chooses and taps as that player: the chooser
-                // performs it (Sharae of Numbing Depths's ruling).
+                // performs it (Sharae of Numbing Depths's ruling). A `Tap` of another
+                // player's `Choose` is compiled only from "[that player] taps ..."
+                // (`followups_4::taps_untapped`); "tap ... of [a player]'s choice" would
+                // need its own form.
                 let by = match what {
                     Sel::Choose { chooser, .. } if !matches!(chooser, PlayerRef::You) => {
                         self.eval_player(chooser, ctx).or(Some(ctx.controller))

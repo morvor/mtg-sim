@@ -7,6 +7,8 @@
 
 use crate::r_residue_burn_freeze_common::*;
 use mtg_engine::decision::{Answer, Decision};
+use mtg_engine::events::Event;
+use mtg_engine::game::{GameConfig, Variant};
 use mtg_engine::object::{CastMethod, Zone};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -196,6 +198,78 @@ fn blinding_beam_affects_every_creature_during_that_players_untap_step() {
     assert!(!is_tapped(&t, p1s) && !is_tapped(&t, later));
 }
 
+#[test]
+fn blinding_beam_with_shared_team_turns_affects_the_whole_teams_untap_step() {
+    cr!("502.3", "805.4");
+    ruling!(
+        "Blinding Beam",
+        "The second mode affects all creatures during the player’s next untap step"
+    );
+    // Two-Headed Giant: P0 and P1 against P2 and P3, P2 taking their team's turns. The
+    // team's untap step is the untap step of both its players: whichever of them is
+    // targeted, neither player's creatures untap during it, and both untap in the next one.
+    for target in [P2, P3] {
+        let mut t = TestGame::with_config(
+            4,
+            GameConfig {
+                variant: Variant::TwoHeadedGiant,
+                teams: Some(vec![0, 0, 1, 1]),
+                ..Default::default()
+            },
+        );
+        t.set_step(P0, Step::PrecombatMain);
+        let c2 = tapped_creature(&mut t, P2, "Grizzly Bears");
+        let c3 = tapped_creature(&mut t, P3, "Hill Giant");
+        t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1]));
+        cast_new(&mut t, P0, "Blinding Beam", &[pl(target)]);
+        t.resolve_all();
+        t.advance_to(P2, Step::Upkeep);
+        assert!(is_tapped(&t, c2) && is_tapped(&t, c3), "target {target:?}");
+        t.advance_to(P0, Step::Upkeep);
+        t.advance_to(P2, Step::Upkeep);
+        assert!(
+            !is_tapped(&t, c2) && !is_tapped(&t, c3),
+            "target {target:?}"
+        );
+    }
+}
+
+#[test]
+fn blinding_beam_waits_for_an_untap_step_that_isnt_skipped() {
+    cr!("502.3", "614.10a");
+    ruling!(
+        "Blinding Beam",
+        "The second mode affects all creatures during the player’s next untap step"
+    );
+    supported("Avizoa");
+    // P1 activates Avizoa ("You skip your next untap step."), then P0's Blinding Beam
+    // targets P1: P1's next untap step is skipped, so the Beam applies in the one after it,
+    // the first that isn't skipped, and P1's creatures untap in the one after that.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let bears = tapped_creature(&mut t, P1, "Grizzly Bears");
+    let avizoa = t.battlefield(P1, "Avizoa");
+    t.activate(P1, avizoa, 0, &[]).expect("Avizoa");
+    t.resolve_all();
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1]));
+    cast_new(&mut t, P0, "Blinding Beam", &[pl(P1)]);
+    t.resolve_all();
+    tap(&mut t, avizoa);
+    // The skipped untap step.
+    t.advance_to(P1, Step::Upkeep);
+    assert!(is_tapped(&t, bears) && is_tapped(&t, avizoa));
+    // The next one: the Beam applies.
+    t.advance_to(P0, Step::Upkeep);
+    t.advance_to(P1, Step::Upkeep);
+    assert!(
+        is_tapped(&t, bears) && is_tapped(&t, avizoa),
+        "the Beam waited"
+    );
+    t.advance_to(P0, Step::Upkeep);
+    t.advance_to(P1, Step::Upkeep);
+    assert!(!is_tapped(&t, bears) && !is_tapped(&t, avizoa));
+}
+
 // ---------------------------------------------------------------------------------------
 // Stun counters
 // ---------------------------------------------------------------------------------------
@@ -235,11 +309,17 @@ fn suppression_ray_stuns_only_creatures_it_tapped() {
     );
     assert_eq!(t.counters(c, STUN), 1);
     assert_eq!(t.counters(a, STUN) + t.counters(b, STUN), 0);
+    // In P1's next untap step the stunned Wurm stays tapped, losing its counter; the
+    // others untap.
+    through_untap_step(&mut t, P1);
+    assert!(is_tapped(&t, c));
+    assert_eq!(t.counters(c, STUN), 0);
+    assert!(!is_tapped(&t, a) && !is_tapped(&t, b));
 }
 
 #[test]
 fn fear_of_sleep_paralysis_stops_stun_counters_moving_off_opponents_permanents() {
-    cr!("122.1d", "101.2");
+    cr!("122.5", "101.2");
     ruling!(
         "Fear of Sleep Paralysis",
         "If an ability tries to move a stun counter from a permanent an opponent controls to another permanent while you control Fear of Sleep Paralysis, that counter won't move. No stun counters will be removed from or put onto anything."
@@ -270,7 +350,7 @@ fn fear_of_sleep_paralysis_stops_stun_counters_moving_off_opponents_permanents()
 
 #[test]
 fn aerith_rescue_mission_chooses_the_stunned_creature_as_it_resolves() {
-    cr!("608.2c", "601.2c", "122.1d");
+    cr!("608.2c", "601.2c");
     ruling!(
         "Aerith Rescue Mission",
         "If you choose the second mode, you don't have to choose which of the target creatures you'll put a stun counter on until Aerith Rescue Mission is resolving."
@@ -301,7 +381,7 @@ fn aerith_rescue_mission_chooses_the_stunned_creature_as_it_resolves() {
 
 #[test]
 fn wicked_slumber_puts_both_counters_on_the_remaining_target() {
-    cr!("608.2b", "122.1d");
+    cr!("608.2b");
     ruling!(
         "Wicked Slumber",
         "If you choose two target creatures, but one of them is an illegal target as Wicked Slumber resolves, the illegal target will be unaffected. You'll put both stun counters on the remaining legal target. If both targets become illegal, Wicked Slumber won't resolve at all."
@@ -330,18 +410,20 @@ fn wicked_slumber_puts_both_counters_on_the_remaining_target() {
     cast_new(&mut t, P0, "Wicked Slumber", &[]);
     t.resolve_all();
     assert_eq!((t.counters(a, STUN), t.counters(b, STUN)), (1, 1));
-    // Both illegal: it doesn't resolve (nothing is tapped; it's put into the graveyard).
+    // Both illegal: it doesn't resolve; it's put into the graveyard (CR 608.2b).
     let mut t = TestGame::new(2);
     t.set_step(P0, Step::PrecombatMain);
     let a = t.battlefield(P1, "Grizzly Bears");
     let b = t.battlefield(P1, "Hill Giant");
-    let c = t.battlefield(P1, "Craw Wurm");
     t.answer_targets(P0, &[obj(a), obj(b)]);
-    cast_new(&mut t, P0, "Wicked Slumber", &[]);
+    let spell = cast_new(&mut t, P0, "Wicked Slumber", &[]);
     crate::r_s05_common::move_to(&mut t, a, Zone::Hand(P1));
     crate::r_s05_common::move_to(&mut t, b, Zone::Hand(P1));
+    let from = t.g.turn_events.len();
     t.resolve_all();
-    assert!(!is_tapped(&t, c));
+    assert!(!t.g.turn_events[from..]
+        .iter()
+        .any(|e| matches!(e, Event::SpellResolved { spell: s } if *s == spell)));
     assert!(t.in_graveyard(P0, "Wicked Slumber"));
 }
 
@@ -372,16 +454,23 @@ fn dragon_turtle_with_an_illegal_target_does_nothing() {
     crate::r_s05_common::move_to(&mut t, bears, Zone::Hand(P1));
     t.resolve_all();
     assert!(!is_tapped(&t, turtle));
-    // No opponent's creature: it taps itself and stays tapped through P0's next untap
-    // step.
-    let mut t = TestGame::new(2);
-    t.set_step(P0, Step::PrecombatMain);
-    let turtle = t.enter(P0, "Dragon Turtle");
-    t.g.flush_events();
-    t.settle();
-    t.resolve_all();
-    assert!(is_tapped(&t, turtle));
-    misses_one_untap(&mut t, turtle, P0);
+    // No opponent's creature, or no target chosen though there is one: it taps itself and
+    // stays tapped through P0's next untap step.
+    for opponents_creature in [false, true] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let bears = opponents_creature.then(|| t.battlefield(P1, "Grizzly Bears"));
+        t.answer_targets(P0, &[]);
+        let turtle = t.enter(P0, "Dragon Turtle");
+        t.g.flush_events();
+        t.settle();
+        t.resolve_all();
+        assert!(is_tapped(&t, turtle), "{opponents_creature}");
+        if let Some(b) = bears {
+            assert!(!is_tapped(&t, b));
+        }
+        misses_one_untap(&mut t, turtle, P0);
+    }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -558,7 +647,7 @@ fn zaffai_casts_an_x_spell_free_with_x_zero() {
 
 #[test]
 fn champions_of_the_shoal_countered_leaves_the_beheld_card_in_exile() {
-    cr!("701.4", "607.2a", "701.6a");
+    cr!("701.4a", "601.2h", "701.6a");
     ruling!(
         "Champions of the Shoal",
         "If Champions of the Shoal is countered or otherwise fails to resolve, the beheld card will remain in exile indefinitely."

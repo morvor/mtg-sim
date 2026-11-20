@@ -75,7 +75,7 @@ fn restatement_rulings() {
             assert_eq!(t.counters(c, "loyalty"), 5);
         }),
         ("Sarkhan the Mad", || {
-            cr!("606.4", "209.1");
+            cr!("606.4");
             ruling!(
                 "Sarkhan the Mad",
                 "Unlike previous planeswalkers, Sarkhan the Mad has no way to raise his loyalty."
@@ -234,7 +234,7 @@ fn restatement_rulings() {
             assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
         }),
         ("Galvanic Discharge", || {
-            cr!("107.14", "107.1b");
+            cr!("107.14");
             ruling!(
                 "Galvanic Discharge",
                 "You may pay zero {E}. You will get {E}{E}{E}, but Galvanic Discharge won't deal any damage."
@@ -354,7 +354,7 @@ fn restatement_rulings() {
 
 #[test]
 fn chandra_flameshapers_token_copies_only_the_copiable_values() {
-    cr!("707.2", "707.9b", "111.1", "301.7b");
+    cr!("707.2", "707.9b", "111.1", "702.122a");
     ruling!(
         "Chandra, Flameshaper",
         "The token created by Chandra's second ability copies exactly what was printed on the original creature and nothing else, with the listed exceptions (unless that creature is copying something else or is a token; see below). It doesn't copy whether that creature is tapped or untapped, whether it has any counters on it or Auras and Equipment attached to it, or any non-copy effects that have changed its power, toughness, types, color, or so on. If it is a Vehicle, it is not crewed."
