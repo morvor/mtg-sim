@@ -33,7 +33,7 @@ const RETRACE: CastMethod = CastMethod::Keyword(KeywordKind::Retrace);
 #[test]
 fn risen_executioner_cast_with_retrace_doesnt_cost_more_for_other_creature_cards() {
     cr!("702.81a", "601.2f");
-    interp!("own-permission-first");
+    interp!("permission-choice-always-asked");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Six");
     let swamps = t.lands(P0, "Swamp", 4);
@@ -78,7 +78,7 @@ fn risen_executioner_cast_with_retrace_doesnt_cost_more_for_other_creature_cards
 #[test]
 fn rout_cast_with_flash_and_a_permission_to_cast_it_free_costs_only_the_2_more() {
     cr!("601.3c", "118.9d", "601.2f");
-    interp!("own-permission-first");
+    interp!("permission-choice-always-asked");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     let plains = t.lands(P0, "Plains", 2);

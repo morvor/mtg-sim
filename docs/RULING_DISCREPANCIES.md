@@ -171,6 +171,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: a spell mastery ability that changes what the spell does checks the graveyard as the spell resolves, the spell not counting; Swift Reckoning's, which lets it be cast as though it had flash, is judged as the casting begins, with the card where it is, and its number has no effect as the spell resolves.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P223.tsv` (on Swift Reckoning only: the text stays cited for the cards it was written for); register `ruling-contradicting-oracle-gives-way`; tests `tests/rulings/r_s15_spell_mastery.rs` (`spell_mastery_counts_the_graveyard_as_the_spell_resolves_without_the_spell`, `exquisite_firecraft_cant_be_countered_only_with_two_other_instants_or_sorceries`), `tests/cards/cast_permissions_classes.rs` (`swift_reckoning_flash_timing_with_spell_mastery`), `tests/rulings/r_residue_misc_1_stack.rs` (`swift_reckoning_cast_from_the_graveyard_counts_itself_as_casting_begins`).
 
+### Seraph: "after being exiled" for a creature put into a graveyard
+- Kind: template error
+- Status: decided
+- Ruling, Seraph (2007-09-16): "If the other creature is a token, it will cease to exist after being exiled. It won’t be returned to the battlefield."
+- Conflicts with: the card's Oracle text, which exiles nothing: "Whenever a creature dealt damage by this creature this turn dies, put that card onto the battlefield under your control at the beginning of the next end step. Sacrifice the creature when you lose control of this creature." A token that dies is put into a graveyard and ceases to exist there (CR 704.5d: "If a token is in a zone other than the battlefield, it ceases to exist."), and Seraph's ruling of 2004-10-04 has the card return from the graveyard: "You do not get the creature back if the creature is not still in the graveyard at the end of the turn."
+- Evidence: Tawnos's Coffin has the same sentence on the same day, where it fits the card ("{3}, {T}: Exile target creature and all Auras attached to it. ..."): "If the targeted creature is a token, it will cease to exist after being exiled. Any Auras that were attached to it will remain exiled forever." (2007-09-16); both are Masters Edition rulings, so Seraph's looks copied from it. No Oracle wording of Seraph that exiled the creature, and so no dated change, was found: the Masters Edition Update Bulletin (2007-08-29; ormos mirror) names Seraph only to say that its Ice Age and Fifth Edition printings worked differently and that Oracle follows the most recent printing, and Gatherer's Oracle history (Wayback Machine) was outside the allowed hosts. Found in work item rulings-residue-misc-2 (pass B and its review, Nov 20), logged under "Not yet investigated"; decided by the user, Nov 20 (call 39, work item user-decisions-nov20b), who agreed to treat "after being exiled" as a template error under `ruling-contradicting-oracle-gives-way`.
+- Engine: as the card says: a token Seraph dealt damage to that dies ceases to exist in the graveyard and isn't returned at the next end step; a card is returned only if it's still in the graveyard then.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P176.tsv` (the ruling's "it will cease to exist after being exiled"; its "It won’t be returned to the battlefield." stays cited); register `ruling-contradicting-oracle-gives-way`; test `tests/rulings/r_residue_misc_2b_triggers.rs` (`seraph_returns_no_token_and_no_card_that_left_the_graveyard`).
+
 ## Copying errors
 
 ### Run Out of Town: "controller" for "owner"
@@ -1111,25 +1120,6 @@ decides whether they become a conflict case.
   `two_target_destruction_with_one_target_left_affects_it`). Whether the Journey into Nyx
   release notes (2014; ormos mirror) have the same spelling wasn't checked. No kind fits a
   misspelled name.
-- **Seraph** (rulings-residue-misc-2, pass B and review, Nov 20): "If the other creature is a
-  token, it will cease to exist after being exiled. It won’t be returned to the
-  battlefield." (2007-09-16) for "Whenever a creature dealt damage by this creature this
-  turn dies, put that card onto the battlefield under your control at the beginning of the
-  next end step. ...", which exiles nothing: the token ceases to exist in the graveyard
-  (CR 704.5d). Seraph's ruling of 2004-10-04 ("You do not get the creature back if the
-  creature is not still in the graveyard at the end of the turn.") already has the card
-  return from the graveyard. Tawnos's Coffin has the same sentence on the same day ("If the
-  targeted creature is a token, it will cease to exist after being exiled. ...",
-  2007-09-16), where it fits the card, so the words look copied from it (both are Masters
-  Edition rulings), but no Oracle wording of Seraph that exiled the creature, and so no
-  dated change, was found: the Masters Edition Update Bulletin (2007-08-29; ormos mirror)
-  names Seraph only to say that its Ice Age and Fifth Edition printings worked differently
-  and that Oracle follows the most recent printing, and Gatherer's Oracle history (Wayback
-  Machine) was outside the allowed hosts. The ruling stays cited for what holds (the token
-  isn't returned; `tests/rulings/r_residue_misc_2b_triggers.rs`,
-  `seraph_returns_no_token_and_no_card_that_left_the_graveyard`), not exempt; under
-  `ruling-contradicting-oracle-gives-way` its "after being exiled" would be a template
-  error, for the coordinator to decide.
 - Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (copying errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the

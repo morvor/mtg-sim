@@ -60,6 +60,9 @@ impl Game {
         match e {
             Effect::Noop => {}
             Effect::Seq(v) => {
+                // A choice stored for counters only what can have them may get (Eye of Doom).
+                let narrowed = crate::kw::counter_choice::narrowed_stored_choices(v);
+                let v = narrowed.as_ref().unwrap_or(v);
                 // "Create a [token] and a [token]" is one instruction that the compiler
                 // splits into one creation per kind: the tokens enter at the same time, as
                 // one batch of events (CR 603.2c, 608.2c). The compiler gives separate
