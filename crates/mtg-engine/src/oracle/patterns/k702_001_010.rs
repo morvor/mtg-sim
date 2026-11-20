@@ -89,26 +89,26 @@ fn trailing_as_long_as(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
 /// Rattlewurm on the battlefield, doesn't have flash. Its condition still lets the card be
 /// begun as though it had flash, judged with the card where it is (CR 601.3d; see
 /// `Game::would_have_flash_as_it_begins`). "This spell has cascade as long as ..."
-/// (Bloodbraid Marauder) functions everywhere, the stack included: cascade triggers on
-/// casting (CR 702.85a).
+/// (Bloodbraid Marauder) functions only on the stack too: it speaks of the card as a spell,
+/// which exists only on the stack (CR 112.1), and cascade functions only there (CR
+/// 702.85a); in a hand, a library, a graveyard or on the battlefield the card doesn't have
+/// cascade (register `self-granted-cascade-functions-on-the-stack`). The other keywords
+/// cards give themselves "as long as ..." keep the zone of a permanent's static ability,
+/// the battlefield (CR 113.6).
 fn conditional_flash_zone(a: &Ability) -> Ability {
     if let AbilityKind::Static(s) = &a.kind {
         if let StaticEffect::Continuous { affected, mods } = &s.effect {
-            let grants = |kinds: &[KeywordKind]| {
+            let grants_only = |kinds: &[KeywordKind]| {
                 !mods.is_empty()
                     && mods.iter().all(
                         |m| matches!(m, Modification::AddKeyword(k) if kinds.contains(&k.kind)),
                     )
             };
             if matches!(affected, Filter::Source)
-                && grants(&[KeywordKind::Flash, KeywordKind::Cascade])
+                && grants_only(&[KeywordKind::Flash, KeywordKind::Cascade])
             {
                 let mut s = s.clone();
-                s.zone = if grants(&[KeywordKind::Flash]) {
-                    FunctionZone::Stack
-                } else {
-                    FunctionZone::Anywhere
-                };
+                s.zone = FunctionZone::Stack;
                 return AbilityDef::with_link(AbilityKind::Static(s), a.text.clone(), a.link);
             }
         }

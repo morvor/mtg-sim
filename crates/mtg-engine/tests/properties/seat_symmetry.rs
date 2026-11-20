@@ -116,3 +116,26 @@ fn triggers_of_several_players_go_on_the_stack_in_apnap_order_whatever_the_seats
         seat_symmetry(&s, r).unwrap_or_else(|e| panic!("seed {}: {e}", s.seed));
     }
 }
+
+#[test]
+fn supplementary_decks_are_shuffled_and_renumbered_whatever_the_seats() {
+    // CR 103.3a: "each supplementary deck’s owner shuffles it so the cards are in a random
+    // order"; CR 717.2: "Each Attraction deck is shuffled before the game begins"; the
+    // shuffled cards become new objects (CR 400.7, `zones::renumber_shuffled_deck`). Found
+    // by this property (game 175 of `--properties --seed 1`, 4 players): the Attraction and
+    // scheme decks were shuffled with the game's randomness and renumbered in seat order, so
+    // the face-down cards in the command zone had other owners in the rotated game.
+    cr!("103.3a", "717.2", "400.7");
+    interp!("seeded-randomness");
+    let fair = || {
+        deck(
+            "16 Plains, 8 Seasoned Buttoneer, 8 Savannah Lions, 8 Serra Angel, \
+             1 Balloon Stand, 1 Bumper Cars, 1 Centrifuge, 1 Concession Stand, \
+             1 Costume Shop, 1 Nature Demands an Offering, 1 Every Dream a Nightmare",
+        )
+    };
+    let s = setup(vec![fair(), fair(), fair()], 5);
+    for r in [1, 2] {
+        seat_symmetry(&s, r).unwrap_or_else(|e| panic!("seed {}: {e}", s.seed));
+    }
+}

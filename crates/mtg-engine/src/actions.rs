@@ -428,14 +428,28 @@ impl Game {
             ReplEvent::Move(m) => g.entry_controller(m),
             _ => g.turn.active,
         };
+        // Each player's objects are listed (and, by default, given timestamps) in an order
+        // that doesn't depend on seats, as `sort_objects_apnap` orders them: by owner in
+        // APNAP order, then in creation order. Not in the order the moves were proposed,
+        // which can follow object ids across owners.
+        let moved = |e: &Option<(usize, ReplEvent)>| match e {
+            Some((_, ReplEvent::Move(m))) => Some(m.obj),
+            _ => None,
+        };
+        let mut seat_free: Vec<ObjectId> = entries.iter().filter_map(moved).collect();
+        self.sort_objects_apnap(&mut seat_free);
+        let key = |e: &Option<(usize, ReplEvent)>| {
+            moved(e).and_then(|o| seat_free.iter().position(|x| *x == o))
+        };
         let mut ordered: Vec<(usize, ReplEvent)> = Vec::new();
         for p in self.apnap() {
-            let mine: Vec<usize> = entries
+            let mut mine: Vec<usize> = entries
                 .iter()
                 .enumerate()
                 .filter(|(_, e)| e.as_ref().is_some_and(|(_, ev)| controller(self, ev) == p))
                 .map(|(k, _)| k)
                 .collect();
+            mine.sort_by_key(|k| key(&entries[*k]));
             let order: Vec<usize> = if mine.len() >= 2 {
                 let names = mine
                     .iter()

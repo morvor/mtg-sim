@@ -157,3 +157,49 @@ fn conspiracy_timestamp_at_game_start_and_again_when_turned_face_up() {
     t.recompute();
     assert_eq!(color_of(&t, bear), colors(&[Color::White]));
 }
+
+#[test]
+fn vanguards_get_their_timestamps_in_apnap_order() {
+    // CR 613.7i with 613.7m: the vanguards receive their timestamps at the beginning of the
+    // game together, so in APNAP order, the starting player's first, whichever seat's card
+    // was created first. P0's makes creatures red, P1's blue; the later one wins.
+    cr!("613.7i", "613.7m");
+    interp!("simultaneous-entries-listed-by-owner-then-creation");
+    for starting in [P0, P1] {
+        let mut t = TestGame::with_config(
+            2,
+            GameConfig {
+                starting_player: Some(starting),
+                skip_mulligans: true,
+                ..Default::default()
+            },
+        );
+        let red = t.custom(
+            P0,
+            creatures_are("Red Vanguard", CardType::Vanguard, Color::Red),
+            Zone::Command,
+        );
+        let blue = t.custom(
+            P1,
+            creatures_are("Blue Vanguard", CardType::Vanguard, Color::Blue),
+            Zone::Command,
+        );
+        t.library_top(P0, "Grizzly Bears");
+        t.library_top(P1, "Grizzly Bears");
+        t.g.start();
+        let (first, second) = if starting == P0 { (red, blue) } else { (blue, red) };
+        assert!(
+            t.obj_now(first).timestamp < t.obj_now(second).timestamp,
+            "starting {starting:?}"
+        );
+        t.set_step(starting, Step::PrecombatMain);
+        let bear = t.custom(
+            P0,
+            creature("Bear", 2, 2, &[Color::Green]),
+            Zone::Battlefield,
+        );
+        t.recompute();
+        let later = if starting == P0 { Color::Blue } else { Color::Red };
+        assert_eq!(color_of(&t, bear), colors(&[later]), "starting {starting:?}");
+    }
+}
