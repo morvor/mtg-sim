@@ -74,13 +74,45 @@ fn terror_of_towashi_never_makes_a_noncreature_a_phyrexian() {
     assert!(!subtype(&mut t, god, "Phyrexian"));
 }
 
+/// A characteristic rider on a permanent put onto the battlefield ("That creature is a black
+/// Zombie in addition to its other colors and types", an effect that applies as it enters,
+/// CR 611.2e) follows the same rule: Heliod, God of the Sun returned while P0's devotion to
+/// white is below five isn't a creature as the effect begins, so it never becomes a Zombie,
+/// even once it's a creature. It's black, in addition to white.
+#[test]
+fn rise_from_the_grave_never_makes_a_noncreature_a_zombie() {
+    cr!("205.3d", "611.2c", "611.2e", "205.1b");
+    interp!("subtype-gained-only-if-it-corresponds-as-the-effect-begins");
+    supported("Rise from the Grave");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
+    let god = t.graveyard(P0, "Heliod, God of the Sun");
+    cast_new(&mut t, P0, "Rise from the Grave", &[obj(god)]);
+    t.resolve();
+    let god = t.g.current(god);
+    assert!(t.on_battlefield(god));
+    assert!(!is_type(&mut t, god, CardType::Creature));
+    assert!(!subtype(&mut t, god, "Zombie"));
+    assert!(has_color(&mut t, god, Color::Black) && has_color(&mut t, god, Color::White));
+    // Devotion to white five: Heliod is a creature, but not a Zombie.
+    for _ in 0..4 {
+        t.battlefield(P0, "Benalish Knight");
+    }
+    assert!(is_type(&mut t, god, CardType::Creature));
+    assert!(!subtype(&mut t, god, "Zombie"));
+    assert!(subtype(&mut t, god, "God"));
+    assert!(has_color(&mut t, god, Color::Black));
+}
+
 /// An effect that makes a noncreature a creature and gives it a creature type at once gives
-/// it the type: the card types the effect itself adds count as it begins.
+/// it the type: the card types the effect itself adds count as it begins. (Mishra's Factory
+/// grants no keyword, so nothing else has computed its characteristics with the new effect.)
 #[test]
 fn an_effect_making_a_noncreature_a_creature_of_a_type_gives_it_the_type() {
-    cr!("205.3d", "611.2c");
+    cr!("205.3d", "205.1b");
     interp!("subtype-gained-only-if-it-corresponds-as-the-effect-begins");
     supported("Elemental Uprising");
+    supported("Mishra's Factory");
     let mut t = TestGame::new(2);
     t.set_step(P0, mtg_engine::turn::Step::PrecombatMain);
     let land = t.battlefield(P0, "Wastes");
@@ -92,4 +124,18 @@ fn an_effect_making_a_noncreature_a_creature_of_a_type_gives_it_the_type() {
     assert!(is_type(&mut t, land, CardType::Land));
     assert_eq!(creature_types(&mut t, land), vec!["Elemental".to_string()]);
     assert_eq!(pt_now(&mut t, land), (4, 4));
+    // "{1}: Mishra's Factory becomes a 2/2 Assembly-Worker artifact creature until end of
+    // turn. It's still a land."
+    let factory = t.battlefield(P0, "Mishra's Factory");
+    t.lands(P0, "Wastes", 1);
+    crate::r_s06_common::activate_containing(&mut t, P0, factory, "becomes").unwrap();
+    t.resolve_all();
+    assert!(is_type(&mut t, factory, CardType::Creature));
+    assert!(is_type(&mut t, factory, CardType::Artifact));
+    assert!(is_type(&mut t, factory, CardType::Land));
+    assert_eq!(
+        creature_types(&mut t, factory),
+        vec!["Assembly-Worker".to_string()]
+    );
+    assert_eq!(pt_now(&mut t, factory), (2, 2));
 }

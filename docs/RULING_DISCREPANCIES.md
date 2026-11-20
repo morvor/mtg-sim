@@ -33,9 +33,9 @@ Wizards of the Coast if erroneous."
   hold; it should be reported all the same.
 
 **Statuses.** *open for review*: not yet checked by a human. *decided*: checked by the user,
-who decided how the engine follows it and whether to report it (say when). *reported*: reported to Wizards
-of the Coast (say when and where). *confirmed*: Wizards changed or confirmed the ruling (say
-how).
+who decided how the engine follows it and whether to report it (say when). *reported*:
+reported to Wizards of the Coast (say when and where). *confirmed*: Wizards changed or
+confirmed the ruling (say how).
 
 **Entries.** Each entry gives the card the ruling is attached to and the ruling, verbatim
 with its `published_at` date (`- Ruling, <card> (<date>): "<text>"`, one line each); the

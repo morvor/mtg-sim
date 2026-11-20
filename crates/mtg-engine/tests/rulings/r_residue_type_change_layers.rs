@@ -203,9 +203,10 @@ fn shadow_puppeteers_on_a_creature_that_stopped_being_a_creature() {
     assert!(is_type(&mut t, crow, CardType::Creature));
     assert_eq!(pt_now(&mut t, crow), (4, 4));
     // It never gains the Dragon subtype, even as a creature: it couldn't as the effect began
-    // (CR 205.3d; decided by the user, Nov 19).
+    // (CR 205.3d; decided by the user, Nov 19). (Whether crewing brings back its Bird type,
+    // which Swift Reconfiguration removed with its creature type, is a separate open question
+    // of CR 205.1a: `docs/agents/items/rulings-residue.md`; not asserted here.)
     assert!(!subtype(&mut t, crow, "Dragon"));
-    assert!(creature_types(&mut t, crow).is_empty());
     assert!(has_color(&mut t, crow, Color::Red));
 }
 

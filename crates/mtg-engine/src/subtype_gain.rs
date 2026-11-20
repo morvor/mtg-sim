@@ -5,12 +5,16 @@
 //! CR 205.3d: "An object can't gain a subtype that doesn't correspond to one of that
 //! object's types." A continuous effect from a resolving spell or ability that makes an
 //! object a [subtype] "in addition to its other types" gives it only the subtypes that
-//! correspond to one of its types as the effect begins (counting the card types the effect
-//! itself, or an earlier effect of the same resolution, gives it). The others are never
-//! gained by that effect, for its whole duration, even if the object gets that card type
-//! later (a noncreature Vehicle crewed). Shadow Puppeteers (2023-09-01): "Since it's not a
-//! creature, it won't gain the Dragon subtype, and it won't have base power and toughness
-//! 4/4." The effect's other parts (its color) apply.
+//! correspond to one of its types as the effect begins (its types with the effect applied:
+//! the card types the effect itself, or an earlier effect, gives it count). The others are
+//! never gained by that effect, for its whole duration, even if the object gets that card
+//! type later (a noncreature Vehicle crewed). Shadow Puppeteers (2023-09-01): "Since it's
+//! not a creature, it won't gain the Dragon subtype, and it won't have base power and
+//! toughness 4/4." The effect's other parts (its color) apply. The same for what a resolving
+//! spell or ability says a permanent it puts onto the battlefield "is" (CR 611.2e: "That
+//! creature is a black Zombie in addition to its other colors and types", Rise from the
+//! Grave): that effect begins as the permanent enters, so its types then decide
+//! (`actions.rs`, the entering permanent's `with_mods`).
 //!
 //! The effect's base power and toughness aren't set aside: CR 208.3a "If an effect would be
 //! created that sets the base power and/or toughness of a noncreature permanent, or

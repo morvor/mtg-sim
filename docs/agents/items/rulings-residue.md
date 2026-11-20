@@ -98,8 +98,10 @@ named reason in docs/rulings-uncovered.tsv. Report counts: cited, exempt, uncove
   **Decided** by the user, Nov 19 (work item user-decisions-nov19c), for the alternative: a
   subtype a resolving effect adds that doesn't correspond to the object's types as the effect
   begins is never gained by it, even once the object is crewed (register
-  `subtype-gained-only-if-it-corresponds-as-the-effect-begins`, `src/subtype_gain.rs`); the
-  crewed Vehicle is red and no Dragon. Its base 4/4 still applies once it's a creature (CR
+  `subtype-gained-only-if-it-corresponds-as-the-effect-begins`, `src/subtype_gain.rs`; also
+  for what an effect says a permanent it puts onto the battlefield "is", CR 611.2e, such as
+  Rise from the Grave's Zombie on a returned noncreature God); the crewed Vehicle is red and
+  no Dragon. Its base 4/4 still applies once it's a creature (CR
   208.3a; the brief asked for the 1/2, which would deviate from 208.3a: register
   `base-pt-set-on-a-noncreature-applies-once-it-is-a-creature`, provisional, for the user).
 - **Creature types after a card-type-removing effect, once a later effect makes the object a
