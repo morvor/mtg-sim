@@ -50,6 +50,20 @@ DONE per item when every ruling of its batches is CITED, EXEMPT with a reason or
 named reason in docs/rulings-uncovered.tsv. Report counts: cited, exempt, uncovered, bugs fixed
 (each with its rule), interactions against restatements; and the row in docs/agents/yield.tsv.
 
+## The misc split (Nov 20, by `rulings-residue-misc-1`)
+
+`list` on Nov 20 showed 860 OPEN texts in the batches no themed item covers, leaving out the
+batches of the themed items already landed and those of the two running then
+(`rulings-residue-burn-freeze`: P009 P062; `rulings-residue-shapechange-typal`: P160 P161 P184).
+Split in two by batch id (OPEN counts on Nov 20 in brackets):
+
+- **`rulings-residue-misc-1`** (429): P002 P005 P011 P012 P015 P016 P017 P037 P039 P044 P045 P051
+  P052 P053 P056 P057 P058 P064 P065 P066 P073 P074 P076 P085 P092 P094 P098 P099 P101 P104 P107
+  P108 P109 P112 P113 P115 P116.
+- **`rulings-residue-misc-2`** (431): P117 P122 P124 P125 P126 P133 P134 P136 P137 P141 P142 P143
+  P145 P146 P148 P150 P151 P156 P162 P163 P165 P166 P168 P171 P172 P176 P177 P180 P185 P186 P189
+  P190 P193 P194 P201 P202 P203 P204 P206 P216 P218 P219 P221 P223 P224 P225.
+
 ## Open questions the items found (for the coordinator)
 
 - **"If it's the first time ... this turn" checked again on resolution** (found by
