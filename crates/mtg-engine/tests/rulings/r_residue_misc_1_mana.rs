@@ -731,3 +731,359 @@ fn draw_triggers_resolve_before_the_spell() {
     assert_eq!(t.hand_size(P0), hand + 1);
     assert_eq!(t.zone(bears), Zone::Stack);
 }
+
+// ---------------------------------------------------------------------------------------
+// Mana producers, rocks and storage
+// ---------------------------------------------------------------------------------------
+
+/// Queues `n` "yes" answers for `p`.
+fn yes(t: &mut TestGame, p: PlayerId, n: usize) {
+    for _ in 0..n {
+        t.answer_yes(p, true);
+    }
+}
+
+#[test]
+fn pawn_of_ulamog_triggers_for_each_creature_dying_at_once() {
+    cr!("603.2c", "603.10a");
+    ruling!(
+        "Pawn of Ulamog",
+        "If multiple nontoken creatures you control (possibly including Pawn of Ulamog itself) are put into their owners' graveyards at the same time, Pawn of Ulamog's triggered ability will trigger that many times."
+    );
+    ruling!(
+        "Pawn of Ulamog",
+        "If you control more than one Pawn of Ulamog and a nontoken creature you control is put into a graveyard, each of those Pawns' abilities will trigger."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Pawn of Ulamog");
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Hill Giant");
+    yes(&mut t, P0, 3);
+    cast_resolve(&mut t, P0, "Day of Judgment", &[]);
+    assert_eq!(tokens_of(&t, P0, "Spawn"), 3);
+    // Two Pawns, one Bears dies: each Pawn triggers.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Pawn of Ulamog");
+    t.battlefield(P0, "Pawn of Ulamog");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    yes(&mut t, P0, 2);
+    destroy(&mut t, bears);
+    t.resolve_all();
+    assert_eq!(tokens_of(&t, P0, "Spawn"), 2);
+}
+
+#[test]
+fn druids_repository_counts_each_attacker_and_spends_counters_as_mana_abilities() {
+    cr!("508.1", "603.2c", "605.1a", "605.3a");
+    ruling!(
+        "Druids' Repository",
+        "The first ability of Druids’ Repository will trigger once for each creature you control that attacks."
+    );
+    ruling!(
+        "Druids' Repository",
+        "You can activate the second ability of Druids’ Repository multiple times in the same turn. It’s a mana ability, doesn’t use the stack, and can’t be responded to."
+    );
+    let mut t = TestGame::new(2);
+    let repo = t.battlefield(P0, "Druids' Repository");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let b = t.battlefield(P0, "Hill Giant");
+    let c = t.battlefield(P0, "Elite Vanguard");
+    t.attack(&[(a, P1.into()), (b, P1.into()), (c, P1.into())], &[]);
+    assert_eq!(t.counters(repo, counters::CHARGE), 3);
+    t.set_step(P0, Step::PostcombatMain);
+    for color in [0, 4] {
+        t.answer(P0, DecisionKind::Option, Answer::Index(color));
+        t.activate(P0, repo, 0, &[]).unwrap();
+        assert_eq!(t.stack_len(), 0);
+    }
+    assert_eq!(mana(&t, P0, W), 1);
+    assert_eq!(mana(&t, P0, G), 1);
+    assert_eq!(t.counters(repo, counters::CHARGE), 1);
+}
+
+#[test]
+fn militias_pride_token_enters_attacking_without_being_declared() {
+    cr!("508.4", "508.1");
+    ruling!(
+        "Militia's Pride",
+        "The token enters attacking. It doesn't trigger \"when a creature attacks\" triggers and is not subject to restrictions on declaring attackers."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Militia's Pride");
+    let repo = t.battlefield(P0, "Druids' Repository");
+    // Ghostly Prison: "Creatures can't attack you unless their controller pays {2} for
+    // each creature they control that's attacking you."
+    t.battlefield(P1, "Ghostly Prison");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    // {2} for the Bears; {W} for the token.
+    t.lands(P0, "Plains", 3);
+    t.answer_yes(P0, true);
+    t.answer_yes(P0, true);
+    t.attack(&[(bears, P1.into())], &[]);
+    assert_eq!(tokens_of(&t, P0, "Kithkin"), 1);
+    // Only the declared attacker triggered Druids' Repository.
+    assert_eq!(t.counters(repo, counters::CHARGE), 1);
+    // The token was attacking without paying Ghostly Prison's cost.
+    assert_eq!(t.life(P1), 17);
+}
+
+#[test]
+fn star_compass_colors_of_basic_lands() {
+    cr!("106.7", "305.6");
+    ruling!(
+        "Star Compass",
+        "If a basic land you control gains another basic land type or gains another ability that lets it produce mana, consider those effects when determining what colors of mana that land can produce."
+    );
+    ruling!(
+        "Star Compass",
+        "The colors of mana are white, blue, black, red, and green. Colorless is a type but not a color."
+    );
+    // Urborg, Tomb of Yawgmoth makes the Forest a Swamp too: it could produce {B}.
+    let mut t = TestGame::new(2);
+    let compass = t.battlefield(P0, "Star Compass");
+    t.battlefield(P0, "Forest");
+    t.battlefield(P0, "Urborg, Tomb of Yawgmoth");
+    let from = t.asked().len();
+    t.answer(P0, DecisionKind::Option, Answer::Index(0));
+    tap(&mut t, P0, compass);
+    let opts: Vec<String> = t.asked()[from..]
+        .iter()
+        .find_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseOption { options, .. } => Some(options.clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(opts.len(), 2, "{opts:?}");
+    assert_eq!(pool(&t, P0), 1);
+    assert!(mana(&t, P0, B) + mana(&t, P0, G) == 1);
+    // Wastes produces {C}, which isn't a color: Star Compass produces nothing.
+    let mut t = TestGame::new(2);
+    let compass = t.battlefield(P0, "Star Compass");
+    t.battlefield(P0, "Wastes");
+    let _ = t.activate(P0, compass, 0, &[]);
+    assert_eq!(pool(&t, P0), 0);
+}
+
+#[test]
+fn white_lotus_tile_counts_the_largest_group_sharing_a_type() {
+    cr!("205.3m", "106.1a");
+    ruling!(
+        "White Lotus Tile",
+        "You'll always use the greatest number possible for X. You don't need to choose any creature types."
+    );
+    let mut t = TestGame::new(2);
+    let tile = t.battlefield(P0, "White Lotus Tile");
+    for (name, types) in [
+        ("A", "Creature — Human Soldier"),
+        ("B", "Creature — Warrior Ally"),
+        ("C", "Creature — Warrior"),
+        ("D", "Creature — Human Warrior"),
+    ] {
+        let def = custom_card(name, types, "{1}", Some((1, 1)), "");
+        t.custom(P0, def, Zone::Battlefield);
+    }
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    tap(&mut t, P0, tile);
+    assert_eq!(mana(&t, P0, U), 3);
+}
+
+#[test]
+fn an_artifact_tapped_for_improvise_then_sacrificed_as_a_cost() {
+    cr!("702.126a", "601.2g", "601.2h");
+    ruling!(
+        "Inspiring Statuary",
+        "you may tap that permanent (if it's an artifact) for the spell's improvise ability before you sacrifice it to pay that cost."
+    );
+    let mut t = TestGame::new(2);
+    let statuary = t.battlefield(P0, "Inspiring Statuary");
+    let orni = t.battlefield(P0, "Ornithopter");
+    let mountain = t.battlefield(P0, "Mountain");
+    // Shrapnel Blast ({1}{R}): "As an additional cost to cast this spell, sacrifice an
+    // artifact. Shrapnel Blast deals 5 damage to any target."
+    let blast = t.hand(P0, "Shrapnel Blast");
+    t.answer_choose(P0, &[obj(orni)]);
+    t.answer_choose(P0, &[obj(orni)]);
+    t.cast(P0, blast).target(P1).go();
+    assert!(t.obj_now(mountain).tapped);
+    assert!(!t.obj_now(statuary).tapped, "the Ornithopter paid {{1}}");
+    assert_eq!(t.zone(orni), Zone::Graveyard(P0));
+    t.resolve_all();
+    assert_eq!(t.life(P1), 15);
+}
+
+#[test]
+fn archway_of_innovation_and_inspiring_statuary_improvise_once() {
+    cr!("702.126c");
+    ruling!(
+        "Archway of Innovation",
+        "Multiple instances of improvise are redundant."
+    );
+    ruling!(
+        "Inspiring Statuary",
+        "Multiple instances of improvise are redundant."
+    );
+    let mut t = TestGame::new(2);
+    let statuary = t.battlefield(P0, "Inspiring Statuary");
+    let archway = t.battlefield(P0, "Archway of Innovation");
+    let islands = t.lands(P0, "Island", 3);
+    t.activate(P0, archway, 1, &[]).unwrap();
+    t.resolve_all();
+    let orni = t.battlefield(P0, "Ornithopter");
+    // Divination ({2}{U}) with two Islands left: one improvise choice of up to two
+    // artifacts, not two.
+    let from = t.asked().len();
+    t.answer_choose(P0, &[obj(statuary), obj(orni)]);
+    let div = t.hand(P0, "Divination");
+    t.cast(P0, div).go();
+    let prompts = t.asked()[from..]
+        .iter()
+        .filter(|(_, d)| matches!(d, mtg_engine::decision::Decision::ChooseEntities { prompt, .. } if prompt.contains("improvise")))
+        .count();
+    assert_eq!(prompts, 1);
+    assert!(t.obj_now(statuary).tapped && t.obj_now(orni).tapped);
+    assert_eq!(islands.iter().filter(|i| !t.obj_now(**i).tapped).count(), 1);
+}
+
+#[test]
+fn prismatic_geoscope_counts_basic_land_types() {
+    cr!("305.6", "106.1b", "605.3b");
+    ruling!(
+        "Prismatic Geoscope",
+        "Most nonbasic lands don't have basic land types, even if they produce colored mana."
+    );
+    ruling!(
+        "Prismatic Geoscope",
+        "Prismatic Geoscope can't produce colorless mana."
+    );
+    ruling!(
+        "Prismatic Geoscope",
+        "The colors of mana that Prismatic Geoscope can produce aren't related to the specific basic land types among lands you control."
+    );
+    ruling!(
+        "Prismatic Geoscope",
+        "Count each subtype that appears one or more times toward the number of basic land types among lands you control."
+    );
+    ruling!(
+        "Prismatic Geoscope",
+        "You can activate Prismatic Geoscope's mana ability if you have no basic land types among lands you control, but it won't produce any mana."
+    );
+    // No lands: it can be activated and produces nothing.
+    let mut t = TestGame::new(2);
+    let scope = t.battlefield(P0, "Prismatic Geoscope");
+    assert!(t.activate(P0, scope, 0, &[]).is_ok());
+    assert!(t.obj_now(scope).tapped);
+    assert_eq!(pool(&t, P0), 0);
+    // Caves of Koilos has no basic land types.
+    let mut t = TestGame::new(2);
+    let scope = t.battlefield(P0, "Prismatic Geoscope");
+    t.battlefield(P0, "Caves of Koilos");
+    t.activate(P0, scope, 0, &[]).unwrap();
+    assert_eq!(pool(&t, P0), 0);
+    // Two Plains and an Island: two types; {R}{G}, colors no land of them produces.
+    let mut t = TestGame::new(2);
+    let scope = t.battlefield(P0, "Prismatic Geoscope");
+    t.lands(P0, "Plains", 2);
+    t.battlefield(P0, "Island");
+    let from = t.asked().len();
+    for c in [3, 4] {
+        t.answer(P0, DecisionKind::Option, Answer::Index(c));
+    }
+    t.activate(P0, scope, 0, &[]).unwrap();
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(pool(&t, P0), 2);
+    assert_eq!(mana(&t, P0, R), 1);
+    assert_eq!(mana(&t, P0, G), 1);
+    // Only the five colors are offered.
+    for (_, d) in &t.asked()[from..] {
+        if let mtg_engine::decision::Decision::ChooseOption { options, .. } = d {
+            assert_eq!(options.len(), 5, "{options:?}");
+        }
+    }
+}
+
+#[test]
+fn nyx_lotus_is_a_mana_ability() {
+    cr!("605.1a", "605.3b", "700.5");
+    ruling!(
+        "Nyx Lotus",
+        "Nyx Lotus’s second ability is a mana ability. It doesn’t use the stack and can’t be responded to."
+    );
+    let mut t = TestGame::new(2);
+    let lotus = t.battlefield(P0, "Nyx Lotus");
+    // Kalonian Tusker ({G}{G}): devotion to green 2.
+    t.battlefield(P0, "Kalonian Tusker");
+    t.answer(P0, DecisionKind::Option, Answer::Index(4));
+    tap(&mut t, P0, lotus);
+    assert_eq!(t.stack_len(), 0);
+    assert_eq!(mana(&t, P0, G), 2);
+}
+
+#[test]
+fn deepfire_elemental_costs_twice_x_plus_one() {
+    cr!("107.3", "601.2f", "602.2b");
+    ruling!(
+        "Deepfire Elemental",
+        "for Deepfire Elemental to destroy a creature with mana value 4 would cost {4}+{4}+{1} = {9}."
+    );
+    let mut t = TestGame::new(2);
+    let deepfire = t.battlefield(P0, "Deepfire Elemental");
+    let giant = t.battlefield(P1, "Hill Giant");
+    fill_pool(&mut t, P0, 3);
+    let before = pool(&t, P0);
+    t.answer(P0, DecisionKind::X, Answer::Number(4));
+    t.activate(P0, deepfire, 0, &[obj(giant)]).unwrap();
+    assert_eq!(before - pool(&t, P0), 9);
+    t.resolve_all();
+    assert!(!t.on_battlefield(giant));
+}
+
+#[test]
+fn omnath_keeps_green_mana_with_its_restrictions() {
+    cr!("106.4", "106.6");
+    ruling!(
+        "Omnath, Locus of Mana",
+        "If a green mana you produce has certain restrictions or riders associated with it (for example, if it was produced by Ancient Ziggurat), they'll apply to that mana no matter when you spend it."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Omnath, Locus of Mana");
+    let zig = t.battlefield(P0, "Ancient Ziggurat");
+    t.answer(P0, DecisionKind::Option, Answer::Index(4));
+    tap(&mut t, P0, zig);
+    t.advance_to(P0, Step::End);
+    assert_eq!(restricted(&t, P0, G, true), 1);
+    t.set_step(P0, Step::PostcombatMain);
+    // It can't pay for Giant Growth, an instant...
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let growth = t.hand(P0, "Giant Growth");
+    assert!(t.cast(P0, growth).target(bears).try_go().is_err());
+    // ... but can pay for a creature spell.
+    let elf = t.hand(P0, "Llanowar Elves");
+    assert!(t.cast(P0, elf).try_go().is_ok());
+    assert_eq!(pool(&t, P0), 0);
+}
+
+#[test]
+fn unspent_mana_is_lost_at_the_end_of_the_step_its_keeper_left_in() {
+    cr!("106.4", "500.4");
+    ruling!(
+        "Omnath, Locus of Mana",
+        "Once Omnath leaves the battlefield, you have until the end of the current step or phase to spend your unspent green mana before it too is lost as normal."
+    );
+    ruling!(
+        "Upwelling",
+        "once it leaves the battlefield, they have until the end of the current step (or phase) to use the mana before it disappears."
+    );
+    for name in ["Omnath, Locus of Mana", "Upwelling"] {
+        let mut t = TestGame::new(2);
+        let keeper = t.battlefield(P0, name);
+        t.set_step(P0, Step::Upkeep);
+        t.g.players[0].mana_pool.add_type(G, 2);
+        t.advance_to(P0, Step::Draw);
+        assert_eq!(mana(&t, P0, G), 2, "{name}: kept as the upkeep ended");
+        destroy(&mut t, keeper);
+        t.resolve_all();
+        assert_eq!(mana(&t, P0, G), 2, "{name}: still in the pool this step");
+        t.advance_to(P0, Step::PrecombatMain);
+        assert_eq!(mana(&t, P0, G), 0, "{name}: lost as the draw step ended");
+    }
+}
