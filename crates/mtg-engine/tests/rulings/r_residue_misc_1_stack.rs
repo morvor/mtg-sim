@@ -632,19 +632,27 @@ fn isildurs_fateful_strike_any_number_a_turn_four_a_deck() {
 // graveyard."
 // ---------------------------------------------------------------------------------------
 
-// Not cited here: Swift Reckoning's ruling (2018-12-07) "If an effect allows you to cast
-// Swift Reckoning from your graveyard, you need two other instant and/or sorcery cards in
-// your graveyard to cast it as though it had flash." It follows from a sentence of 601.3 in
-// the CRs effective 2016-07-22 to 2019-08-23 ("If that player is no longer allowed to cast
-// that spell after completing its proposal, the casting of the spell is illegal ..."), which
-// the CR effective 2019-10-04 removed; Graveyard Shift's ruling (2022-04-29) has the card
-// count itself "immediately before you begin to cast it, even if moving it to the stack
-// would reduce that number to four". Left for the coordinator as a conflict case
-// (docs/agents/items/rulings-residue.md, "Open questions").
+// Not cited, exempt as outdated (docs/rulings-exemptions/rulings-P011.tsv; logged in
+// docs/RULING_DISCREPANCIES.md): Swift Reckoning's ruling (2018-12-07) "If an effect allows
+// you to cast Swift Reckoning from your graveyard, you need two other instant and/or sorcery
+// cards in your graveyard to cast it as though it had flash." It followed from 601.3 as
+// worded in the CRs effective 2016-07-22 to 2019-08-23 ("If that player is no longer allowed
+// to cast that spell after completing its proposal, the casting of the spell is illegal
+// ..."; 601.4 from the CR effective 2019-10-04, now 601.6). The CR effective 2022-04-29 added
+// 601.4a, now 601.6a: once a player has begun casting a spell "that could be cast as though
+// it had flash because certain conditions were met", they "may continue to cast that spell
+// as though it had flash even if those conditions stop being met". Graveyard Shift's ruling
+// (2022-04-29) has its card count itself the same way "immediately before you begin to cast
+// it, even if moving it to the stack would reduce that number to four" (work item
+// ruling-conflicts-13; more cases in `flash_permission_conditions.rs`).
 #[test]
 fn swift_reckoning_cast_from_the_graveyard_counts_itself_as_casting_begins() {
-    cr!("601.2a", "601.3", "702.34a");
+    cr!("601.2a", "601.3", "601.6a", "702.34a");
     interp!("flash-permission-conditions-judged-as-casting-begins");
+    ruling!(
+        "Swift Reckoning",
+        "The number of instant and/or sorcery cards in your graveyard matters only as you begin to cast Swift Reckoning. Once it's cast, that number doesn't matter and will have no effect on Swift Reckoning resolving."
+    );
     supported("Swift Reckoning");
     // Snapcaster Mage gives it flashback this turn, on P1's turn (instant speed). As the
     // casting begins, the card is in the graveyard and counts itself: with one other

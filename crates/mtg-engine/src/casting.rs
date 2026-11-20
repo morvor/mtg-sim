@@ -1198,8 +1198,8 @@ impl Game {
         // The condition is checked before the card moves to the stack: a card whose own
         // ability gives it flash where it is now (Graveyard Shift with five mana values in
         // the graveyard, itself among them) may begin to be cast with flash even if moving
-        // it would end the condition. (Not for a spell cast face down: it has no abilities,
-        // CR 708.2.)
+        // it would end the condition (CR 601.6a). (Not for a spell cast face down: it has no
+        // abilities, CR 708.2.)
         let before_moving = {
             let o = self.obj(card);
             o.zone != Zone::Stack
@@ -1231,8 +1231,10 @@ impl Game {
     /// card `began` (an effect of the card's own, whose source was `began`, is the spell's
     /// now). Their conditions were judged then, with the card where it was (CR 601.3:
     /// "A player can begin to cast a spell only if a rule or effect allows that player to
-    /// cast it"); only the qualities they ask of the spell are judged as it's proposed
-    /// (CR 601.3b; interpretation `flash-permission-conditions-judged-as-casting-begins`).
+    /// cast it"), and the player may continue to cast it as though it had flash even if
+    /// they stop being met (CR 601.6a); only the qualities they ask of the spell are judged
+    /// as it's proposed (CR 601.3b, 601.6; interpretation
+    /// `flash-permission-conditions-judged-as-casting-begins`).
     fn flash_permitted_by(
         &self,
         p: PlayerId,
@@ -1753,7 +1755,8 @@ impl Game {
         };
         // The effects that let it be begun that way, with their conditions as they stand
         // now, before the card moves (Swift Reckoning cast from a graveyard counts itself
-        // among the instant and sorcery cards there).
+        // among the instant and sorcery cards there); the casting may continue even if the
+        // move ends a condition (CR 601.6a).
         let flash_permissions_begun = if by_flash_permission {
             self.statics.flash_permissions.clone()
         } else {
@@ -2214,7 +2217,7 @@ impl Game {
         // CR 601.3b: a spell begun as though it had flash because an effect lets spells
         // with certain qualities be cast that way ("if X is 3 or less", "if it targets a
         // permanent you control") must have them as proposed. The effects are those that
-        // applied as it was begun: moving the card to the stack doesn't end one.
+        // applied as it was begun: moving the card to the stack doesn't end one (CR 601.6a).
         if by_flash_permission
             && !proposed.has_keyword(KeywordKind::Flash)
             && !self.flash_permitted_by(p, id, &proposed, &flash_permissions_begun, card)
