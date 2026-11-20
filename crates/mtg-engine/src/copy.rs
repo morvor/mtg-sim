@@ -188,6 +188,10 @@ pub fn copy_spell_quiet(g: &mut Game, spell: ObjectId, controller: PlayerId) -> 
         si.cast.mana_sources.clear();
         si.cast.instant_timing = false;
         si.cast.main_phase = false;
+        // A copy of an ability isn't activated (CR 707.10): the "for as long as" durations
+        // of its effects start as it's put onto the stack (register
+        // `copied-ability-duration-starts-as-the-copy-is-created`).
+        si.window = crate::duration_windows::Window::copy_at(crate::duration_windows::now(g));
     }
     let id = ObjectId(g.objects.len() as u32);
     copy.id = id;

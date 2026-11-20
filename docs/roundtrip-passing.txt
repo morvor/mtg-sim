@@ -4413,6 +4413,7 @@ Collective Brutality
 Collective Effort
 Collective Nightmare
 Collective Resistance
+Collective Restraint
 Collective Unconscious
 Collector Ouphe
 Collector's Cage
@@ -22909,6 +22910,7 @@ Sphere of Law
 Sphere of Purity
 Sphere of Reason
 Sphere of Resistance
+Sphere of Safety
 Sphere of Truth
 Sphere of the Suns
 Sphinx Mindbreaker

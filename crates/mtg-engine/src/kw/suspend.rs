@@ -220,7 +220,11 @@ impl KeywordRules for Suspend {
             0
         };
         let cost = cost_with_x(&kw, x);
-        if !crate::special_actions::pay(g, p, &cost, Some(card), &Ctx::new(Some(card), p)) {
+        let mut ctx = Ctx::new(Some(card), p);
+        // A suspend cost with {X} is a cost that contains {X} (CR 107.3d; Rosheen
+        // Meanderer's ruling: "a suspend cost").
+        ctx.cost_has_x = kw.cost.as_ref().is_some_and(crate::defined_x_costs::contains_x);
+        if !crate::special_actions::pay(g, p, &cost, Some(card), &ctx) {
             return bad("can't pay the suspend cost");
         }
         let new = g.move_object_ev(MoveEv {

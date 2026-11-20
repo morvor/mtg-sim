@@ -627,6 +627,12 @@ pub enum CostPart {
     /// (X is 0, CR 107.3h; nothing reduces it: it isn't a spell being cast). Only a card
     /// whose mana cost could be paid may be chosen (see `cost_sets.rs`).
     AndPayItsManaCost(Box<CostPart>),
+    /// "{X}, where X is [value]" in a cost that isn't a spell's or ability's own (an attack
+    /// tax, an alternative cost an effect offers): X generic mana, X defined by the text
+    /// (CR 107.3c) and determined as the total cost is (CR 508.1h, 601.2f). The cost still
+    /// contains {X}: mana that may be spent only on such costs may pay it (CR 106.6; see
+    /// `defined_x_costs.rs`).
+    DefinedX(Value),
 }
 
 // ---------------------------------------------------------------------------
@@ -2309,6 +2315,11 @@ pub enum Duration {
     /// "for as long as [source] remains on the battlefield" / "for as long as you control".
     WhileSourceOnBattlefield,
     WhileYouControlSource,
+    /// "until [source] leaves the battlefield": like [`Duration::WhileSourceOnBattlefield`],
+    /// except that the source phasing out doesn't end it: phasing isn't leaving the
+    /// battlefield (CR 702.26d), and only "for as long as" durations lose track of a
+    /// phased-out permanent (CR 702.26f).
+    UntilSourceLeavesBattlefield,
     /// "for as long as [object] remains tapped" etc.
     WhileCondition(Condition),
     /// Indefinitely (e.g. "gain control of target creature").

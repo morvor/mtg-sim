@@ -31,6 +31,12 @@ impl Game {
         if ctx.entering.is_some() && self.effect_on_entering_object(e, ctx) {
             return;
         }
+        // CR 611.2b: the "for as long as" duration of the continuous effect this
+        // instruction of a resolving ability would create ended while the ability waited
+        // (whatever kind of effect it is).
+        if crate::duration_windows::effect_does_nothing(self, e, ctx) {
+            return;
+        }
         // Cards an instruction exiles are exiled with the source of the ability performing
         // it, for the abilities linked to it (CR 607.2a): by its link, however they're
         // exiled ("search your library for seven cards, exile them", a dig).
@@ -255,7 +261,7 @@ impl Game {
                 otherwise,
             } => {
                 let had_x = ctx.cost_has_x;
-                ctx.cost_has_x = cost.mana.as_ref().is_some_and(|m| m.has_x());
+                ctx.cost_has_x = crate::defined_x_costs::contains_x(cost);
                 let cost = &crate::mana_abilities::bind_x_for_payment(self, cost, ctx);
                 // "[cost] for each ...": the total is determined now (CR 702.24a).
                 let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
@@ -1071,13 +1077,11 @@ impl Game {
                 duration,
             } => {
                 // CR 611.2b: a "for as long as" duration that already ended means the
-                // effect does nothing. (One about the affected objects, "for as long as
-                // that creature has a bounty counter on it", is checked for them below.)
+                // effect does nothing (one that ended while the ability waited: see
+                // `exec`). One about the affected objects, "for as long as that creature
+                // has a bounty counter on it", is checked for them below.
                 let about_affected = matches!(duration, Duration::WhileCondition(_));
-                if !about_affected
-                    && (self.effect_expired(duration, ctx.source, ctx.controller)
-                        || crate::untap_choice::ended_before_it_began(self, duration, ctx))
-                {
+                if !about_affected && self.effect_expired(duration, ctx.source, ctx.controller) {
                     return;
                 }
                 // CR 702.26e: a phased-out permanent isn't among the objects it affects,
@@ -1189,10 +1193,8 @@ impl Game {
                 };
                 // CR 611.2b: a "for as long as" duration that already ended (one about the
                 // objects it applies to, "for as long as it remains tapped", is checked
-                // for them).
-                if self.rule_effect_expired(duration, ctx.source, ctx.controller, &objects)
-                    || crate::untap_choice::ended_before_it_began(self, duration, ctx)
-                {
+                // for them; one that ended while the ability waited: see `exec`).
+                if self.rule_effect_expired(duration, ctx.source, ctx.controller, &objects) {
                     return;
                 }
                 let id = self.new_effect_id();
@@ -3523,12 +3525,14 @@ impl Game {
         | Restriction::BlockCost { cost, .. }
         | Restriction::BlockCostAgainst { cost, .. } = &mut r
         {
-            if let Some(m) = cost.mana.as_mut().filter(|m| m.has_x()) {
-                *m = m.with_x(ctx.x.max(0) as u32);
-                // X = 0: a cost of {0}, still a cost (CR 118.5; War Tax rulings).
-                if m.symbols.is_empty() {
-                    m.symbols.push(crate::mana::ManaSymbol::Generic(0));
-                }
+            // The cost still contains {X} (CR 106.6), its X now defined (`defined_x_costs`;
+            // X = 0 is a cost of {0}, still a cost, CR 118.5 and War Tax's rulings).
+            if let Some(m) = cost.mana.clone().filter(|m| m.has_x()) {
+                let rest = m.with_x(0);
+                cost.mana = (!rest.symbols.is_empty()).then_some(rest);
+                cost.parts.push(CostPart::DefinedX(Value::c(
+                    m.x_count() as i32 * ctx.x.max(0),
+                )));
             }
         }
         // A restriction on a referenced player ("target player can't play lands this

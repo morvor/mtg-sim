@@ -248,28 +248,11 @@ pub fn extend_cast_options(g: &Game, p: PlayerId, card: ObjectId, out: &mut Vec<
 
 /// An offered alternative cost for a spell with mana value `mv` (X being 0, CR 107.3b),
 /// amounts relative to the spell given: "life equal to its mana value", and "{X}, where X
-/// is that spell's mana value" (`CostPart::Repeated` of {1} that many times: that much
-/// generic mana).
+/// is that spell's mana value" (Kentaro, the Smiling Cat: a `CostPart::DefinedX` of that
+/// value, a cost that still contains {X}, which `Game::total_cost_and_x` turns into that
+/// much generic mana before cost increases and reductions apply, CR 118.9d, 601.2f).
 pub fn cost_for_spell(cost: &Cost, mv: u32) -> Cost {
-    let mut c = crate::permissions::spell_relative_cost(cost, mv);
-    let mut parts = Vec::new();
-    for part in std::mem::take(&mut c.parts) {
-        match part {
-            CostPart::Repeated { cost, times: Value::ManaValueOf(s) }
-                if matches!(*s, Sel::This) && cost.parts.is_empty() && cost.mana.is_some() =>
-            {
-                let total = c.mana.get_or_insert_with(crate::mana::ManaCost::default);
-                if let Some(m) = &cost.mana {
-                    for _ in 0..mv {
-                        total.add(m);
-                    }
-                }
-            }
-            other => parts.push(other),
-        }
-    }
-    c.parts = parts;
-    c
+    crate::permissions::spell_relative_cost(cost, mv)
 }
 
 /// Records that a spell was cast for the alternative cost `src` offers: a once-each-turn
