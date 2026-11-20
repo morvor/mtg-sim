@@ -747,6 +747,9 @@ impl Game {
                     // CR 205.3d: not a subtype it can't have as it enters (Rise from the
                     // Grave returning a noncreature God, `subtype_gain.rs`).
                     crate::subtype_gain::lock_ungainable_parts(self, first);
+                    // CR 113.11: nor an ability it can't have (Valkyrie's Call's "It has
+                    // flying" for a creature that can't have flying, `kw/cant_have.rs`).
+                    crate::kw::cant_have::drop_ungrantable_keywords(self, first);
                 }
                 self.recompute();
                 // Counters it enters with (CR 122.6): planeswalker loyalty (CR 306.5b),
