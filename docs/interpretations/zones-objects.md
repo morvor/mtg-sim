@@ -29,6 +29,18 @@ decision listed in `docs/DEFERRED.md`, not here.
 - Code: `crates/mtg-engine/src/kw/look_at_random.rs`; `crates/mtg-engine/src/zones.rs` (`allow_look`, `may_look`); `crates/mtg-engine/src/facedown.rs` (`can_look_at`).
 - Tests: `tests/cards/paper_random_hand.rs` (`urzas_bauble_looks_privately_at_a_random_card`).
 
+## looked-at-face-down-permanent-stays-seen: A face-down permanent a player looked at stays visible to that player while it remains the same object
+- Kind: interpretation
+- Status: provisional
+- Rules: 708.5 "At any time, you may look at a face-down spell you control on the stack or a face-down permanent you control (even if it’s phased out). You can’t look at face-down cards in any other zone or face-down spells or permanents controlled by another player." / 701.20e "Some effects instruct a player to look at one or more cards. Looking at a card follows the same rules as revealing a card, except that the card is shown only to the specified player." / 400.7 "An object that moves from one zone to another becomes a new object with no memory of, or relation to, its previous existence. ..." / Smoke Teller's ruling: "Smoke Teller’s ability lets you look at the creature as the ability resolves. It doesn’t let you look at it later, although you should be given a reasonable amount of time to look at it. In a multiplayer game, be sure not to reveal the card to other players."
+- Question: "Look at target face-down creature" (Smoke Teller, Aven Soulgazer) shows the card to one player as the ability resolves. Should the looker's view keep showing it afterward, when the ruling says the ability doesn't let them look at it later?
+- Decision: As for a card looked at in another player's hand (`looked-at-hand-card-stays-seen`, extended by analogy): the player who looked keeps seeing the face-down permanent for as long as it remains the same object; it isn't revealed, no other player sees it, and once it changes zones (a new object, CR 400.7) the permission ends. The ruling's "doesn't let you look at it later" is read as "doesn't let you look at a later object or learn anything new": what the player saw they remember.
+- Alternatives: (A) Visible only while the ability resolves (the ruling's literal words): the player "forgets" what they legitimately saw, which a real player wouldn't, and an agent's memory would recover it anyway. (B) A log line only.
+- Why: The information was legitimately obtained and the permanent is the same object until it moves; no game rule reads the permission (a presentation choice), and only the looking player gains it. Provisional: the ruling's words read the other way, so a judge could hold the look to the resolution.
+- Affects: Smoke Teller, Aven Soulgazer, and other "look at target face-down creature" effects.
+- Code: `crates/mtg-engine/src/zones.rs` (`allow_look`, `may_look`); `crates/mtg-engine/src/facedown.rs` (`can_look_at`).
+- Tests: `tests/rulings/r_residue_misc_1_abilities.rs` (`smoke_teller_looks_privately_as_it_resolves`); `tests/cards/permanent_status_face_down.rs` (`smoke_teller_looks_at_target_face_down_creature`).
+
 ## the-token-another-ability-created: "The token" in another ability is the one token the card's token-making ability created
 - Kind: interpretation
 - Status: decided
