@@ -9,6 +9,7 @@
 #   FULL=1 scripts/mutants.sh simultaneous       # the same: a full run (every mutant, no shard)
 #   FULL=1 RESUME=1 scripts/mutants.sh simultaneous   # continue an interrupted run of the same
 #                                                # commit (same SAMPLE/FULL), skipping what it tested
+#   FULL=1 REV=abc1234 scripts/mutants.sh x   # measure commit abc1234, not HEAD (RESUME too)
 #   TIMEOUT=900 scripts/mutants.sh layers        # a longer test timeout per mutant (default 600 s;
 #                                                # the unmutated mtg-engine suite takes ~290 s)
 #
@@ -28,6 +29,9 @@ SAMPLE=${SAMPLE:-10}
 # FULL=1: every mutant of each file (no shard), as for the mutation-2 full runs.
 [[ -n "${FULL:-}" ]] && SAMPLE=1
 TIMEOUT=${TIMEOUT:-600}
+# REV=<commit>: measure that commit instead of HEAD (keep a long run, and its RESUME, on the
+# commit it started at while tests for its survivors are committed on top).
+REV=${REV:-HEAD}
 LOCK=${LOCK:-/tmp/cargo-heavy.lock}
 mkdir -p "$MS" "$OUT"
 
@@ -36,7 +40,7 @@ for stem in "$@"; do
   # left a mutation behind; uncommitted work in progress must not break the baseline).
   # -m: fresh mtimes, so cargo rebuilds rather than reusing the last mutant's binaries.
   find "$MS" -mindepth 1 -maxdepth 1 ! -name target -exec rm -rf {} +
-  git -C "$WT" archive HEAD | tar -C "$MS" -xmf -
+  git -C "$WT" archive "$REV" | tar -C "$MS" -xmf -
   file=crates/mtg-engine/src/$stem.rs
   n=$(cd "$MS" && cargo mutants --list -f "$file" | wc -l)
   k=$SAMPLE
