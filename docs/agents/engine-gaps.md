@@ -949,6 +949,22 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   Altars with two creatures pay {4} and not {5}; Skirk Prospector sacrificed last; Krark-Clan Ironworks
   with one other artifact pays {4}; Blood Pet with Ashnod's Altar; Workhorse's counters and Treasonous
   Ogre's life bound the activations; two Ashnod's Altars and Molt Tender, the set-wide matching).
+  Review (Nov 20): the matching took the planner's order of preference for the order of activation,
+  so Molt Tender (tapped for mana, ranked after the Altars) couldn't be tapped and then sacrificed
+  ({4} instead of {5}, pinned by the test as the answer): activations that take no other object now
+  come first, then those whose permanent another cost could take (`Planner::exec_key`), and the plan
+  is carried out in that order; and `plan_with_filter` planned a filter's cost and the rest apart, so
+  Ashnod's Altar paying Celestial Prism's {2} and three Phyrexian Altar activations were planned with
+  three creatures and the cast reversed (a regression of the repeats): the combined plan is matched
+  too. Left: a creature convoked or improvised for the spell is still in the planner's sacrifice
+  pools (`pay_mana` leaves it out when the cost is paid, so such a plan can fail and be reversed;
+  convoke's default choice doesn't count the sacrifices either), a chain of consumers taking
+  each other's permanents in an order other than the one `exec_key` gives isn't found, and the plan
+  for a cost's mana doesn't keep what the cost's own other parts sacrifice: Bone Splinters ({B},
+  "As an additional cost to cast this spell, sacrifice a creature.") with Phyrexian Altar and one
+  creature is offered and the cast reversed (on origin too), and since the repeats Fling ({1}{R})
+  with Phyrexian Altar and two creatures likewise (castability is optimistic, register
+  `castability-is-optimistic`: reversed per 733.1; with three creatures it's paid).
   Still not planned at all (other gaps, not repeats): mana abilities whose cost taps other untapped
   permanents ("Tap an untapped Elf you control", Birchlore Rangers, Heritage Druid, Urza, Lord High
   Artificer, Grand Architect, Seton, Relic of Legends, Meria, Baylen, Supportive Parents, The Cabbage

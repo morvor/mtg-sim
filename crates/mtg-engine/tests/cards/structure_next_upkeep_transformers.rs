@@ -59,7 +59,7 @@ fn aang_entering_puts_a_creature_from_the_top_five_onto_the_battlefield() {
 
 #[test]
 fn aang_destined_savior_earthbends_two_at_the_beginning_of_your_combat() {
-    cr!("701.66a", "507.2");
+    cr!("701.66a", "500.6", "507.2");
     // Aang, Destined Savior: "At the beginning of combat on your turn, earthbend 2."
     supported("Aang, at the Crossroads // Aang, Destined Savior");
     let mut t = TestGame::new(2);

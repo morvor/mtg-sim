@@ -5,7 +5,6 @@
 //! Mishra's Bauble and the other cantrips) is the first upkeep of the turn after the one
 //! the delayed ability was created in.
 
-
 use mtg_engine::object::FaceState;
 use mtg_engine::testing::*;
 use mtg_engine::turn::{Stage, Step};
