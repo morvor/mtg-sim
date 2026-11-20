@@ -857,20 +857,23 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   reversal of a special action whose permanent left during the payment (with the payment keeping it, only a
   cost part choosing the permanent itself does): test with Raven Guild Initiate returned for its own morph
   cost under Arcane Adaptation. The reservation of a cost's source is recorded under the existing policy
-  `automatic-mana-payment` (docs/interpretations/stack-casting-costs.md), which the tests now cite.
+  `automatic-mana-payment` (docs/interpretations/stack-casting-costs.md), which the tests now cite. With
+  the final code, 40 properties games in a debug build (rollback, snapshot, determinism, seat): all held,
+  no panics.
 - Part 4 of the item (Inquisitor Eisenhorn's "this way" trigger for a card drawn while casting, CR 121.8)
   moved to small-fixes-4, which landed it (`kw/reveal_first_draw.rs`, `tests/cr/r121_8_reveal_as_drawn.rs`).
-- Found, not fixed (seat symmetry, `--properties --games 500`; not from this item, which changes nothing
-  that depends on seats or on the order of object ids, and neither difference is in its code): game 175 (4 players, seed
-  1000178): before the first turn the nameless face-down objects in the command zone (conspiracies) have
-  different owners in the rotated game (rotation 3: `command[O240 "" own0 ...]` against `own3`), so the
-  canonical renaming pairs different objects, or the objects are placed differently;
-  `cargo run --release -p mtg-sim -- --properties --property seat --seed 1 --only 175 --players 4 --max-turns 40`.
-  Game 405 (2 players, seed 1000408, rotation 1): at turn 17 an "Order objects entering the battlefield"
-  decision lists Watchful Giant and Deepway Navigator in the opposite order (`actions.rs`,
-  `order_simultaneous_entries` lists the simultaneous moves in the order they were proposed; probably an
-  order of object ids, which differ between seats); `cargo run --release -p mtg-sim -- --properties --property seat
-  --seed 1 --only 405 --players 2 --max-turns 40`.
+- Found, not fixed (seat symmetry, `--properties --games 500`; not from this item: both reproduce
+  identically, in a debug build, with the engine as it was without it, origin at 9a650bd6).
+  Game 175 (4 players, seed 1000178, rotation 3): before the first turn the nameless face-down objects in
+  the command zone (conspiracies) have different owners in the rotated game (`command[O240 "" own0 ...]`
+  against `own3`): the canonical renaming pairs different objects, or the objects are placed differently.
+  `cargo run --release -p mtg-sim -- --properties --property seat --seed 1 --only 175 --players 4
+  --max-turns 40`. Game 405 (2 players, seed 1000408, rotation 1): at turn 17 an "Order objects entering
+  the battlefield" decision lists Watchful Giant and Deepway Navigator in the opposite order (the answers
+  give the same order, so only the listing differs; `actions.rs`, `order_simultaneous_entries` lists the
+  simultaneous moves in the order they were proposed, probably an order of object ids, which differ between
+  seats). `cargo run --release -p mtg-sim -- --properties --property seat --seed 1 --only 405 --players 2
+  --max-turns 40`.
 
 ---
 
