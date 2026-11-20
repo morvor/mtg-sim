@@ -102,6 +102,18 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Code: `crates/mtg-engine/src/game.rs` (`ask_order`); `crates/mtg-engine/src/triggers.rs` (stacking triggers).
 - Tests: `tests/cr/interp_decision_defaults.rs` (`a_default_order_keeps_the_listed_order`).
 
+## simultaneous-entries-listed-by-owner-then-creation: A player orders their objects entering the battlefield together from a list by owner in APNAP order, then by creation
+- Kind: policy
+- Status: decided
+- Rules: 613.7m "If two or more objects would receive a timestamp simultaneously, such as by entering a zone simultaneously or becoming attached simultaneously, their relative timestamps are determined in APNAP order (see rule 101.4). Objects controlled by the active player (or owned by the active player, if they have no controller) have an earlier relative timestamp in the order of that player’s choice, followed by each other player in turn order." / 101.4 "If multiple players would make choices and/or take actions at the same time, the active player (the player whose turn it is) makes any choices required, then the next player in turn order ... makes any choices required, followed by the remaining nonactive players in turn order. ..."
+- Question: The rules leave the relative timestamps of a player's own objects entering the battlefield together to that player. In which order does the engine list them for the choice, which is also their order when the agent doesn't answer (`default-order-as-listed`)?
+- Decision: Each player's objects are listed by owner in APNAP order (the active player's cards first), then each owner's in the order the objects were created (`Game::sort_objects_apnap`), whatever order the moves were proposed in. The vanguard and conspiracy cards that receive timestamps together at the beginning of the game (613.7i, 613.7j) get them in the same order: by owner in APNAP order (613.7m: their controllers are their owners), each player's in creation order (until small-fixes-6, in the command zone's order, which put the vanguards in seat order).
+- Alternatives: The order the moves were proposed in (the engine until small-fixes-6): often an order of object ids, which follow the seats the players sit in, so the same game with the players seated differently listed the objects differently (seat symmetry property, game 405 of `--properties --seed 1`); or by name.
+- Why: Deterministic and independent of seats: APNAP order depends only on turn order (101.4), and an owner's objects are created in the same order wherever the owner sits. The same order the engine uses before choosing among objects at random (`sort_objects_apnap`).
+- Affects: every "Order objects entering the battlefield" decision (mass reanimation, flickers of several permanents, tokens and cards entering together); vanguards and conspiracies at the beginning of the game.
+- Code: `crates/mtg-engine/src/actions.rs` (`order_simultaneous_entries`); `crates/mtg-engine/src/apnap.rs` (`sort_objects_apnap`); `crates/mtg-engine/src/variants.rs` (`begin_game`).
+- Tests: `tests/cr/r613_7m_entry_order_listing.rs` (`objects_entering_together_are_listed_the_same_wherever_the_players_sit`, `one_owners_objects_entering_together_are_listed_in_creation_order`); `tests/cr/r609_613_variant_timestamps.rs` (`vanguards_get_their_timestamps_in_apnap_order`).
+
 ## default-combat-declarations: A default or illegal declaration of attackers or blockers is replaced by the least legal one
 - Kind: policy
 - Status: decided
@@ -203,12 +215,12 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Status: decided
 - Rules: 701.24a "To shuffle a library or a face-down pile of cards, randomize the cards within it so that no player knows their order." / 705.1 "Some cards refer to flipping a coin. A coin used in a flip must be a two-sided object with easily distinguished sides and equal likelihood that either side lands face up. ..."
 - Question: Shuffles, coin flips, die rolls and random choices must be random. How does the engine randomize?
-- Decision: Every game has one ChaCha8 generator seeded from `GameConfig::seed`; all random results (shuffles, flips, rolls, "at random" choices, the starting player) come from it, so a game replays exactly from its seed and its agents' answers. No player (agent) can predict results without reading the generator's state, which in-process agents could do (see `hidden-information`).
+- Decision: Every game has one ChaCha8 generator seeded from `GameConfig::seed`; all random results (shuffles, flips, rolls, "at random" choices, the starting player) come from it, so a game replays exactly from its seed and its agents' answers. No player (agent) can predict results without reading the generator's state, which in-process agents could do (see `hidden-information`). With `GameConfig::player_rng_keys` (set by the seat symmetry property), what a player randomizes themselves comes from a stream of their own, keyed by their deck (`Game::rng_for`): their library's shuffles, random cards from their hand and, since small-fixes-6, the shuffles of their own supplementary decks before the game (Attraction, scheme and planar decks, CR 103.3a), which are also shuffled and renumbered in APNAP order rather than seat order.
 - Alternatives: An unseeded (system) random source: no replays or reproducible fuzz failures.
 - Why: Reproducibility: mtg-sim prints a repro command with the seed for every failure.
 - Affects: every random event.
-- Code: `crates/mtg-engine/src/game.rs` (`Game::rng`, `shuffle_library`, `GameConfig::seed`); `crates/mtg-engine/src/dice.rs`.
-- Tests: `tests/cr/interp_decision_defaults.rs` (`random_results_come_from_the_games_seed`).
+- Code: `crates/mtg-engine/src/game.rs` (`Game::rng`, `Game::rng_for`, `shuffle_library`, `GameConfig::seed`); `crates/mtg-engine/src/dice.rs`; `crates/mtg-engine/src/attraction_cards.rs` (`shuffle_attraction_decks`), `crates/mtg-engine/src/variants.rs` (`shuffle_scheme_decks`), `crates/mtg-engine/src/planechase.rs` (`shuffle_planar_decks`).
+- Tests: `tests/cr/interp_decision_defaults.rs` (`random_results_come_from_the_games_seed`); `tests/properties/seat_symmetry.rs` (`supplementary_decks_are_shuffled_and_renumbered_whatever_the_seats`, `a_players_supplementary_decks_are_shuffled_with_their_own_randomness`).
 
 ## ability-ids-depend-on-the-process: Ability ids in requests come from a process-wide counter; answers name options by their place
 - Kind: policy

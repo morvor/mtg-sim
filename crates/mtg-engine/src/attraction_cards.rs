@@ -34,10 +34,13 @@ fn is_attraction_object(g: &Game, id: ObjectId) -> bool {
     o.kind == ObjKind::Card && o.card.as_deref().is_some_and(is_attraction_card)
 }
 
-/// CR 717.2, 103.3a: each player's Attraction deck is shuffled before the game begins.
+/// CR 717.2, 103.3a: each player's Attraction deck is shuffled before the game begins:
+/// with the player's own randomness, as their library is (`Game::rng_for`), and in APNAP
+/// order, so the new objects the cards become (CR 400.7) are numbered the same wherever the
+/// players sit.
 pub fn shuffle_attraction_decks(g: &mut Game) {
     use rand::seq::SliceRandom;
-    for p in g.player_ids() {
+    for p in g.apnap() {
         let slots: Vec<usize> = g
             .command
             .iter()
@@ -49,7 +52,7 @@ pub fn shuffle_attraction_decks(g: &mut Game) {
             .map(|(i, _)| i)
             .collect();
         let mut ids: Vec<ObjectId> = slots.iter().map(|i| g.command[*i]).collect();
-        ids.shuffle(&mut g.rng);
+        ids.shuffle(g.rng_for(p));
         for (i, id) in slots.iter().zip(ids) {
             g.command[*i] = id;
         }

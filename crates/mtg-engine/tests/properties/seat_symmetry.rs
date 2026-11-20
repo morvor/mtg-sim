@@ -63,8 +63,22 @@ fn the_comparison_notices_different_games() {
     let s = setup(vec![red_green(), white_blue()], 5);
     let mut other = s.clone();
     other.seed = 6;
-    let mut a = build(&s, 0, Recording { states: true, ..Default::default() });
-    let mut b = build(&other, 1, Recording { states: true, ..Default::default() });
+    let mut a = build(
+        &s,
+        0,
+        Recording {
+            states: true,
+            ..Default::default()
+        },
+    );
+    let mut b = build(
+        &other,
+        1,
+        Recording {
+            states: true,
+            ..Default::default()
+        },
+    );
     a.finish();
     b.finish();
     assert!(compare("different seeds", &a.lines(), &b.lines()).is_err());
@@ -115,4 +129,76 @@ fn triggers_of_several_players_go_on_the_stack_in_apnap_order_whatever_the_seats
     for r in [1, 2] {
         seat_symmetry(&s, r).unwrap_or_else(|e| panic!("seed {}: {e}", s.seed));
     }
+}
+
+/// A deck with an Attraction deck (five Attractions) and a scheme deck (two schemes).
+fn with_supplementary_decks() -> Vec<std::sync::Arc<CardDef>> {
+    deck(
+        "16 Plains, 8 Seasoned Buttoneer, 8 Savannah Lions, 8 Serra Angel, \
+         1 Balloon Stand, 1 Bumper Cars, 1 Centrifuge, 1 Concession Stand, \
+         1 Costume Shop, 1 Nature Demands an Offering, 1 Every Dream a Nightmare",
+    )
+}
+
+#[test]
+fn supplementary_decks_are_shuffled_and_renumbered_whatever_the_seats() {
+    // CR 103.3a: "each supplementary deck’s owner shuffles it so the cards are in a random
+    // order"; CR 717.2: "Each Attraction deck is shuffled before the game begins"; while
+    // the game starts, the players act in APNAP order with the starting player as the
+    // active player (CR 101.4, 101.4e). The shuffled cards become new objects
+    // (`zones::renumber_shuffled_deck`, register `deck-order-ids-before-shuffle`). Found by
+    // this property (game 175 of `--properties --seed 1`, 4 players): the Attraction and
+    // scheme decks were shuffled with the game's randomness and renumbered in seat order, so
+    // the face-down cards in the command zone had other owners in the rotated game.
+    cr!("103.3a", "717.2", "101.4e");
+    interp!("seeded-randomness");
+    let s = setup(
+        vec![
+            with_supplementary_decks(),
+            with_supplementary_decks(),
+            with_supplementary_decks(),
+        ],
+        5,
+    );
+    for r in [1, 2] {
+        seat_symmetry(&s, r).unwrap_or_else(|e| panic!("seed {}: {e}", s.seed));
+    }
+}
+
+#[test]
+fn a_players_supplementary_decks_are_shuffled_with_their_own_randomness() {
+    // A harness option, not a rule, as for libraries (above): with per-player streams, a
+    // player's Attraction and scheme decks are shuffled with that player's randomness, so
+    // their order doesn't depend on the other players' decks. (Shuffled with the game's
+    // randomness in APNAP order, the decks would still be seat symmetric, but the second
+    // player's order would depend on whether the first player had decks to shuffle.)
+    interp!("seeded-randomness");
+    let plain = || deck("16 Plains, 8 Savannah Lions, 8 Serra Angel, 8 Seasoned Buttoneer");
+    let order = |first: Vec<std::sync::Arc<CardDef>>| -> Vec<String> {
+        let s = setup(vec![first, with_supplementary_decks()], 5);
+        let mut run = build(&s, 0, Default::default());
+        run.game.pregame();
+        let g = &run.game;
+        g.command
+            .iter()
+            .filter(|o| g.obj(**o).owner == PlayerId(1))
+            .map(|o| g.obj(*o).card.as_ref().unwrap().name.to_string())
+            .collect()
+    };
+    let alone = order(plain());
+    assert_eq!(alone.len(), 7);
+    assert_eq!(order(with_supplementary_decks()), alone);
+    // Not vacuous: the decks were shuffled.
+    assert_ne!(
+        alone,
+        [
+            "Balloon Stand",
+            "Bumper Cars",
+            "Centrifuge",
+            "Concession Stand",
+            "Costume Shop",
+            "Nature Demands an Offering",
+            "Every Dream a Nightmare",
+        ]
+    );
 }

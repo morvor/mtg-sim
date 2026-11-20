@@ -1463,7 +1463,7 @@ fn keyword_mods(item: &str) -> Option<Vec<Modification>> {
 /// Keywords that matter only while casting a spell or in other zones: granting them to
 /// permanents on the battlefield wouldn't do what the card says (e.g. "~ has flash as
 /// long as you control a Desert" works from your hand).
-fn functions_on_battlefield(k: KeywordKind) -> bool {
+pub(crate) fn functions_on_battlefield(k: KeywordKind) -> bool {
     use KeywordKind::*;
     !matches!(
         k,
@@ -2412,7 +2412,10 @@ fn parse_predicate(
             tv = times(tv, &n);
             if let Some(m) = more {
                 let (p2, t2, tail2) = crate::oracle::effects::parse_pt_mod(&m)?;
-                let n2 = other(parse_for_each(tail2.trim().strip_prefix("for each ")?, Some(it))?);
+                let n2 = other(parse_for_each(
+                    tail2.trim().strip_prefix("for each ")?,
+                    Some(it),
+                )?);
                 pv = Value::Sum(vec![pv, times(p2, &n2)]);
                 tv = Value::Sum(vec![tv, times(t2, &n2)]);
             }
@@ -3181,8 +3184,11 @@ pub(crate) fn parse_static_line(l: &str, text: &str, ctx: &CompileContext) -> Op
     (!v.is_empty()).then_some(v)
 }
 
-/// "~ has flash as long as you control a Desert": the ability functions in every zone,
-/// so the card can be cast as though it had flash while the condition holds (CR 601.3d).
+/// "~ has flash as long as you control a Desert", when the "k702: trailing as long as"
+/// pattern doesn't take it: like the abilities that pattern compiles, the ability functions
+/// only on the stack (CR 113.6e; `k702_001_010::self_granted_keyword_zone`), and its
+/// condition lets the card be begun as though it had flash (CR 601.3d;
+/// `Game::would_have_flash_as_it_begins`).
 fn conditional_flash(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let r = end(l).strip_prefix("~ has flash as long as ")?;
     let (cond, _) = parse_static_condition(r, Some(&Sel::This), ctx)?;
@@ -3193,7 +3199,7 @@ fn conditional_flash(l: &str, text: &str, ctx: &CompileContext) -> Option<Vec<Ab
         ))],
     });
     st.condition = Some(cond);
-    st.zone = FunctionZone::Anywhere;
+    st.zone = FunctionZone::Stack;
     Some(vec![AbilityDef::new(AbilityKind::Static(st), text)])
 }
 
