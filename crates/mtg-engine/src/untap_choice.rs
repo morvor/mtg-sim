@@ -182,6 +182,9 @@ impl Game {
             })
             .map(|(id, _)| id)
             .chain(crate::rule_statics::opponents_steps::extra_untaps(self))
+            // "Creatures don't untap during target player's next untap step" applies to
+            // them too (Blinding Beam's ruling).
+            .filter(|id| !kept_tapped_this_untap_step(self, *id))
             .collect();
         for id in extra {
             if !to_untap.contains(&id) {
@@ -189,4 +192,30 @@ impl Game {
             }
         }
     }
+}
+
+/// Whether an effect keeps the permanent from untapping during the untap step of the
+/// active player, whoever controls it (`Restriction::DoesntUntapDuringUntapStepOf`,
+/// CR 502.3): "Creatures don't untap during target player's next untap step" (Blinding
+/// Beam) covers the creatures other players control that would untap then (Seedborn
+/// Muse), as its ruling says.
+pub(crate) fn kept_tapped_this_untap_step(g: &Game, obj: ObjectId) -> bool {
+    let applies = |who: &crate::ability::PlayerFilter, what, ctx: &Ctx| {
+        g.active_players()
+            .iter()
+            .any(|p| g.player_filter_matches(who, *p, ctx))
+            && g.matches(obj, what, ctx)
+    };
+    g.statics.restrictions.iter().any(|(s, c, r)| match r {
+        Restriction::DoesntUntapDuringUntapStepOf { who, what } => {
+            applies(who, what, &Ctx::new(Some(*s), *c))
+        }
+        _ => false,
+    }) || g.rule_effects.iter().any(|e| match &e.restriction {
+        Restriction::DoesntUntapDuringUntapStepOf { who, what } => {
+            e.objects.as_ref().is_none_or(|v| v.contains(&obj))
+                && applies(who, what, &Ctx::new(e.source, e.controller))
+        }
+        _ => false,
+    })
 }

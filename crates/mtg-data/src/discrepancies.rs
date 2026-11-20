@@ -8,8 +8,8 @@
 //! ```text
 //! ### <Card>: <what is wrong>
 //! - Kind: template error | copying error | misattached | inconsistent | outdated |
-//!   narrower than stated
-//! - Status: open for review | reported | confirmed
+//!   narrower than stated | misleading
+//! - Status: open for review | decided | reported | confirmed
 //! - Ruling, <Card Name> (<published_at>): "<the ruling's text, verbatim>"   (one or more)
 //! - Conflicts with: <the Oracle text, CR rule or other rulings, quoted with dates>
 //! - Evidence: <the likely origin, with dates>
@@ -44,10 +44,11 @@ pub const KINDS: &[&str] = &[
     "inconsistent",
     "outdated",
     "narrower than stated",
+    "misleading",
 ];
 
 /// The statuses of an entry.
-pub const STATUSES: &[&str] = &["open for review", "reported", "confirmed"];
+pub const STATUSES: &[&str] = &["open for review", "decided", "reported", "confirmed"];
 
 /// The fields every entry must have, besides its `Ruling` lines.
 pub const FIELDS: &[&str] = &[

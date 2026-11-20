@@ -661,8 +661,18 @@ impl Game {
                 // The player performing the instruction taps them (CR 701.26a): the
                 // controller of the spell or ability, or the player it has do it ("that
                 // player taps an untapped creature they control"; Solitary Sanctuary's
-                // rulings).
-                let by = Some(ctx.controller);
+                // rulings). "That player taps an untapped artifact, creature, or land they
+                // control" (Tangle Wire) chooses and taps as that player: the chooser
+                // performs it (Sharae of Numbing Depths's ruling). A `Tap` of another
+                // player's `Choose` is compiled only from "[that player] taps ..."
+                // (`followups_4::taps_untapped`); "tap ... of [a player]'s choice" would
+                // need its own form.
+                let by = match what {
+                    Sel::Choose { chooser, .. } if !matches!(chooser, PlayerRef::You) => {
+                        self.eval_player(chooser, ctx).or(Some(ctx.controller))
+                    }
+                    _ => Some(ctx.controller),
+                };
                 for o in self.resolve_objects(what, ctx) {
                     if self.tap_with(o, false, by, false) {
                         tapped.push(Entity::Object(o));
@@ -1136,6 +1146,8 @@ impl Game {
                 self.dirty = true;
                 // CR 113.11: not for an object that can't have an ability it adds.
                 crate::kw::cant_have::drop_ungrantable_keywords(self, first);
+                // CR 205.3d: nor a subtype it can't have as the effect begins.
+                crate::subtype_gain::lock_ungainable_parts(self, first);
             }
             Effect::AddRestriction {
                 restriction,
@@ -4366,6 +4378,7 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::AttackOnlyAlone(f)
         | Restriction::CantTransform(f) => Some(f),
         Restriction::CantBe { what, .. } => Some(what),
+        Restriction::DoesntUntapDuringUntapStepOf { what, .. } => Some(what),
         Restriction::AttackTogether { attackers, .. }
         | Restriction::MustAttackOtherThan { attackers, .. } => Some(attackers),
         Restriction::CantActivate { sources, .. } => Some(sources),
@@ -4407,7 +4420,9 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
         | Restriction::MaxSpellsPerTurn(f, _)
         | Restriction::MaxSpellsOfKindPerTurn { who: f, .. }
         | Restriction::CantPlayLandCards { who: f, .. } => Some(f),
-        Restriction::CantCast { who, .. } | Restriction::CantActivate { who, .. } => Some(who),
+        Restriction::CantCast { who, .. }
+        | Restriction::CantActivate { who, .. }
+        | Restriction::DoesntUntapDuringUntapStepOf { who, .. } => Some(who),
         Restriction::TargetableAsThoughNo { by, .. } => Some(by),
         Restriction::MustAttackPlayer { defender, .. }
         | Restriction::CantAttackPlayer { defender, .. }

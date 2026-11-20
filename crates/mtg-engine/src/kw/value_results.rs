@@ -90,13 +90,29 @@ fn matches_at(
 
 /// This turn's events (processed ones with their index), then those simultaneous with the
 /// event being checked for triggers (`Game::batch_ahead`), then the current action's.
-fn turn_events_indexed(g: &Game) -> impl Iterator<Item = (Option<usize>, &Event)> {
-    g.turn_events
+/// With `until`, only the first `until` processed ones (those that had happened when an
+/// ability triggered, `EventInfo::turn_events_seen`).
+fn turn_events_indexed(
+    g: &Game,
+    until: Option<usize>,
+) -> impl Iterator<Item = (Option<usize>, &Event)> {
+    let (n, later) = match until {
+        Some(n) => (n.min(g.turn_events.len()), 0),
+        None => (g.turn_events.len(), usize::MAX),
+    };
+    g.turn_events[..n]
         .iter()
         .enumerate()
         .map(|(i, e)| (Some(i), e))
-        .chain(g.batch_ahead.iter().map(|e| (None, e)))
-        .chain(g.events.iter().map(|e| (None, e)))
+        .chain(g.batch_ahead.iter().take(later).map(|e| (None, e)))
+        .chain(g.events.iter().take(later).map(|e| (None, e)))
+}
+
+/// How many of this turn's events had happened when the ability being evaluated triggered
+/// (its trigger event's [`EventInfo::turn_events_seen`]); `None` outside a triggered
+/// ability, and as it triggers.
+fn trigger_horizon(ctx: &Ctx) -> Option<usize> {
+    ctx.event.as_ref().and_then(|e| e.turn_events_seen)
 }
 
 /// The matches of this turn's event `ev` for `cond`. A permanent's entering the
@@ -146,12 +162,30 @@ pub const DESTROYED: crate::ability::Var = crate::ability::vars::USER + 7520;
 pub const COUNTERED: crate::ability::Var = crate::ability::vars::USER + 7526;
 
 pub fn events_this_turn(g: &Game, cond: &TriggerCond, tally: Tally, ctx: &Ctx) -> i64 {
+    count_events(g, cond, tally, ctx, None)
+}
+
+/// [`crate::ability::HistoryWindow::ThisTurnUntilTriggered`]: like [`events_this_turn`],
+/// but only the events that had happened when the ability triggered, for "if it's the
+/// first time [the trigger event] this turn" checked again as it resolves (CR 603.4;
+/// interpretation `first-time-is-about-the-trigger-event`).
+pub fn events_until_triggered(g: &Game, cond: &TriggerCond, tally: Tally, ctx: &Ctx) -> i64 {
+    count_events(g, cond, tally, ctx, trigger_horizon(ctx))
+}
+
+fn count_events(
+    g: &Game,
+    cond: &TriggerCond,
+    tally: Tally,
+    ctx: &Ctx,
+    until: Option<usize>,
+) -> i64 {
     let mut n = 0i64;
     let mut players = BTreeSet::new();
     // The events simultaneous with the one an ability is triggering on count too
     // (`Game::batch_ahead`): excess damage dealt along with the damage being looked at
     // (CR 120.10), lands entering together (Tunnel Ignus).
-    for (i, ev) in turn_events_indexed(g) {
+    for (i, ev) in turn_events_indexed(g, until) {
         for info in matches_at(g, cond, ctx, i, ev) {
             match tally {
                 Tally::Events => n += 1,
@@ -181,8 +215,27 @@ pub fn event_objects_this_turn(
     cond: &TriggerCond,
     ctx: &Ctx,
 ) -> Vec<crate::types::ObjectId> {
+    event_objects(g, cond, ctx, None)
+}
+
+/// [`event_objects_this_turn`] for
+/// [`crate::ability::HistoryWindow::ThisTurnUntilTriggered`] (see [`events_until_triggered`]).
+pub fn event_objects_until_triggered(
+    g: &Game,
+    cond: &TriggerCond,
+    ctx: &Ctx,
+) -> Vec<crate::types::ObjectId> {
+    event_objects(g, cond, ctx, trigger_horizon(ctx))
+}
+
+fn event_objects(
+    g: &Game,
+    cond: &TriggerCond,
+    ctx: &Ctx,
+    until: Option<usize>,
+) -> Vec<crate::types::ObjectId> {
     let mut out = Vec::new();
-    for (i, ev) in turn_events_indexed(g) {
+    for (i, ev) in turn_events_indexed(g, until) {
         for info in matches_at(g, cond, ctx, i, ev) {
             let o = match cond {
                 TriggerCond::DealsDamage { .. } => info.other.or(info.object),

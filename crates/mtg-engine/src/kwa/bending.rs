@@ -188,9 +188,14 @@ impl KeywordActionRules for Earthbend {
     fn perform(&self, g: &mut Game, a: &Args, ctx: &mut Ctx) {
         let n = number(g, a.n, ctx);
         let p = g.eval_player(a.who, ctx).unwrap_or(ctx.controller);
+        let mut any = false;
         for land in g.resolve_objects(a.what, ctx) {
+            any |= on_battlefield(g, land);
             earthbend(g, p, land, n, ctx);
         }
+        // "Earthbend N. When you do, ..." (CR 603.12): the reflexive ability triggers if
+        // a land was earthbent.
+        ctx.prev_happened = any;
     }
 }
 

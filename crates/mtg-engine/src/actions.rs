@@ -88,7 +88,13 @@ impl Game {
             let p = self.affected_player(&ReplEvent::Move(moves[*i].clone()));
             apnap.iter().position(|x| *x == p).unwrap_or(usize::MAX)
         });
-        for (i, m) in order.into_iter().map(|i| (i, &moves[i])) {
+        // CR 616.1f–g: a player's permanents entering together have their replacement
+        // effects applied in the order that player chooses, where it can matter; which
+        // effects apply to each is determined as the event is proposed (CR 614.12).
+        let mut chosen = crate::entry_replacement_order::EntryOrder::new(self, &moves, &order);
+        for slot in order {
+            let i = chosen.pick(self, &moves, slot);
+            let m = &moves[i];
             if !self.can_move(m.obj) {
                 continue;
             }
@@ -97,7 +103,7 @@ impl Game {
             if m.to == Zone::Battlefield && self.cant_enter(m) || self.move_forbidden(m) {
                 continue;
             }
-            for e in self.replace(ReplEvent::Move(m.clone())) {
+            for e in self.replace_entering(ReplEvent::Move(m.clone()), chosen.snapshot(i)) {
                 // An object that can't enter the battlefield stays where it is. This also
                 // covers moves a replacement effect redirected to the battlefield, and
                 // entries a replacement modified (CR 614.17d: check the permanent as it
@@ -722,6 +728,7 @@ impl Game {
                     // stop applying as it's turned face up (CR 708.2a, 708.8).
                     let id = self.new_effect_id();
                     let ts = self.new_timestamp();
+                    let first = self.effects.len();
                     self.effects.push(ContinuousEffect {
                         id,
                         source,
@@ -737,6 +744,9 @@ impl Game {
                         layer1: None,
                         created_turn: self.turn.number,
                     });
+                    // CR 205.3d: not a subtype it can't have as it enters (Rise from the
+                    // Grave returning a noncreature God, `subtype_gain.rs`).
+                    crate::subtype_gain::lock_ungainable_parts(self, first);
                 }
                 self.recompute();
                 // Counters it enters with (CR 122.6): planeswalker loyalty (CR 306.5b),
@@ -1396,7 +1406,7 @@ impl Game {
                     && self.matches(obj, f, &Ctx::new(e.source, e.controller))
             }
             _ => false,
-        })
+        }) || crate::untap_choice::kept_tapped_this_untap_step(self, obj)
     }
 
     // ------------------------------------------------------------------
