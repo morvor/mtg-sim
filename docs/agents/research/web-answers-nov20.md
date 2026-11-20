@@ -13,7 +13,7 @@ bulletins, Gatherer rulings) > rules managers' statements > level-2+ judges' ans
 judges > forums. Credentials are as the saved pages state them: Cranial Insertion author bios
 ("Carsten Haese is a former Level 2 judge based in Toledo, OH.", "Callum Milne is a Level 2 judge
 from British Columbia, Canada.", "Andrew is a Level 2 judge from Dallas, TX ...", e.g.
-`ci-1052.txt`, `ci-1002.txt`, `ci-2978.txt`; Justin Hovdenes signs "Level 2 Magic Judge",
+`ci-1002.txt`, `ci-1052.txt`, `ci-2978.txt`; Justin Hovdenes signs "Level 2 Magic Judge",
 `ci-4016.txt`); Nathan Long's Magic Judges forum profile reads "Forum Moderator / Level 2 Judge
 (Judge Foundry), Judge" (`mj-post-131920.html`), and Wizards' release notes name him, Carsten
 Haese and Eli Shiffrin among their compilers or contributors (e.g. Commander 2018: "Compiled by
@@ -151,7 +151,7 @@ before the ability resolves. Searched:
 - the release notes above, and the Adventures in the Forgotten Realms Release Notes (ward made evergreen; Jul 12, 2021, https://magic.wizards.com/en/articles/archive/feature/adventures-forgotten-realms-release-notes-2021-07-09, saved `afr-release-notes.html`: its ward notes are about several instances and gaining ward in response, e.g. Hall of Storm Giants' "Each of those instances will trigger separately and ask the opponent who controls the spell or ability to pay {3}.");
 - Gatherer's rulings for Norn's Decree, Coveted Jewel (above); every ruling in `data/rulings.jsonl.gz` of Norn's Decree, Coveted Jewel, Michiko Konda, Edric, Bident of Thassa, Contested War Zone, Kazuul, Revenge of Ravens, Marchesa's Decree, Nelly Borca, Blood Seeker, Suture Priest, Archaeomancer's Map, Thunderbreak Regent, Ashenmoor Liege, Charismatic Conqueror, Nightshade Harvester, Black Bolt, Frost Titan, Perplexing Chimera, Commandeer, Bronze Guardian and Hall of Storm Giants, and every ruling with "initiative" or with "monarch" and "control" (re-read for this item; ruling-research-2 read the other cards of the family);
 - Cranial Insertion's archive search (https://www.cranial-insertion.com/archive?word=..., exact phrases; results are capped at about 52 articles, so phrases with 52 hits were not searched exhaustively): "Coveted Jewel", "Norn's", "Decree", "Michiko Konda", "Edric, Spymaster of Trest", "Bident of Thassa", "Contested War Zone", "Blood Seeker", "Suture Priest", "Commandeer", "Aethersnatch", "Perplexing Chimera", "Frost Titan", "Bonecrusher Giant", "Spelljack", "Emberwilde Captain", "Archfiend of Spite", "Tainted Aether", "Tahngarth, First Mate", "Kazuul", "Revenge of Ravens", "Undercity", "initiative" (capped), "becomes the monarch", "take the initiative", "ward", "Charismatic Conqueror", "Trespasser's Curse", "Karmic Justice", "Thunderbreak Regent", "Ashenmoor Liege", "Massacre Wurm", "Scalelord", "Leyline of Combustion", "Polluted Bonds", "Tunnel Ignus", "Archaeomancer", "who loses life", "who draws the cards", "who pays", "who has to sacrifice", "new controller", "changes control", "who controlled it when", "controlled it when it triggered", "when the ability triggered", "at the time it triggered", "draws three cards", "poison counter", "aren't blocked", "deal combat damage to you", "a creature an opponent controls", "spell or ability an opponent controls" (every hit's questions read; saved `ci-search/*.html` and `ci-<id>.html`);
-- the Magic Judges forum search (https://apps.magicjudges.org/forum/search/, topic titles and post texts): "Coveted Jewel", "Jewel", "Norn's Decree", "Decree", "Michiko Konda", "Konda", "Edric", "Bident of Thassa", "Contested War Zone", "Blood Seeker", "Suture Priest", "Frost Titan", "Perplexing Chimera", "Kazuul", "Archfiend of Spite", "Massacre Wurm", "Tainted Aether", "Revenge of Ravens", "Marchesa's Decree", "Emberwilde", "monarch", "initiative", "ward", "that player", "that opponent" (saved `mj-s-*.html`, `mj-search-*.html`); its Rules Q&A topics are closed and the newest rules topics found are from 2019–2020, before ward, the initiative and Norn's Decree;
+- the Magic Judges forum search (https://apps.magicjudges.org/forum/search/, topic titles and post texts): "Coveted Jewel", "Jewel", "Norn's Decree", "Decree", "Michiko Konda", "Konda", "Edric", "Bident of Thassa", "Contested War Zone", "Blood Seeker", "Suture Priest", "Frost Titan", "Perplexing Chimera", "Kazuul", "Archfiend of Spite", "Massacre Wurm", "Tainted Aether", "Revenge of Ravens", "Marchesa's Decree", "Emberwilde", "monarch", "initiative", "ward", "that player", "that opponent" (saved `mj-s-*.html`, `mj-search-*.html`); its Rules Q&A forum has had few topics since 2020 (its index, https://apps.magicjudges.org/forum/73/, saved `mj-forum-73.html`, lists about ten from 2020 to August 2026, none on these questions), so ward, the initiative and Norn's Decree are almost all after its active years;
 - web searches restricted to apps.magicjudges.org, blogs.magicjudges.org, www.cranial-insertion.com and magic.wizards.com (summaries only, used to find URLs).
 
 ### Reasoning (ours)
@@ -206,8 +206,8 @@ moving it to the stack would reduce that number to four."
 No judge or Wizards statement after 2022-04-29 on a spell mastery card cast from a graveyard
 counting itself. Searched: Cranial Insertion ("Swift Reckoning": no hits; "spell mastery": 8
 articles, 2015–2018, read; "Graveyard Shift": none; "as though it had flash": 16 articles, read;
-"601.4a", "601.5a", "601.6a": none); the Magic Judges forum (the topic above; its rules forum
-predates 2022); Wizards' rules-change articles of 2022 (above).
+"601.4a", "601.5a", "601.6a": none); the Magic Judges forum (the topic above; its Rules Q&A forum
+has had about ten topics since 2020, none on this); Wizards' rules-change articles of 2022 (above).
 
 ### Reasoning (ours)
 
@@ -218,7 +218,7 @@ written.
 
 ### Verdict against the register
 
-- `flash-permission-conditions-judged-as-casting-begins` (decided) and the outdated entry "Swift Reckoning: "you need two other instant and/or sorcery cards" ..." in `docs/RULING_DISCREPANCIES.md`: **confirmed** (the forum answer is the 2015 reading; nothing after 2022 reads the rule the other way). The register's description of the post ("dated 2015 by a search index; the site was outside the review's allowed network") is now verified: Nathan Long, Aug. 4, 2015 (the Sources field is updated).
+- `flash-permission-conditions-judged-as-casting-begins` (decided) and the outdated entry "Swift Reckoning: "you need two other instant and/or sorcery cards" ..." in `docs/RULING_DISCREPANCIES.md`: **confirmed** (the forum answer is the 2015 reading; nothing after 2022 reads the rule the other way). The register's description of the post ("dated 2015 by a search index; the site was outside the review's allowed network") is now verified: Nathan Long, Aug. 4, 2015 (the entry's Why now quotes it).
 
 ---
 
@@ -401,7 +401,7 @@ text ("instanceText"); none involves exile or removal from the game:
 - Masters Edition (MED, the Magic Online set the Oracle update of September 7, 2007 was made for; see the bulletin below): "Flying\nWhenever a creature dealt damage by Seraph this turn is put into a graveyard, put that card into play under your control at end of turn. Sacrifice the creature when you lose control of Seraph."
 
 Gatherer's rulings for Seraph: "(10/4/2004) You do not get the creature back if the creature is
-not still in the graveyard at the end of the turn." and, among four of "(9/16/2007)": "If the
+not still in the graveyard at the end of the turn." and, one of four dated "(9/16/2007)": "If the
 other creature is a token, it will cease to exist after being exiled. It won't be returned to the
 battlefield."
 
@@ -631,13 +631,13 @@ are unchanged in wording. **Recommendation:** a data-update item, outside this o
 
 - `docs/RULING_DISCREPANCIES.md`: the Siege of Towers entry and the hybrid-symbol entry moved from "Template errors" to "Copying errors" (kind "copying error", the release notes and Gatherer quoted); the Seraph note under "Not yet investigated" made a template-error entry; the Kellan, the Kid note updated with the release notes and Gatherer text; the header's sentence on which hosts were outside the allowed network updated.
 - `docs/rulings-exemptions/rulings-P222.tsv`, `rulings-P130.tsv`, `rulings-P214.tsv`: the reasons of the Siege of Towers and hybrid-symbol exemptions now say "copying error" and name the release notes (needles unchanged).
-- Register Sources fields (no decision changed): `that-opponent-fixed-as-it-triggers` (the Cranial Insertion ward/Frost Titan and Relic Putrescence answers, the Norn's Decree release notes read; the Why's sentence on blocked hosts corrected), `for-as-long-as-checked-continually-from-activation` and `duration-the-resolution-sets-up-is-checked-as-the-effect-begins` (the Foundations Update Bulletin verified; Seasinger's Gatherer ruling verified), `flash-permission-conditions-judged-as-casting-begins` (the forum post identified and quoted), `for-each-tokens-counters-life-one-event` (the forum and Cranial Insertion answers), `phasing-out-ends-a-waiting-for-as-long-as-duration` (the Cranial Insertion phasing answers), `attack-total-cost-contains-x` (the Cranial Insertion cost answers); `docs/INTERPRETATIONS.md` and `docs/DECISIONS.md` regenerated.
+- Register Sources fields (no decision changed): `that-opponent-fixed-as-it-triggers` (the Cranial Insertion ward/Frost Titan and Relic Putrescence answers, the Norn's Decree release notes read; the Why's sentence on blocked hosts corrected), `for-as-long-as-checked-continually-from-activation` and `duration-the-resolution-sets-up-is-checked-as-the-effect-begins` (the Foundations Update Bulletin verified; Seasinger's Gatherer ruling verified), `flash-permission-conditions-judged-as-casting-begins` (the forum post identified and quoted), `for-each-tokens-counters-life-one-event` (the forum and Cranial Insertion answers), `phasing-out-ends-a-waiting-for-as-long-as-duration` (the Cranial Insertion phasing answers), `attack-total-cost-contains-x` (the Cranial Insertion cost answers, Propaganda's ruling), and the Affects of `ruling-contradicting-oracle-gives-way` (the two reclassified cases and Seraph); `docs/DECISIONS.md` regenerated (`docs/INTERPRETATIONS.md` was already current: no title or status changed).
 
 ## Not reachable
 
 - **www.cardmarket.com**: refused by the network policy ("agent proxy: no rule or network setting allows this host"). Would have read "#CMAskTheJudge Episode 66: A Real Jewel" (https://www.cardmarket.com/en/Magic/Insight/Articles/CMAskTheJudge-Episode-66-A-Real-Jewel), which web-search summaries describe as Coveted Jewel with the attacker removed before blocks (unverified), to see whether it mentions a control change.
 - **www.reddit.com**: the .json endpoints answer 403 "You've been blocked by network security."; the HTML pages are a JavaScript bot challenge. Would have searched r/mtgrules for Norn's Decree, Coveted Jewel, ward with Perplexing Chimera or Commandeer, the initiative and the monarch after a control change, tempting offers with Hardened Scales/Xorn/Peregrin Took, Ixidron with Grumgully, and Sphere of Safety with Rosheen Meanderer.
-- **www.mtgsalvation.com**: 403 with a Cloudflare challenge ("cf-mitigated: challenge"). Same searches in its rules forum.
+- **www.mtgsalvation.com**: 403 with a Cloudflare challenge ("cf-mitigated: challenge"). Same searches in its rules forum; in particular the threads a web search lists as "Frost Titan and who is controlling it" (https://www.mtgsalvation.com/forums/magic-fundamentals/magic-rulings/808984-frost-titan-and-who-is-controlling-it) and "Mark of Mutiny and Frost Titan" (https://www.mtgsalvation.com/forums/magic-fundamentals/magic-rulings/magic-rulings-archives/286994-mark-of-mutiny-and-frost-titan), titles only, contents unread.
 - **web.archive.org**: connection reset during the TLS handshake. Would have read Gatherer's old pages for Seraph (multiverseid 159245, 2711, 4156) as captured 2007–2009, to see the 2007 ruling's original words ("removed from the game"?) and any Oracle text between 1997 and 2007, and the Masters Edition FAQ if one exists.
 - Also refused by the network policy (not in the brief's list): scryfall.com and api.scryfall.com, boardgames.stackexchange.com, judgeacademy.com, tappedout.net, mtg.fandom.com, mtg.wiki.
 - Not searched for lack of a reachable source: the Magic Judges Discord and other judge chats.
@@ -696,4 +696,5 @@ All under `target/web-research/`, fetched 2026-11-20 (UTC times in `fetch-log.ts
 | `gatherer-taeko-j25.html`, `gatherer-slinza-j25.html`, `gatherer-hurska-j25.html` | https://gatherer.wizards.com/J25/en-us/39/taeko-the-patient-avalanche, /55/slinza-the-spiked-stampede, /53/hurska-sweet-tooth |
 | `gatherer-syndicate-heavy-clu.html`, `gatherer-sorin-mh3.html`, `gatherer-kellan-the-kid-otj.html` | https://gatherer.wizards.com/CLU/en-us/47/syndicate-heavy, https://gatherer.wizards.com/MH3/en-us/245/sorin-of-house-markov, https://gatherer.wizards.com/OTJ/en-us/213/kellan-the-kid |
 | `wizards-rules-page.html`, `MagicCompRules-20261106.txt` | https://magic.wizards.com/en/rules, https://media.wizards.com/2026/downloads/MagicCompRules%2020261106.txt |
+| `mj-forum-73.html` | https://apps.magicjudges.org/forum/73/ |
 | `ci-search/*.html`, `mj-s-*.html`, `mj-search-*.html` | the archive and forum searches listed under each question |
