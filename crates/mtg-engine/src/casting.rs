@@ -4551,8 +4551,9 @@ impl Game {
                         self.obj(*o).controller == p && self.may_sacrifice_for_cost(*o, ctx)
                     })
                     // A mana ability activated to pay another cost doesn't sacrifice the
-                    // object that cost is for (see `Game::mana_reserve`).
-                    .filter(|o| Some(*o) != self.mana_reserve)
+                    // object that cost is for (see `Game::mana_reserve`), nor what the
+                    // payment's later mana abilities need (`Game::mana_keep`).
+                    .filter(|o| Some(*o) != self.mana_reserve && !self.mana_keep.contains(o))
                     // Nor what convoke or improvise tapped for the spell being cast: that's
                     // tapped after mana abilities are activated (CR 601.2g–h).
                     .filter(|o| {
@@ -4657,6 +4658,7 @@ impl Game {
                     .filter(|c| {
                         exile_cost_may_use_source(*c, src, ctx)
                             && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
+                            && !self.mana_keep.contains(c)
                     })
                     .collect();
                 // ("Exile two cards from a single graveyard": they must be chosen together,

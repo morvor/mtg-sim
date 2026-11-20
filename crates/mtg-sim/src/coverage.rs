@@ -26,6 +26,9 @@ pub struct Usage {
     pub cast: HashSet<SmolStr>,
     /// Cards a player could cast or play when they had priority.
     pub offered_cast: HashSet<SmolStr>,
+    /// Cards the focus agent chose to cast or play (whether or not the cast was then
+    /// completed: a payment can still fail, CR 601.2h, 733.1).
+    pub chosen_cast: HashSet<SmolStr>,
     /// Activated abilities a player could activate when they had priority.
     pub offered: HashSet<u64>,
     pub activated: HashSet<u64>,
@@ -49,6 +52,7 @@ impl Usage {
     pub fn merge(&mut self, o: &Usage) {
         self.cast.extend(o.cast.iter().cloned());
         self.offered_cast.extend(o.offered_cast.iter().cloned());
+        self.chosen_cast.extend(o.chosen_cast.iter().cloned());
         self.offered.extend(&o.offered);
         self.activated.extend(&o.activated);
         self.triggered.extend(&o.triggered);
@@ -434,10 +438,21 @@ impl FocusAgent {
         } else {
             return None;
         };
+        if let Action::Cast { card, .. } | Action::PlayLand { card } = &pick {
+            usage.chosen_cast.extend(card_name(g, *card));
+        }
         self.taken.push(pick.clone());
         Some(pick)
     }
 }
+
+/// The prompts of the decisions that pay part of a spell's mana cost by tapping or exiling
+/// other objects (convoke, improvise, delve; CR 702.51a, 702.126a, 702.66a).
+const PAY_OTHERWISE: [&str; 3] = [
+    "Tap creatures to convoke",
+    "Tap artifacts to improvise",
+    "Exile cards from your graveyard to delve",
+];
 
 impl Agent for FocusAgent {
     fn name(&self) -> &str {
@@ -476,10 +491,27 @@ impl Agent for FocusAgent {
                     .decide(g, p, &Decision::Priority { actions: kept });
                 if let Answer::Action(a) = &answer {
                     if self.focus.uses(g, a) {
+                        if let Action::Cast { card, .. } | Action::PlayLand { card } = a {
+                            let mut usage = self.usage.lock().unwrap_or_else(|e| e.into_inner());
+                            usage.chosen_cast.extend(card_name(g, *card));
+                        }
                         self.taken.push(a.clone());
                     }
                 }
                 return answer;
+            }
+            // Convoke, improvise or delve for the focus card: often the engine's choice,
+            // which pays as much of the cost that way as the rest needs (a random choice
+            // can leave a cost the player's mana doesn't pay, and the cast is reversed).
+            Decision::ChooseEntities {
+                source: Some(s),
+                prompt,
+                ..
+            } if self.focus.is_focus_card(g, *s)
+                && PAY_OTHERWISE.contains(&prompt.as_str())
+                && self.rng.gen_bool(0.7) =>
+            {
+                return Answer::Default;
             }
             Decision::OptionalCost { repeatable, .. } => {
                 return if *repeatable {

@@ -67,10 +67,16 @@ struct Delay {
     /// next turn": that step of a turn the player begins after the delayed ability is
     /// created (not this turn's).
     next_turn: bool,
+    /// "the next turn's upkeep": the first upkeep of the next turn
+    /// ([`crate::turn_structure::next_turns_upkeep`]), not the next upkeep to begin.
+    next_turns: bool,
 }
 
 impl Delay {
     fn trigger(&self) -> TriggerCond {
+        if self.next_turns {
+            return crate::turn_structure::next_turns_upkeep();
+        }
         let whose = match self.whose {
             Whose::Any => PlayerRel::Any,
             Whose::You => PlayerRel::You,
@@ -140,6 +146,7 @@ fn delay_phrase(s: &str) -> Option<Delay> {
         whose: Whose::Any,
         this_turn,
         next_turn: false,
+        next_turns: false,
     };
     match s {
         "end of combat" | "the end of combat" => return Some(eoc(false)),
@@ -164,6 +171,7 @@ fn delay_phrase(s: &str) -> Option<Delay> {
                 whose,
                 this_turn: false,
                 next_turn: true,
+                next_turns: false,
             });
         }
     }
@@ -180,7 +188,8 @@ fn delay_phrase(s: &str) -> Option<Delay> {
     ]
     .into_iter()
     .find_map(|(p, w)| r.strip_prefix(p).map(|x| (w, x)))?;
-    if r.starts_with("the next turn's ") && step != "upkeep" {
+    let next_turns = r.starts_with("the next turn's ");
+    if next_turns && (step != "upkeep" || this_turn) {
         return None;
     }
     Some(Delay {
@@ -188,6 +197,7 @@ fn delay_phrase(s: &str) -> Option<Delay> {
         whose,
         this_turn,
         next_turn: false,
+        next_turns,
     })
 }
 
