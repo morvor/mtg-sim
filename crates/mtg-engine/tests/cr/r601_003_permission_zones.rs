@@ -33,7 +33,11 @@ fn bosium_strip_casts_only_the_top_card_while_crucible_of_worlds_lists_the_grave
     t.activate(P0, strip, 0, &[]).unwrap();
     t.resolve_all();
     // Shock isn't the top card, and Crucible of Worlds's permission is for lands.
-    assert!(t.cast(P0, shock).target(Entity::Player(P1)).try_go().is_err());
+    assert!(t
+        .cast(P0, shock)
+        .target(Entity::Player(P1))
+        .try_go()
+        .is_err());
     t.clear_answers();
     assert_eq!(t.zone(shock), Zone::Graveyard(P0));
     // Lightning Bolt, the top card, may be cast.
@@ -46,11 +50,11 @@ fn bosium_strip_casts_only_the_top_card_while_crucible_of_worlds_lists_the_grave
 /// `true`) and `180:5`. Coram's permissions, for cards in graveyards that were put there
 /// from libraries this turn, list the cards in every graveyard among those P0 may play, so
 /// P1's Mountain (not put there from a library) is checked against Crucible of Worlds's
-/// permission too: the mutants read "your graveyard" as any graveyard (or any zone), and
-/// P0 plays P1's Mountain.
+/// permission too: the mutants read "your graveyard" (P0's, its controller's, CR 109.5) as
+/// any graveyard (or any zone), and P0 plays P1's Mountain.
 #[test]
 fn crucible_of_worlds_doesnt_play_a_land_from_another_players_graveyard() {
-    cr!("305.1");
+    cr!("109.5", "305.1");
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Coram, the Undertaker");
     t.battlefield(P0, "Crucible of Worlds");
@@ -145,14 +149,14 @@ fn another_players_crucible_of_worlds_doesnt_play_a_land_from_your_graveyard() {
     assert!(t.on_battlefield(forest));
 }
 
-/// Engine bug found triaging `permissions.rs:196:32`; this test FAILS until the fix is
-/// made (in `permissions.rs`: `in_permission_zone`'s `ZoneKind::Graveyard` arm by
-/// `as_though::in_graveyard_for`, and `effect_permitted_cards`'s also listing
-/// `as_though::other_graveyard_cards`). Shaman's Trance lets P0 play lands and cast spells
-/// from other players' graveyards "as though those cards were in your graveyard": for that
-/// purpose they're in P0's graveyard (CR 609.4), so Crucible of Worlds's permission, "You
-/// may play lands from your graveyard", covers them, as flashback does today
-/// (`kw/flashback.rs`).
+/// Regression test for the engine bug found triaging `permissions.rs:196:32`; it failed
+/// before the fix (commit `c83fe93`, in `permissions.rs`: `in_permission_zone`'s
+/// `ZoneKind::Graveyard` arm by `as_though::in_graveyard_for`, and `effect_permitted_cards`'s
+/// also listing `as_though::other_graveyard_cards`). Shaman's Trance lets P0 play lands and
+/// cast spells from other players' graveyards "as though those cards were in your
+/// graveyard": for that purpose they're in P0's graveyard (CR 609.4), so Crucible of
+/// Worlds's permission, "You may play lands from your graveyard", covers them, as the Trance
+/// already did for flashback's (`kw/flashback.rs`).
 #[test]
 fn shamans_trance_lets_crucible_of_worlds_play_a_land_from_another_players_graveyard() {
     cr!("609.4", "305.1");
@@ -160,11 +164,15 @@ fn shamans_trance_lets_crucible_of_worlds_play_a_land_from_another_players_grave
     t.battlefield(P0, "Crucible of Worlds");
     t.lands(P0, "Mountain", 3);
     let forest = t.graveyard(P1, "Forest");
-    assert!(t.play_land(P0, forest).is_err(), "P1's graveyard isn't P0's");
+    assert!(
+        t.play_land(P0, forest).is_err(),
+        "P1's graveyard isn't P0's"
+    );
     let trance = t.hand(P0, "Shaman's Trance");
     t.cast(P0, trance).go();
     t.resolve_all();
-    t.play_land(P0, forest).expect("as though it were in P0's graveyard");
+    t.play_land(P0, forest)
+        .expect("as though it were in P0's graveyard");
     let f = t.g.current(forest);
     assert!(t.on_battlefield(f));
     assert_eq!(t.obj_now(f).controller, P0);

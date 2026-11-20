@@ -40,9 +40,9 @@ fn discard(t: &mut TestGame, p: PlayerId, card: ObjectId) -> ObjectId {
 /// its own). Omniscience's permission, for cards in P0's hand, also allows the Bears, but
 /// cast for its mana cost the Bears use none of it. The mutants add a second way to cast it
 /// for its mana cost, "with Omniscience's permission", and casting it then asks "Choose the
-/// permission you're using" between that way and its own. (The pending `attach` fix, which
-/// skips a card's own way with an additional cost of its own outside the hand, leaves cards
-/// in the hand as they are: this test still kills both mutants after it.)
+/// permission you're using" between that way and its own. (The `attach` fix of commit
+/// `c83fe93`, which skips a card's own way with an additional cost of its own outside the
+/// hand, leaves cards in the hand as they are: this test still kills both mutants after it.)
 #[test]
 fn a_card_cast_from_hand_for_its_mana_cost_with_omniscience_out_asks_no_permission() {
     cr!("601.3", "118.9b");
@@ -170,13 +170,14 @@ fn hama_waterbends_the_mana_value_of_the_half_cast_from_a_split_card() {
 /// permission allows also gets the "without paying their mana costs" way, a copy of the same
 /// permission). Ignite the Future cast with flashback exiles the top three cards of P0's
 /// library, which P0 may play this turn, and "may play cards this way without paying their
-/// mana costs". A land is played, not cast (CR 305.1), so there's no mana cost to pay or not:
-/// the exiled Island is played with the one permission and nobody is asked which. The mutant
-/// offers the same permission twice for the Island, and playing it asks "Choose the
-/// permission you're using".
+/// mana costs". A land is played, not cast: it's put onto the battlefield from the zone it
+/// was in as a special action and is never a spell (CR 116.2a, 305.1), so there's no mana
+/// cost to pay or not: the exiled Island is played with the one permission and nobody is
+/// asked which. The mutant offers the same permission twice for the Island, and playing it
+/// asks "Choose the permission you're using".
 #[test]
 fn a_land_ignite_the_future_exiled_after_flashback_is_played_without_a_permission_choice() {
-    cr!("305.1", "601.3");
+    cr!("305.1", "116.2a");
     let mut t = TestGame::new(2);
     let ignite = t.graveyard(P0, "Ignite the Future");
     t.lands(P0, "Mountain", 8);
@@ -184,7 +185,9 @@ fn a_land_ignite_the_future_exiled_after_flashback_is_played_without_a_permissio
     let island = t.library_top(P0, "Island");
     t.library_top(P0, "Forest");
     t.cast(P0, ignite)
-        .method(CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Flashback))
+        .method(CastMethod::Keyword(
+            mtg_engine::keywords::KeywordKind::Flashback,
+        ))
         .go();
     t.resolve_all();
     let island = t.g.current(island);

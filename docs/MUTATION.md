@@ -1167,20 +1167,21 @@ pins. Changes:
 
 A full run (`FULL=1 scripts/mutants.sh permissions`) of the file at `43fcf29`: all 238
 mutants. The run was stopped by the 2-hour session limit several times and resumed each time
-with `FULL=1 RESUME=1 REV=43fcf29` (this worktree's own `RESUME`, through `--iterate`, `9c8dd49`–`cb69cb6`; the merge took the
-simultaneous.rs run's version of the script instead, which does the same). About
-3.5 minutes per mutant. 153 caught, 74 missed, 0 timeouts, 11 unviable: kill rate **67.4%**
+with `FULL=1 RESUME=1 REV=43fcf29` (this worktree's own `RESUME`, `9c8dd49`–`cb69cb6`, which
+skips the mutants already tested through `--iterate`, with `REV` naming the measured commit;
+the merge took the simultaneous.rs run's version of the script, whose `RESUME` skips them too
+but has no `REV`). About 3.5 minutes per mutant. 153 caught, 74 missed, 0 timeouts, 11 unviable: kill rate **67.4%**
 (153/227).
 
 The 74 survivors were classified from the code in eight batches, written while the run went
-on: 35 killable (b), 39 equivalent (a), and three engine bugs (c), found triaging `196:32`,
+on: 32 killable (b), 39 equivalent (a), and three (`514:17`, `515:17`, `516:17`) that only
+drop a way the engine offered wrongly (c). The triage found three engine bugs, at `196:32`,
 `514:17` and `969:45`. The tests were committed with their batches (`f67b79f`–`ccf8cb7`,
-unbuilt until the run ended); then the engine was fixed (`c83fe93`: fixes 1 and 2 and the
-register entry `own-permission-first`; `09bc166`: fix 3). The 74 survivors were re-run at
-the fixed commit (`RERUN=1 scripts/mutants.sh permissions`; the fixes moved the code by up
-to 15 lines): 32 of the 35 killable ones caught; the other three, `514:17`, `515:17`,
-`516:17`, missed, because fix 2 made them equivalent (below); the 39 equivalent ones
-missed. One of those, `347:13`, was killable after all (a land gets a free copy of its
+unbuilt until the run ended); once it had ended the engine was fixed (`c83fe93`: fixes 1 and
+2 and the register entry `own-permission-first`; `09bc166`: fix 3). The 74 survivors were
+re-run at the fixed commit (`RERUN=1 scripts/mutants.sh permissions`; the fixes moved the
+code by up to 15 lines): the 32 killable ones caught; the three (c) ones missed, because fix
+2 made them equivalent (below); the 39 equivalent ones missed. One of those, `347:13`, was killable after all (a land gets a free copy of its
 permission, and playing it asks which permission; below): a test was added (`50c47b1`) and a
 second re-run (`RERUN=1 ONLY=...`) caught it. Final: **33 caught, 41 missed** (all
 equivalent), kill rate after the new tests **81.9%** (186/227: 153 + 33).
@@ -1274,11 +1275,11 @@ otherwise.
   paying their mana costs" way too, the same permission twice, and playing it asks "Choose
   the permission you're using". `a_land_ignite_the_future_exiled_after_flashback_is_played_without_a_permission_choice`
   (`r601_003_permission_choice.rs`: an Island Ignite the Future exiled after flashback is
-  played with no question; CR 305.1, 601.3).
+  played with no question; CR 305.1, 116.2a).
 
 **Engine bugs (c)**, each fixed generally, with a regression test that fails before the fix:
 
-- Shaman's Trance (CR 609.4, 609.4a; found triaging `196:32`): "You may play lands and cast
+- Shaman's Trance (CR 609.4; found triaging `196:32`): "You may play lands and cast
   spells from other players' graveyards this turn as though those cards were in your
   graveyard" extended only the keywords' graveyard permissions (flashback, retrace, ...), not
   effects' "from your graveyard" ones (Crucible of Worlds, Muldrotha, Yawgmoth's Will,
@@ -1288,14 +1289,15 @@ otherwise.
   (`r601_003_permission_zones.rs`). Commit `c83fe93`.
 - One permission's cost per way (CR 702.81a, 601.2f; found triaging `514:17`–`516:17`):
   `attach` combined a card's own way whose additional cost comes with its own permission
-  (retrace, jump-start, Rona, Sheoldred's Faithful) with another permission's terms: Risen
+  (retrace's, jump-start's, Rona, Sheoldred's Faithful's) with another permission's terms: Risen
   Executioner with retrace (Six) had a third way, a land discarded *and* {1} more for each
   other creature card. The player uses one permission (the Muldrotha ruling), and the total
   cost is that way's. `attach` now skips, outside the hand, own ways with an additional cost
   of their own, as it already did for flashback's alternative cost (in the hand an own
   additional cost belongs to a timing permission, which an effect's permission may combine
-  with). `risen_executioner_cast_with_retrace_doesnt_cost_more_for_other_creature_cards`
-  (`r601_003_permission_ways.rs`, the Muldrotha ruling). Commit `c83fe93`. Since the fix
+  with: `rout_cast_with_flash_and_a_permission_to_cast_it_free_costs_only_the_2_more`, added
+  by the review). `risen_executioner_cast_with_retrace_doesnt_cost_more_for_other_creature_cards`
+  (`r601_003_permission_ways.rs`). Commit `c83fe93`. Since the fix
   `514:17`, `515:17` and `516:17` are equivalent with today's cards (no own way without a
   cost of its own meets those terms), so they count as (a), not killed.
 - Unstable Amulet's "until you exile another card with this artifact" (CR 109.5, 611.2a;
@@ -1366,11 +1368,42 @@ otherwise.
   discarded it this turn.”"; Muldrotha, the Gravetide's ruling (2020-11-10): "If multiple
   effects allow you to play a card from your graveyard, you must announce which permission
   you're using as you begin to play the card." The card's own permission can't be used up,
-  so announcing it leaves the player every option. Cited by the Omniscience and Oscorp
-  Industries tests.
+  so announcing it leaves the player every option. Cited by the Omniscience, Oscorp
+  Industries, Risen Executioner and Rout tests.
 - Latent, no card: a static permission's use is identified only by its source (way 0), which
   would confuse two static permissions of one source; `choose_cast_permission`'s default for a
   group mixing the card's own way with effects' is option 0 (the own way), not the first
   payable one as its doc says (after fix 2 no such group arises with today's cards).
 - The new code (the `as_though` arms, `attach`'s extra-cost skip, `given`'s per-player
   `newer`) hasn't had its own mutants run.
+
+**Review.** Every engine fix's regression test was checked again to fail with its fix
+reverted (the Shaman's Trance, Risen Executioner and stolen Unstable Amulet tests, each
+failing alone), and fix 2's exception for the hand, which no test reached, now has one:
+`rout_cast_with_flash_and_a_permission_to_cast_it_free_costs_only_the_2_more`
+(`r601_003_permission_ways.rs`: Rout in P0's hand, with an effect's permission to cast it
+without paying its mana cost, is cast during P1's turn for {2}; it fails with `attach`'s skip
+applied in the hand too). Changes:
+
+- Tests: the Risen Executioner test cited a Muldrotha, the Gravetide ruling with no Muldrotha
+  in it (dropped; the ruling stays cited by the Muldrotha tests); the Ignite the Future land
+  test cited 601.3, a rule for casting spells, for a land play (now 116.2a); the Coram, the
+  Undertaker test also cites 109.5 ("your graveyard" is its controller's); the regression
+  tests' "fails until the fix" notes now name the fix commits. Both tests of
+  `r601_003_permission_ways.rs` cite `own-permission-first`, whose decision now says why an
+  own way's additional cost is combined with an effect's permission in the hand (it comes
+  with a timing permission there, CR 601.3c).
+- This section: the classification (32 (b) and three (c), not "35 killable"), the script's
+  `REV`, Shaman's Trance's rules (609.4a dropped: Crucible of Worlds isn't an "as though"
+  effect), the Muldrotha ruling no longer listed for the Risen Executioner test.
+- Found, not fixed (outside this file): with Omniscience on the battlefield, a card's own way
+  to cast it as though it had flash for an additional cost isn't offered without paying its
+  mana cost. `Game::permitted_cast_options` gives Omniscience's permission a plain
+  `CastMethod::Free` way of its own, without flash, so Rout can't be cast during an opponent's
+  turn for {2} (P0 with two Plains is refused), though its flash permission's {2} is an
+  additional cost an alternative cost combines with (CR 601.3c, 118.9d; Omniscience's ruling
+  "You can, however, pay additional costs, such as kicker costs."). It affects the nine cards
+  with "as though it had flash if you pay {2} more" (Rout, Harbinger of the Tides, Ghitu Fire,
+  Mystical Tether, ...); the fix belongs with the offered alternative costs
+  (`kw::offered_costs::extend_cast_options`, which already extends every way without an
+  alternative cost).

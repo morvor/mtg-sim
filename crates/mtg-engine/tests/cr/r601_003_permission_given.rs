@@ -134,13 +134,14 @@ fn myr_welders_other_exile_ability_doesnt_end_its_unstable_amulet_permission() {
     assert!(may_cast(&t, P0, memnite));
 }
 
-/// Engine bug found triaging `permissions.rs:969:45` and `975:64`; this test FAILS until the
-/// fix is made (in `permissions::given`, an earlier "until you exile another card with ~"
-/// permission ends only when the new one is from the same object *for the same player*: today
-/// any player's new permission from that object ends it). "You" in the duration is the player
-/// who activated the ability (CR 109.5), so P0 may play the Shock until P0 exiles another card
-/// with the Amulet: P1, who took the Amulet with Steal Artifact, exiling a card of their own
-/// with it doesn't end that. (`975:64` fails this test too, as it does the first one.)
+/// Regression test for the engine bug found triaging `permissions.rs:969:45` and `975:64`; it
+/// failed before the fix (commit `09bc166`: in `permissions::given`, an earlier "until you
+/// exile another card with ~" permission ends only when the new one is from the same object
+/// *for the same player*; before, any player's new permission from that object ended it).
+/// "You" in the duration is the player who activated the ability (CR 109.5), so P0 may play
+/// the Shock until P0 exiles another card with the Amulet: P1, who took the Amulet with Steal
+/// Artifact, exiling a card of their own with it doesn't end that. (`975:64` fails this test
+/// too, as it does the first one.)
 #[test]
 fn another_player_exiling_a_card_with_your_unstable_amulet_doesnt_end_your_permission() {
     cr!("109.5", "611.2a");
