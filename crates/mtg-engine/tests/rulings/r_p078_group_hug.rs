@@ -729,9 +729,9 @@ fn erestor_counts_an_opponent_with_two_votes_both_ways() {
 /// Grudge Keeper's ruling "If you have additional votes because of Brago’s Representative,
 /// and you vote for more than one choice, an opponent will lose 2 life only if they voted
 /// for none of those choices." (2014-05-29, cited for an opponent with one vote in
-/// `r_p172_combat_votes.rs`) is narrower than stated: when the opponent has several votes
-/// too, Erestor of the Council's ruling on the same words applies (docs/
-/// RULING_DISCREPANCIES.md).
+/// `r_p172_combat_votes.rs`) is misleading (the user, Nov 19): it clarifies the case of an
+/// opponent with one vote but reads as general; when the opponent has several votes too,
+/// Erestor of the Council's ruling on the same words applies (docs/RULING_DISCREPANCIES.md).
 #[test]
 fn grudge_keeper_counts_an_opponent_whose_several_votes_partly_match_yours() {
     cr!("701.38a", "701.38d");

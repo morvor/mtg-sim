@@ -728,6 +728,7 @@ impl Game {
                     // stop applying as it's turned face up (CR 708.2a, 708.8).
                     let id = self.new_effect_id();
                     let ts = self.new_timestamp();
+                    let first = self.effects.len();
                     self.effects.push(ContinuousEffect {
                         id,
                         source,
@@ -743,6 +744,9 @@ impl Game {
                         layer1: None,
                         created_turn: self.turn.number,
                     });
+                    // CR 205.3d: not a subtype it can't have as it enters (Rise from the
+                    // Grave returning a noncreature God, `subtype_gain.rs`).
+                    crate::subtype_gain::lock_ungainable_parts(self, first);
                 }
                 self.recompute();
                 // Counters it enters with (CR 122.6): planeswalker loyalty (CR 306.5b),
