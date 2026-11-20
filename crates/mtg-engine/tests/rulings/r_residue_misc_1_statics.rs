@@ -52,7 +52,10 @@ fn moritte_enters_with_two_counters_plus_those_the_copy_brings() {
     let servant = t.battlefield(P0, "Servant of the Scale");
     t.battlefield(P0, "Hardened Scales");
     let m = moritte_copies(&mut t, servant);
-    assert!(p1(&t, m) >= 4, "{}", p1(&t, m));
+    // The three counters it would enter with are one event: Hardened Scales adds one
+    // ("If a creature you control would enter the battlefield with a number of +1/+1
+    // counters on it, it enters with that many plus one instead.").
+    assert_eq!(p1(&t, m), 4);
 }
 
 #[test]

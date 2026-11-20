@@ -632,17 +632,24 @@ fn isildurs_fateful_strike_any_number_a_turn_four_a_deck() {
 // graveyard."
 // ---------------------------------------------------------------------------------------
 
+// Not cited here: Swift Reckoning's ruling (2018-12-07) "If an effect allows you to cast
+// Swift Reckoning from your graveyard, you need two other instant and/or sorcery cards in
+// your graveyard to cast it as though it had flash." It follows from a sentence of 601.3 in
+// the CRs effective 2016-07-22 to 2019-08-23 ("If that player is no longer allowed to cast
+// that spell after completing its proposal, the casting of the spell is illegal ..."), which
+// the CR effective 2019-10-04 removed; Graveyard Shift's ruling (2022-04-29) has the card
+// count itself "immediately before you begin to cast it, even if moving it to the stack
+// would reduce that number to four". Left for the coordinator as a conflict case
+// (docs/agents/items/rulings-residue.md, "Open questions").
 #[test]
-fn swift_reckoning_cast_from_the_graveyard_needs_two_other_instants_or_sorceries() {
-    cr!("601.2a", "601.2e", "601.3d", "702.34a");
-    ruling!(
-        "Swift Reckoning",
-        "If an effect allows you to cast Swift Reckoning from your graveyard, you need two other instant and/or sorcery cards in your graveyard to cast it as though it had flash."
-    );
+fn swift_reckoning_cast_from_the_graveyard_counts_itself_as_casting_begins() {
+    cr!("601.2a", "601.3", "702.34a");
+    interp!("flash-permission-conditions-judged-as-casting-begins");
     supported("Swift Reckoning");
-    // Snapcaster Mage gives it flashback this turn, on P1's turn (instant speed). As
-    // proposed, the spell is on the stack: only the other cards in the graveyard count.
-    for others in [1usize, 2] {
+    // Snapcaster Mage gives it flashback this turn, on P1's turn (instant speed). As the
+    // casting begins, the card is in the graveyard and counts itself: with one other
+    // instant or sorcery card there, it's offered and can be cast; with none, neither.
+    for others in [0usize, 1] {
         let mut t = TestGame::new(2);
         let reck = t.graveyard(P0, "Swift Reckoning");
         for _ in 0..others {
@@ -657,17 +664,16 @@ fn swift_reckoning_cast_from_the_graveyard_needs_two_other_instants_or_sorceries
         t.lands(P0, "Plains", 2);
         t.g.turn.priority = Some(P0);
         t.g.recompute();
-        let method =
-            t.g.legal_actions(P0)
-                .into_iter()
-                .find_map(|a| match a {
-                    Action::Cast { card, method } if card == reck => Some(method),
-                    _ => None,
-                })
-                .expect("flashback offered");
+        let offered = t.g.legal_actions(P0).into_iter().find_map(|a| match a {
+            Action::Cast { card, method } if card == reck => Some(method),
+            _ => None,
+        });
+        assert_eq!(offered.is_some(), others == 1, "others: {others}");
+        // What's offered is what casting accepts.
+        let method = offered.unwrap_or(CastMethod::Keyword(KeywordKind::Flashback));
         let cast = t.cast(P0, reck).method(method).target(bears).try_go();
-        assert_eq!(cast.is_ok(), others == 2, "others: {others}");
-        if others == 2 {
+        assert_eq!(cast.is_ok(), others == 1, "others: {others}");
+        if others == 1 {
             t.resolve_all();
             assert!(t.in_graveyard(P1, "Grizzly Bears"));
             assert_eq!(t.zone(reck), Zone::Exile);

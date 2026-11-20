@@ -957,8 +957,16 @@ impl Game {
     /// CR 400.7g: if an effect granted `card` the keyword ability it's being cast with
     /// ("target card gains flashback", "each instant and sorcery card in your graveyard has
     /// flashback"), that ability continues to apply to the spell `spell` it became, even
-    /// though the effect no longer applies to that new object.
-    fn keep_granted_casting_keyword(&mut self, card: ObjectId, spell: ObjectId, m: &CastMethod) {
+    /// though the effect no longer applies to that new object. `inset` is the keyword an
+    /// effect gave the card only with the characteristics of the inset spell it's cast as
+    /// (CR 601.3e; [`crate::adventure::granted_inset_keyword`]).
+    fn keep_granted_casting_keyword(
+        &mut self,
+        card: ObjectId,
+        spell: ObjectId,
+        m: &CastMethod,
+        inset: Option<crate::keywords::Keyword>,
+    ) {
         let CastMethod::Keyword(k) = *m else {
             return;
         };
@@ -979,6 +987,7 @@ impl Game {
             .keywords()
             .find(|x| x.kind == k)
             .cloned()
+            .or(inset)
         else {
             return;
         };
@@ -1214,16 +1223,34 @@ impl Game {
     /// characteristics the spell would have given the choices made in its proposal
     /// (CR 601.3b, 601.3e).
     fn flash_permitted(&self, p: PlayerId, card: ObjectId, chars: &Characteristics) -> bool {
+        self.flash_permitted_by(p, card, chars, &self.statics.flash_permissions, card)
+    }
+
+    /// [`Game::flash_permitted`] by the effects `perms` (source, controller, player, spells),
+    /// those that applied as the player began to cast the spell `card`, which was then the
+    /// card `began` (an effect of the card's own, whose source was `began`, is the spell's
+    /// now). Their conditions were judged then, with the card where it was (CR 601.3:
+    /// "A player can begin to cast a spell only if a rule or effect allows that player to
+    /// cast it"); only the qualities they ask of the spell are judged as it's proposed
+    /// (CR 601.3b; interpretation `flash-permission-conditions-judged-as-casting-begins`).
+    fn flash_permitted_by(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+        perms: &[(ObjectId, PlayerId, PlayerRel, Filter)],
+        began: ObjectId,
+    ) -> bool {
         let view = WithChars {
             id: card,
             chars,
             face_down: self.obj(card).face_down,
         };
-        self.statics
-            .flash_permissions
+        perms
             .iter()
             .any(|(s, c, who, what)| {
-                let ctx = Ctx::new(Some(*s), *c);
+                let s = if *s == began { card } else { *s };
+                let ctx = Ctx::new(Some(s), *c);
                 self.player_rel_matches(*who, p, &ctx)
                     && self.matches_view(&view, card, &as_spell_filter(what), &ctx)
             })
@@ -1724,6 +1751,25 @@ impl Game {
                 && !c.has_keyword(KeywordKind::Flash)
                 && self.flash_permitted(p, card, &c)
         };
+        // The effects that let it be begun that way, with their conditions as they stand
+        // now, before the card moves (Swift Reckoning cast from a graveyard counts itself
+        // among the instant and sorcery cards there).
+        let flash_permissions_begun = if by_flash_permission {
+            self.statics.flash_permissions.clone()
+        } else {
+            Vec::new()
+        };
+        // A keyword an effect gives the card only with the characteristics of the inset
+        // spell it's cast as, and it's cast with (CR 601.3e: Lier's flashback for Stomp),
+        // which the spell keeps (CR 400.7g; see `keep_granted_casting_keyword`).
+        let inset_keyword = match opt.method {
+            CastMethod::Keyword(k)
+                if opt.face == FaceState::Half(1) && !self.obj(card).chars.has_keyword(k) =>
+            {
+                crate::adventure::granted_inset_keyword(self, card, k)
+            }
+            _ => None,
+        };
         // 601.2a: move the card to the stack.
         if let Some(list) = self.zone_list_mut(from) {
             list.retain(|x| *x != card);
@@ -1811,7 +1857,7 @@ impl Game {
         // 611.2f, 611.3a).
         crate::next_spell::spell_put_on_stack(self, id, p);
         self.recompute();
-        self.keep_granted_casting_keyword(card, id, &opt.method);
+        self.keep_granted_casting_keyword(card, id, &opt.method, inset_keyword);
         let chars = self.obj(id).chars.clone();
 
         // 601.2b: optional additional costs (kicker etc.) and X.
@@ -2166,10 +2212,11 @@ impl Game {
         }
         // CR 601.3b: a spell begun as though it had flash because an effect lets spells
         // with certain qualities be cast that way ("if X is 3 or less", "if it targets a
-        // permanent you control") must have them as proposed.
+        // permanent you control") must have them as proposed. The effects are those that
+        // applied as it was begun: moving the card to the stack doesn't end one.
         if by_flash_permission
             && !proposed.has_keyword(KeywordKind::Flash)
-            && !self.flash_permitted(p, id, &proposed)
+            && !self.flash_permitted_by(p, id, &proposed, &flash_permissions_begun, card)
         {
             return Err(Illegal(
                 "the proposed spell can't be cast as though it had flash".into(),

@@ -409,6 +409,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: as the rulings say, for Abuelo's Awakening (layer 7b in timestamp order, CR 613.4b, 613.7a; crewing sets no power or toughness, CR 702.122a).
 - Recorded: tests `tests/rulings/r_p149_exile_until.rs` (`returned_artifact_and_enchantment_creature_cards_are_base_1_1`, `returned_permanents_take_later_base_pt_but_stay_1_1_when_crewed`), citing them under Abuelo, Ancestral Echo, which can't take part (its ability returns no card as a creature).
 
+### Survey Mechan: Susur Secundi, Void Altar's ruling about its last ability
+- Kind: misattached
+- Status: open for review
+- Ruling, Survey Mechan (2025-07-25): "Use the sacrificed creature’s power as it last existed on the battlefield to determine how many cards to draw with Susur Secundi’s last ability."
+- Conflicts with: Survey Mechan draws no number of cards based on a sacrificed creature's power: "Flying / Hexproof (This creature can't be the target of spells or abilities your opponents control.) / {10}, Sacrifice this creature: It deals 3 damage to any target. Target player draws three cards and gains 3 life. This ability costs {X} less to activate, where X is the number of differently named lands you control." The ruling names and describes Susur Secundi, Void Altar's last ability: "12+ | {1}{B}, {T}, Pay 2 life, Sacrifice a creature: Draw cards equal to the sacrificed creature's power. Activate only as a sorcery."
+- Evidence: both are Edge of Eternities cards (released 2025-08-01 per the card data; the rulings are dated 2025-07-25). Susur Secundi has no rulings in the data; Survey Mechan's other three rulings are about its own last ability (counting differently named lands, no actions while it's activated, the cost fixed once determined). The set's release notes are past the ormos mirror's end (2022), so they weren't compared. Found by work item rulings-residue-misc-1 (pass A, Nov 20).
+- Engine: as the ruling says, for Susur Secundi: the cards drawn are the sacrificed creature's power as it last existed on the battlefield (CR 608.2h), a pump until end of turn included.
+- Recorded: test `tests/rulings/r_residue_misc_1_triggers.rs` (`susur_secundi_draws_the_sacrificed_creatures_last_known_power`), citing it under Survey Mechan, which takes part as the creature sacrificed (a 1/3 made 4/6 by Giant Growth: four cards drawn).
+
 ## Outdated rulings
 
 ### Souls of the Faultless: "you may choose either member of the attacking team"
@@ -1027,6 +1036,41 @@ decides whether they become a conflict case.
   same on both cards, so with Siege of Towers' name read in, the ruling holds. The text is
   cited through Shattering Spree (`tests/rulings/r_s14_replicate_retrace.rs`), so it needs
   no test of its own. Not exempted; not an entry.
+- **Swift Reckoning** (rulings-residue-misc-1, Nov 20; a conflict case for the coordinator):
+  "If an effect allows you to cast Swift Reckoning from your graveyard, you need two other
+  instant and/or sorcery cards in your graveyard to cast it as though it had flash."
+  (2018-12-07, Ultimate Masters) for "Spell mastery — If there are two or more instant
+  and/or sorcery cards in your graveyard, you may cast this spell as though it had flash."
+  It follows from 601.3 as it read from the CR effective 2016-07-22 to the CR effective
+  2019-08-23: "A player can’t begin to cast a spell unless a rule or effect allows that
+  player to cast it. If that player is no longer allowed to cast that spell after completing
+  its proposal, the casting of the spell is illegal and the game returns to the moment
+  before the casting of that spell was proposed (see rule 721, “Handling Illegal
+  Actions”)." (archived CR texts; the card is on the stack once the proposal is complete).
+  The CR effective 2019-10-04 replaced it with today's 601.3: "A player can begin to cast a
+  spell only if a rule or effect allows that player to cast it and no rule or effect
+  prohibits that player from casting it." Graveyard Shift's ruling, written under today's
+  rules for the same situation, has the card count itself: "If an effect allows you to cast
+  Graveyard Shift from your graveyard, you may cast it any time you could cast an instant if
+  you have five or more mana values among cards in your graveyard immediately before you
+  begin to cast it, even if moving it to the stack would reduce that number to four."
+  (2022-04-29), and Swift Reckoning's other ruling of the same day says "The number of
+  instant and/or sorcery cards in your graveyard matters only as you begin to cast Swift
+  Reckoning." Against it: 601.2e still checks whether "the proposed spell can legally be
+  cast", and the two cards are worded differently ("you may cast this spell as though it had
+  flash", 601.3b's kind of effect, against Graveyard Shift's "This spell has flash as long
+  as", 601.3d's). Swift Reckoning's third ruling, the spell mastery note of Magic Origins
+  ("Check to see if there are two or more instant and/or sorcery cards in your graveyard as
+  the spell resolves to determine whether the spell mastery ability applies. The spell
+  itself won't count because it's still on the stack as you make this check.",
+  2015-06-22), is written for spell mastery abilities that change the effect, and says the
+  opposite of the 2018 "matters only as you begin to cast" for this card (it is cited
+  through the other spell mastery cards). The ruling is left uncited, not exempt; the engine
+  counts the card itself (provisional `flash-permission-conditions-judged-as-casting-begins`,
+  `tests/rulings/r_residue_misc_1_stack.rs`,
+  `swift_reckoning_cast_from_the_graveyard_counts_itself_as_casting_begins`). If it is
+  judged outdated, it becomes an outdated entry with an exemption in
+  `docs/rulings-exemptions/rulings-P011.tsv`; if it stands, the register entry is reversed.
 - Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (copying errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the

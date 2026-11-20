@@ -109,3 +109,30 @@ Split in two by batch id (OPEN counts on Nov 20 in brackets):
   order (the crew effect is later) would leave it no Dragon. `tests/rulings/
   r_residue_type_change_layers.rs` (`shadow_puppeteers_on_a_creature_that_stopped_being_a_creature`)
   asserts the 4/4 but not the Dragon. Settling it needs a register entry (provisional).
+- **Swift Reckoning cast from a graveyard: does the card count itself?** (found by
+  `rulings-residue-misc-1`, Nov 20; a conflict case, the ruling left uncited, not exempt).
+  Swift Reckoning: "Spell mastery — If there are two or more instant and/or sorcery cards in
+  your graveyard, you may cast this spell as though it had flash." Its ruling (2018-12-07):
+  "If an effect allows you to cast Swift Reckoning from your graveyard, you need two other
+  instant and/or sorcery cards in your graveyard to cast it as though it had flash." That
+  follows from 601.3 as it read in the CRs effective 2016-07-22 to 2019-08-23 ("... If that
+  player is no longer allowed to cast that spell after completing its proposal, the casting
+  of the spell is illegal and the game returns to the moment before the casting of that
+  spell was proposed ..."), which the CR effective 2019-10-04 replaced with today's "A
+  player can begin to cast a spell only if a rule or effect allows that player to cast it
+  and no rule or effect prohibits that player from casting it." Graveyard Shift's ruling
+  (2022-04-29), under today's rules: "If an effect allows you to cast Graveyard Shift from
+  your graveyard, you may cast it any time you could cast an instant if you have five or more
+  mana values among cards in your graveyard immediately before you begin to cast it, even if
+  moving it to the stack would reduce that number to four." The case for the ruling still
+  holding: 601.2e ("The game checks to see if the proposed spell can legally be cast.") and
+  the cards' different wordings (601.3b's "allows a player to cast a spell ... as though it
+  had flash" against 601.3d's "would have flash only if certain conditions are met"). The
+  engine had followed the ruling while its list of legal actions offered the cast it then
+  refused; it now counts the card itself as the casting begins, so the list and the casting
+  agree (provisional `flash-permission-conditions-judged-as-casting-begins`). To settle:
+  either the ruling is outdated (an outdated entry in docs/RULING_DISCREPANCIES.md, where its
+  note under "Not yet investigated" has the quotes, and an exemption in
+  `docs/rulings-exemptions/rulings-P011.tsv`; the register entry decided), or it stands (the
+  register entry reversed: the effects judged again with the card on the stack, and the list
+  of legal actions made to judge them so too).

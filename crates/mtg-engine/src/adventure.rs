@@ -118,22 +118,22 @@ pub fn on_an_adventure_for(g: &Game, card: ObjectId, p: PlayerId) -> bool {
             .any(|(c, q)| *c == card && *q == p)
 }
 
-/// Whether a static ability of a permanent could grant abilities to cards outside the
-/// battlefield ("Each instant and sorcery card in your graveyard has flashback", Lier,
-/// Disciple of the Drowned): a continuous effect that adds keywords or abilities to objects
-/// in another zone. A cheap test before [`granted_inset_cast_options`] copies the game.
-fn grants_outside_the_battlefield(g: &Game) -> bool {
+/// Whether a static ability of a permanent could grant abilities to cards in `zone`, a zone
+/// other than the battlefield ("Each instant and sorcery card in your graveyard has
+/// flashback", Lier, Disciple of the Drowned): a continuous effect that adds keywords or
+/// abilities to objects in that zone. A cheap test before [`granted_inset_cast_options`]
+/// copies the game (an effect for cards in graveyards doesn't make it copy the game for a
+/// card in a hand).
+fn grants_in_zone(g: &Game, zone: crate::ability::ZoneKind) -> bool {
     use crate::ability::{AbilityKind, Modification, StaticEffect};
+    let in_zone = format!("InZone({zone:?})");
     g.permanents().any(|o| {
         o.chars.abilities.iter().any(|a| match &a.kind {
             AbilityKind::Static(s) => match &s.effect {
                 StaticEffect::Continuous { affected, mods } => {
                     mods.iter().any(|m| {
                         matches!(m, Modification::AddKeyword(_) | Modification::AddAbility(_))
-                    }) && {
-                        let f = format!("{affected:?}");
-                        f.contains("InZone(") && !f.contains("InZone(Battlefield)")
-                    }
+                    }) && format!("{affected:?}").contains(&in_zone)
                 }
                 _ => false,
             },
@@ -153,18 +153,50 @@ fn grants_outside_the_battlefield(g: &Game) -> bool {
 /// applied, and the keywords it gains that way offer the ways to cast it as the inset.
 /// Cards on the stack or on the battlefield aren't looked at (they aren't cast from there).
 pub fn granted_inset_cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
+    let Some((h, granted)) = inset_granted_keywords(g, card) else {
+        return vec![];
+    };
+    crate::kw::keyword_cast_options(&h, p, card, &granted)
+        .into_iter()
+        .filter(|opt| opt.face == FaceState::Half(1))
+        .collect()
+}
+
+/// The keyword of kind `k` that continuous effects give `card` with its inset's
+/// characteristics where it is ([`granted_inset_cast_options`]): the ability a spell cast
+/// as that inset with it keeps on the stack (CR 400.7g: "If an effect grants a nonland card
+/// an ability that allows it to be cast, that ability will continue to apply to the new
+/// object that card became after it moved to the stack as a result of being cast this
+/// way."), so Skimming Strike cast with Lier's flashback is exiled as flashback says.
+pub fn granted_inset_keyword(
+    g: &Game,
+    card: ObjectId,
+    k: KeywordKind,
+) -> Option<crate::keywords::Keyword> {
+    inset_granted_keywords(g, card)?
+        .1
+        .into_iter()
+        .find(|x| x.kind == k)
+}
+
+/// The keywords an adventurer or omen card outside the battlefield and the stack would have
+/// with its inset's characteristics where it is, besides those it has now (CR 601.3e), and
+/// the copy of the game where it was given them, all layers applied; `None` if it would
+/// gain none, or no permanent's static ability grants abilities to cards in that zone.
+fn inset_granted_keywords(
+    g: &Game,
+    card: ObjectId,
+) -> Option<(Game, Vec<crate::keywords::Keyword>)> {
     let o = g.obj(card);
     if inset(g, card).is_none()
         || o.face != FaceState::Front
         || o.face_down
         || matches!(o.zone, Zone::Stack | Zone::Battlefield)
-        || !grants_outside_the_battlefield(g)
+        || !o.zone.kind().is_some_and(|z| grants_in_zone(g, z))
     {
-        return vec![];
+        return None;
     }
-    let Some(def) = o.card.clone() else {
-        return vec![];
-    };
+    let def = o.card.clone()?;
     let half = FaceState::Half(1);
     let own: Vec<String> = g
         .characteristics_to_cast(card)
@@ -186,13 +218,7 @@ pub fn granted_inset_cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<
         .filter(|k| !own.contains(&format!("{k:?}")))
         .cloned()
         .collect();
-    if granted.is_empty() {
-        return vec![];
-    }
-    crate::kw::keyword_cast_options(&h, p, card, &granted)
-        .into_iter()
-        .filter(|opt| opt.face == half)
-        .collect()
+    (!granted.is_empty()).then_some((h, granted))
 }
 
 /// Hooks for adventurer and omen cards in the keyword registry (they aren't keywords).

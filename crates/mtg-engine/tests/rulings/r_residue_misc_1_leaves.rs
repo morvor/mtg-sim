@@ -566,10 +566,14 @@ fn lier_flashback_for_an_adventure_only() {
 
 #[test]
 fn lier_flashback_for_an_omen() {
-    cr!("601.3e", "720.3a", "702.34a");
+    cr!("601.3e", "720.3a", "720.3d", "702.34a", "400.7g", "616.1");
     ruling!(
         "Lier, Disciple of the Drowned",
         "Lier's last ability allows you to cast adventurer cards in your graveyard as Adventures and omen cards in your graveyard as Omens using the flashback it grants."
+    );
+    ruling!(
+        "Lier, Disciple of the Drowned",
+        "A spell cast using flashback will always be exiled afterward, whether it resolves, is countered, or leaves the stack in some other way."
     );
     // Dirgur Island Dragon // Skimming Strike ({1}{U} instant Omen: "Tap up to one target
     // creature. Draw a card.").
@@ -588,7 +592,30 @@ fn lier_flashback_for_an_omen() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 1);
     assert!(t.obj_now(bears).tapped);
-    assert_ne!(t.zone(t.g.current(card)), Zone::Graveyard(P0));
+    // Exiled, not shuffled into the library as an Omen otherwise is (CR 720.3d): flashback
+    // exiles it "instead of putting it anywhere else" (CR 702.34a), whichever of the two
+    // replacements is applied first (CR 616.1).
+    assert_eq!(t.zone(t.g.current(card)), Zone::Exile);
+    // Returned to its owner's hand from the stack by Venser, Shaper Savant ("When Venser
+    // enters, return target spell or permanent to its owner's hand."), it's exiled too: the
+    // spell keeps the flashback it was cast with (CR 400.7g), though Lier gives flashback
+    // only to cards in a graveyard.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Lier, Disciple of the Drowned");
+    let card = t.graveyard(P0, "Dirgur Island Dragon // Skimming Strike");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    fill_pool(&mut t, P0, 2);
+    let s = t
+        .cast(P0, card)
+        .method(CastMethod::Keyword(KeywordKind::Flashback))
+        .target(bears)
+        .go();
+    assert!(has(&mut t, s, KeywordKind::Flashback));
+    t.answer_targets(P1, &[obj(s)]);
+    enter(&mut t, P1, "Venser, Shaper Savant");
+    t.resolve();
+    assert_eq!(t.zone(t.g.current(card)), Zone::Exile);
+    assert!(!t.obj_now(bears).tapped);
 }
 
 #[test]
