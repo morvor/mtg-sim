@@ -151,20 +151,49 @@ fn has_mana_ability(g: &Game, id: ObjectId) -> bool {
         .any(|a| matches!(&a.kind, AbilityKind::Activated(x) if x.is_mana_ability))
 }
 
+/// Whether the total cost `cost` of `spell` could still be paid once the permanents
+/// `tapped` are tapped for it (convoke, improvise): they're tapped as the total cost is
+/// paid, after the mana abilities are activated (CR 601.2g–h), so no mana ability taps,
+/// sacrifices or exiles them first (`Game::paid_otherwise`), and the cost's other parts
+/// ("As an additional cost to cast this spell, sacrifice a creature.") must still be paid.
+pub(crate) fn payable_once_tapped(
+    g: &Game,
+    p: PlayerId,
+    spell: ObjectId,
+    cost: &Cost,
+    tapped: &[ObjectId],
+) -> bool {
+    let chars = g.obj(spell).chars.clone();
+    if tapped.is_empty() {
+        return g.can_pay_cost_optimistic(p, cost, Some(spell), &chars);
+    }
+    let mut h = g.clone();
+    for c in tapped {
+        h.objects[c.0 as usize].tapped = true;
+    }
+    h.paid_otherwise.extend_from_slice(tapped);
+    h.can_pay_cost_optimistic(p, cost, Some(spell), &chars)
+}
+
 /// The default choice: no creatures if the mana can be paid otherwise; else creatures
-/// (preferring ones without mana abilities) until the rest can be paid.
+/// (preferring ones without mana abilities) until the rest of the total cost `cost` can be
+/// paid ([`payable_once_tapped`]).
 fn default_choice(
     g: &Game,
     p: PlayerId,
     spell: ObjectId,
-    m: &ManaCost,
+    cost: &Cost,
     cands: &[ObjectId],
 ) -> Vec<ObjectId> {
-    let chars = g.obj(spell).chars.clone();
-    let payable = |cost: &ManaCost| {
-        g.can_pay_cost_optimistic(p, &Cost::mana(cost.clone()), Some(spell), &chars)
+    let Some(m) = cost.mana.as_ref() else {
+        return vec![];
     };
-    if payable(m) {
+    let payable = |rest: &ManaCost, tapped: &[ObjectId]| {
+        let mut c = cost.clone();
+        c.mana = Some(rest.clone());
+        payable_once_tapped(g, p, spell, &c, tapped)
+    };
+    if payable(m, &[]) {
         return vec![];
     }
     let mut order = cands.to_vec();
@@ -179,8 +208,22 @@ fn default_choice(
             continue;
         }
         chosen = trial;
-        if payable(&rest) {
-            break;
+        if payable(&rest, &chosen) {
+            return chosen;
+        }
+    }
+    // Tapping all of them doesn't leave a payable rest: leave out those the rest of the
+    // payment needs to sacrifice or tap for mana instead, one at a time, as long as the
+    // rest can then be paid (Ashnod's Altar sacrificing a white creature for {2} while
+    // two red ones convoke {R}{R}).
+    let payable_set = |set: &[ObjectId]| {
+        let (rest, assign) = remaining(m, &colors_of(g, set));
+        assign.iter().all(|a| a.is_some()) && payable(&rest, set)
+    };
+    for c in chosen.clone() {
+        let trial: Vec<ObjectId> = chosen.iter().copied().filter(|x| *x != c).collect();
+        if !trial.is_empty() && payable_set(&trial) {
+            chosen = trial;
         }
     }
     chosen
@@ -232,7 +275,7 @@ impl KeywordRules for Convoke {
             {
                 v.iter().filter_map(|e| e.object()).collect()
             }
-            _ => default_choice(g, p, spell, &m, &cands),
+            _ => default_choice(g, p, spell, cost, &cands),
         };
         if chosen.is_empty() {
             return Ok(());

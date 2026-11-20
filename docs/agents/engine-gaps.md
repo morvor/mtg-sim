@@ -971,6 +971,40 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   Merchant), discards (Skirge Familiar) or exiles from hand (Cadaverous Bloom); and Squandered
   Resources, whose mana ("any type the sacrificed land could produce") is known only once the land is
   chosen, so `production_units` finds none while planning.
+  Fixed (small-fixes-8, Nov 21): mana abilities whose costs tap other untapped permanents are planned
+  (`ManaSource::tap_pool`; summoning-sick permanents and the permanent itself included, per Heritage
+  Druid's, Birchlore Rangers' and Urza's rulings; after the permanents' own tapping for mana), and so
+  are discards (not at random) and exiles from the player's hand (last resort, like a sacrifice; the
+  player picks the card as the cost is paid); what all the planned activations sacrifice, exile,
+  discard or tap is one matching (`match_sacrifices`: a permanent tapped for its own mana or
+  sacrificed as itself is never tapped for another cost; one object pays only one cost). Squandered
+  Resources and Food Chain are listed once per object their costs could take, with that object's mana
+  (`depends_on_cost_object`, `ManaSource::exact`; the activation is then offered only that object),
+  and the plan drops such activations while the rest still pays (`fewer_objects`: Food Chain exiles a
+  Grizzly Bears alone for {2}{G}, not a Memnite too). Food Chain added only one mana even activated by
+  hand: a mana ability's effect didn't see what its cost exiled (`COST_EXILED`); the mana ability's
+  activation now records what its cost moved (CR 400.7j, `zones::record_cost_moved`). The cost's own
+  other parts are matched after the mana abilities (`cost_needs.rs`, `SpendContext::cost_needs`): Bone
+  Splinters with Phyrexian Altar and one creature, and Fling with two, aren't offered (with one more
+  creature they're paid); a spell in a hand or graveyard isn't discarded or exiled for its own mana.
+  An attempt made anyway falls back to planning the mana alone (`pay_mana`), so it's reversed after
+  its mana abilities as before (the 733.1 tests that reach library actions through Fling and Ashnod's
+  Altar keep doing so).
+  What convoke or improvise taps is in no mana ability's cost (`sources_inner`), and the default
+  convoke and improvise choices judge the whole rest of the cost with those creatures or artifacts kept
+  out (`convoke::payable_once_tapped`); convoke's default also leaves creatures out one at a time when
+  tapping all of them leaves the rest unpayable. Register: `mana-abilities-planned-with-the-objects-
+  their-costs-take` (and `automatic-mana-payment`, `default-cost-helpers`, `castability-is-optimistic`
+  updated). Tests: `tests/cr/r605_003_mana_abilities_with_other_resources.rs`,
+  `tests/cr/r601_002g_mana_abilities_before_other_costs.rs`. Left: a chain of consumers taking each
+  other's permanents in an order other than `exec_key`'s isn't found (optional part 5, not done); an
+  object tapped for one planned cost and then sacrificed for a later one (tap an Elf for Heritage
+  Druid, then sacrifice it to Phyrexian Altar) isn't planned (under-offered, never reversed); the
+  castable-spells list still assumes every convoke or improvise candidate is tapped and none is also
+  sacrificed for mana, and counts restricted mana for any spell (`castability-is-optimistic`); "X mana
+  of any one color" (Food Chain, Gilded Lotus) is planned as X units each of any color, so one
+  activation can be planned for two colors and the cast then reversed (old); a per-object source's
+  mana is planned without the replacement effects and triggered mana abilities of tapping it.
 
 ---
 

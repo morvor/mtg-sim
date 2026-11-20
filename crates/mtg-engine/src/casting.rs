@@ -3335,6 +3335,9 @@ impl Game {
                 );
             }
             crate::cost_sets::record_untapped(&paid, &mut ctx.vars);
+            // "the exiled creature's mana value" (Food Chain): what the cost moved, as the
+            // objects it became (CR 400.7j).
+            crate::zones::record_cost_moved(self, &paid, &mut ctx.vars);
             self.record_activation(p, src, a.uid);
             self.emit(Event::AbilityActivated {
                 ability: None,
@@ -3840,6 +3843,9 @@ impl Game {
             };
             let spend = SpendContext {
                 reserve_may_tap: !cost.has_tap(),
+                // What the cost's other parts take once the mana abilities are activated
+                // (CR 601.2g–h): Bone Splinters' creature isn't also sacrificed for {B}.
+                cost_needs: crate::cost_needs::cost_needs(self, p, &cost.parts, src, ctx),
                 ..spend
             };
             let plan = crate::mana_abilities::plan_payment(self, p, &need, &spend, reserve);
@@ -4407,6 +4413,15 @@ impl Game {
                 reserve_may_tap: !cost.has_tap(),
                 // "Spend this mana only to ... pay a cost that contains {C}".
                 cost_has_colorless: m.symbols.contains(&crate::mana::ManaSymbol::Colorless),
+                // What the other parts take once the mana abilities are activated (CR
+                // 601.2g–h): the mana abilities keep enough of it.
+                cost_needs: crate::cost_needs::cost_needs(
+                    self,
+                    p,
+                    cost.parts.iter().filter(|c| !first(c)),
+                    src,
+                    ctx,
+                ),
                 ..spend.clone()
             };
             // CR 609.4b: "as though it were mana of any color" changes only how it's paid.
@@ -4606,6 +4621,9 @@ impl Game {
                     .filter(|c| {
                         Some(*c) != src && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
                     })
+                    // Nor, for a mana ability activated to pay another cost, the card that
+                    // cost is for or what the payment needs later (`Game::mana_keep`).
+                    .filter(|c| Some(*c) != self.mana_reserve && !self.mana_keep.contains(c))
                     .collect();
                 if !crate::target_groups::can_choose_together(self, filter, &cands, n as usize, ctx)
                 {
@@ -4658,6 +4676,7 @@ impl Game {
                     .filter(|c| {
                         exile_cost_may_use_source(*c, src, ctx)
                             && crate::draw_rules::usable_for_cost(self, *c, filter, ctx)
+                            && Some(*c) != self.mana_reserve
                             && !self.mana_keep.contains(c)
                     })
                     .collect();
@@ -4784,6 +4803,9 @@ impl Game {
                         (self.obj(*o).controller == p || filter_names_other_controller(filter))
                             && !self.obj(*o).tapped
                     })
+                    // A mana ability activated to pay another cost doesn't tap the object
+                    // that cost is for, nor what the payment needs later (`Game::mana_keep`).
+                    .filter(|o| Some(*o) != self.mana_reserve && !self.mana_keep.contains(o))
                     .collect();
                 if !crate::target_groups::can_choose_together(self, filter, &cands, n as usize, ctx)
                 {
