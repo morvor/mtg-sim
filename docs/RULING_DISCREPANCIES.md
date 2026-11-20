@@ -301,6 +301,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: the permanent stays phased out while the chapter ability's controller controls the Saga; once they stop controlling it (another player gains control of it, it leaves the battlefield), it phases in during its controller's next untap step, even if they have regained control of the Saga by then.
 - Recorded: no exemption: the ruling stays cited for the usual case; tests `tests/rulings/r_p048_phasing.rs` (`zhalfirs_phased_out_permanents_stay_out_while_the_saga_is_controlled`, `zhalfirs_permanent_phases_in_once_you_stop_controlling_the_saga`).
 
+### Swift Reckoning: the spell mastery note "as the spell resolves" on a spell mastery that lets it be cast with flash
+- Kind: narrower than stated
+- Status: open for review
+- Ruling, Swift Reckoning (2015-06-22): "Check to see if there are two or more instant and/or sorcery cards in your graveyard as the spell resolves to determine whether the spell mastery ability applies. The spell itself won't count because it's still on the stack as you make this check."
+- Conflicts with: Swift Reckoning's own ruling (2018-12-07): "The number of instant and/or sorcery cards in your graveyard matters only as you begin to cast Swift Reckoning. Once it's cast, that number doesn't matter and will have no effect on Swift Reckoning resolving." Its spell mastery ("If there are two or more instant and/or sorcery cards in your graveyard, you may cast this spell as though it had flash.") lets a player begin to cast it (CR 601.3: "A player can begin to cast a spell only if a rule or effect allows that player to cast it and no rule or effect prohibits that player from casting it."), judged as the casting begins, when a card cast from a graveyard counts itself (CR 601.6a; the outdated entry on its other ruling, above).
+- Evidence: the ruling is the general note on the ability word in the Magic Origins Release Notes (2015-07-08; ormos mirror, Wayback capture 2015-07-10), under "New Ability Word: Spell Mastery", written for the spell mastery abilities that change what the spell does (its example is Fiery Impulse's "If there are two or more instant and/or sorcery cards in your graveyard, Fiery Impulse deals 3 damage to that creature instead."), and right for the other cards with the ability word; the same release notes give Swift Reckoning its own note, the "matters only as you begin" ruling above, which the data dates 2018-12-07 (it is also in the Ultimate Masters Release Notes, 2018-11-29). The data attaches the general note to every card with the ability word, Swift Reckoning included, where it answers the question its own note answers the other way. No rules change is involved (CR 207.2c: ability words have no rules meaning). Noted by work item rulings-residue-misc-1 and taken up in ruling-conflicts-13; not a contradiction for the abilities it was written for, so nothing is exempted.
+- Engine: a spell mastery ability that changes what the spell does checks the graveyard as the spell resolves, the spell not counting; Swift Reckoning's, which lets it be cast as though it had flash, is judged as the casting begins, with the card where it is, and its number has no effect as the spell resolves.
+- Recorded: no exemption: the text stays cited for the spell mastery abilities it was written for; tests `tests/rulings/r_s15_spell_mastery.rs` (`spell_mastery_counts_the_graveyard_as_the_spell_resolves_without_the_spell`, `exquisite_firecraft_cant_be_countered_only_with_two_other_instants_or_sorceries`), `tests/cards/cast_permissions_classes.rs` (`swift_reckoning_flash_timing_with_spell_mastery`), `tests/rulings/r_residue_misc_1_stack.rs` (`swift_reckoning_cast_from_the_graveyard_counts_itself_as_casting_begins`).
+
 ## Misleading rulings
 
 ### Grudge Keeper: "only if they voted for none of those choices" when the opponent has several votes too
@@ -925,6 +934,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: the counters are refine counters; after the last one is removed in an upkeep, P0 may cast the sorcery then; declined, it stays exiled with no counters and can't be cast later.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P066.tsv` (the counter's name); test `tests/rulings/r_residue_misc_1_casting.rs` (`uvildas_card_cast_or_left_in_exile`).
 
+### Swift Reckoning: "you need two other instant and/or sorcery cards" to cast it from a graveyard as though it had flash
+- Kind: outdated
+- Status: open for review
+- Ruling, Swift Reckoning (2018-12-07): "If an effect allows you to cast Swift Reckoning from your graveyard, you need two other instant and/or sorcery cards in your graveyard to cast it as though it had flash."
+- Conflicts with: CR 601.6a: "Once a player has begun casting a spell that had flash because certain conditions were met or that could be cast as though it had flash because certain conditions were met (see 601.3d), they may continue to cast that spell as though it had flash even if those conditions stop being met." The card: "Spell mastery — If there are two or more instant and/or sorcery cards in your graveyard, you may cast this spell as though it had flash. (You may cast it any time you could cast an instant.)" As the casting begins, the card is in the graveyard and counts itself (CR 601.3: "A player can begin to cast a spell only if a rule or effect allows that player to cast it and no rule or effect prohibits that player from casting it."); moving it to the stack (601.2a) ends the condition, and 601.6a lets the player continue to cast it as though it had flash. Graveyard Shift's ruling on the same situation (2022-04-29): "If an effect allows you to cast Graveyard Shift from your graveyard, you may cast it any time you could cast an instant if you have five or more mana values among cards in your graveyard immediately before you begin to cast it, even if moving it to the stack would reduce that number to four."
+- Evidence: the ruling is the card's note in the Ultimate Masters Release Notes (2018-11-29; ormos mirror, Wayback capture 2018-12-02), right under the CR of its time: 601.3 in the CRs effective 2016-07-22 to 2019-08-23 read "A player can’t begin to cast a spell unless a rule or effect allows that player to cast it. If that player is no longer allowed to cast that spell after completing its proposal, the casting of the spell is illegal and the game returns to the moment before the casting of that spell was proposed (see rule 721, “Handling Illegal Actions”)." (archived CR texts; rule 719, then 720, in the first ones), and once the proposal is complete the card is on the stack, where one other card no longer meets the condition. The CR effective 2019-10-04 (Throne of Eldraine) didn't remove that sentence, as the note on this ruling under "Not yet investigated" said until Nov 20: it moved it to a new 601.4, "If a player is no longer allowed to cast a spell after completing its proposal (see rules 601.2a–d), the casting of the spell is illegal and the game returns to the moment before the casting of that spell was proposed (see rule 722, “Handling Illegal Actions”). It doesn’t matter if a rule or effect would make the casting of the spell illegal while determining and paying that spell’s costs (see rules 601.2f-h) or any time after the spell has been cast." (Eli Shiffrin's Comprehensive Rules Changes, 2019-09-27: "The old 601.3 rule started off by talking about whether it was legal to begin casting, and then all of its subrules went into details. But then the main rule continued on talking about what if it became illegal! I broke that out into its own rule and added clarity that becoming illegal after the proposal is done doesn't matter."), 601.5 from the CR effective 2022-06-10 and 601.6 today. The change that outdates the ruling is the CR effective 2022-04-29 (Streets of New Capenna), which added 601.4a in today's 601.6a's words (601.5a from the CR effective 2022-06-10; the archive's last CR, effective 2026-04-17, still has it as 601.5a). Jess Dunks's Comprehensive Rules Changes for that set (2022-04-20): "This new rule explains what happens in the very rare case that a spell loses flash during the spell-casting process. If that happens, the player may finish casting the spell as though it had flash." Graveyard Shift's ruling, in the same set's release notes (2022-04-20), applies the rule to a card cast from a graveyard that counts itself. Swift Reckoning's other ruling, also dated 2018-12-07 and already in the Magic Origins Release Notes (2015-07-08), agrees with today's rule: "The number of instant and/or sorcery cards in your graveyard matters only as you begin to cast Swift Reckoning. Once it's cast, that number doesn't matter and will have no effect on Swift Reckoning resolving."; so do the rulings on the other conditional flash permissions, from Hungering Yeti's (2014-11-24, "Hungering Yeti checks if you control a green or blue permanent only as you begin to cast it. Once you begin to cast Hungering Yeti as though it had flash, it doesn't matter what happens to the green or blue permanents you control.") to Bard's Company's (2026-06-29, "If you use the first ability of Bard's Company to cast it as though it had flash, you must control a Human only as you begin the casting process and put Bard's Company on the stack. ..."). One reading would keep the ruling: 601.6a's "(see 601.3d)" taken to limit "could be cast as though it had flash because certain conditions were met" to spells that would have flash only if conditions are met (601.3d's kind, Graveyard Shift's "This spell has flash as long as"), leaving a permission to cast a spell as though it had flash, such as Swift Reckoning's, to 601.6 alone. Not taken: the rule's words are those of the permission, a "see" reference points to a related rule rather than narrowing the words before it, and the rulings above judge such permissions only as the casting begins. Investigated in work item ruling-conflicts-13 (conclusion B: outdated).
+- Engine: Swift Reckoning cast at instant speed from a graveyard (with flashback from Snapcaster Mage or Lier, Disciple of the Drowned) counts itself as the casting begins: with one other instant or sorcery card there it is offered and can be cast, with none it is neither; its list of legal actions and its casting agree. Graveyard Shift is cast the same way with four other mana values there.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P011.tsv`; register `flash-permission-conditions-judged-as-casting-begins`; tests `tests/rulings/r_residue_misc_1_stack.rs` (`swift_reckoning_cast_from_the_graveyard_counts_itself_as_casting_begins`), `tests/rulings/r_p011_misc.rs` (`graveyard_shift_counts_itself_before_it_is_cast`).
+
 ## Not yet investigated
 
 Possible further instances found while compiling this log. They haven't been through the
@@ -1075,41 +1093,6 @@ decides whether they become a conflict case.
   `two_target_destruction_with_one_target_left_affects_it`). Whether the Journey into Nyx
   release notes (2014; ormos mirror) have the same spelling wasn't checked. No kind fits a
   misspelled name.
-- **Swift Reckoning** (rulings-residue-misc-1, Nov 20; a conflict case for the coordinator):
-  "If an effect allows you to cast Swift Reckoning from your graveyard, you need two other
-  instant and/or sorcery cards in your graveyard to cast it as though it had flash."
-  (2018-12-07, Ultimate Masters) for "Spell mastery — If there are two or more instant
-  and/or sorcery cards in your graveyard, you may cast this spell as though it had flash."
-  It follows from 601.3 as it read from the CR effective 2016-07-22 to the CR effective
-  2019-08-23: "A player can’t begin to cast a spell unless a rule or effect allows that
-  player to cast it. If that player is no longer allowed to cast that spell after completing
-  its proposal, the casting of the spell is illegal and the game returns to the moment
-  before the casting of that spell was proposed (see rule 721, “Handling Illegal
-  Actions”)." (archived CR texts; the card is on the stack once the proposal is complete).
-  The CR effective 2019-10-04 replaced it with today's 601.3: "A player can begin to cast a
-  spell only if a rule or effect allows that player to cast it and no rule or effect
-  prohibits that player from casting it." Graveyard Shift's ruling, written under today's
-  rules for the same situation, has the card count itself: "If an effect allows you to cast
-  Graveyard Shift from your graveyard, you may cast it any time you could cast an instant if
-  you have five or more mana values among cards in your graveyard immediately before you
-  begin to cast it, even if moving it to the stack would reduce that number to four."
-  (2022-04-29), and Swift Reckoning's other ruling of the same day says "The number of
-  instant and/or sorcery cards in your graveyard matters only as you begin to cast Swift
-  Reckoning." Against it: 601.2e still checks whether "the proposed spell can legally be
-  cast", and the two cards are worded differently ("you may cast this spell as though it had
-  flash", 601.3b's kind of effect, against Graveyard Shift's "This spell has flash as long
-  as", 601.3d's). Swift Reckoning's third ruling, the spell mastery note of Magic Origins
-  ("Check to see if there are two or more instant and/or sorcery cards in your graveyard as
-  the spell resolves to determine whether the spell mastery ability applies. The spell
-  itself won't count because it's still on the stack as you make this check.",
-  2015-06-22), is written for spell mastery abilities that change the effect, and says the
-  opposite of the 2018 "matters only as you begin to cast" for this card (it is cited
-  through the other spell mastery cards). The ruling is left uncited, not exempt; the engine
-  counts the card itself (provisional `flash-permission-conditions-judged-as-casting-begins`,
-  `tests/rulings/r_residue_misc_1_stack.rs`,
-  `swift_reckoning_cast_from_the_graveyard_counts_itself_as_casting_begins`). If it is
-  judged outdated, it becomes an outdated entry with an exemption in
-  `docs/rulings-exemptions/rulings-P011.tsv`; if it stands, the register entry is reversed.
 - Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (copying errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the
@@ -1144,3 +1127,8 @@ decides whether they become a conflict case.
   disagree and that the engine follows the ruling: the deviation
   `per-object-actions-in-given-order` is decided, and the ruling is cited. Kaboom!'s and
   Divergent Transformations' rulings, found on the way, are listed above.
+- Work item ruling-conflicts-13 took up Swift Reckoning's ruling on casting it from a graveyard, left
+  uncited by rulings-residue-misc-1 beside Graveyard Shift's: an outdated entry above (the CR
+  effective 2022-04-29 added 601.4a, now 601.6a; the CR effective 2019-10-04 had moved, not
+  removed, the sentence the ruling rests on), and the general spell mastery note on the same
+  card a narrower-than-stated entry above.
