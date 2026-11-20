@@ -8,7 +8,7 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 
 | Kind | Decided | Provisional |
 |---|---:|---:|
-| interpretation | 111 | 16 |
+| interpretation | 110 | 17 |
 | deviation | 12 | 0 |
 | policy | 38 | 1 |
 
@@ -65,6 +65,9 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 - **first-turn-skips-one-draw-step** (interpretation, [turn-structure](interpretations/turn-structure.md)): The starting player skips only the first draw step of their first turn, not the draw step of an additional beginning phase
   - Question: An effect gives the starting player an additional beginning phase in their first turn (Shadow of the Second Sun, Sphinx of the Second Sun, Temple of Atropos), or a lone additional draw step (Untap, Upkeep, Draw). 103.8a has them skip "the draw step" of that turn, written for a turn with one draw step. Is the additional draw step skipped too?
   - Decision: No. 103.8a (and 103.8b for the team that plays first) skips one draw step: the first one that would begin in the starting player's first turn, the normal beginning phase's. A draw step added later in that turn happens, and the player draws. A "skip your next draw step" effect waits past the one 103.8a skips (614.10a), so it applies to the added one.
+- **unrevealed-top-card-grants-no-abilities** (interpretation, [zones-objects](interpretations/zones-objects.md)): A library's new top card gives no abilities until it's revealed
+  - Question: "As long as the top card of your library is [a card], ~ has all activated abilities of that card" reads the top card, which exists (unrevealed) while the card above it is being cast. Does the permanent have the new top card's abilities meanwhile? 401.5 says only that the card isn't revealed or looked at; Snoop's ruling says Snoop has none of its abilities. Skill Borrower, the only other card with this structure, is worded the same way ("Play with the top card of your library revealed." and the grant) and has no ruling on it.
+  - Decision: For every ability grant whose source is the top card of a library (`Sel::TopOfLibrary` in `Modification::AddAbilitiesOf`), while a spell is being cast, an ability activated or a special action taken, a card in a library gives its abilities only if it's that library's revealed top card (`zones::revealed_top`); the revealed top is updated once that's finished (`zones::update_revealed_tops`). Snoop's ruling decides it for Snoop; Skill Borrower is read alike by analogy.
 
 ## All entries
 
@@ -247,4 +250,4 @@ Every rules judgment call the engine makes has an entry: an **interpretation** (
 | `rimescale-dragon-creatures-only` | Rimescale Dragon's "Creatures with ice counters on them don't untap" affects only creatures, whatever put the ice counters on them | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |
 | `self-shuffle-gone-library-still-shuffled` | "Its owner shuffles it into their library" shuffles that library even when it has left | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |
 | `the-token-another-ability-created` | "The token" in another ability is the one token the card's token-making ability created | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |
-| `unrevealed-top-card-grants-no-abilities` | A library's new top card gives no abilities until it's revealed | interpretation | decided | [zones-objects](interpretations/zones-objects.md) |
+| `unrevealed-top-card-grants-no-abilities` | A library's new top card gives no abilities until it's revealed | interpretation | provisional | [zones-objects](interpretations/zones-objects.md) |

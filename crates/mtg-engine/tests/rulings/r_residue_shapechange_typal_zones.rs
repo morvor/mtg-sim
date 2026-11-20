@@ -76,7 +76,9 @@ fn ilharg_creature_end_step_trigger_resolves_after_it_returns() {
         "If the new creature has an ability that triggers at the beginning of the end step, that ability will trigger and resolve even if the creature is returned to your hand during the end step before that ability resolves."
     );
     supported("Platoon Dispenser");
-    // Either order of the two triggers: the Dispenser's draws a card.
+    // Either order of the two triggers: the Dispenser's draws a card, also when the
+    // Dispenser is back in hand as it resolves.
+    let mut returned_first = vec![];
     for order in [[0usize, 1], [1, 0]] {
         let mut t = main_phase(2);
         let ilharg = t.battlefield(P0, "Ilharg, the Raze-Boar");
@@ -90,16 +92,20 @@ fn ilharg_creature_end_step_trigger_resolves_after_it_returns() {
         t.settle();
         assert_eq!(on_stack(&t), 2);
         let hand = t.hand_size(P0);
+        t.resolve();
+        returned_first.push(t.in_hand(P0, "Platoon Dispenser"));
         t.resolve_all();
         assert!(t.in_hand(P0, "Platoon Dispenser"));
         // The Dispenser came back and a card was drawn.
         assert_eq!(t.hand_size(P0), hand + 2, "order {order:?}");
     }
+    returned_first.sort();
+    assert_eq!(returned_first, vec![false, true]);
 }
 
 #[test]
 fn ilharg_creature_can_attack_another_player() {
-    cr!("508.4", "802.2a");
+    cr!("508.4", "802.2");
     ruling!(
         "Ilharg, the Raze-Boar",
         "You choose which player, planeswalker, or battle the new creature is attacking. It doesn't have to be attacking the same player, planeswalker, or battle that Ilharg is attacking."
@@ -134,7 +140,7 @@ fn flash_in(t: &mut TestGame, card: ObjectId, pay: bool) {
 
 #[test]
 fn flash_creature_not_paid_for_is_sacrificed_at_once_and_both_triggers_go_on_the_stack() {
-    cr!("608.2c", "603.3b", "603.6a", "603.10a", "117.3");
+    cr!("608.2c", "603.3b", "603.6a", "603.10a", "117.3b");
     ruling!(
         "Flash",
         "If you choose not to pay, the creature is sacrificed immediately. No player will get priority in between the creature entering the battlefield and being sacrificed. Sacrificing the creature this way will trigger any abilities that trigger when it leaves the battlefield, and those abilities will be put onto the stack at the same time as those that triggered when it entered the battlefield."
@@ -157,7 +163,7 @@ fn flash_creature_not_paid_for_is_sacrificed_at_once_and_both_triggers_go_on_the
 
 #[test]
 fn flash_x_in_the_mana_cost_is_zero() {
-    cr!("107.3b", "601.2f", "118.7");
+    cr!("107.3h", "118.7");
     ruling!(
         "Flash",
         "If the creature has {X} in its mana cost, X is considered to be 0."
@@ -165,15 +171,16 @@ fn flash_x_in_the_mana_cost_is_zero() {
     supported("Ingenious Prodigy");
     let mut t = main_phase(2);
     let prodigy = t.hand(P0, "Ingenious Prodigy");
-    let island = t.lands(P0, "Island", 1)[0];
-    // {X}{U} with X = 0, reduced by {2}: {U}. Flash itself is paid by its own lands.
+    t.lands(P0, "Island", 4);
+    // {X}{U} with X = 0, reduced by {2}: {U}, though there's mana for a larger X.
     flash_in(&mut t, prodigy, true);
     t.settle();
     t.resolve_all();
     let prodigy = t.g.current(prodigy);
     assert!(t.on_battlefield(prodigy));
     assert_eq!(plus1(&t, prodigy), 0);
-    assert!(tapped(&t, island));
+    // Flash's {1}{U} and the Prodigy's {U}.
+    assert_eq!(crate::r_s01_common::tapped_lands(&t, P0), 3);
     assert!(!t
         .asked()
         .iter()
@@ -182,7 +189,7 @@ fn flash_x_in_the_mana_cost_is_zero() {
 
 #[test]
 fn minion_of_the_mighty_dragon_enters_attacking_without_attack_or_tap_triggers() {
-    cr!("508.4", "603.2", "205.3m");
+    cr!("508.4", "508.3a", "603.2e", "205.3m");
     ruling!(
         "Minion of the Mighty",
         "The creature card is already tapped and attacking as it's put onto the battlefield. Any abilities that trigger whenever a creature becomes tapped or whenever a creature attacks won't trigger."
@@ -195,23 +202,25 @@ fn minion_of_the_mighty_dragon_enters_attacking_without_attack_or_tap_triggers()
     supported("Goldspan Dragon");
     supported("Quest for Renewal");
     supported("Dragonmaster Outcast");
+    supported("Thundermaw Hellkite");
     let mut t = main_phase(2);
     let minion = t.battlefield(P0, "Minion of the Mighty");
     let wurm = t.battlefield(P0, "Craw Wurm");
     let quest = t.battlefield(P0, "Quest for Renewal");
     let outcast = t.hand(P0, "Dragonmaster Outcast");
-    let gold = t.hand(P0, "Goldspan Dragon");
+    let hellkite = t.hand(P0, "Thundermaw Hellkite");
+    let gold_card = t.hand(P0, "Goldspan Dragon");
     for _ in 0..4 {
         t.answer_yes(P0, true);
     }
     let from = t.asked().len();
-    t.answer_choose(P0, &[obj(gold)]);
+    t.answer_choose(P0, &[obj(gold_card)]);
     attack_with(
         &mut t,
         &[(minion, Entity::Player(P1)), (wurm, Entity::Player(P1))],
     );
     t.resolve_all();
-    let gold = t.g.current(gold);
+    let gold = t.g.current(gold_card);
     assert!(t.on_battlefield(gold));
     assert!(tapped(&t, gold));
     assert!(t.g.is_attacking(gold));
@@ -219,17 +228,26 @@ fn minion_of_the_mighty_dragon_enters_attacking_without_attack_or_tap_triggers()
     // entering tapped doesn't, and its attack trigger doesn't create a Treasure.
     assert_eq!(t.counters(quest, "quest"), 2);
     assert!(t.named_on_battlefield("Treasure").is_empty());
-    // Dragonmaster Outcast (a Human Shaman) wasn't among the choices.
-    let offered = asked_since(&t, from).into_iter().any(|(_, d)| {
-        matches!(d, mtg_engine::decision::Decision::ChooseEntities { candidates, .. }
-            if candidates.contains(&obj(outcast)))
-    });
-    assert!(!offered);
+    // The Dragon cards offered: Thundermaw Hellkite (a Dragon without the word in its
+    // name), not Dragonmaster Outcast (a Human Shaman with it).
+    let cands = asked_since(&t, from)
+        .into_iter()
+        .find_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseEntities { candidates, .. }
+                if candidates.contains(&obj(gold_card)) =>
+            {
+                Some(candidates)
+            }
+            _ => None,
+        })
+        .expect("asked for a Dragon creature card");
+    assert!(cands.contains(&obj(hellkite)));
+    assert!(!cands.contains(&obj(outcast)));
 }
 
 #[test]
 fn summoners_egg_card_turned_face_up_in_exile() {
-    cr!("708.8", "406.3", "603.2");
+    cr!("113.6", "406.3", "603.2");
     ruling!(
         "Summoner's Egg",
         "Any “When this creature is turned face up” abilities that the exiled card may have don’t trigger because the card isn’t being turned face up while it’s on the battlefield."
@@ -271,7 +289,7 @@ fn summoners_egg_card_turned_face_up_in_exile() {
 
 #[test]
 fn mossbridge_troll_regenerates_every_time() {
-    cr!("701.19a", "614.8");
+    cr!("701.19b", "614.8");
     ruling!(
         "Mossbridge Troll",
         "The first ability essentially means that Mossbridge Troll always has a regeneration shield. It retains that shield even if it's used."
@@ -294,7 +312,7 @@ fn mossbridge_troll_regenerates_every_time() {
 
 #[test]
 fn skullbriar_gets_one_counter_per_combat_damage_event_to_any_player_even_its_controller() {
-    cr!("510.2", "603.2", "615.1");
+    cr!("510.2", "603.2", "614.9");
     ruling!(
         "Skullbriar, the Walking Grave",
         "Skullbriar will get one +1/+1 counter each time it deals combat damage to a player (including you if its combat damage gets redirected), regardless of how much damage is dealt."
@@ -310,8 +328,8 @@ fn skullbriar_gets_one_counter_per_combat_damage_event_to_any_player_even_its_co
     t.resolve_all();
     assert_eq!(t.life(P1), 17);
     assert_eq!(plus1(&t, sk), 3);
-    // P1's Harm's Way redirects 2 of a 1/1 Skullbriar's... all of a 2-power Skullbriar's
-    // combat damage to P0: P0 is the player dealt damage, and the counter still comes.
+    // P1's Harm's Way redirects all of a 2-power Skullbriar's combat damage to P0: P0 is
+    // the player dealt damage, and the counter still comes.
     let mut t = main_phase(2);
     let sk = t.battlefield(P0, "Skullbriar, the Walking Grave");
     give_plus1(&mut t, sk, 1);

@@ -21,7 +21,7 @@ fn candidates_since(t: &TestGame, p: PlayerId, from: usize) -> Vec<Vec<Entity>> 
 fn restatement_rulings() {
     let cases: &[Case] = &[
         ("Desecration Demon", || {
-            cr!("507.1", "508.1");
+            cr!("506.1", "508.1");
             ruling!(
                 "Desecration Demon",
                 "Players won't know which player, planeswalker, or battle Desecration Demon will attack, if any, when deciding whether to sacrifice a creature."
@@ -50,7 +50,7 @@ fn restatement_rulings() {
             assert_eq!(plus1(&t, demon), 1);
         }),
         ("Oko's Hospitality", || {
-            cr!("601.2c", "701.23a");
+            cr!("601.3", "701.23a");
             ruling!(
                 "Oko's Hospitality",
                 "You may cast Oko's Hospitality even if you control no creatures. You'll just search for Oko, the Trickster."
@@ -66,7 +66,7 @@ fn restatement_rulings() {
             assert!(t.in_hand(P0, "Oko, the Trickster"));
         }),
         ("Bribe Taker", || {
-            cr!("122.1", "603.3");
+            cr!("122.1");
             ruling!(
                 "Bribe Taker",
                 "Bribe Taker counts the number of different kinds of counters on permanents, not the total number of counters. For example, if a creature has two shield counters on it as Bribe Taker's triggered ability resolves, Bribe Taker's controller may put only one counter on it, either a +1/+1 counter or a shield counter."
@@ -124,7 +124,7 @@ fn restatement_rulings() {
             assert_eq!(on_stack(&t), 0);
         }),
         ("Meditate", || {
-            cr!("614.10", "500.7");
+            cr!("614.10", "614.10a");
             ruling!("Meditate", "You skip one turn as part of the effect.");
             supported("Meditate");
             for n in [1u32, 2] {

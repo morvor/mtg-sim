@@ -1,6 +1,6 @@
 //! Item `rulings-residue-shapechange-typal` — interaction rulings about typal payoffs
 //! (batch P184): counts and type checks made as an ability resolves or as damage is dealt
-//! (CR 608.2h, 615), last known information of a creature that left (CR 603.10, 608.2h),
+//! (CR 608.2h, 615), last known information of a creature that left (CR 608.2h),
 //! "is dealt damage" triggers (CR 603.2, 120.3), simultaneous zone changes (CR 603.6a,
 //! 603.10a), choices made in APNAP order (CR 101.4) and mana with delayed triggers
 //! (CR 106.6).
@@ -73,7 +73,7 @@ fn patriarchs_bidding_choices_in_turn_order_and_returns_at_once() {
 
 #[test]
 fn battletide_alchemist_prevents_for_each_player_separately() {
-    cr!("615.1a", "615.3", "120.3");
+    cr!("615.1a", "615.10", "120.3");
     ruling!(
         "Battletide Alchemist",
         "If a source would deal damage to multiple players at the same time, you may prevent X damage that source would deal to each of those players. The choice for each player is made separately."
@@ -102,7 +102,7 @@ fn battletide_alchemist_prevents_for_each_player_separately() {
 
 #[test]
 fn battletide_alchemist_prevents_each_time_and_counts_clerics_as_damage_is_dealt() {
-    cr!("615.1a", "615.3", "608.2h");
+    cr!("615.1", "615.1a", "615.10");
     ruling!(
         "Battletide Alchemist",
         "If the same source would deal damage to a player at different times, you may prevent X of that damage each time."
@@ -245,7 +245,7 @@ fn wrathful_raptors_triggers_once_for_simultaneous_damage_from_several_sources()
 
 #[test]
 fn triumphant_chomp_amount_is_determined_on_resolution() {
-    cr!("608.2h", "107.1b");
+    cr!("608.2h");
     ruling!(
         "Triumphant Chomp",
         "The amount of damage Triumphant Chomp deals is determined as it resolves. If you don't control any Dinosaurs at that time, or if the Dinosaurs you control are unusually small, Triumphant Chomp will deal 2 damage."
@@ -278,7 +278,7 @@ fn triumphant_chomp_amount_is_determined_on_resolution() {
 
 #[test]
 fn armored_kincaller_checks_for_another_dinosaur_on_resolution() {
-    cr!("608.2h", "603.4", "109.4");
+    cr!("608.2h", "113.7a");
     ruling!(
         "Armored Kincaller",
         "Whether or not you control another Dinosaur is checked only as Armored Kincaller's ability is resolving. It doesn't matter if you still control Armored Kincaller at the time, or if it's still a Dinosaur."
@@ -371,7 +371,7 @@ fn priest_of_the_wakening_sun_reveals() {
 
 #[test]
 fn priest_of_the_wakening_sun_reveal_is_chosen_on_resolution() {
-    cr!("608.2c", "603.3", "117.3c");
+    cr!("608.2c", "603.3", "603.5");
     ruling!(
         "Priest of the Wakening Sun",
         "You don’t choose whether to reveal a Dinosaur card from your hand until the triggered ability of Priest of the Wakening Sun resolves. You may respond to the triggered ability by taking an action to get a Dinosaur card into your hand, such as activating its second ability."
@@ -402,7 +402,7 @@ fn priest_of_the_wakening_sun_reveal_is_chosen_on_resolution() {
 
 #[test]
 fn scaled_nurturer_mana_triggers_per_mana_and_without_the_nurturer() {
-    cr!("106.6", "603.7a", "603.10");
+    cr!("106.6", "603.7a", "603.7e");
     ruling!(
         "Scaled Nurturer",
         "If more than one {G} produced by a Scaled Nurturer is spent to cast a single Dragon creature spell, the delayed triggered ability associated with each mana spent will trigger. You will gain 2 life that many times."
@@ -477,6 +477,21 @@ fn tiamat_triggers_when_cast_from_any_zone() {
     assert_eq!(triggers_on_stack(&t, "search your library"), 1);
     t.answer_choose(P0, &[]);
     t.resolve_all();
+    // Cast from the command zone as a commander (CR 903.8): it finds a Dragon.
+    let mut t = TestGame::with_config(2, mtg_engine::game::GameConfig::commander_game());
+    t.set_step(P0, Step::PrecombatMain);
+    let tiamat = t.command(P0, "Tiamat");
+    t.g.objects[tiamat.0 as usize].is_commander = true;
+    t.g.players[0].commander_names.push("Tiamat".into());
+    let shivan = t.library_top(P0, "Shivan Dragon");
+    lands_for_cost(&mut t, P0, "Tiamat");
+    t.cast(P0, tiamat).go();
+    t.resolve();
+    t.settle();
+    assert_eq!(triggers_on_stack(&t, "search your library"), 1);
+    t.answer_choose_moved(P0, &[obj(shivan)]);
+    t.resolve_all();
+    assert!(t.in_hand(P0, "Shivan Dragon"));
     // Put onto the battlefield without being cast: no trigger.
     let mut t = main_phase(2);
     t.enter(P0, "Tiamat");
@@ -557,7 +572,7 @@ fn striker_enters(t: &mut TestGame, mode: usize, target: Entity) -> ObjectId {
 
 #[test]
 fn thornmantle_striker_counts_elves_on_resolution() {
-    cr!("608.2h", "700.5");
+    cr!("608.2h");
     ruling!(
         "Thornmantle Striker",
         "For each mode, use the number of Elves you control as the enters-the-battlefield ability resolves, including Thornmantle Striker itself if it’s still under your control."
@@ -590,7 +605,7 @@ fn thornmantle_striker_counts_elves_on_resolution() {
 
 #[test]
 fn thornmantle_striker_removes_counters_and_a_planeswalker_without_loyalty_dies() {
-    cr!("704.5i", "122.8", "608.2c");
+    cr!("704.5i", "608.2c");
     ruling!(
         "Thornmantle Striker",
         "A planeswalker with no loyalty counters on it is put into its owner’s graveyard."
@@ -619,18 +634,39 @@ fn thornmantle_striker_removes_counters_and_a_planeswalker_without_loyalty_dies(
     t.resolve_all();
     assert_eq!(plus1(&t, bears), 0);
     assert_eq!(t.counters(bears, "stun"), 0);
-    // A choice among kinds: X = 1 with a +1/+1 counter and a stun counter.
+    // A choice among kinds, made as the ability resolves: X = 1 with a +1/+1 counter and
+    // a stun counter; P0's choice is the one removed (the second kind offered).
     let mut t = main_phase(2);
     let bears = t.battlefield(P1, "Grizzly Bears");
     give_plus1(&mut t, bears, 1);
     t.g.add_counters(Entity::Object(bears), "stun", 1, None);
-    let from = t.asked().len();
     striker_enters(&mut t, 0, obj(bears));
+    // The trigger is on the stack: no counter has been chosen yet.
+    let from = t.asked().len();
+    let choices = |t: &TestGame| {
+        asked_since(t, from)
+            .into_iter()
+            .filter_map(|(p, d)| match d {
+                Decision::ChooseOption {
+                    prompt, options, ..
+                } if p == P0 && prompt == "Choose a counter to remove" => Some(options),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    assert!(choices(&t).is_empty());
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
     t.resolve_all();
-    assert_eq!(plus1(&t, bears) + t.counters(bears, "stun"), 1);
-    assert!(asked_since(&t, from)
-        .iter()
-        .any(|(p, d)| *p == P0 && !matches!(d, Decision::Priority { .. })));
+    let asked = choices(&t);
+    assert_eq!(asked.len(), 1);
+    assert_eq!(asked[0].len(), 2);
+    let (plus, stun) = (plus1(&t, bears), t.counters(bears, "stun"));
+    assert_eq!(plus + stun, 1);
+    if asked[0][1].contains("stun") {
+        assert_eq!(stun, 0);
+    } else {
+        assert_eq!(plus, 0);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -639,56 +675,98 @@ fn thornmantle_striker_removes_counters_and_a_planeswalker_without_loyalty_dies(
 
 #[test]
 fn arboreal_alliance_with_x_0_makes_a_0_0_token() {
-    cr!("107.3b", "107.3f", "704.5f");
+    cr!("107.3m", "704.5f");
     ruling!(
         "Arboreal Alliance",
         "If Arboreal Alliance enters the battlefield without being cast, or if you cast it with X equal to 0, you'll create a 0/0 green Treefolk creature token. Unless something else is raising its toughness, it will immediately die."
     );
     supported("Arboreal Alliance");
-    let mut t = main_phase(2);
-    t.enter(P0, "Arboreal Alliance");
-    t.resolve_all();
-    assert_eq!(crate::r_s25_common::creature_tokens(&t, P0), 0);
-    // With Glorious Anthem, the 0/0 survives as a 1/1.
-    let mut t = main_phase(2);
-    t.battlefield(P0, "Glorious Anthem");
-    t.lands(P0, "Forest", 2);
-    let aa = t.hand(P0, "Arboreal Alliance");
-    t.cast(P0, aa).x(0).go();
-    t.resolve_all();
-    let toks = crate::r_s01_common::tokens(&t, P0);
-    assert_eq!(toks.len(), 1);
-    assert_eq!(pt_now(&mut t, toks[0]), (1, 1));
-    assert!(crate::r_residue_type_change_common::subtype(
-        &mut t, toks[0], "Treefolk"
-    ));
+    // Put onto the battlefield without being cast, or cast with X = 0: the token is
+    // created (Soul Warden sees it enter) and dies at once.
+    for cast in [false, true] {
+        let mut t = main_phase(2);
+        t.battlefield(P0, "Soul Warden");
+        if cast {
+            t.lands(P0, "Forest", 2);
+            let aa = t.hand(P0, "Arboreal Alliance");
+            t.cast(P0, aa).x(0).go();
+        } else {
+            t.enter(P0, "Arboreal Alliance");
+        }
+        t.resolve_all();
+        assert!(!t.named_on_battlefield("Arboreal Alliance").is_empty());
+        assert_eq!(t.life(P0), 21, "cast {cast}");
+        assert_eq!(crate::r_s25_common::creature_tokens(&t, P0), 0);
+    }
+    // Something raising its toughness: with Glorious Anthem, the 0/0 survives as a 1/1.
+    for cast in [false, true] {
+        let mut t = main_phase(2);
+        t.battlefield(P0, "Glorious Anthem");
+        if cast {
+            t.lands(P0, "Forest", 2);
+            let aa = t.hand(P0, "Arboreal Alliance");
+            t.cast(P0, aa).x(0).go();
+        } else {
+            t.enter(P0, "Arboreal Alliance");
+        }
+        t.resolve_all();
+        let toks = crate::r_s01_common::tokens(&t, P0);
+        assert_eq!(toks.len(), 1, "cast {cast}");
+        assert_eq!(pt_now(&mut t, toks[0]), (1, 1));
+        assert!(crate::r_residue_type_change_common::subtype(
+            &mut t, toks[0], "Treefolk"
+        ));
+        assert!(has_color(&mut t, toks[0], Color::Green));
+    }
 }
 
 #[test]
 fn tajuru_paragon_uses_its_last_known_creature_types() {
-    cr!("608.2h", "603.10", "113.7a");
+    cr!("608.2h", "113.7a");
     ruling!(
         "Tajuru Paragon",
         "If Tajuru Paragon leaves the battlefield before its triggered ability resolves, use its creature types as it last existed on the battlefield to determine which cards you may put into your hand."
     );
     supported("Tajuru Paragon");
-    supported("Maskwood Nexus");
-    // With Maskwood Nexus, the Paragon was every creature type as it left: a Bear shares
-    // one of them.
-    let mut t = main_phase(2);
-    t.battlefield(P0, "Maskwood Nexus");
-    let bears = t.library_top(P0, "Grizzly Bears");
-    t.lands(P0, "Forest", 1);
-    t.lands(P0, "Wastes", 4);
-    let para = t.hand(P0, "Tajuru Paragon");
-    t.cast(P0, para).kicked(true).go();
-    t.resolve();
-    t.settle();
-    assert_eq!(triggers_on_stack(&t, "reveal the top six"), 1);
-    let para_now = t.g.current(para);
-    destroy(&mut t, para_now);
-    assert!(t.in_graveyard(P0, "Tajuru Paragon"));
-    t.answer_choose_moved(P0, &[obj(bears)]);
-    t.resolve_all();
-    assert!(t.in_hand(P0, "Grizzly Bears"));
+    supported("Mirror Entity");
+    // The Paragon (an Elf Cleric Rogue Warrior Wizard) dies with its trigger on the stack.
+    // With Mirror Entity's "gain all creature types until end of turn" in response, it had
+    // every creature type as it last existed (the card in the graveyard is no Bear): a
+    // Bear shares one of them. Without it, the Bear can't be taken.
+    for mirror in [false, true] {
+        let mut t = main_phase(2);
+        let entity = t.battlefield(P0, "Mirror Entity");
+        let bears = t.library_top(P0, "Grizzly Bears");
+        t.lands(P0, "Forest", 1);
+        t.lands(P0, "Wastes", 4);
+        let para = t.hand(P0, "Tajuru Paragon");
+        t.cast(P0, para).kicked(true).go();
+        t.resolve();
+        t.settle();
+        assert_eq!(triggers_on_stack(&t, "reveal the top six"), 1);
+        if mirror {
+            t.lands(P0, "Wastes", 3);
+            t.answer(P0, DecisionKind::X, Answer::Number(3));
+            t.activate(P0, entity, 0, &[]).unwrap();
+            t.resolve();
+        }
+        let para_now = t.g.current(para);
+        assert_eq!(
+            crate::r_residue_type_change_common::subtype(&mut t, para_now, "Bear"),
+            mirror
+        );
+        destroy(&mut t, para_now);
+        let card = t.g.current(para_now);
+        assert!(t.in_graveyard(P0, "Tajuru Paragon"));
+        assert!(!crate::r_residue_type_change_common::subtype(
+            &mut t, card, "Bear"
+        ));
+        t.answer_choose_moved(P0, &[obj(bears)]);
+        t.resolve_all();
+        assert_eq!(
+            t.in_hand(P0, "Grizzly Bears"),
+            mirror,
+            "Mirror Entity {mirror}"
+        );
+    }
 }

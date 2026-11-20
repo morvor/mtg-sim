@@ -37,6 +37,7 @@ fn leonardo_token_copies_the_printed_card_and_its_enters_abilities_work() {
     supported("Leonardo da Vinci");
     supported("Costume Closet");
     supported("Prophetic Prism");
+    supported("Metallic Mimic");
     let mut t = main_phase(2);
     let leo = t.battlefield(P0, "Leonardo da Vinci");
     // "This artifact enters with two +1/+1 counters on it."
@@ -61,11 +62,24 @@ fn leonardo_token_copies_the_printed_card_and_its_enters_abilities_work() {
     assert_eq!(name_now(&t, tok), "Prophetic Prism");
     // Drew one, discarded the Prism, drew one from the token's trigger.
     assert_eq!(t.hand_size(P0), hand + 1);
+    // "As this creature enters, choose a creature type. ... Each other creature you
+    // control of the chosen type enters with an additional +1/+1 counter on it."
+    t.g.objects[leo.0 as usize].tapped = false;
+    let mimic = t.hand(P0, "Metallic Mimic");
+    choose_creature_type(&mut t, P0, "Bear");
+    let tok = leonardo_loots(&mut t, leo, mimic).expect("a token");
+    assert_eq!(name_now(&t, tok), "Metallic Mimic");
+    assert!(crate::r_residue_type_change_common::subtype(
+        &mut t, tok, "Bear"
+    ));
+    let bears = t.enter(P0, "Grizzly Bears");
+    t.settle();
+    assert_eq!(plus1(&t, bears), 1);
 }
 
 #[test]
 fn leonardo_token_exceptions_are_copiable_values() {
-    cr!("707.9b", "707.2", "706.2");
+    cr!("707.9b", "707.2", "707.3");
     ruling!(
         "Leonardo da Vinci",
         "The token is a Thopter artifact creature in addition to its other types. Its power and toughness are 0/2, and it has flying. These are copiable values of the token that other effects may copy."
@@ -102,7 +116,7 @@ fn leonardo_token_exceptions_are_copiable_values() {
 
 #[test]
 fn leonardo_x_is_locked_in_as_the_ability_resolves() {
-    cr!("608.2h", "611.2c", "613.4b");
+    cr!("608.2h", "611.2d", "613.4b");
     ruling!(
         "Leonardo da Vinci",
         "The value of X is determined only as Leonardo’s first ability resolves. Once that happens, the value of X won’t change later in the turn even if the number of cards in your hand changes."
@@ -180,7 +194,7 @@ fn anikthea_token_copies_the_card_not_the_permanent_it_was() {
 
 #[test]
 fn anikthea_token_exceptions_are_copiable_values() {
-    cr!("707.9b", "707.2", "105.3");
+    cr!("707.9b", "707.2", "707.3", "105.3");
     ruling!(
         "Anikthea, Hand of Erebos",
         "The token is a Zombie creature in addition to its other types and is black instead of its other colors. Its base power and toughness are 3/3. These are copiable values of the tokens that other effects may copy."

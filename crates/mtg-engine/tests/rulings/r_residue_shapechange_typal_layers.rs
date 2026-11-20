@@ -22,7 +22,7 @@ fn amplifire_upkeep(t: &mut TestGame) -> ObjectId {
 
 #[test]
 fn amplifire_is_1_1_from_the_untap_step_until_its_trigger_resolves() {
-    cr!("611.2b", "613.4b", "503.1a");
+    cr!("611.2a", "613.4b", "503.1a");
     ruling!(
         "Amplifire",
         "Amplifire will be a 1/1 creature from the time your untap step begins until the time its triggered ability resolves during your upkeep."
@@ -162,7 +162,7 @@ fn shapeshifter_cda_applies_before_setting_and_modifying_effects() {
 
 #[test]
 fn shapeshifter_chooses_again_once_each_upkeep() {
-    cr!("603.2", "604.3", "503.1");
+    cr!("603.2", "603.2c", "604.3", "503.1a");
     ruling!(
         "Shapeshifter",
         "The ability that lets you choose a new number is a triggered ability that triggers only once each upkeep."
@@ -185,7 +185,7 @@ fn shapeshifter_chooses_again_once_each_upkeep() {
 
 #[test]
 fn atomic_microsizer_overwrites_earlier_setting_effects_only() {
-    cr!("613.4b", "613.4c", "613.7", "301.5c");
+    cr!("613.4b", "613.4c", "613.7");
     ruling!(
         "Atomic Microsizer",
         "The effect of Atomic Microsizer’s second ability will overwrite any previous effects that set the creature’s power and toughness to specific values. Effects that otherwise modify the target creature’s power and toughness will still apply no matter when they took effect. The same is true for +1/+1 counters."
@@ -224,6 +224,7 @@ fn surge_engine_activates_its_last_ability_once_per_object() {
     );
     supported("Surge Engine");
     supported("Cloudshift");
+    supported("Act of Treason");
     let mut t = main_phase(2);
     let e = t.battlefield(P0, "Surge Engine");
     t.lands(P0, "Island", 40);
@@ -240,8 +241,18 @@ fn surge_engine_activates_its_last_ability_once_per_object() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 3);
     assert!(t.activate(P0, e, 2, &[]).is_err());
+    // Nor by another player who gains control of it: the restriction stays with the
+    // object (CR 602.5b), though that player can activate its other abilities.
+    t.advance_to(P1, Step::PrecombatMain);
+    cast_resolve(&mut t, P1, "Act of Treason", &[obj(e)]);
+    assert_eq!(controller(&mut t, e), P1);
+    assert!(has_color(&mut t, e, Color::Blue));
+    t.lands(P1, "Island", 6);
+    assert!(t.activate(P1, e, 2, &[]).is_err());
+    assert!(t.activate(P1, e, 0, &[]).is_ok());
     // Not even in a later turn.
     t.advance_to(P0, Step::PrecombatMain);
+    assert_eq!(controller(&mut t, e), P0);
     for l in t.g.permanents().map(|o| o.id).collect::<Vec<_>>() {
         t.g.objects[l.0 as usize].tapped = false;
     }

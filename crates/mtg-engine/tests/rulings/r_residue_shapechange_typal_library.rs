@@ -65,7 +65,7 @@ fn conspicuous_snoop_gains_keyword_activated_abilities() {
 
 #[test]
 fn conspicuous_snoop_casts_goblins_from_the_library_with_normal_timing_and_costs() {
-    cr!("601.2b", "601.2f", "601.3", "307.1", "702.109a");
+    cr!("601.2b", "601.2f", "601.3", "302.1", "304.1", "702.109a");
     ruling!(
         "Conspicuous Snoop",
         "You must follow the normal timing permissions and restrictions of the Goblin spells you cast from your library."
@@ -164,6 +164,75 @@ fn conspicuous_snoop_doesnt_reveal_the_new_top_card_while_casting() {
 }
 
 #[test]
+fn skill_borrower_doesnt_have_an_unrevealed_new_top_cards_abilities_while_casting() {
+    cr!("401.5", "601.2", "613.1f");
+    interp!("unrevealed-top-card-grants-no-abilities");
+    supported("Skill Borrower");
+    supported("Future Sight");
+    supported("Prodigal Sorcerer");
+    let mut t = main_phase(2);
+    let borrower = t.battlefield(P0, "Skill Borrower");
+    t.battlefield(P0, "Future Sight");
+    // Prodigal Sorcerer ("{T}: This creature deals 1 damage to any target") under
+    // Lightning Bolt, cast from the top with Future Sight.
+    t.library_top(P0, "Prodigal Sorcerer");
+    let bolt = t.library_top(P0, "Lightning Bolt");
+    t.lands(P0, "Mountain", 1);
+    assert!(activated(&mut t, borrower).is_empty());
+    let seen = crate::r_s01_common::watch(
+        &mut t,
+        P0,
+        |d| matches!(d, Decision::ChooseTargets { .. }),
+        |g| {
+            let b = g
+                .permanents()
+                .find(|o| o.chars.name == "Skill Borrower")
+                .unwrap();
+            b.chars
+                .abilities
+                .iter()
+                .filter(|a| matches!(a.kind, AbilityKind::Activated(_)))
+                .count()
+        },
+    );
+    t.cast(P0, bolt).target(Entity::Player(P1)).go();
+    assert_eq!(*seen.lock().unwrap(), vec![0]);
+    // Once the Bolt is cast, the Sorcerer is revealed and lends its ability.
+    let i = index_of(&mut t, borrower, "deals 1 damage");
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    t.activate(P0, borrower, i, &[Entity::Player(P1)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 16);
+}
+
+#[test]
+fn skill_borrower_ability_whose_cost_changes_the_top_card_still_resolves() {
+    cr!("602.2a", "113.7a");
+    ruling!(
+        "Skill Borrower",
+        "If the top card of your library changes while you’re activating one of Skill Borrower’s activated abilities gained from that card, the ability will still be activated and will resolve normally even though Skill Borrower has lost that ability."
+    );
+    supported("Royal Herbalist");
+    let mut t = main_phase(2);
+    let borrower = t.battlefield(P0, "Skill Borrower");
+    // Royal Herbalist ("{2}, Exile the top card of your library: You gain 1 life.") on
+    // top: paying the cost exiles it, and Prodigal Sorcerer becomes the top card.
+    crate::r_s01_common::stack_library(&mut t, P0, &["Royal Herbalist", "Prodigal Sorcerer"]);
+    t.lands(P0, "Wastes", 2);
+    let i = index_of(&mut t, borrower, "gain 1 life");
+    t.activate(P0, borrower, i, &[]).unwrap();
+    assert_eq!(on_stack(&t), 1);
+    assert!(t.in_exile("Royal Herbalist"));
+    // The Borrower lost the Herbalist's ability; the Sorcerer is revealed now.
+    let now = activated(&mut t, borrower);
+    assert!(!now.iter().any(|a| a.contains("gain 1 life")));
+    assert!(now.iter().any(|a| a.contains("deals 1 damage")));
+    t.resolve_all();
+    assert_eq!(t.life(P0), 21);
+}
+
+#[test]
 fn conspicuous_snoop_linked_abilities_last_only_while_it_has_them() {
     cr!("607.2a", "607.5", "613.1f");
     ruling!(
@@ -215,7 +284,7 @@ fn conspicuous_snoop_linked_abilities_last_only_while_it_has_them() {
 
 #[test]
 fn goblin_recruiter_finds_cards_with_the_goblin_type() {
-    cr!("205.3m", "308.3", "701.23a");
+    cr!("205.3m", "308.2", "701.23a");
     ruling!(
         "Goblin Recruiter",
         "You can search for any card with the creature type Goblin, including creature or kindred cards. Older cards of type \"Summon Goblin\" and \"Summon Goblins\" also count. You can't search for cards that have Goblin in the name but don't have the creature type Goblin."
@@ -267,7 +336,7 @@ fn quest_upkeep(t: &mut TestGame, top: &str) -> (ObjectId, ObjectId) {
 
 #[test]
 fn quest_for_ulas_temple_look_and_reveal_are_optional() {
-    cr!("603.5", "701.20a", "401.3");
+    cr!("603.5", "701.20a", "401.2");
     ruling!(
         "Quest for Ula's Temple",
         "When the first ability resolves, you may look at the top card of your library. If you don’t, nothing happens. If you look at it and it’s not a creature card, it simply stays hidden. If you look at it and it is a creature card, you may reveal it and put a quest counter on Quest for Ula’s Temple, or you may choose to leave it hidden. In all cases, the card remains on top of your library."
@@ -295,7 +364,7 @@ fn quest_for_ulas_temple_look_and_reveal_are_optional() {
 
 #[test]
 fn quest_for_ulas_temple_with_the_top_card_already_revealed() {
-    cr!("401.3", "603.5");
+    cr!("401.5", "603.5");
     ruling!(
         "Quest for Ula's Temple",
         "If an ability (from Future Sight or Oracle of Mul Daya, for example) causes you to play with the top card of your library revealed, you may still put a quest counter on Quest for Ula’s Temple when the first ability resolves if the top card of your library is a creature card."
@@ -312,7 +381,7 @@ fn quest_for_ulas_temple_with_the_top_card_already_revealed() {
 
 #[test]
 fn quest_for_ulas_temple_end_step_ability_triggers_each_turn() {
-    cr!("513.1a", "603.4");
+    cr!("603.2", "603.4");
     ruling!(
         "Quest for Ula's Temple",
         "Although the first ability triggers only on your turn, the second ability may trigger each turn."
