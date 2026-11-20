@@ -483,15 +483,24 @@ fn involves_hidden_quality(part: &CostPart) -> bool {
             zone: ZoneKind::Hand | ZoneKind::Library,
             ..
         } => !matches!(filter, Filter::Any),
-        CostPart::Effect(e) => matches!(
-            &**e,
-            Effect::KeywordAction {
-                action: KeywordAction::Behold,
-                what,
-                ..
-            } if !matches!(crate::behold::quality(what), Filter::Any)
-        ),
+        CostPart::Effect(e) => beholds_quality(e),
         CostPart::OneOf(options) => options.iter().any(cost_involves_hidden_quality),
+        _ => false,
+    }
+}
+
+/// Whether a cost paid by an effect beholds a [quality] (CR 701.4a), alone ("behold a
+/// Kithkin") or followed by what's done with what was beheld ("behold a Goblin and exile
+/// it", Champion of the Weird; "choose a creature you control or reveal a creature card
+/// from your hand", Monstrous Emergence, remembered for the spell).
+fn beholds_quality(e: &Effect) -> bool {
+    match e {
+        Effect::KeywordAction {
+            action: KeywordAction::Behold,
+            what,
+            ..
+        } => !matches!(crate::behold::quality(what), Filter::Any),
+        Effect::Seq(v) => v.iter().any(beholds_quality),
         _ => false,
     }
 }
@@ -503,8 +512,9 @@ fn cost_involves_hidden_quality(c: &Cost) -> bool {
 /// CR 118.8c: casting a spell "if able" doesn't require casting it if it has a mandatory
 /// additional cost that includes actions involving cards with a stated quality in a
 /// hidden zone. A mandatory choice between additional costs ("reveal a Dinosaur card from
-/// your hand or pay {1}", "behold a Kithkin or pay {2}") is such a cost when one of its
-/// options includes such an action, whichever option the player could pay
+/// your hand or pay {1}", "behold a Kithkin or pay {2}") or within one ("behold a Goblin
+/// and exile it": a Goblin card from the hand or a Goblin permanent) is such a cost when
+/// one of its options includes such an action, whichever option the player could pay
 /// (`cast-if-able-hidden-cost-choice`).
 pub fn additional_cost_involves_hidden_quality(g: &Game, card: ObjectId) -> bool {
     g.obj(card).chars.abilities.iter().any(|a| match &a.kind {

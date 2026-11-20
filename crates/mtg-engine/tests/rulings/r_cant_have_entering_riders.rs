@@ -19,13 +19,16 @@ fn valkyries_call_returns_a_creature_that_cant_have_flying_without_it_for_good()
     );
     supported("Valkyrie's Call");
     supported("Archetype of Imagination");
+    supported("Bishop of Wings");
     // Valkyrie's Call: "Whenever a nontoken, non-Angel creature you control dies, return
     // that card to the battlefield under its owner's control with a +1/+1 counter on it.
     // It has flying and is an Angel in addition to its other types." P1's Archetype of
     // Imagination: "Creatures your opponents control lose flying and can't have or gain
-    // flying."
+    // flying." P0's Bishop of Wings: "Whenever an Angel you control enters, you gain 4
+    // life."
     let mut t = TestGame::new(2);
     t.battlefield(P0, "Valkyrie's Call");
+    t.battlefield(P0, "Bishop of Wings");
     let archetype = t.battlefield(P1, "Archetype of Imagination");
     let bears = t.battlefield(P0, "Grizzly Bears");
     destroy(&mut t, bears);
@@ -35,8 +38,10 @@ fn valkyries_call_returns_a_creature_that_cant_have_flying_without_it_for_good()
     let back = back[0];
     let has_flying = |t: &TestGame| t.g.obj(back).chars.has_keyword(KeywordKind::Flying);
     assert!(!has_flying(&t));
-    // The rest of the effect applies: it's an Angel, with its +1/+1 counter.
+    // The rest of the effect applies: it's an Angel, as it enters (CR 611.2e: Bishop of
+    // Wings' ability triggered), with its +1/+1 counter.
     assert!(t.g.obj(back).chars.has_subtype("Angel"));
+    assert_eq!(t.life(P0), 24);
     assert_eq!(t.pt(back), (3, 3));
     // "... even if later in the turn Archetype of Courage left the battlefield": the
     // flying part never applies.

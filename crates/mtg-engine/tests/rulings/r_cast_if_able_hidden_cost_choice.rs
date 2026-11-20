@@ -3,8 +3,10 @@
 //! involving cards with a stated quality in a hidden zone, the player isn't required to
 //! cast that spell, even if those cards are present in that zone." A mandatory choice
 //! between additional costs one of whose options involves such cards ("reveal a Dinosaur
-//! card from your hand or pay {1}", "behold a Dragon or pay {1}") is such a cost, whichever
-//! option the player could pay (`cast-if-able-hidden-cost-choice`).
+//! card from your hand or pay {1}", "behold a Dragon or pay {1}"), or a cost that is
+//! itself such a choice ("behold a Goblin and exile it", "choose a creature you control or
+//! reveal a creature card from your hand"), is such a cost, whichever option the player
+//! could pay (`cast-if-able-hidden-cost-choice`).
 
 use crate::r_p078_common::{add_mana, to_upkeep};
 use crate::r_s01_common::supported;
@@ -43,10 +45,6 @@ fn evocation_with(card: &str, setup: fn(&mut TestGame)) -> (TestGame, ObjectId) 
 #[test]
 fn wild_evocation_need_not_cast_a_spell_whose_cost_choice_includes_revealing_a_dinosaur() {
     cr!("118.8c", "601.2b");
-    ruling!(
-        "Wild Evocation",
-        "If a player reveals a nonland card, that player must cast that card if it's possible to do so, even if they don't want to."
-    );
     interp!("cast-if-able-hidden-cost-choice");
     // Thunderherd Migration: "As an additional cost to cast this spell, reveal a Dinosaur
     // card from your hand or pay {1}. Search your library for a basic land card, put it
@@ -107,6 +105,56 @@ fn wild_evocation_need_not_cast_a_behold_or_pay_spell_even_with_the_permanent_to
     t.answer_targets(P0, &[Entity::Object(bears)]);
     t.resolve_all();
     assert!(t.in_graveyard(P0, "Caustic Exhale"));
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn wild_evocation_need_not_cast_a_spell_that_beholds_and_exiles_or_chooses_or_reveals() {
+    cr!("118.8c", "701.4a");
+    interp!("cast-if-able-hidden-cost-choice");
+    // Champion of the Weird: "As an additional cost to cast this spell, behold a Goblin and
+    // exile it. (Exile a Goblin you control or a Goblin card from your hand.)" P0 controls
+    // Raging Goblin, which they could exile; the cost still includes exiling a Goblin card
+    // from their hand, so they aren't required to cast it.
+    let goblin = |t: &mut TestGame| {
+        t.battlefield(P0, "Raging Goblin");
+    };
+    let (mut t, _) = evocation_with("Champion of the Weird", goblin);
+    let from = t.asked().len();
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    assert!(asked_to_cast(&t, from));
+    assert!(t.in_hand(P0, "Champion of the Weird"));
+    assert_eq!(t.named_on_battlefield("Raging Goblin").len(), 1);
+    // Casting it, P0 beholds Raging Goblin and exiles it.
+    let (mut t, _) = evocation_with("Champion of the Weird", goblin);
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(t.named_on_battlefield("Champion of the Weird").len(), 1);
+    assert!(t.in_exile("Raging Goblin"));
+    // Monstrous Emergence: "As an additional cost to cast this spell, choose a creature you
+    // control or reveal a creature card from your hand. Monstrous Emergence deals damage
+    // equal to the power of the creature you chose or the card you revealed to target
+    // creature." (beholding a creature in all but name). P0 controls Hill Giant, which they
+    // could choose.
+    let giant = |t: &mut TestGame| {
+        t.battlefield(P0, "Hill Giant");
+        t.battlefield(P1, "Grizzly Bears");
+    };
+    let (mut t, _) = evocation_with("Monstrous Emergence", giant);
+    let from = t.asked().len();
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    assert!(asked_to_cast(&t, from));
+    assert!(t.in_hand(P0, "Monstrous Emergence"));
+    assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 1);
+    // Casting it, P0 chooses Hill Giant: 3 damage to the Bears.
+    let (mut t, _) = evocation_with("Monstrous Emergence", giant);
+    let bears = t.named_on_battlefield("Grizzly Bears")[0];
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[Entity::Object(bears)]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Monstrous Emergence"));
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
 }
 
