@@ -1,0 +1,7 @@
+# sweep-nov20: full every-card sweep and tier refresh
+
+Tooling item (effort high; review: check the numbers and the diff of docs/verified-cards.tsv for surprises, at max). The last full refresh predates wave 6; many items since changed compiled forms, fingerprints and behavior.
+
+Run exactly CLAUDE.md's "Regenerate docs/verified-cards.tsv and docs/CARD_COVERAGE.md" sequence: the structure-log test run, the four every-card chunks (one command each, ~40 min, nothing else heavy alongside; CARGO_BUILD_JOBS=2), the concatenation, `verified --write`, `card-coverage --write`, and the round-trip list (`roundtrip --write` if that is how docs/ROUNDTRIP.md is refreshed). IMPORTANT: the container is reclaimed while a session sits idle, which kills background runs. Keep the session active: run each chunk in the foreground in pieces or wait on it with Monitor / short foreground waits; resume a killed chunk by re-running it.
+
+Report: verified / round-trip / compiled counts and percentages before and after (from the committed files), every card that dropped a tier with the failed check, and any panic, hang, slow game or rules-check violation the sweep found (with its repro command). Investigate each panic/hang/violation enough to say whether it's a bug, and list it; fix only trivial ones, the rest go to the coordinator. Commit the regenerated files with a yield row; follow worker.md's one-item-per-session rule and notify the coordinator.
