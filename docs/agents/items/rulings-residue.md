@@ -74,7 +74,8 @@ named reason in docs/rulings-uncovered.tsv. Report counts: cited, exempt, uncove
   Settling it needs a register entry (a reasonable judge could go either way: provisional) and
   the three patterns made to agree, with tests of the in-between event for each wording.
   **Taken up by item ruling-conflicts-12** (see its STATUS): all the patterns now read the
-  condition as about the trigger event (provisional `first-time-is-about-the-trigger-event`).
+  condition as about the trigger event (`first-time-is-about-the-trigger-event`, provisional, then
+  **decided** by the user Nov 20, work item user-decisions-nov20).
 - **Several permanents entering at once apply their "as [this] enters" replacement effects in the
   order the moves are given** (per player, APNAP; `Game::move_objects` in actions.rs), not in an
   order their controller chooses. Thief of Blood's ruling lets the controller apply any of the
@@ -103,7 +104,9 @@ named reason in docs/rulings-uncovered.tsv. Report counts: cited, exempt, uncove
   Rise from the Grave's Zombie on a returned noncreature God); the crewed Vehicle is red and
   no Dragon. Its base 4/4 still applies once it's a creature (CR
   208.3a; the brief asked for the 1/2, which would deviate from 208.3a: register
-  `base-pt-set-on-a-noncreature-applies-once-it-is-a-creature`, provisional, for the user).
+  `base-pt-set-on-a-noncreature-applies-once-it-is-a-creature`, provisional, then **decided** by the
+  user Nov 20 as recommended, work item user-decisions-nov20; the user called the Nov 19 subtype
+  decision one of their lower-confidence ones: docs/agents/finish-line-plan.md §5, "Revisit later").
 - **Creature types after a card-type-removing effect, once a later effect makes the object a
   creature again** (found by user-decisions-nov19c, Nov 19; pre-existing behavior, no test pins
   it). CR 205.1a: "If an object's card type is removed, the subtypes correlated with that card
@@ -115,6 +118,11 @@ named reason in docs/rulings-uncovered.tsv. Report counts: cited, exempt, uncove
   crew effect adds the creature type without them). Reading "the entire time the object's card
   type is removed" as ending when the object has the card type again would give it back Bird
   and Dragon. Settling it needs a register entry (provisional).
+  **Decided** by the user, Nov 20 (work item user-decisions-nov20), for the engine's reading: "I agree
+  with this - the equipment ruling on this seems to reinforce this idea" (register
+  `subtypes-removed-with-a-card-type-stay-removed-once-it-returns`; pinned by
+  `tests/rulings/subtypes_after_card_type_removed.rs`: Grizzly Bears under Swift Reconfiguration,
+  crewed, is an artifact creature Vehicle with no creature types).
 - **Rulings older than the Dominaria planeswalker errata that say "a player" where the card now
   says "target player or planeswalker"** (found by `rulings-residue-burn-freeze`'s review,
   Nov 20; no exemption made: they are cited for player targets, as the earlier P009 rounds
@@ -140,3 +148,8 @@ named reason in docs/rulings-uncovered.tsv. Report counts: cited, exempt, uncove
   policy their "a player" parts would be exempt in part, each with an entry in
   docs/RULING_DISCREPANCIES.md; a class decision like `pre-battle-rulings-give-way-to-the-cr`
   would settle them all (the P008/P009 "burn planeswalker" batches hold more of them).
+  **Decided** by the user, Nov 20 (work item user-decisions-nov20): treat them like the battle rulings
+  (register `pre-dominaria-player-target-rulings-give-way`, docs/interpretations/sources.md): 22
+  rulings on 20 cards exempt in part as outdated (`docs/rulings-exemptions/pre-dominaria-player-rulings.tsv`),
+  one grouped entry in docs/RULING_DISCREPANCIES.md, a planeswalker-target test per card
+  (`tests/rulings/pre_dominaria_player_target_rulings.rs`).

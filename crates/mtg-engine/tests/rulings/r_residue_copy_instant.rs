@@ -1138,6 +1138,12 @@ fn kefnet_copies_a_card_that_left_the_hand_using_its_last_known_information() {
         "God-Eternal Kefnet",
         "If the card leaves your hand before Kefnet's triggered ability resolves, you'll copy it using its last known information."
     );
+    // With the first ruling, the second says where that copy is made (decided by the two
+    // rulings: the user, Nov 20).
+    ruling!(
+        "God-Eternal Kefnet",
+        "The copy is created in and cast from your hand."
+    );
     // Lightning Bolt revealed; in response it's discarded. The copy is still made and cast.
     let (mut t, card) = kefnet_draw("Lightning Bolt", true, true);
     assert_eq!(t.stack_len(), 1);
