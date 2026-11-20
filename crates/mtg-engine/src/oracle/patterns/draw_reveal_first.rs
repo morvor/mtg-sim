@@ -1,11 +1,12 @@
 //! "Reveal the first card you draw each turn. Whenever you reveal a creature card this way,
 //! draw a card." (Primitive Etchings, Rowen, Keranos, God of Storms, Inquisitor
-//! Eisenhorn): each "Whenever you reveal a [card] this way" is a triggered ability that
-//! triggers when you draw your first card of the turn (CR 121.1; "on each of your turns":
-//! only during your turns) if it's that kind of card (the card is revealed as it's drawn,
-//! CR 701.20a). "You may reveal the first card you draw each turn as you draw it": the
-//! card is revealed only if you choose to as you draw it, and the triggered abilities
-//! trigger only then.
+//! Eisenhorn, God-Eternal Kefnet): each "Whenever you reveal a [card] this way" is a
+//! triggered ability that triggers when the static ability next to it reveals your first
+//! card drawn in a turn (CR 121.1, 701.20a; "on each of your turns": only during your
+//! turns), if it's that kind of card. "You may reveal the first card you draw each turn as
+//! you draw it": the card is revealed only if you choose to as you draw it, and the
+//! triggered abilities trigger only then. The reveal and its trigger event are
+//! `kw/reveal_first_draw.rs`'s.
 
 use super::AbilityPattern;
 use crate::ability::*;
@@ -60,34 +61,19 @@ fn reveal_first_draw(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
         if !tail.trim().is_empty() || !desc.ends_with(" card") {
             return None;
         }
-        let mut cond = vec![
-            // The first card drawn this turn (`Event::Drew`'s count).
-            Condition::Compare(Value::EventAmount, Cmp::Eq, Value::c(1)),
-            Condition::SelMatches(Sel::TriggerObject, filter),
-        ];
-        if your_turns {
-            cond.push(Condition::PlayerMatches(
-                PlayerRef::You,
-                PlayerFilter::Active,
-            ));
-        }
-        if may {
-            // Revealed only if you chose to (as it was drawn).
-            cond.push(Condition::Custom(
-                crate::kw::reveal_first_draw::REVEALED_THIS_WAY.into(),
-            ));
-        }
         let body = crate::oracle::effects::parse_trigger_body(
             effect,
             ctx,
             Sel::TriggerObject,
             PlayerRef::You,
         )?;
+        // Revealed by this permanent's ability (the first card drawn this turn; on each
+        // of your turns, or as you chose to): `kw/reveal_first_draw.rs`.
         let trigger = TriggerCond::Where {
-            trigger: Box::new(TriggerCond::Draws {
-                who: PlayerRel::You,
-            }),
-            cond: Condition::And(cond),
+            trigger: Box::new(TriggerCond::Custom(
+                crate::kw::reveal_first_draw::REVEALED_FIRST_DRAW.into(),
+            )),
+            cond: Condition::SelMatches(Sel::TriggerObject, filter),
         };
         let tr = TriggeredAbility::new(trigger, body);
         out.push(AbilityDef::with_link(

@@ -261,7 +261,7 @@ impl Game {
                 otherwise,
             } => {
                 let had_x = ctx.cost_has_x;
-                ctx.cost_has_x = cost.mana.as_ref().is_some_and(|m| m.has_x());
+                ctx.cost_has_x = crate::defined_x_costs::contains_x(cost);
                 let cost = &crate::mana_abilities::bind_x_for_payment(self, cost, ctx);
                 // "[cost] for each ...": the total is determined now (CR 702.24a).
                 let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
@@ -3518,12 +3518,14 @@ impl Game {
         | Restriction::BlockCost { cost, .. }
         | Restriction::BlockCostAgainst { cost, .. } = &mut r
         {
-            if let Some(m) = cost.mana.as_mut().filter(|m| m.has_x()) {
-                *m = m.with_x(ctx.x.max(0) as u32);
-                // X = 0: a cost of {0}, still a cost (CR 118.5; War Tax rulings).
-                if m.symbols.is_empty() {
-                    m.symbols.push(crate::mana::ManaSymbol::Generic(0));
-                }
+            // The cost still contains {X} (CR 106.6), its X now defined (`defined_x_costs`;
+            // X = 0 is a cost of {0}, still a cost, CR 118.5 and War Tax's rulings).
+            if let Some(m) = cost.mana.clone().filter(|m| m.has_x()) {
+                let rest = m.with_x(0);
+                cost.mana = (!rest.symbols.is_empty()).then_some(rest);
+                cost.parts.push(CostPart::DefinedX(Value::c(
+                    m.x_count() as i32 * ctx.x.max(0),
+                )));
             }
         }
         // A restriction on a referenced player ("target player can't play lands this

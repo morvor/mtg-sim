@@ -185,24 +185,25 @@ fn if_greater_pay_difference(l: &str, prev: &mut Effect, _b: &mut Builder) -> bo
     if !matches!(**otherwise, Effect::Noop) || !matches!(a, Value::ManaValueOf(_)) {
         return false;
     }
-    let Some(one) = crate::mana::ManaCost::parse("{1}") else {
+    let Some(x) = crate::mana::ManaCost::parse("{X}") else {
         return false;
     };
-    // {X} where X is the difference: that much generic mana (CR 107.1b: a negative
-    // difference is 0).
+    // {X} where X is the difference (CR 107.3c; CR 107.1b: a negative difference is 0),
+    // determined as the payment is offered: a cost that contains {X}, which mana
+    // spendable only on such costs may pay (CR 106.6).
     let diff = Value::Max(
         Box::new(Value::Diff(Box::new(a.clone()), Box::new(c.clone()))),
         Box::new(Value::c(0)),
     );
-    **otherwise = Effect::PayOptional {
-        who: PlayerRef::You,
-        cost: Cost::free().with(CostPart::Repeated {
-            cost: Box::new(Cost::mana(one)),
-            times: diff,
-        }),
-        then: Box::new(Effect::Noop),
-        otherwise: Box::new(Effect::Noop),
-    };
+    **otherwise = Effect::Seq(vec![
+        Effect::SetX { value: diff },
+        Effect::PayOptional {
+            who: PlayerRef::You,
+            cost: Cost::mana(x),
+            then: Box::new(Effect::Noop),
+            otherwise: Box::new(Effect::Noop),
+        },
+    ]);
     true
 }
 
@@ -215,7 +216,10 @@ fn difference_payment(e: &mut Effect) -> Option<&mut Effect> {
         return None;
     };
     match &mut **otherwise {
-        p @ Effect::PayOptional { .. } => Some(p),
+        Effect::Seq(v) => match v.as_mut_slice() {
+            [Effect::SetX { .. }, p @ Effect::PayOptional { .. }] => Some(p),
+            _ => None,
+        },
         _ => None,
     }
 }

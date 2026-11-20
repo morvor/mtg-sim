@@ -195,7 +195,9 @@ fn in_permission_zone(g: &Game, p: PlayerId, card: ObjectId, perm: &PlayPermissi
         // "from the top of your graveyard", "from any graveyard".
         ZoneKind::Graveyard if perm.terms.any_owner => matches!(o.zone, Zone::Graveyard(_)),
         ZoneKind::Graveyard if perm.top_only => g.player(p).graveyard.last() == Some(&card),
-        ZoneKind::Graveyard => o.zone == Zone::Graveyard(p),
+        // Another player's graveyard counts as `p`'s while an effect lets them play cards
+        // there as though they were in their own (CR 609.4, Shaman's Trance).
+        ZoneKind::Graveyard => crate::as_though::in_graveyard_for(g, p, card),
         ZoneKind::Exile => o.zone == Zone::Exile,
         // "from that player's hand" (Sen Triplets): another player's hand.
         ZoneKind::Hand if perm.terms.any_owner => matches!(o.zone, Zone::Hand(_)),
@@ -426,7 +428,11 @@ pub fn effect_permitted_cards(g: &Game, p: PlayerId) -> Vec<ObjectId> {
             ZoneKind::Graveyard if perm.top_only => {
                 g.player(p).graveyard.last().copied().into_iter().collect()
             }
-            ZoneKind::Graveyard => g.player(p).graveyard.clone(),
+            ZoneKind::Graveyard => {
+                let mut cards = g.player(p).graveyard.clone();
+                cards.extend(crate::as_though::other_graveyard_cards(g, p));
+                cards
+            }
             ZoneKind::Exile => g.exile.clone(),
             ZoneKind::Hand if perm.terms.any_owner => g
                 .players
@@ -479,7 +485,10 @@ pub fn same_way(a: &CastOption, b: &CastOption) -> bool {
 /// terms. A way the card's own permission allows is offered with another permission too if
 /// that one changes how it's cast (flash, an alternative cost, mana flexibility), unless
 /// it's already cast for an alternative cost of its own (flashback's cost comes with
-/// flashback's permission).
+/// flashback's permission) or, outside the hand, with an additional cost of its own
+/// (retrace's comes with retrace's permission, CR 702.81a): the total cost is one
+/// permission's, not both (CR 601.2f). In the hand an own way's additional cost belongs
+/// to a timing permission ("flash if you pay {2} more"), which combines with a grant.
 pub fn attach(
     g: &Game,
     p: PlayerId,
@@ -490,7 +499,10 @@ pub fn attach(
     let mut out = own.clone();
     for opt in all {
         let is_own = own.iter().any(|o| same_way(o, &opt));
-        if is_own && opt.alt_cost.is_some() {
+        if is_own
+            && (opt.alt_cost.is_some()
+                || (opt.extra_cost.is_some() && g.obj(card).zone != Zone::Hand(p)))
+        {
             continue;
         }
         let chars = crate::spell_preview::spell_characteristics(g, p, card, &opt);
@@ -594,6 +606,8 @@ pub fn spell_relative_cost(cost: &Cost, mv: u32) -> Cost {
             .map(|part| match part {
                 CostPart::PayLife(v) => CostPart::PayLife(fix(v)),
                 CostPart::PayEnergy(v) => CostPart::PayEnergy(fix(v)),
+                // "{X}, where X is that spell's mana value" (Kentaro, the Smiling Cat).
+                CostPart::DefinedX(v) => CostPart::DefinedX(fix(v)),
                 // "by waterbending {X} rather than paying its mana cost, where X is its mana
                 // value" (Hama, the Bloodbender).
                 CostPart::Effect(e) => match &**e {
@@ -949,7 +963,7 @@ pub fn land_played_with(g: &mut Game, perm: Option<&CastPermission>, land: Objec
 /// The permissions `g.play_grants[before..]` were just given with their terms: those
 /// with a limit ("you may cast a spell from among those cards") share a group, used up
 /// together (see [`record_use`]); one given "until you exile another card with ~" ends
-/// its source's earlier such permissions.
+/// the earlier such permissions its source gave the same player.
 pub fn given(g: &mut Game, before: usize) {
     if before >= g.play_grants.len() {
         return;
@@ -966,15 +980,18 @@ pub fn given(g: &mut Game, before: usize) {
             }
         }
     }
-    let newer: Vec<Option<ObjectId>> = g.play_grants[before..]
+    // "You" is the player the permission is for (CR 109.5): another player exiling a card
+    // with the same source doesn't end it (CR 611.2a).
+    let newer: Vec<(Option<ObjectId>, PlayerId)> = g.play_grants[before..]
         .iter()
         .filter(|gr| gr.terms.until_another && gr.source.is_some())
-        .map(|gr| gr.source)
+        .map(|gr| (gr.source, gr.duration_player()))
         .collect();
     if !newer.is_empty() {
         let mut i = 0;
         g.play_grants.retain(|gr| {
-            let keep = i >= before || !(gr.terms.until_another && newer.contains(&gr.source));
+            let keep = i >= before
+                || !(gr.terms.until_another && newer.contains(&(gr.source, gr.duration_player())));
             i += 1;
             keep
         });

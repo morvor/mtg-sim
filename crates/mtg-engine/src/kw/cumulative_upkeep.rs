@@ -134,6 +134,8 @@ pub fn scaled(part: &CostPart, n: i64) -> Option<CostPart> {
             filter: filter.clone(),
             count: m(count),
         },
+        // "{X} for each [thing], where X is [value]".
+        CostPart::DefinedX(v) => CostPart::DefinedX(m(v)),
         // "Exile the top card of your library" (Thought Lash): the top N cards, so the
         // whole set is payable only with N cards in the library (no partial payments).
         CostPart::Effect(e) => match &**e {
@@ -153,12 +155,14 @@ pub fn scaled(part: &CostPart, n: i64) -> Option<CostPart> {
 /// The cost with every [`CostPart::Repeated`] replaced by that many copies of its cost,
 /// the number of repetitions evaluated now (CR 702.24a: the total cost is determined as
 /// it's paid). Mana symbols are repeated, so a choice such as a hybrid symbol is made
-/// separately for each repetition; counted parts ("pay 2 life") are multiplied.
+/// separately for each repetition; counted parts ("pay 2 life") are multiplied. The value
+/// of an X the text defines ("{X}, where X is ...") is determined too, with the rest of the
+/// total cost (see `defined_x_costs`).
 pub fn expand_repeated(g: &Game, cost: &Cost, ctx: &Ctx) -> Cost {
     if !cost
         .parts
         .iter()
-        .any(|p| matches!(p, CostPart::Repeated { .. }))
+        .any(|p| matches!(p, CostPart::Repeated { .. } | CostPart::DefinedX(_)))
     {
         return cost.clone();
     }
@@ -168,7 +172,7 @@ pub fn expand_repeated(g: &Game, cost: &Cost, ctx: &Ctx) -> Cost {
     };
     for part in &cost.parts {
         let CostPart::Repeated { cost: sub, times } = part else {
-            out.parts.push(part.clone());
+            out.parts.push(crate::defined_x_costs::lock(g, part, ctx).unwrap_or_else(|| part.clone()));
             continue;
         };
         let n = g.eval_value(times, ctx).max(0);
