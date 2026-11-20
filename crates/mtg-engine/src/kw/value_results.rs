@@ -20,7 +20,8 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 /// A damage event of this turn (`TurnHistory::damage_as_dealt`): its index in
-/// `Game::turn_events` and what its source was as it dealt the damage.
+/// `Game::turn_events` and what its source was as it dealt the damage (for an excess
+/// damage event, what the permanent dealt the damage was then).
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct DamageAsDealt {
     pub index: usize,
@@ -42,6 +43,13 @@ pub fn record_damage(g: &mut Game, source: ObjectId) {
     g.history.damage_as_dealt.push(rec);
 }
 
+/// Records the excess damage event about to be added to this turn's events: the
+/// permanent dealt the damage as it was then (its controller and characteristics), in the
+/// same list, under that event's index.
+pub fn record_excess_damage(g: &mut Game, obj: ObjectId) {
+    record_damage(g, obj)
+}
+
 /// `cond` matched against the `index`th event of this turn (`None`: not yet processed).
 /// "[Quality] sources that dealt damage this turn" means what the sources were as they
 /// dealt it, not what they are now (a creature that was a Pirate then counts even if it
@@ -53,6 +61,55 @@ fn matches_at(
     index: Option<usize>,
     ev: &Event,
 ) -> Vec<EventInfo> {
+    // "[Sources] dealt noncombat damage": the same damage event, noncombat only, with the
+    // source as it dealt the damage (Temple of Power: a red source you controlled then,
+    // even if it has changed control since).
+    if let (TriggerCond::Noncombat(inner), Event::Damage { combat, .. }) = (cond, ev) {
+        if matches!(**inner, TriggerCond::DealsDamage { .. }) {
+            return if *combat {
+                vec![]
+            } else {
+                matches_at(g, inner, ctx, index, ev)
+            };
+        }
+    }
+    // "[A creature] an opponent controlled was dealt excess damage this turn" (Rith,
+    // Liberated Primeval): the permanent as it was dealt the damage, even if it has
+    // changed control since (CR 120.10, 608.2h).
+    if let (
+        TriggerCond::DealtExcessDamage {
+            filter,
+            noncombat_only,
+        },
+        Event::ExcessDamage { obj, combat, .. },
+    ) = (cond, ev)
+    {
+        let seen = index.and_then(|i| {
+            g.history
+                .damage_as_dealt
+                .iter()
+                .find(|r| r.index == i && r.source == *obj)
+        });
+        if let Some(seen) = seen {
+            let view = crate::eval::AsDeclared {
+                id: *obj,
+                chars: &seen.chars,
+                controller: seen.controller,
+            };
+            if (*noncombat_only && *combat) || !g.matches_view(&view, *obj, filter, ctx) {
+                return vec![];
+            }
+            return vec![EventInfo {
+                object: Some(*obj),
+                player: Some(seen.controller),
+                amount: match ev {
+                    Event::ExcessDamage { amount, .. } => *amount as i32,
+                    _ => 0,
+                },
+                ..Default::default()
+            }];
+        }
+    }
     if let (
         TriggerCond::DealsDamage {
             source,

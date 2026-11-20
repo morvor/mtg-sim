@@ -681,6 +681,9 @@ impl Game {
                 *self.history.crimes.entry(*player).or_insert(0) += 1
             }
             Event::Damage { source, .. } => crate::kw::value_results::record_damage(self, *source),
+            Event::ExcessDamage { obj, .. } => {
+                crate::kw::value_results::record_excess_damage(self, *obj)
+            }
             // What a permanent was as it entered (its characteristics are computed by
             // now): conditions about permanents that entered this turn look at that, not
             // at what it is later ("a face-down creature entered ...").
