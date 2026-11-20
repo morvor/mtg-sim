@@ -18,7 +18,7 @@ Judgment calls about how characteristics are determined (CR 604.3, 613). Format 
 ## commander-identity-protection-player: "Protection from each color that's not in your commander's color identity" uses the protected permanent's controller's commanders
 - Kind: interpretation
 - Status: decided
-- Rules: 903.4f "If an ability refers to the colors or number of colors in a commander’s color identity, that quality is undefined if that player doesn’t have a commander. That part of the ability won’t do anything. ..." / 702.16a "Protection is an evasion ability that ..."
+- Rules: 903.4f "If an ability refers to the colors or number of colors in a commander’s color identity, that quality is undefined if that player doesn’t have a commander. That part of the ability won’t do anything. ..." / 702.16a "Protection is a static ability, written “Protection from [quality].” ..." (The audit decision-audit-1, Nov 20, corrected the 702.16a quote, which read 'Protection is an evasion ability that ...', words that aren't in the rule.)
 - Question: Commander's Plate grants the equipped creature protection based on "your commander's color identity". If the Equipment's controller and the creature's controller differ (an Equipment attached to another player's creature), whose commander is it?
 - Decision: The color identity of the commanders of the protected permanent's controller (the player for whom the protection ability is evaluated); none (no protection) if that player has no commander. With two commanders, their combined identity (its rulings).
 - Alternatives: The Equipment's controller's commander.
