@@ -55,7 +55,7 @@ fn two_amulet_abilities(t: &mut TestGame, holder: ObjectId, between: fn(&mut Tes
     let amulets = indices_of(t, holder, AMULETS);
     assert_eq!(amulets.len(), 2, "{}", t.dump_log());
     t.g.add_counters(Entity::Player(P0), counters::ENERGY, 8, None);
-    let mut exile_top = |t: &mut TestGame, which: usize, name: &str| {
+    let exile_top = |t: &mut TestGame, which: usize, name: &str| {
         let card = t.library_top(P0, name);
         t.g.untap(holder);
         t.activate(P0, holder, amulets[which], &[]).unwrap();
