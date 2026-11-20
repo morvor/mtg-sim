@@ -201,6 +201,7 @@ fn wastewaker(
 #[test]
 fn eumidian_wastewaker_you_choose_first_and_a_player_who_cant_discard_sacrifices() {
     cr!("608.2d", "101.4");
+    interp!("impossible-choice-options-not-offered");
     ruling!(
         "Eumidian Wastewaker",
         "you choose to discard a card or sacrifice a permanent, and then defending player chooses to discard a card or sacrifice a permanent. If one of those players can’t discard a card (such as by having no cards in hand), that player must sacrifice a permanent."
