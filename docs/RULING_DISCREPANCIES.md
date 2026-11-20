@@ -415,6 +415,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: as the rulings say, for Abuelo's Awakening (layer 7b in timestamp order, CR 613.4b, 613.7a; crewing sets no power or toughness, CR 702.122a).
 - Recorded: tests `tests/rulings/r_p149_exile_until.rs` (`returned_artifact_and_enchantment_creature_cards_are_base_1_1`, `returned_permanents_take_later_base_pt_but_stay_1_1_when_crewed`), citing them under Abuelo, Ancestral Echo, which can't take part (its ability returns no card as a creature).
 
+### Secret Arcade // Dusty Parlor: Séance Board's morbid ruling
+- Kind: misattached
+- Status: open for review
+- Ruling, Secret Arcade // Dusty Parlor (2024-09-20): "If no creatures have died in a turn by the time that turn's end step begins, Séance Board's first ability won't trigger at all. Causing a creature to die during the end step won't cause the ability to trigger."
+- Conflicts with: Secret Arcade // Dusty Parlor has no morbid ability and nothing that triggers at the end step ("Nonland permanents you control and permanent spells you control are enchantments in addition to their other types. ... // Whenever you cast an enchantment spell, put a number of +1/+1 counters equal to that spell's mana value on up to one target creature."). The ruling names and describes Séance Board ("Morbid — At the beginning of each end step, if a creature died this turn, put a soul counter on this artifact. ..."), which has the same ruling in the data.
+- Evidence: the ruling names Séance Board; both are Duskmourn: House of Horror cards with rulings dated 2024-09-20 (Séance Board's other ruling, on {X} in mana costs, is attached to Secret Arcade too). Found in work item rulings-residue-misc-2 (pass A).
+- Engine: as the ruling says, for Séance Board.
+- Recorded: test `tests/rulings/r_residue_misc_2a_mana.rs` (`seance_board_doesnt_trigger_for_a_creature_dying_during_the_end_step`), citing it under Séance Board and under Secret Arcade // Dusty Parlor, which takes part with its first door unlocked (Séance Board is an enchantment too, which changes nothing).
+
 ## Outdated rulings
 
 ### Souls of the Faultless: "you may choose either member of the attacking team"

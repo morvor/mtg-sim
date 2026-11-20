@@ -327,15 +327,26 @@ fn secluded_courtyard_without_a_chosen_type_mana_pays_nothing() {
 fn seance_board_doesnt_trigger_for_a_creature_dying_during_the_end_step() {
     cr!("603.4", "513.1");
     ruling!(
+        "Séance Board",
+        "If no creatures have died in a turn by the time that turn's end step begins, Séance Board's first ability won't trigger at all. Causing a creature to die during the end step won't cause the ability to trigger."
+    );
+    // The data also attaches it to Secret Arcade // Dusty Parlor, which it doesn't
+    // describe (docs/RULING_DISCREPANCIES.md); it takes part here as a Room on the
+    // battlefield that makes Séance Board an enchantment, changing nothing.
+    ruling!(
         "Secret Arcade // Dusty Parlor",
         "If no creatures have died in a turn by the time that turn's end step begins, Séance Board's first ability won't trigger at all. Causing a creature to die during the end step won't cause the ability to trigger."
     );
-    // (Filed under Secret Arcade // Dusty Parlor; it describes Séance Board.)
     supported("Séance Board");
     supported("Secret Arcade // Dusty Parlor");
     let mut t = TestGame::new(2);
-    t.battlefield(P0, "Secret Arcade // Dusty Parlor");
+    let arcade = t.battlefield(P0, "Secret Arcade // Dusty Parlor");
+    assert!(mtg_engine::rooms::unlock(&mut t.g, arcade, 0, P0));
     let board = t.battlefield(P0, "Séance Board");
+    t.g.recompute();
+    assert!(t
+        .obj_now(board)
+        .is(mtg_engine::types::CardType::Enchantment));
     let bears = t.battlefield(P1, "Grizzly Bears");
     t.advance_to(P0, Step::End);
     t.settle();

@@ -634,6 +634,7 @@ fn bringer_of_the_last_gift_triggers_only_if_cast() {
     t.cast(P0, bringer).go();
     t.resolve_all();
     // (The Bears was sacrificed this way, so it isn't returned.)
+    assert!(!t.on_battlefield(bears));
     assert!(t.in_graveyard(P1, "Grizzly Bears"));
     assert_eq!(t.named_on_battlefield("Grizzly Bears").len(), 0);
 }
@@ -1085,4 +1086,114 @@ fn vault_21_counts_x_as_0_in_hand() {
     t.g.flush_events();
     t.resolve_all();
     assert_eq!(tokens(&t, P0).len(), 2, "{}", t.dump_log());
+}
+
+// --- Central Elevator // Promising Stairs ------------------------------------------------------------
+
+/// A Room put onto `p`'s battlefield with the given doors unlocked.
+fn room(t: &mut TestGame, p: PlayerId, name: &str, doors: &[usize]) -> ObjectId {
+    supported(name);
+    let id = t.battlefield(p, name);
+    for d in doors {
+        assert!(
+            mtg_engine::rooms::unlock(&mut t.g, id, *d, p),
+            "{name} door {d}"
+        );
+    }
+    t.g.recompute();
+    id
+}
+
+#[test]
+fn promising_stairs_counts_both_names_of_a_fully_unlocked_room() {
+    cr!("709.5c", "709.5", "104.2b");
+    ruling!(
+        "Central Elevator // Promising Stairs",
+        "Promising Stairs's ability counts names, not permanents. A Room with two unlocked doors has two names."
+    );
+    for last_full in [true, false] {
+        let mut t = TestGame::new(2);
+        room(&mut t, P0, "Central Elevator // Promising Stairs", &[0, 1]);
+        room(&mut t, P0, "Cramped Vents // Access Maze", &[0, 1]);
+        room(&mut t, P0, "Walk-In Closet // Forgotten Cellar", &[0, 1]);
+        let doors: &[usize] = if last_full { &[0, 1] } else { &[1] };
+        room(&mut t, P0, "Painter's Studio // Defaced Gallery", doors);
+        // (The unlock triggers, such as Central Elevator's search, are dropped.)
+        t.g.stack.clear();
+        t.g.pending_triggers.clear();
+        t.set_step(P1, Step::End);
+        t.advance_to(P0, Step::Upkeep);
+        t.resolve_all();
+        assert_eq!(t.has_lost(P1), last_full, "eight names: {last_full}");
+    }
+}
+
+#[test]
+fn central_elevator_checks_only_the_names_of_unlocked_doors() {
+    cr!("201.2c", "709.5", "701.23a");
+    ruling!(
+        "Central Elevator // Promising Stairs",
+        "Two or more objects (cards, permanents, spells, etc.) have the same name if they have at least one name in common, even if one or more of those objects have additional names. Central Elevator's ability lets you search your library for any Room card that doesn't share a name with a Room you control on the battlefield, checking only the names of unlocked doors. If a Room on the battlefield has no unlocked doors, it doesn't have either of its names."
+    );
+    let mut t = TestGame::new(2);
+    // On the battlefield: Cramped Vents // Access Maze with its left door unlocked, and
+    // Walk-In Closet // Forgotten Cellar with no door unlocked.
+    room(&mut t, P0, "Cramped Vents // Access Maze", &[0]);
+    room(&mut t, P0, "Walk-In Closet // Forgotten Cellar", &[]);
+    let vents = t.library_top(P0, "Cramped Vents // Access Maze");
+    let closet = t.library_top(P0, "Walk-In Closet // Forgotten Cellar");
+    let studio = t.library_top(P0, "Painter's Studio // Defaced Gallery");
+    let elevator = room(&mut t, P0, "Central Elevator // Promising Stairs", &[]);
+    let from = t.asked().len();
+    t.answer_choose(P0, &[obj(closet)]);
+    assert!(mtg_engine::rooms::unlock(&mut t.g, elevator, 0, P0));
+    t.g.flush_events();
+    t.resolve_all();
+    let offered: Vec<Vec<Entity>> = asked_since(&t, from)
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            Decision::ChooseEntities { candidates, .. } => Some(candidates),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(offered.len(), 1, "{}", t.dump_log());
+    assert!(!offered[0].contains(&obj(vents)), "shares Cramped Vents");
+    assert!(
+        offered[0].contains(&obj(closet)),
+        "a locked Room has no names"
+    );
+    assert!(offered[0].contains(&obj(studio)));
+    assert!(t.in_hand(P0, "Walk-In Closet // Forgotten Cellar"));
+}
+
+// --- Boing! -------------------------------------------------------------------------------------------
+
+#[test]
+fn boing_with_a_result_of_0_doesnt_scry() {
+    cr!("706.2", "706.6", "701.22a");
+    ruling!(
+        "Boing!",
+        "If the result is 0 or less because of modifications to the result, you don't scry at all."
+    );
+    supported("Boing!");
+    supported("Xenosquirrels");
+    for decrease in [false, true] {
+        let mut t = TestGame::new(2);
+        let squirrels = t.enter(P0, "Xenosquirrels");
+        t.settle();
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.g.dice.loaded.push_back(1);
+        t.answer_yes(P0, decrease);
+        // "increase or decrease": decrease.
+        t.answer(P0, DecisionKind::Option, Answer::Index(1));
+        let from = t.asked().len();
+        cast_new(&mut t, P0, "Boing!", &[obj(bears)]);
+        t.resolve_all();
+        assert!(t.in_hand(P1, "Grizzly Bears"));
+        let scried = asked_since(&t, from)
+            .iter()
+            .any(|(_, d)| matches!(d, Decision::Scry { .. }));
+        assert_eq!(scried, !decrease, "{:?}", asked_since(&t, from));
+        assert_eq!(t.counters(squirrels, "+1/+1"), if decrease { 1 } else { 2 });
+    }
 }

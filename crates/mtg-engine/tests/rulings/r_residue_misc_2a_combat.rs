@@ -436,6 +436,7 @@ fn rod(t: &mut TestGame, target: ObjectId) -> ObjectId {
 #[test]
 fn immovable_rod_a_creature_losing_its_pt_defining_ability_is_0() {
     cr!("604.3", "613.1f", "613.4a");
+    interp!("star-without-defining-ability-is-zero");
     ruling!(
         "Immovable Rod",
         "If a creature has a characteristic-defining ability that sets its power and/or toughness loses that ability, the power and/or toughness (as appropriate) become 0."
