@@ -534,6 +534,10 @@ pub struct SpendContext {
     /// activated before the costs are paid (CR 601.2g-h, 602.2b; Heart Warden's "{T}: Add
     /// {G}" helps pay its "{2}, Sacrifice this creature").
     pub reserve_may_tap: bool,
+    /// The payment's source must stay where it is whatever the cost: a special action
+    /// that acts on it once the cost is paid ("turn it face up", CR 116.2b, 702.37e). No
+    /// mana ability may sacrifice it (see `reserve_may_tap`).
+    pub keep_source: bool,
     /// What the cost is paid for beyond casting or activating ([`SpendPurpose`]).
     pub purpose: Option<SpendPurpose>,
     /// The mana cost being paid contains {C} ("pay a cost that contains {C}").

@@ -3797,7 +3797,11 @@ impl Game {
             // As when paying: only a cost that uses the source itself keeps the source's own
             // mana abilities from paying the mana (Midnight Clock's "{T}: Add {U}" pays for
             // its "{2}{U}: Put an hour counter on this artifact").
-            let reserve = if reserves_source(cost) { src } else { None };
+            let reserve = if reserves_source(cost) || spend.keep_source {
+                src
+            } else {
+                None
+            };
             let spend = SpendContext {
                 reserve_may_tap: !cost.has_tap(),
                 ..spend
@@ -4334,7 +4338,11 @@ impl Game {
                     "unpayable cost: an object with no mana cost (CR 118.6)".into(),
                 ));
             }
-            let reserve = if reserves_source(cost) { src } else { None };
+            let reserve = if reserves_source(cost) || spend.keep_source {
+                src
+            } else {
+                None
+            };
             let spend = &SpendContext {
                 reserve_may_tap: !cost.has_tap(),
                 // "Spend this mana only to ... pay a cost that contains {C}".

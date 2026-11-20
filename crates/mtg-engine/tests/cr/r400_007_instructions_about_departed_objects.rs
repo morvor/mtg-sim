@@ -95,3 +95,44 @@ fn a_source_sacrificed_for_mana_cant_have_counters_removed_as_its_cost() {
     let tokens = t.g.battlefield.iter().filter(|o| !t.obj(**o).is_card()).count();
     assert_eq!(tokens, 1, "{}", t.dump_log());
 }
+
+#[test]
+fn a_face_down_permanent_sacrificed_for_mana_isnt_turned_face_up() {
+    cr!("400.7", "702.37e", "116.2b", "733.1");
+    use mtg_engine::decision::{Action, SpecialAction};
+    use mtg_engine::keywords::KeywordKind;
+    use mtg_engine::object::CastMethod;
+    // Rattleclaw Mystic: "Morph {2}". Cast face down with three Islands, then turned face
+    // up with Ashnod's Altar ("Sacrifice a creature: Add {C}{C}.") the only mana.
+    let setup = |bears: bool| {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        t.lands(P0, "Island", 3);
+        let card = t.hand(P0, "Rattleclaw Mystic");
+        t.cast(P0, card)
+            .method(CastMethod::FaceDown(KeywordKind::Morph))
+            .go();
+        t.resolve();
+        let mystic = t.g.current(card);
+        assert!(t.obj(mystic).face_down && t.on_battlefield(mystic));
+        t.battlefield(P0, "Ashnod's Altar");
+        let other = bears.then(|| t.battlefield(P0, "Grizzly Bears"));
+        t.g.turn.priority = Some(P0);
+        let r = t.g.perform_action(
+            P0,
+            Action::Special(SpecialAction::TurnFaceUp { obj: mystic }),
+        );
+        (t, mystic, other, r)
+    };
+    // Only the Mystic itself could pay: sacrificing it leaves nothing to turn face up, so
+    // the action is reversed and it stays face down.
+    let (t, mystic, _, r) = setup(false);
+    assert!(r.is_err(), "{}", t.dump_log());
+    assert!(t.on_battlefield(mystic) && t.obj(mystic).face_down);
+    // Another creature pays for it.
+    let (t, mystic, bears, r) = setup(true);
+    assert!(r.is_ok(), "{}", t.dump_log());
+    assert!(!t.on_battlefield(bears.unwrap()));
+    assert!(t.on_battlefield(mystic) && !t.obj(mystic).face_down);
+    assert_eq!(t.obj(mystic).chars.name.as_str(), "Rattleclaw Mystic");
+}

@@ -377,6 +377,9 @@ pub fn pay_for(
     crate::cost_rules::choose_payment_ways(g, p, src, &mut cost);
     let spend = SpendContext {
         source: src,
+        // What the special action acts on once the cost is paid isn't sacrificed for its
+        // mana (CR 400.7).
+        keep_source: true,
         purpose,
         // "Spend this mana only on costs that contain {X}": a special action's cost with
         // {X}, X chosen immediately before it's paid (CR 107.3d; `ctx.cost_has_x` says so
@@ -384,9 +387,22 @@ pub fn pay_for(
         has_x: ctx.cost_has_x || crate::defined_x_costs::contains_x(&cost),
         ..Default::default()
     };
+    // A cost that moves the source itself ("discard ~", Circling Vultures) is the action.
+    let moves_source = cost.parts.iter().any(|c| {
+        matches!(
+            c,
+            CostPart::DiscardSelf
+                | CostPart::SacrificeSelf
+                | CostPart::ExileSelf
+                | CostPart::ReturnSelfToHand
+        )
+    });
+    let live_before = src.is_some_and(|s| g.is_live(s));
     match g.pay_total_cost(p, &cost, src, &spend, ctx) {
-        Ok(_) => true,
-        Err(_) => {
+        // Otherwise a source that left as the cost was paid (sacrificed for its mana) can't
+        // be acted on: the action can't be completed (CR 400.7, 733.1).
+        Ok(_) if moves_source || !live_before || src.is_none_or(|s| g.is_live(s)) => true,
+        _ => {
             g.roll_back(snapshot);
             false
         }
