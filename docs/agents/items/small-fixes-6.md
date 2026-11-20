@@ -16,3 +16,7 @@ Then run `--properties --games 500 --jobs 3` once and report.
 3. **Game 405:** `order_simultaneous_entries` now lists each player's objects by owner in APNAP order, then creation order (`sort_objects_apnap`), not in the order the moves were proposed; register `simultaneous-entries-listed-by-owner-then-creation`; test `tests/cr/r613_7m_entry_order_listing.rs`.
 
 Both games now hold (`--only 175 --players 4`, `--only 405 --players 2`, seed 1).
+
+Properties run (release build, `--properties --games 500 --jobs 3`, seed 1, 2,484 s): seat 500/500 held
+(1,134,649 decisions), snapshot 500/500, rollback 500/500 (29,488 reversed actions checked), determinism
+500/500, replay 498 held and 2 stopped at the time limit (games 83 and 469), no violations, no panics.
