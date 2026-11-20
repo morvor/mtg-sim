@@ -153,6 +153,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: as the card says: if Shredder becomes a copy of something else while his first ability is on the stack, its tokens are copies of what he is copying; if he leaves the battlefield, they are still created, copies of Shredder as he last existed on the battlefield (with a copy effect that applied to him then); his last ability, resolving after he has left, makes the player lose half their life and creates no tokens.
 - Recorded: exemptions `docs/rulings-exemptions/rulings-P030.tsv` (the first ruling's "before his last ability resolves") and `docs/rulings-exemptions/rulings-P031.tsv` (the second's "while his last ability is on the stack"); the rest of both stays cited; register `ruling-contradicting-oracle-gives-way`; tests `tests/rulings/r_residue_copy_instant_tokens.rs` (`shredder_s_tokens_after_shredder_left`), `tests/rulings/r_p031_token_self_copies.rs` (`shredder_s_tokens_copy_what_it_s_copying`).
 
+### Siege of Towers: "copy Shattering Spree" for "copy Siege of Towers"
+- Kind: template error
+- Status: open for review
+- Ruling, Siege of Towers (2024-01-12): "As the replicate triggered ability resolves, you'll copy Shattering Spree for each time you paid its replicate cost, even if the original spell is no longer on the stack at that time (perhaps because it was countered)."
+- Conflicts with: the card's Oracle text, whose replicate copies Siege of Towers itself and never Shattering Spree: "Replicate {1}{R} (When you cast this spell, copy it for each time you paid its replicate cost. You may choose new targets for the copies.) / Target Mountain becomes a 3/1 creature. It's still a land." CR 702.56a: "... “When you cast this spell, if a replicate cost was paid for it, copy it for each time its replicate cost was paid. If the spell has any targets, you may choose new targets for any of the copies.” ..."
+- Evidence: the ruling is Shattering Spree's, word for word with the same date and the name left unchanged: "As the replicate triggered ability resolves, you'll copy Shattering Spree for each time you paid its replicate cost, even if the original spell is no longer on the stack at that time (perhaps because it was countered)." (2024-01-12), right for Shattering Spree ("Replicate {R} ... Destroy target artifact."). Both cards were reprinted in Ravnica Remastered (released 2024-01-12, the date of both cards' replicate rulings), and the same template names its own card everywhere else in the data: Lose Focus "As the replicate triggered ability resolves, you'll copy Lose Focus for each time you paid its replicate cost, ..." (2021-06-18) and Changing Loyalty "As the replicate triggered ability resolves, you'll copy Changing Loyalty for each time you paid its replicate cost, ..." (2026-03-20). Siege of Towers' other ruling of that day, "The copies that replicate creates are created on the stack, so they're not "cast." Abilities that trigger when a player casts a spell won't trigger." (2024-01-12), is Shattering Spree's too and names no card; it agrees with the card. No rules or Oracle change explains the name. Ravnica Remastered's release notes weren't read (magic.wizards.com is outside this session's allowed network hosts, and the ormos mirror ends in 2022). With Siege of Towers' name read in, the ruling agrees with the card; noted first in ruling-conflicts-11, investigated in work item small-fixes-4.
+- Engine: as the card says: Siege of Towers' replicate trigger copies Siege of Towers once for each time its replicate cost was paid, even if the original was countered first; a Shattering Spree elsewhere (in its controller's hand) isn't copied.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P222.tsv` (the ruling's "you'll copy Shattering Spree"; the rest stays cited under Siege of Towers); register `ruling-contradicting-oracle-gives-way`; tests `tests/rulings/r_siege_of_towers_replicate.rs` (`siege_of_towers_replicate_copies_it_even_after_it_was_countered`), and, for Shattering Spree's own ruling, `tests/rulings/r_s14_replicate_retrace.rs` (`replicate_copies_even_after_the_original_was_countered`).
+
 ## Copying errors
 
 ### Run Out of Town: "controller" for "owner"
@@ -998,14 +1007,6 @@ decides whether they become a conflict case.
   `two_target_destruction_with_one_target_left_affects_it`). Whether the Journey into Nyx
   release notes (2014; ormos mirror) have the same spelling wasn't checked. No kind fits a
   misspelled name.
-- **Siege of Towers** (ruling-conflicts-11): "As the replicate triggered ability resolves,
-  you'll copy Shattering Spree for each time you paid its replicate cost, even if the
-  original spell is no longer on the stack at that time (perhaps because it was countered)."
-  (2024-01-12, Ravnica Remastered) names Shattering Spree: it is Shattering Spree's ruling,
-  word for word and with the same date, with the name left unchanged. Replicate works the
-  same on both cards, so with Siege of Towers' name read in, the ruling holds. The text is
-  cited through Shattering Spree (`tests/rulings/r_s14_replicate_retrace.rs`), so it needs
-  no test of its own. Not exempted; not an entry.
 - Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (copying errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the
