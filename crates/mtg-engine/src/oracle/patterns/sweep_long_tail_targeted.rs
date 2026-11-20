@@ -109,6 +109,9 @@ fn object_based(lower: &str) -> bool {
 
 /// `kind` with each "that player" (`PlayerRef::TriggerPlayer`) read as the targeting
 /// spell's controller as the ability resolves (`PlayerRef::ControllerOf(Sel::TriggerSpell)`).
+/// A value of another type serialized the same way (`Sel::TriggerPlayer`,
+/// `PlayerRel::TriggerPlayer`) doesn't deserialize once replaced: then `None`, and the
+/// block isn't read this way.
 fn controller_of_the_spell(kind: &AbilityKind) -> Option<AbilityKind> {
     use serde_json::Value as J;
     fn walk(v: J, from: &J, to: &J) -> J {
