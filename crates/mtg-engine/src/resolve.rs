@@ -1720,16 +1720,22 @@ impl Game {
             }
             Effect::AttachAsCreature { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
+                // As for attaching (CR 400.7, 701.3b).
                 if let Some(t) = self.resolve_sel(to, ctx).into_iter().next() {
-                    for o in objs {
-                        self.attach_as_creature(o, t);
+                    if self.present_entity(t).is_some() {
+                        for o in self.all_present(objs) {
+                            self.attach_as_creature(o, t);
+                        }
                     }
                 }
             }
             Effect::Unattach { what } => {
                 let mut done = Vec::new();
                 let mut from = Vec::new();
-                for o in self.resolve_objects(what, ctx) {
+                // An object that has left keeps what it was attached to as last known
+                // information; it isn't unattached (CR 400.7).
+                let objs = self.resolve_objects(what, ctx);
+                for o in self.all_present(objs) {
                     if let Some(h) = self.obj(o).attached_to {
                         self.unattach(o);
                         done.push(Entity::Object(o));
