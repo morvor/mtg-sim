@@ -31,6 +31,12 @@ impl Game {
         if ctx.entering.is_some() && self.effect_on_entering_object(e, ctx) {
             return;
         }
+        // CR 611.2b: the "for as long as" duration of the continuous effect this
+        // instruction of a resolving ability would create ended while the ability waited
+        // (whatever kind of effect it is).
+        if crate::duration_windows::effect_does_nothing(self, e, ctx) {
+            return;
+        }
         // Cards an instruction exiles are exiled with the source of the ability performing
         // it, for the abilities linked to it (CR 607.2a): by its link, however they're
         // exiled ("search your library for seven cards, exile them", a dig).
@@ -1058,13 +1064,11 @@ impl Game {
                 duration,
             } => {
                 // CR 611.2b: a "for as long as" duration that already ended means the
-                // effect does nothing. (One about the affected objects, "for as long as
-                // that creature has a bounty counter on it", is checked for them below.)
+                // effect does nothing (one that ended while the ability waited: see
+                // `exec`). One about the affected objects, "for as long as that creature
+                // has a bounty counter on it", is checked for them below.
                 let about_affected = matches!(duration, Duration::WhileCondition(_));
-                if !about_affected
-                    && (self.effect_expired(duration, ctx.source, ctx.controller)
-                        || crate::untap_choice::ended_before_it_began(self, duration, ctx))
-                {
+                if !about_affected && self.effect_expired(duration, ctx.source, ctx.controller) {
                     return;
                 }
                 // CR 702.26e: a phased-out permanent isn't among the objects it affects,
@@ -1176,10 +1180,8 @@ impl Game {
                 };
                 // CR 611.2b: a "for as long as" duration that already ended (one about the
                 // objects it applies to, "for as long as it remains tapped", is checked
-                // for them).
-                if self.rule_effect_expired(duration, ctx.source, ctx.controller, &objects)
-                    || crate::untap_choice::ended_before_it_began(self, duration, ctx)
-                {
+                // for them; one that ended while the ability waited: see `exec`).
+                if self.rule_effect_expired(duration, ctx.source, ctx.controller, &objects) {
                     return;
                 }
                 let id = self.new_effect_id();

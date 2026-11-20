@@ -106,7 +106,7 @@ fn a_loop_that_grows_the_game_state_runs_until_the_action_limit() {
     interp!("growing-loops-run-to-the-limit");
     // Two Charismatic Conquerors on each side ("Whenever an artifact or creature an
     // opponent controls enters untapped, they may tap that permanent. If they don't, you
-    // create a 1/1 white Vampire creature token with flying."): only one trigger per
+    // create a 1/1 white Vampire creature token with lifelink."): only one trigger per
     // entering token can tap it, so each token makes another for the other side, without
     // end. The state never repeats (there are more tokens each time), so the engine never
     // recognizes the loop: the game is a draw only when it reaches the action limit.
