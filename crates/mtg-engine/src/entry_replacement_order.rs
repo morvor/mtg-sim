@@ -13,13 +13,16 @@
 //!
 //! Which effects modify how each of them enters is determined as their entering is
 //! proposed, before any of those effects is applied (614.12; [`Game::entry_snapshot`]):
-//! an effect that applied then still applies if applying another permanent's effects made
-//! what generated it leave the battlefield (Rhythm of the Wild's ruling: "If Rhythm of the
-//! Wild leaves the battlefield at the same time that a nontoken creature enters the
-//! battlefield (most likely because that creature has a replacement effect, such as that of
-//! Rescuer Sphinx), that creature still gets a +1/+1 counter or haste."). So a Rescuer
-//! Sphinx returning Rhythm of the Wild doesn't take riot away from a creature entering
-//! with it, whichever is applied first.
+//! an effect that applied then still applies whatever applying another permanent's effects
+//! did to what generated it, made it leave the battlefield (Rhythm of the Wild's ruling: "If
+//! Rhythm of the Wild leaves the battlefield at the same time that a nontoken creature
+//! enters the battlefield (most likely because that creature has a replacement effect, such
+//! as that of Rescuer Sphinx), that creature still gets a +1/+1 counter or haste.") or
+//! turned it face down (Ixidron's; decided by the user, Nov 20). So a Rescuer Sphinx
+//! returning Rhythm of the Wild doesn't take riot away from a creature entering with it,
+//! and Ixidron turning Grumgully, the Generous face down doesn't take Grumgully's counter
+//! away from one, whichever is applied first. (What such an effect counts, Master
+//! Biomancer's power, is still counted as it's applied.)
 //!
 //! The order matters only when applying one permanent's effects can change what another's
 //! do: one of them acts on the game as it's applied (Thief of Blood removes every
@@ -27,7 +30,7 @@
 //! down, Lotus Vale's "sacrifice two untapped lands instead") and another one reads the
 //! game or acts on it too (Golgari Grave-Troll counts the creature cards in its owner's
 //! graveyard, Clone chooses a creature to copy, a second Thief of Blood, an effect another
-//! permanent generates). Choices, conditions and life or energy payments (paid once all the
+//! permanent generates, which can count something about that permanent). Choices, conditions and life or energy payments (paid once all the
 //! choices are made, CR 614.12b, `entry_costs.rs`) change nothing as they're made, so
 //! permanents with only such effects, or only effects that read the game, are applied in
 //! the order of the moves without a question. When the order can matter, the player is
@@ -54,8 +57,9 @@ enum Reach {
     /// with a +1/+1 counter for each creature card in your graveyard", "you may have it
     /// enter as a copy of any creature on the battlefield", "choose a color", "enters
     /// tapped unless a player has 13 or less life", "you may pay 2 life" (paid later). An
-    /// effect another permanent generates ("Each other non-Human creature you control
-    /// enters with an additional +1/+1 counter on it") depends on that permanent too.
+    /// effect another permanent generates ("Each other creature you control enters with a
+    /// number of additional +1/+1 counters on it equal to Master Biomancer's power") can
+    /// depend on that permanent too.
     Reads,
     /// Changes the game as it's applied: removes counters, exiles or sacrifices objects,
     /// returns a permanent to its owner's hand, turns permanents face down.

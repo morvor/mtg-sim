@@ -240,10 +240,13 @@ struct Candidate {
 
 /// The replacement effects that would modify how a permanent enters the battlefield,
 /// determined as the event is first proposed (CR 614.12).
-/// They still apply if applying one of them made a permanent leave the battlefield (an
-/// "as this enters, return a permanent you control" choice returning the permanent that
-/// grants riot), as long as the permanent still enters the same way: not once a copy,
-/// control, back-face, or face-down effect has changed what applies (CR 616.1b–d, 616.1f).
+/// They still apply whatever happens meanwhile to what generates them (register
+/// `simultaneous-entries-ordered-by-controller`): if applying one of them made a permanent
+/// leave the battlefield (an "as this enters, return a permanent you control" choice
+/// returning the permanent that grants riot, Rhythm of the Wild's ruling) or turned it face
+/// down (Ixidron turning Grumgully, the Generous face down as a creature enters with it), as
+/// long as the permanent still enters the same way: not once a copy, control, back-face, or
+/// face-down effect has changed what applies (CR 616.1b–d, 616.1f).
 /// For several permanents entering at the same time, each one's are determined as that
 /// event is proposed, before any of their effects is applied ([`Game::entry_snapshot`]).
 pub(crate) struct EntrySnapshot {
@@ -253,7 +256,6 @@ pub(crate) struct EntrySnapshot {
     face: Option<FaceState>,
     transformed: bool,
     face_down: Option<KeywordKind>,
-    battlefield: Vec<ObjectId>,
     cands: Vec<Candidate>,
 }
 
@@ -399,7 +401,6 @@ impl Game {
             face: m.etb.face,
             transformed: m.etb.transformed,
             face_down: m.etb.face_down,
-            battlefield: self.battlefield.clone(),
             cands,
         })
     }
@@ -476,17 +477,17 @@ impl Game {
                 }
                 match &snap {
                     // Effects that applied to the permanent as the event was proposed
-                    // still apply, even if applying another one (an "as this enters,
-                    // return a permanent" choice) removed what generated them (Rhythm of
-                    // the Wild's riot). See [`EntrySnapshot`].
+                    // still apply, whatever happened to what generated them meanwhile:
+                    // applying another one removed it (an "as this enters, return a
+                    // permanent" choice returning Rhythm of the Wild) or turned it face
+                    // down (Ixidron's). See [`EntrySnapshot`].
                     Some(sn)
                         if sn.obj == m.obj
                             && sn.copy_of == m.etb.copy_of
                             && sn.controller == m.etb.controller
                             && sn.face == m.etb.face
                             && sn.transformed == m.etb.transformed
-                            && sn.face_down == m.etb.face_down
-                            && sn.battlefield.iter().any(|o| !self.battlefield.contains(o)) =>
+                            && sn.face_down == m.etb.face_down =>
                     {
                         for c in &sn.cands {
                             if !applied.contains(&c.key) && !entry.iter().any(|e| e.key == c.key) {
@@ -503,7 +504,6 @@ impl Game {
                             face: m.etb.face,
                             transformed: m.etb.transformed,
                             face_down: m.etb.face_down,
-                            battlefield: self.battlefield.clone(),
                             cands: entry.clone(),
                         }));
                     }

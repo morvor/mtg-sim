@@ -5,7 +5,8 @@
 //! another reads or changes it too. The default is the order of the moves
 //! (interpretation `simultaneous-entries-ordered-by-controller`). Which effects apply to
 //! each is determined as the event is proposed: one whose source an earlier-applied
-//! effect made leave the battlefield still applies (Rhythm of the Wild's ruling).
+//! effect made leave the battlefield (Rhythm of the Wild's ruling) or turned face down
+//! (Ixidron's) still applies.
 
 use crate::r_residue_counters_common::*;
 use mtg_engine::ability::LibraryPosition;
@@ -406,17 +407,20 @@ fn rhythm_of_the_wild_returned_as_another_creature_enters_still_gives_it_riot() 
 }
 
 #[test]
-fn an_effect_another_permanent_generates_is_ordered_too() {
+fn an_effect_whose_source_another_entering_permanent_turns_face_down_still_applies() {
     cr!("616.1", "616.1f", "614.12");
     interp!("simultaneous-entries-ordered-by-controller");
     supported("Grumgully, the Generous");
     supported("Ixidron");
     // Grumgully, the Generous: "Each other non-Human creature you control enters with an
-    // additional +1/+1 counter on it." It stays on the battlefield, but Ixidron, entering
-    // with the Bears, turns it face down (a face-down 2/2 has no abilities): the Bears get
-    // Grumgully's counter only if their effects are applied first. The Bears' only effect
-    // is Grumgully's, so the player is asked.
-    for (pick, bears_n) in [(None, 0u32), (Some(0usize), 0), (Some(1), 1)] {
+    // additional +1/+1 counter on it." It stays on the battlefield, but Ixidron ("As this
+    // creature enters, turn all other nontoken creatures face down."), entering with the
+    // Bears, turns it face down (a face-down 2/2 has no abilities). Grumgully's effect was
+    // determined as the event was proposed, so it still applies, whichever permanent's
+    // effects come first (decided by the user, Nov 20: before, the Bears got the counter only
+    // if their effects were applied first). The player is still asked: an effect another
+    // permanent generates can count something about that permanent (Master Biomancer).
+    for pick in [None, Some(0usize), Some(1)] {
         let mut t = TestGame::new(2);
         t.set_step(P0, Step::PrecombatMain);
         let grumgully = t.battlefield(P0, "Grumgully, the Generous");
@@ -429,7 +433,84 @@ fn an_effect_another_permanent_generates_is_ordered_too() {
         assert!(questions[0][1].starts_with("Grizzly Bears"));
         assert!(t.obj_now(grumgully).face_down);
         assert!(!t.obj_now(ids[1]).face_down, "entering at the same time");
-        assert_eq!(plus1(&t, ids[1]), bears_n, "{pick:?}");
+        assert_eq!(plus1(&t, ids[1]), 1, "{pick:?}");
+    }
+}
+
+#[test]
+fn an_effect_whose_source_turns_face_down_applies_whether_or_not_a_permanent_leaves() {
+    cr!("616.1f", "614.12");
+    interp!("simultaneous-entries-ordered-by-controller");
+    ruling!(
+        "Rhythm of the Wild",
+        "If Rhythm of the Wild leaves the battlefield at the same time that a nontoken creature enters the battlefield (most likely because that creature has a replacement effect, such as that of Rescuer Sphinx), that creature still gets a +1/+1 counter or haste."
+    );
+    supported("Grumgully, the Generous");
+    supported("Ixidron");
+    supported("Rescuer Sphinx");
+    // Ixidron, Rescuer Sphinx and Grizzly Bears enter together, with Grumgully, the Generous
+    // and Ornithopter on the battlefield. Ixidron turns Grumgully and Ornithopter face down;
+    // the Sphinx ("As this creature enters, you may return a nonland permanent you control
+    // to its owner's hand. If you do, this creature enters with a +1/+1 counter on it.")
+    // returns Ornithopter or nothing. The Bears get Grumgully's counter either way, in
+    // whichever order the effects are applied (before, the engine added back the effects
+    // determined as the event was proposed only once a permanent had left the battlefield:
+    // with the Sphinx returning Ornithopter the Bears got 1, without it 0).
+    for returns in [false, true] {
+        for pick in [None, Some(0usize), Some(1), Some(2)] {
+            let mut t = TestGame::new(2);
+            t.set_step(P0, Step::PrecombatMain);
+            let grumgully = t.battlefield(P0, "Grumgully, the Generous");
+            let thopter = t.battlefield(P0, "Ornithopter");
+            if let Some(i) = pick {
+                t.answer(P0, DecisionKind::Replacement, Answer::Index(i));
+            }
+            t.answer_yes(P0, returns);
+            if returns {
+                t.answer_choose(P0, &[obj(thopter)]);
+            }
+            let ids = enter_together(
+                &mut t,
+                &[
+                    (P0, "Ixidron"),
+                    (P0, "Rescuer Sphinx"),
+                    (P0, "Grizzly Bears"),
+                ],
+            );
+            let case = format!("returns {returns}, pick {pick:?}");
+            assert!(!entry_order_questions(&t, P0).is_empty(), "{case}");
+            assert!(t.obj_now(grumgully).face_down, "{case}");
+            assert_eq!(t.in_hand(P0, "Ornithopter"), returns, "{case}");
+            assert_eq!(plus1(&t, ids[2]), 1, "{case}: the Bears");
+            // The Sphinx: its own counter if it returned a permanent, and Grumgully's.
+            assert_eq!(plus1(&t, ids[1]), 1 + returns as u32, "{case}: the Sphinx");
+        }
+    }
+}
+
+#[test]
+fn a_lone_rescuer_sphinx_returning_grumgully_still_gets_its_counter() {
+    cr!("614.12", "616.1f");
+    interp!("simultaneous-entries-ordered-by-controller");
+    ruling!(
+        "Rhythm of the Wild",
+        "If Rhythm of the Wild leaves the battlefield at the same time that a nontoken creature enters the battlefield (most likely because that creature has a replacement effect, such as that of Rescuer Sphinx), that creature still gets a +1/+1 counter or haste."
+    );
+    supported("Grumgully, the Generous");
+    supported("Rescuer Sphinx");
+    // Rescuer Sphinx enters alone and returns Grumgully, the Generous: Grumgully's effect,
+    // determined as the event was proposed, still applies whichever of the two effects is
+    // applied first, as Rhythm of the Wild's riot does in its ruling.
+    for first in [0usize, 1] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let grumgully = t.battlefield(P0, "Grumgully, the Generous");
+        t.answer(P0, DecisionKind::Replacement, Answer::Index(first));
+        t.answer_yes(P0, true);
+        t.answer_choose(P0, &[obj(grumgully)]);
+        let ids = enter_together(&mut t, &[(P0, "Rescuer Sphinx")]);
+        assert!(t.in_hand(P0, "Grumgully, the Generous"), "first {first}");
+        assert_eq!(plus1(&t, ids[0]), 2, "first {first}");
     }
 }
 
