@@ -21,8 +21,9 @@
 //! 118.9d applies it to the alternative cost). Before the fix the free way was offered only
 //! with normal timing (`Game::permitted_cast_options` gave Omniscience's permission plain
 //! `CastMethod::Free` ways of its own; found by the November 2026 mutation run of
-//! `permissions.rs`, docs/MUTATION.md). The same fix lets a split card with fuse be cast fused
-//! from the hand for free with Omniscience (CR 702.102a).
+//! `permissions.rs`, docs/MUTATION.md). The same fix lets the card's other own ways that
+//! aren't alternative costs combine with Omniscience too: fused (CR 702.102a), "as though it
+//! had flash if it's cast using teamwork" (Quantum Reduction) and prototyped (CR 718.3).
 
 use mtg_engine::keywords::KeywordKind;
 use mtg_engine::object::{CastMethod, Zone};
@@ -192,4 +193,46 @@ fn omniscience_casts_a_fuse_card_fused_without_paying_its_mana_cost() {
     t.resolve_all();
     assert!(!t.on_battlefield(thopter));
     assert!(!t.on_battlefield(anthem));
+}
+
+/// Quantum Reduction ({1}{U} Aura, "Teamwork 2 ... You may cast this spell as though it had
+/// flash if it's cast using teamwork.") with Omniscience: during P1's turn P0, with no lands,
+/// casts it using teamwork (Grizzly Bears tapped) without paying its mana cost.
+#[test]
+fn omniscience_and_flash_if_cast_using_teamwork() {
+    cr!("601.3c", "118.9d", "702.194a");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Omniscience");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let wurm = t.battlefield(P1, "Craw Wurm");
+    let c = t.hand(P0, "Quantum Reduction");
+    t.set_step(P1, Step::BeginningOfCombat);
+    let teamwork = CastMethod::Keyword(KeywordKind::Teamwork);
+    assert!(t.cast(P0, c).method(CastMethod::Free).target(wurm).try_go().is_err());
+    t.clear_answers();
+    t.cast(P0, c).method(teamwork).target(wurm).go();
+    assert!(t.obj(bears).tapped);
+    t.resolve_all();
+    assert_eq!(t.pt(wurm), (1, 4));
+}
+
+/// Blitz Automaton ({7}, prototype {2}{R} — 3/2) with Omniscience and no lands: cast
+/// prototyped without paying its mana cost, it's a 3/2.
+#[test]
+fn omniscience_casts_a_prototype_card_prototyped_without_paying_its_mana_cost() {
+    cr!("718.3", "702.160a", "118.9");
+    ruling!(
+        "Blitz Automaton",
+        "if an effect allows you to cast an artifact card without paying its mana cost, you could either cast Blitz Automaton normally, or as a prototyped spell."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Omniscience");
+    let c = t.hand(P0, "Blitz Automaton");
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, c)
+        .method(CastMethod::Keyword(KeywordKind::Prototype))
+        .go();
+    t.resolve_all();
+    let automaton = t.named_on_battlefield("Blitz Automaton")[0];
+    assert_eq!(t.pt(automaton), (3, 2));
 }
