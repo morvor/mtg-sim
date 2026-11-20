@@ -907,16 +907,23 @@ fn copy_for_each_other_opponent(l: &str, b: &mut Builder) -> Option<Effect> {
     if !b.in_trigger || !matches!(b.it, Sel::TriggerSpell) {
         return None;
     }
-    use crate::kw::choices_5_filters::{COPY_TARGETING_PLAYER_OR_PERMANENT, NOT_THAT_SPELLS_TARGET_PLAYER};
-    Some(Effect::ForEachPlayer {
-        who: PlayerRef::Each(PlayerFilter::And(vec![
-            PlayerFilter::Opponent,
-            PlayerFilter::History(Box::new(Condition::Custom(
-                NOT_THAT_SPELLS_TARGET_PLAYER.into(),
-            ))),
-        ])),
-        effect: Box::new(Effect::Custom(COPY_TARGETING_PLAYER_OR_PERMANENT.into())),
-    })
+    use crate::kw::choices_5_filters::{
+        COPY_TARGETING_PLAYER_OR_PERMANENT, NOT_THAT_SPELLS_TARGET_PLAYER, ORDER_COPIES_MADE,
+    };
+    // The copies are put onto the stack at the same time, in the order their controller
+    // chooses (CR 405.3).
+    Some(Effect::Seq(vec![
+        Effect::ForEachPlayer {
+            who: PlayerRef::Each(PlayerFilter::And(vec![
+                PlayerFilter::Opponent,
+                PlayerFilter::History(Box::new(Condition::Custom(
+                    NOT_THAT_SPELLS_TARGET_PLAYER.into(),
+                ))),
+            ])),
+            effect: Box::new(Effect::Custom(COPY_TARGETING_PLAYER_OR_PERMANENT.into())),
+        },
+        Effect::Custom(ORDER_COPIES_MADE.into()),
+    ]))
 }
 
 inventory::submit! { EffectPattern { name: "for each other opponent, choose that player or a permanent they control, copy that spell targeting it", priority: 90, parse: copy_for_each_other_opponent } }

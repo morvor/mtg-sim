@@ -456,7 +456,8 @@ enum PayerPhrase<'a> {
     ControllerOfIt(&'a str),
     /// A player phrase `player_ref` reads ("you", "target opponent", "defending player").
     Phrase(&'a str, &'a str),
-    /// "any player", "a player": any one of them may (each in turn until one does).
+    /// "any player", "a player": each of them in turn order is offered the payment, even
+    /// after one has paid (`unless-any-player-pays-offers-everyone`).
     Any(PlayerRef, &'a str),
 }
 
@@ -1014,10 +1015,9 @@ fn tax_cost(action: &str, where_x: Option<&str>, it: &Sel, b: &mut Builder) -> O
             if !end(&rest).is_empty() {
                 return None;
             }
-            return Some(Cost::default().with(CostPart::Repeated {
-                cost: Box::new(resolution_cost("{1}")?),
-                times: v,
-            }));
+            // X generic mana in a cost that contains {X} (CR 107.3c, 106.6; see
+            // `defined_x_costs`), determined as the total cost is (CR 508.1h).
+            return Some(Cost::default().with(CostPart::DefinedX(v)));
         }
         if let Some((c, each)) = r.split_once(" for each ") {
             let times = super::statics::parse_for_each(each, Some(it))?;

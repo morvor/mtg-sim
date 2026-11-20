@@ -31,6 +31,12 @@ impl Game {
         if ctx.entering.is_some() && self.effect_on_entering_object(e, ctx) {
             return;
         }
+        // CR 611.2b: the "for as long as" duration of the continuous effect this
+        // instruction of a resolving ability would create ended while the ability waited
+        // (whatever kind of effect it is).
+        if crate::duration_windows::effect_does_nothing(self, e, ctx) {
+            return;
+        }
         // Cards an instruction exiles are exiled with the source of the ability performing
         // it, for the abilities linked to it (CR 607.2a): by its link, however they're
         // exiled ("search your library for seven cards, exile them", a dig).
@@ -136,9 +142,62 @@ impl Game {
                     );
                 ctx.prev_happened = yes;
                 if yes {
+                    let it_before = ctx.vars.get(&vars::IT).cloned();
+                    // "You may untap target tapped creature an opponent controls. If you
+                    // do, untap this creature" (Soldevi Golem): the untapping is a cost
+                    // paid as the ability resolves, and "if you do" checks whether the
+                    // player chose to pay it (CR 118.12). A player can't pay it for a
+                    // permanent that can't become untapped (CR 118.3; Blossombind ruling)
+                    // or isn't tapped (CR 701.26b); one whose untapping a stun counter
+                    // replaces still pays it (CR 122.1d; Stall for Time ruling). Only
+                    // selections that involve no choice are looked at.
+                    let could_untap = match &**effect {
+                        Effect::Untap {
+                            what:
+                                what @ (Sel::Target(_)
+                                | Sel::This
+                                | Sel::AttachedTo
+                                | Sel::TriggerObject
+                                | Sel::Var(_)),
+                        } => Some(self.resolve_objects(what, ctx).into_iter().any(|o| {
+                            let x = self.obj(o);
+                            x.tapped
+                                && !x.phased_out
+                                && !crate::prohibitions::object_cant(
+                                    self,
+                                    o,
+                                    ObjectAction::Untapped,
+                                )
+                        })),
+                        _ => None,
+                    };
                     // Effects that can fail to do what they say (sacrificing, paying,
                     // countering) record whether they did it ("if you do", "when you do").
                     self.exec(effect, ctx);
+                    if let Some(could) = could_untap {
+                        ctx.prev_happened = could;
+                    }
+                    // "You may put that card onto the battlefield. If you don't, put it
+                    // into your hand": an Aura that couldn't enter stayed where it was (CR
+                    // 303.4g) and is still the same object (CR 400.7), so "it" still means
+                    // that card, as when the player declines (Songbirds' Blessing ruling).
+                    if let (
+                        Effect::Move {
+                            what: Sel::Var(v), ..
+                        },
+                        Some(before),
+                    ) = (&**effect, it_before)
+                    {
+                        if *v == vars::IT
+                            && !ctx.prev_happened
+                            && before.iter().all(|e| match e {
+                                Entity::Object(o) => self.is_live(*o),
+                                Entity::Player(_) => false,
+                            })
+                        {
+                            ctx.set_var(vars::IT, before);
+                        }
+                    }
                     // "You may draw cards equal to its power. If you do, discard two cards":
                     // a player may choose to draw even with too few cards in their library
                     // (CR 121.3), and "if you do" follows that choice, however many cards
@@ -162,6 +221,34 @@ impl Game {
                     if exiles_whole_set(effect) {
                         ctx.prev_happened = true;
                     }
+                    // "You may gain control of target permanent ... If you do, untap it"
+                    // (also "you may have that player gain control of equipped creature"):
+                    // choosing to apply the effect to a permanent the player already
+                    // controls still counts (Dominus of Fealty ruling); one that's gone (an
+                    // illegal target, a permanent that left) doesn't (Iroh, Tea Master
+                    // ruling). Only selections that involve no choice are looked at again.
+                    if let Effect::GainControl { what, who, .. } = &**effect {
+                        if matches!(
+                            what,
+                            Sel::Target(_)
+                                | Sel::This
+                                | Sel::AttachedTo
+                                | Sel::TriggerObject
+                                | Sel::Var(_)
+                        ) {
+                            let gainer = self.eval_player(who, ctx);
+                            let objs = self.resolve_objects(what, ctx);
+                            if !objs.is_empty()
+                                && objs.iter().all(|o| {
+                                    self.is_live(*o)
+                                        && !crate::kw::phasing::is_phased_out(self, *o)
+                                        && Some(self.obj(*o).controller) == gainer
+                                })
+                            {
+                                ctx.prev_happened = true;
+                            }
+                        }
+                    }
                 }
                 // Set after the offered instruction ran, so a "you may" inside it doesn't
                 // stand in for this one (`Condition::PrevChosen`).
@@ -173,6 +260,8 @@ impl Game {
                 then,
                 otherwise,
             } => {
+                let had_x = ctx.cost_has_x;
+                ctx.cost_has_x = crate::defined_x_costs::contains_x(cost);
                 let cost = &crate::mana_abilities::bind_x_for_payment(self, cost, ctx);
                 // "[cost] for each ...": the total is determined now (CR 702.24a).
                 let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
@@ -194,16 +283,23 @@ impl Game {
                     );
                     self.last_paid = None;
                     if pays && crate::entry_costs::pay(self, p, cost, ctx) {
+                        // The first payment is the one "if they do" refers to; the
+                        // remaining players are still offered the cost, to no further
+                        // effect (CR 118.12a; `any-player-may-after-a-payment`).
+                        if !paid {
+                            crate::kw::payment_mana::note(self, ctx);
+                            crate::cost_effects::note_paid(self, cost, ctx);
+                        }
+                        self.last_paid = None;
                         paid = true;
-                        crate::kw::payment_mana::note(self, ctx);
-                        crate::cost_effects::note_paid(self, cost, ctx);
-                        break;
+                        continue;
                     }
                     if !pays && matches!(**then, Effect::Noop) {
                         // CR 732.6: declining the [B] of "[A] unless [B]".
                         crate::shortcuts::declined_unless(self);
                     }
                 }
+                ctx.cost_has_x = had_x;
                 ctx.prev_happened = paid;
                 if paid {
                     self.exec(then, ctx);
@@ -214,8 +310,39 @@ impl Game {
             }
             Effect::ForEach { sel, var, effect } => {
                 let items = self.resolve_sel(sel, ctx);
+                let stack_before = self.stack.len();
+                // "For each of those creatures, copy that spell" (Feather, Radiant
+                // Arbiter): one copy event, so the copies an effect adds (Twinning Staff)
+                // are made once for it, not for each creature (`copy::begin_copy_event`);
+                // and the copies are put on the stack at once, in the order their
+                // controller chooses (CR 405.3), all of them together, which the copy
+                // instruction leaves to this.
+                let copies_together = matches!(**effect, Effect::CopySpellRetargeted { .. });
+                let marker = crate::copy::ORDERED_BY_ENCLOSING;
+                let outer = copies_together.then(|| ctx.vars.insert(marker, vec![]));
+                let event = copies_together && crate::copy::begin_copy_event(self);
                 // CR 608.2f: an action on several objects happens to all of them at once.
                 crate::simultaneous::for_each_object(self, items, *var, effect, ctx);
+                crate::copy::end_copy_event(self, event);
+                if let Some(outer) = outer {
+                    match outer {
+                        Some(v) => {
+                            ctx.vars.insert(marker, v);
+                        }
+                        None => {
+                            ctx.vars.remove(&marker);
+                        }
+                    }
+                    let copies: Vec<ObjectId> = self.stack[stack_before.min(self.stack.len())..]
+                        .iter()
+                        .copied()
+                        .filter(|c| {
+                            self.obj(*c).kind == ObjKind::SpellCopy
+                                && self.obj(*c).controller == ctx.controller
+                        })
+                        .collect();
+                    crate::copy::order_copies(self, ctx.controller, &copies);
+                }
             }
             Effect::ForEachPlayer { who, effect } => {
                 let players = self.eval_players(who, ctx);
@@ -540,8 +667,18 @@ impl Game {
                 // The player performing the instruction taps them (CR 701.26a): the
                 // controller of the spell or ability, or the player it has do it ("that
                 // player taps an untapped creature they control"; Solitary Sanctuary's
-                // rulings).
-                let by = Some(ctx.controller);
+                // rulings). "That player taps an untapped artifact, creature, or land they
+                // control" (Tangle Wire) chooses and taps as that player: the chooser
+                // performs it (Sharae of Numbing Depths's ruling). A `Tap` of another
+                // player's `Choose` is compiled only from "[that player] taps ..."
+                // (`followups_4::taps_untapped`); "tap ... of [a player]'s choice" would
+                // need its own form.
+                let by = match what {
+                    Sel::Choose { chooser, .. } if !matches!(chooser, PlayerRef::You) => {
+                        self.eval_player(chooser, ctx).or(Some(ctx.controller))
+                    }
+                    _ => Some(ctx.controller),
+                };
                 for o in self.resolve_objects(what, ctx) {
                     if self.tap_with(o, false, by, false) {
                         tapped.push(Entity::Object(o));
@@ -927,8 +1064,9 @@ impl Game {
                 duration,
             } => {
                 // CR 611.2b: a "for as long as" duration that already ended means the
-                // effect does nothing. (One about the affected objects, "for as long as
-                // that creature has a bounty counter on it", is checked for them below.)
+                // effect does nothing (one that ended while the ability waited: see
+                // `exec`). One about the affected objects, "for as long as that creature
+                // has a bounty counter on it", is checked for them below.
                 let about_affected = matches!(duration, Duration::WhileCondition(_));
                 if !about_affected && self.effect_expired(duration, ctx.source, ctx.controller) {
                     return;
@@ -1012,6 +1150,8 @@ impl Game {
                 self.dirty = true;
                 // CR 113.11: not for an object that can't have an ability it adds.
                 crate::kw::cant_have::drop_ungrantable_keywords(self, first);
+                // CR 205.3d: nor a subtype it can't have as the effect begins.
+                crate::subtype_gain::lock_ungainable_parts(self, first);
             }
             Effect::AddRestriction {
                 restriction,
@@ -1040,10 +1180,8 @@ impl Game {
                 };
                 // CR 611.2b: a "for as long as" duration that already ended (one about the
                 // objects it applies to, "for as long as it remains tapped", is checked
-                // for them).
-                if self.rule_effect_expired(duration, ctx.source, ctx.controller, &objects)
-                    || crate::untap_choice::ended_before_it_began(self, duration, ctx)
-                {
+                // for them; one that ended while the ability waited: see `exec`).
+                if self.rule_effect_expired(duration, ctx.source, ctx.controller, &objects) {
                     return;
                 }
                 let id = self.new_effect_id();
@@ -1265,6 +1403,7 @@ impl Game {
                 let players = self.eval_players(controller, ctx);
                 let fixed = self.fix_mods(&crate::granted_captures::confine_to_created(mods), ctx);
                 let mut created = Vec::new();
+                let mut together = Vec::new();
                 for p in players {
                     for s in &sources {
                         let tc = TokenCreate {
@@ -1275,9 +1414,19 @@ impl Game {
                             copy_of: Some(*s),
                             copy_exceptions: fixed.clone(),
                         };
-                        created
-                            .extend(self.create_tokens_maybe_attacking(p, tc, n, *attacking, ctx));
+                        if *attacking {
+                            // What each attacks is chosen as it's created.
+                            created.extend(self.create_tokens_maybe_attacking(p, tc, n, true, ctx));
+                        } else {
+                            together.push((p, tc, n, ctx.source));
+                        }
                     }
+                }
+                // "For each creature target player controls, create a token that's a copy
+                // of that creature" (Clone Legion): the tokens all enter at the same time
+                // (CR 608.2f, 614.12), so none of them sees another enter.
+                if !together.is_empty() {
+                    created.extend(self.create_tokens_together(together).into_iter().flatten());
                 }
                 // "tokens created with ~" (CR 607.1d), as for other created tokens.
                 self.link_to_creator(ctx, &created);
@@ -1683,22 +1832,29 @@ impl Game {
             } => {
                 let targets = target.as_ref().map(|t| self.resolve_sel(t, ctx));
                 for o in self.resolve_objects(what, ctx) {
-                    let made = match &targets {
+                    let mut made: Vec<ObjectId> = match &targets {
                         Some(ts) => {
                             crate::copy_rules::copy_with_target(self, o, ctx.controller, ts.clone())
                                 .into_iter()
-                                .count()
+                                .collect()
                         }
                         None => crate::copy_rules::copy_for_each_target(
                             self,
                             o,
                             ctx.controller,
                             among.as_ref().map(|f| (f, &*ctx)),
-                        )
-                        .len(),
+                        ),
                     };
-                    if made > 0 {
-                        crate::copy::additional_copies(self, o, ctx.controller);
+                    if !made.is_empty() {
+                        // Copies an effect adds are put onto the stack with these at the
+                        // same time, all in the order their controller chooses (CR 405.3,
+                        // 707.10d): asked once, here, unless an enclosing "for each"
+                        // orders them with its other copies (and makes the added copies
+                        // once, for all of them: one copy event).
+                        made.extend(crate::copy::additional_copies(self, o, ctx.controller));
+                        if !ctx.vars.contains_key(&crate::copy::ORDERED_BY_ENCLOSING) {
+                            crate::copy::order_copies(self, ctx.controller, &made);
+                        }
                     }
                 }
             }
@@ -2505,13 +2661,36 @@ impl Game {
                         }
                         only = Some(f);
                     }
-                    if let Ok(spell) = crate::casting::cast_during_resolution_as(
+                    let prev = std::mem::replace(
+                        &mut self.special.casting_if_able,
+                        (!*optional).then_some(p),
+                    );
+                    let mut r = crate::casting::cast_during_resolution_as(
                         self,
                         p,
                         o,
-                        method,
+                        method.clone(),
                         only.as_deref(),
-                    ) {
+                    );
+                    // The player chose to activate no mana abilities for it: the casting was
+                    // reversed (CR 733.1), and they cast it again, as they must if able,
+                    // with the mana in their pool alone (CR 733.2), choosing only costs it
+                    // pays (an unkicked spell rather than a kicked one).
+                    if r.as_ref()
+                        .is_err_and(|e| e.0 == crate::cost_rules::DECLINED_MANA_ABILITIES)
+                    {
+                        let prev_pool = std::mem::replace(&mut self.special.pool_only, Some(p));
+                        r = crate::casting::cast_during_resolution_as(
+                            self,
+                            p,
+                            o,
+                            method,
+                            only.as_deref(),
+                        );
+                        self.special.pool_only = prev_pool;
+                    }
+                    self.special.casting_if_able = prev;
+                    if let Ok(spell) = r {
                         spent += self.mana_value_of(spell) as i64;
                         cast.push(Entity::Object(spell));
                     }
@@ -3333,12 +3512,14 @@ impl Game {
         | Restriction::BlockCost { cost, .. }
         | Restriction::BlockCostAgainst { cost, .. } = &mut r
         {
-            if let Some(m) = cost.mana.as_mut().filter(|m| m.has_x()) {
-                *m = m.with_x(ctx.x.max(0) as u32);
-                // X = 0: a cost of {0}, still a cost (CR 118.5; War Tax rulings).
-                if m.symbols.is_empty() {
-                    m.symbols.push(crate::mana::ManaSymbol::Generic(0));
-                }
+            // The cost still contains {X} (CR 106.6), its X now defined (`defined_x_costs`;
+            // X = 0 is a cost of {0}, still a cost, CR 118.5 and War Tax's rulings).
+            if let Some(m) = cost.mana.clone().filter(|m| m.has_x()) {
+                let rest = m.with_x(0);
+                cost.mana = (!rest.symbols.is_empty()).then_some(rest);
+                cost.parts.push(CostPart::DefinedX(Value::c(
+                    m.x_count() as i32 * ctx.x.max(0),
+                )));
             }
         }
         // A restriction on a referenced player ("target player can't play lands this
@@ -3424,6 +3605,18 @@ impl Game {
                         Entity::Player(p) => Some(PlayerFilter::Is(*p)),
                         Entity::Object(o) => Some(PlayerFilter::Is(self.obj(*o).controller)),
                     })
+                    .collect();
+                Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
+            }
+            // "creatures defending player controls without flying can't block this turn"
+            // (The Motherlode, Excavator): the defending player as the effect begins; the
+            // creatures are a class (CR 611.2c).
+            Filter::ControlledBy(rel @ PlayerRel::Defending) => {
+                let ps = self
+                    .player_ids()
+                    .into_iter()
+                    .filter(|p| self.player_rel_matches(*rel, *p, ctx))
+                    .map(PlayerFilter::Is)
                     .collect();
                 Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
             }
@@ -4189,6 +4382,7 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::AttackOnlyAlone(f)
         | Restriction::CantTransform(f) => Some(f),
         Restriction::CantBe { what, .. } => Some(what),
+        Restriction::DoesntUntapDuringUntapStepOf { what, .. } => Some(what),
         Restriction::AttackTogether { attackers, .. }
         | Restriction::MustAttackOtherThan { attackers, .. } => Some(attackers),
         Restriction::CantActivate { sources, .. } => Some(sources),
@@ -4230,7 +4424,9 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
         | Restriction::MaxSpellsPerTurn(f, _)
         | Restriction::MaxSpellsOfKindPerTurn { who: f, .. }
         | Restriction::CantPlayLandCards { who: f, .. } => Some(f),
-        Restriction::CantCast { who, .. } | Restriction::CantActivate { who, .. } => Some(who),
+        Restriction::CantCast { who, .. }
+        | Restriction::CantActivate { who, .. }
+        | Restriction::DoesntUntapDuringUntapStepOf { who, .. } => Some(who),
         Restriction::TargetableAsThoughNo { by, .. } => Some(by),
         Restriction::MustAttackPlayer { defender, .. }
         | Restriction::CantAttackPlayer { defender, .. }

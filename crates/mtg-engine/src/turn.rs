@@ -148,6 +148,11 @@ pub struct TurnState {
     /// resumes from that turn once the extra turns added after it are taken (CR 500.7).
     #[serde(default)]
     pub normal_active: Option<PlayerId>,
+    /// Whether the draw step that the starting player skips in their first turn (CR
+    /// 103.8a–b) has been skipped this turn: a draw step added later in that turn happens
+    /// (register `first-turn-skips-one-draw-step`).
+    #[serde(default)]
+    pub first_draw_skipped: bool,
 }
 
 impl TurnState {
@@ -171,6 +176,7 @@ impl TurnState {
             attacked_players: vec![],
             illegal_attempts: 0,
             normal_active: None,
+            first_draw_skipped: false,
         }
     }
 
@@ -331,6 +337,7 @@ impl Game {
         self.turn.cleanup_priority = false;
         self.turn.step_log.clear();
         self.turn.attacked_players.clear();
+        self.turn.first_draw_skipped = false;
         self.last_turn_history = std::mem::take(&mut self.history);
         self.history.began_at = self.next_timestamp;
         let events = std::mem::take(&mut self.turn_events);
@@ -767,8 +774,10 @@ impl Game {
         let active = self.turn.active;
         // CR 103.8: in a two-player game the player who plays first skips the draw step of
         // their first turn (CR 103.8a); in other multiplayer games no one does
-        // (CR 103.8c).
+        // (CR 103.8c). Only that one draw step: the draw step of an additional beginning
+        // phase later in the turn happens (register `first-turn-skips-one-draw-step`).
         if step == Step::Draw && self.first_turn_draw_skipped(active) {
+            self.turn.first_draw_skipped = true;
             return true;
         }
         // Skips that rules of keywords and hand-written abilities define.
@@ -824,15 +833,19 @@ impl Game {
         false
     }
 
-    /// Whether `active` skips the draw step of this turn because it's the starting
-    /// player's first turn (CR 103.8a–c).
+    /// Whether `active` skips the next draw step of this turn because it's the starting
+    /// player's first turn (CR 103.8a–c) and that turn's draw step hasn't been skipped yet.
     pub fn first_turn_draw_skipped(&self, active: PlayerId) -> bool {
         // CR 103.8b: in Two-Headed Giant, the team who plays first skips it.
         let skips = self
             .config
             .starting_player_skips_draw
             .unwrap_or(self.is_two_player() || self.config.variant == Variant::TwoHeadedGiant);
-        skips && active == self.turn.starting_player && self.turn.number == 1 && !self.turn.extra
+        skips
+            && active == self.turn.starting_player
+            && self.turn.number == 1
+            && !self.turn.extra
+            && !self.turn.first_draw_skipped
     }
 
     fn untap_step_actions(&mut self) {
@@ -852,7 +865,8 @@ impl Game {
             }
         }
         // CR 502.3: untap (each player on the active team, CR 805.4a).
-        for active in self.active_players() {
+        let actives = self.active_players();
+        for &active in &actives {
             self.recompute();
             let mut to_untap: Vec<ObjectId> = self
                 .permanents()
@@ -873,6 +887,12 @@ impl Game {
                     self.objects[id.0 as usize].exerted = false;
                 }
             }
+        }
+        // With shared team turns, the team's untap step is each of its players' untap step
+        // (CR 805.4): an effect lasting through one player's next untap step ends once the
+        // whole team has untapped, as "creatures don't untap during target player's next
+        // untap step" also keeps that player's teammates' creatures tapped.
+        for active in actives {
             self.expire_through_next_untap_step(active);
         }
     }
@@ -1235,6 +1255,17 @@ impl Game {
 /// The player a "doesn't untap" restriction on a group of permanents is about, if its
 /// filter names one ("creatures [that player] controls").
 fn untap_restricted_player(r: &Restriction) -> Option<PlayerId> {
+    // "Creatures don't untap during target player's next untap step": that player.
+    if let Restriction::DoesntUntapDuringUntapStepOf { who, .. } = r {
+        return match who {
+            PlayerFilter::Is(p) => Some(*p),
+            PlayerFilter::Or(v) => match v.as_slice() {
+                [PlayerFilter::Is(p)] => Some(*p),
+                _ => None,
+            },
+            _ => None,
+        };
+    }
     let Restriction::DoesntUntap(f) = r else {
         return None;
     };

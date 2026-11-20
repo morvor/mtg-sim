@@ -4,8 +4,8 @@
 //! total cost (CR 601.2f), dividing damage (CR 601.2d), Powerstone tokens (CR 111.10),
 //! permanent types (CR 110.4), and spells whose X is 0.
 
-use crate::r_p095_common::*;
 use crate::r_p079_common::can_cast_now;
+use crate::r_p095_common::*;
 use crate::r_s01_common::{supported, tapped_lands};
 use crate::r_s29_common::{choose_modes, divide, put_counters};
 use mtg_engine::card::card;
@@ -351,7 +351,8 @@ fn chainer_returns_the_creature_black_and_a_nightmare_as_it_enters() {
     let denizen = t.battlefield(P0, "Shadow Alley Denizen");
     let bears = t.graveyard(P1, "Grizzly Bears");
     t.lands(P0, "Swamp", 3);
-    t.activate(P0, chainer, 0, &[Entity::Object(bears)]).unwrap();
+    t.activate(P0, chainer, 0, &[Entity::Object(bears)])
+        .unwrap();
     assert_eq!(t.life(P0), 17);
     t.answer_targets(P0, &[Entity::Object(denizen)]);
     t.resolve();
@@ -466,7 +467,9 @@ fn fire_covenant_divides_as_cast_with_at_least_one_each() {
         .targets(&[Entity::Object(bears), Entity::Object(giant)])
         .go();
     t.resolve_all();
-    assert!(t.in_graveyard(P1, "Grizzly Bears") || crate::r_s29_common::damage_marked(&t, bears) >= 1);
+    assert!(
+        t.in_graveyard(P1, "Grizzly Bears") || crate::r_s29_common::damage_marked(&t, bears) >= 1
+    );
     assert!((1..5).contains(&crate::r_s29_common::damage_marked(&t, giant)));
     // With X = 1, no more than one target can be chosen.
     let mut t = TestGame::new(2);
@@ -567,7 +570,9 @@ fn orcus_with_x_zero_does_nothing() {
         t.cast(P0, card).x(0).go();
         choose_modes(&mut t, P0, &[mode]);
         t.resolve_all();
-        assert!(!t.named_on_battlefield("Orcus, Prince of Undeath").is_empty());
+        assert!(!t
+            .named_on_battlefield("Orcus, Prince of Undeath")
+            .is_empty());
         assert_eq!(t.pt(bears), (2, 2));
         assert_eq!(t.life(P0), 20);
         assert!(t.in_graveyard(P0, "Raging Goblin"));
@@ -577,6 +582,7 @@ fn orcus_with_x_zero_does_nothing() {
 #[test]
 fn revival_experiment_one_card_per_permanent_type() {
     cr!("110.4", "205.4a");
+    interp!("pre-battle-rulings-give-way-to-the-cr");
     ruling!(
         "Revival Experiment",
         "The permanent types are artifact, creature, enchantment, land, and planeswalker. Things like “legendary” or “snow” are supertypes, not types."
@@ -599,8 +605,10 @@ fn revival_experiment_one_card_per_permanent_type() {
     let [bears, isamaru, forest, snow, ring, anthem, jace, battle] = ids[..] else {
         unreachable!()
     };
-    // One choice per permanent type: artifact, battle (CR 110.4, since 2023; the ruling
-    // predates battles, see docs/RULING_DISCREPANCIES.md), creature, enchantment, land,
+    // One choice per permanent type: artifact, battle (CR 110.4, since the CR effective
+    // 2023-04-14; the ruling's list predates battles and gives way to the CR, register
+    // `pre-battle-rulings-give-way-to-the-cr`, docs/RULING_DISCREPANCIES.md), creature,
+    // enchantment, land,
     // planeswalker. The legendary and the snow cards are among the creature and land
     // choices, not choices of their own.
     for pick in [ring, battle, isamaru, anthem, snow, jace] {

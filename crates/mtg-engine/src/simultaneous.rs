@@ -12,16 +12,19 @@
 //!   copy a creature entering with it), and choices for replacement effects that modify
 //!   how they enter are made only then, in APNAP order (CR 616.1);
 //! * the permanents they sacrifice are sacrificed together (CR 701.21a);
-//! * the token copies they create of the objects they chose are created together, so
-//!   none of them enters early enough to affect how the others enter (CR 614.12;
-//!   Zndrsplt's Judgment);
+//! * the token copies they create are created together, so none of them enters early
+//!   enough to affect how the others enter (CR 614.12; Zndrsplt's Judgment, Parallel
+//!   Evolution);
 //! * the cards they discard are discarded once all of them have chosen;
 //! * "[effect] unless they pay [life / sacrifice ... / discard ...]": each decides whether
 //!   to pay and chooses what to pay with, then the payments are made with the others'
 //!   actions (CR 101.4, 118.12; Killing Wave, Torment of Hailfire);
 //! * damage dealt to each of them is dealt at once, so a source with lifelink causes one
 //!   life gain event (CR 120.3f, 608.2f);
-//! * a search: each searches, then the cards found are moved together;
+//! * a search: each searches, then the cards found are moved together (also "for each land
+//!   destroyed this way, its controller may search ...": a player searching the same
+//!   library again continues the same search, one search for all those cards, then shuffles
+//!   that library once, CR 701.23h);
 //! * life gained or lost: each amount is determined before anyone's life total changes;
 //! * control changes: every player's objects are determined (and chosen, by whoever
 //!   chooses them, each chooser knowing the earlier choices) before any control changes,
@@ -29,8 +32,10 @@
 //!   all creatures their opponents control" swaps them; Aminatou, Scrambleverse rulings).
 //!
 //! An instruction that isn't one of those is performed for each player in turn, in APNAP
-//! order (CR 608.2f); "you may ..." questions and conditions are still settled for every
-//! player before any of them acts. Either way the instruction is one event: its events
+//! order (CR 608.2f); "you may ..." questions, conditions, "choose one" and what "[that
+//! player]" does are still settled for every player before any of them acts. One action
+//! with what records it ("may have ~ deal 5 damage to them", noting who did) is that
+//! action. Either way the instruction is one event: its events
 //! form one batch for "one or more" triggers (CR 603.2c) and are checked for triggers
 //! once it's done (see `trigger_timing`).
 //!
@@ -684,6 +689,11 @@ enum Plan {
     },
     /// Performed for this player in turn (CR 608.2f).
     Exec(Effect),
+    /// One action and what records it ("may have ~ deal 5 damage to them", noting who
+    /// did): the action is planned with the other players' (one event, CR 608.2f), then
+    /// the records are made for this player (see `perform_instruction`, which takes them
+    /// apart).
+    Then(Box<Plan>, Vec<Effect>),
 }
 
 /// What performing a plan did, for the player's results.
@@ -703,23 +713,13 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
     match e {
         Effect::Noop => true,
         Effect::May { effect, .. } => plannable(g, effect, ctx, p),
-        Effect::AsPlayer { who, effect } => match g.eval_player(who, ctx) {
-            Some(q) => {
-                let mut c = ctx.clone();
-                c.controller = q;
-                plannable(g, effect, &c, p)
-            }
-            None => true,
-        },
-        Effect::If {
-            then, otherwise, ..
-        } => plannable(g, then, ctx, p) && plannable(g, otherwise, ctx, p),
-        // "Its owner puts it on their choice of the top or bottom of their library": the
-        // option is chosen first, then the chosen action is performed with the others
-        // (CR 101.4, 401.4; Aetherspouts).
-        Effect::ChooseOne { options, .. } => {
-            !options.is_empty() && options.iter().all(|(_, e)| plannable(g, e, ctx, p))
-        }
+        // "For each creature, its controller may draw a card", "each player who controls a
+        // creature sacrifices a creature; each other player draws a card", "its owner puts
+        // it on their choice of the top or bottom of their library" (Aetherspouts): what
+        // "[that player]" does, the condition and the option chosen are settled for every
+        // player before any of them acts (CR 101.4, 608.2e); a part that can't be planned
+        // is then performed for each player in turn (`plan`).
+        Effect::AsPlayer { .. } | Effect::If { .. } | Effect::ChooseOne { .. } => true,
         Effect::Move { what, to } => {
             let mut sels = vec![what];
             if let Some(a) = &to.attached_to {
@@ -741,8 +741,11 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
         Effect::AddCounters { what, .. } => chosen_by(g, &[what], ctx, p),
         // "Each friend creates a token that's a copy of a creature they control"
         // (Zndrsplt's Judgment): the players choose in turn, then the tokens are created
-        // (CR 101.4, 608.2e).
-        Effect::CreateTokenCopy { of, .. } => has_choice(of) && chosen_by(g, &[of], ctx, p),
+        // (CR 101.4, 608.2e). "For each creature token on the battlefield, its controller
+        // creates a token that's a copy of that creature" (Parallel Evolution): all the
+        // copies are created at the same time (CR 608.2f, 614.12). Whoever chooses what's
+        // copied, the same object can be copied again.
+        Effect::CreateTokenCopy { .. } => true,
         // "Each foe chooses one untapped creature they control, then taps the rest"
         // (Regna's Sanction): the players choose in turn, then the permanents are all
         // tapped together (CR 101.4, 608.2e). (What's chosen as they're tapped is still
@@ -775,8 +778,15 @@ fn plannable(g: &Game, e: &Effect, ctx: &Ctx, p: Option<PlayerId>) -> bool {
                     // sacrifices and the token creation happen together (CR 101.4).
                     || token_plan(g, otherwise, ctx).is_some())
         }
+        // "Each opponent may search their library ...", "for each land destroyed this way,
+        // its controller may search their library ..." (Krenko's Buzzcrusher): each searcher
+        // searches their own part, then the found cards move together (CR 701.23i). "For
+        // each opponent, you search your library" is performed in turn (the chooser isn't
+        // the player it's for).
         Effect::Search { who, whose, .. } => {
-            p.is_some_and(|p| g.eval_players(who, ctx) == vec![p])
+            let searchers = g.eval_players(who, ctx);
+            searchers.len() == 1
+                && p.is_none_or(|p| searchers == vec![p])
                 && g.eval_player(whose, ctx).is_some()
         }
         _ => false,
@@ -895,7 +905,7 @@ fn plan(
             }
         }
         // "Its controller sacrifices it": planned as that player (see `Game::exec`).
-        Effect::AsPlayer { who, effect } if plannable(g, e, ctx, p) => {
+        Effect::AsPlayer { who, effect } => {
             let Some(q) = g.eval_player(who, ctx) else {
                 return Plan::Nothing;
             };
@@ -906,13 +916,17 @@ fn plan(
             let plan = plan(g, effect, ctx, p, earlier);
             ctx.controller = saved;
             ctx.resolving_controller = saved_resolving;
+            // Performed later, still as that player ("put a +1/+1 counter on each creature
+            // they control": theirs, not the resolving player's).
+            let as_them = |e: Effect| Effect::AsPlayer {
+                who: who.clone(),
+                effect: Box::new(e),
+            };
             match plan {
-                // Performed later, still as that player ("put a +1/+1 counter on each
-                // creature they control": theirs, not the resolving player's).
-                Plan::Exec(inner) => Plan::Exec(Effect::AsPlayer {
-                    who: who.clone(),
-                    effect: Box::new(inner),
-                }),
+                Plan::Exec(inner) => Plan::Exec(as_them(inner)),
+                Plan::Then(plan, records) => {
+                    Plan::Then(plan, records.into_iter().map(as_them).collect())
+                }
                 plan => plan,
             }
         }
@@ -932,7 +946,7 @@ fn plan(
                 plan(g, otherwise, ctx, p, earlier)
             }
         }
-        Effect::ChooseOne { who, options } if plannable(g, e, ctx, p) => {
+        Effect::ChooseOne { who, options } => {
             let chooser = g.eval_player(who, ctx).unwrap_or(ctx.controller);
             let labels = options.iter().map(|(l, _)| l.clone()).collect();
             let i = g.ask_option(chooser, ctx.source, "Choose one", labels);
@@ -1109,13 +1123,36 @@ fn plan(
                 return Plan::Exec(e.clone());
             }
             let searcher = g.eval_player(who, ctx).unwrap_or(ctx.controller);
-            let owner = g.eval_player(whose, ctx).unwrap_or(searcher);
+            // Whose library: "their library" is the searcher's, as `Game::exec` reads it
+            // (which also reads the cards' description with the searcher as "they").
+            let mut c = ctx.clone();
+            c.iter_player = Some(searcher);
+            let owner = g.eval_player(whose, &c).unwrap_or(searcher);
+            // A player searching the same library again in this instruction ("for each land
+            // destroyed this way, its controller may search ...", two of theirs) continues
+            // the same search: it's one search for all those cards (CR 701.23h), so a card
+            // found for an earlier part can't be found again, and the cards found move
+            // together (and the library is shuffled once, `perform_plans`).
+            let taken: Vec<ObjectId> = earlier
+                .iter()
+                .flatten()
+                .filter_map(|pl| match pl {
+                    Plan::Search {
+                        searcher: s,
+                        owner: o,
+                        found,
+                        ..
+                    } if *s == searcher && *o == owner => Some(found.clone()),
+                    _ => None,
+                })
+                .flatten()
+                .collect();
             let n = g.eval_value(count, ctx).max(0) as u32;
             // CR 118.12b: whether the player searched.
             let searched =
                 !g.player_restricted(searcher, |r| matches!(r, Restriction::CantSearch(_)));
             // CR 701.23i: the players search, then the found cards move.
-            let found = crate::library::search(g, searcher, owner, filter, n, ctx);
+            let found = crate::library::search_excluding(g, searcher, owner, filter, n, &taken, &c);
             Plan::Search {
                 searched,
                 owner,
@@ -1130,7 +1167,7 @@ fn plan(
             what,
             who,
             duration,
-        } if plannable(g, e, ctx, p) => {
+        } => {
             let grant = crate::control_change::plan_gain_control(g, what, who, duration, ctx);
             if has_choice(what) {
                 let mut by = Vec::new();
@@ -1246,11 +1283,17 @@ fn plan(
             tapped,
             attacking,
             mods,
-        } if plannable(g, e, ctx, p) => {
+        } => {
             let chosen = g.resolve_sel(of, ctx);
-            if let Some(p) = p {
-                let objs = chosen.iter().filter_map(|e| e.object()).collect();
-                g.record_apnap_choice(p, objs);
+            // A choice of what to copy is known to the players choosing after its chooser
+            // (CR 101.4b); copies of objects nobody chose are no one's choice.
+            if has_choice(of) {
+                let mut by = Vec::new();
+                choosers(g, of, ctx, &mut by);
+                if let Some(c) = by.first() {
+                    let objs = chosen.iter().filter_map(|e| e.object()).collect();
+                    g.record_apnap_choice(*c, objs);
+                }
             }
             ctx.vars.insert(PLANNED_TOKEN_COPIES, chosen);
             if *attacking {
@@ -1284,6 +1327,21 @@ fn plan(
                 }
             }
             Plan::Tokens { tokens }
+        }
+        // "Any player may have ~ deal 5 damage to them" (and the note that a player did):
+        // one action with what records it, planned like the action alone, so the damage is
+        // dealt to every player who chose it at once (CR 101.4, 608.2f; one life gain event
+        // for a source with lifelink, CR 120.3f).
+        Effect::Seq(v) if one_action_then_records(v) => {
+            let (action, records) = v.split_first().expect("a non-empty sequence");
+            match plan(g, action, ctx, p, earlier) {
+                Plan::Exec(action) => {
+                    let mut v = vec![action];
+                    v.extend(records.iter().cloned());
+                    Plan::Exec(Effect::Seq(v))
+                }
+                plan => Plan::Then(Box::new(plan), records.to_vec()),
+            }
         }
         Effect::LoseLife { who, n } => Plan::Exec(Effect::LoseLife {
             who: who.clone(),
@@ -1337,6 +1395,8 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
     // Which players' parts are planned (their choices made first); the others perform the
     // whole instruction in turn.
     let mut plans: Vec<Option<Plan>> = (0..n).map(|_| None).collect();
+    // What records each player's planned action, made after it (`Plan::Then`).
+    let mut records: Vec<Vec<Effect>> = vec![Vec::new(); n];
     for i in 0..n {
         if frames.frames[i].actor.is_none() {
             continue;
@@ -1368,6 +1428,11 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
             }
             None => Plan::Nothing,
         };
+        let mut plan = plan;
+        while let Plan::Then(inner, then) = plan {
+            records[i].splice(0..0, then);
+            plan = *inner;
+        }
         plans[i] = Some(plan);
     }
     let mut outcomes = perform_plans(g, &mut plans, frames, ctx);
@@ -1377,7 +1442,16 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
         if frames.frames[i].actor.is_none() {
             continue;
         }
-        choose_next_object(g, i, ins, frames, &mut plans, &mut outcomes, ctx.source);
+        choose_next_object(
+            g,
+            i,
+            ins,
+            frames,
+            &mut plans,
+            &mut outcomes,
+            &mut records,
+            ctx.source,
+        );
         let outcome = std::mem::take(&mut outcomes[i]);
         // A process of several steps ("reveals cards until ..., puts that card onto the
         // battlefield, then shuffles") can't be performed simultaneously: it's performed
@@ -1408,6 +1482,9 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
                 frames.leave(i, ctx, before, false);
             }
         }
+        for e in &records[i] {
+            frames.run(g, i, e, ctx);
+        }
         for e in &ins.post {
             frames.run(g, i, e, ctx);
         }
@@ -1417,7 +1494,8 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
 /// Before frame `i`'s object is performed for on its own, the player who orders its
 /// player's group chooses which of the group's objects not yet performed for comes next
 /// (CR 608.2f; `per_object_order`): it's moved to position `i`, the others keeping their
-/// order.
+/// order (with its plan, outcome and records).
+#[allow(clippy::too_many_arguments)]
 fn choose_next_object(
     g: &mut Game,
     i: usize,
@@ -1425,6 +1503,7 @@ fn choose_next_object(
     frames: &mut Frames,
     plans: &mut [Option<Plan>],
     outcomes: &mut [Outcome],
+    records: &mut [Vec<Effect>],
     source: Option<ObjectId>,
 ) {
     let Some(order) = &frames.order else {
@@ -1466,6 +1545,7 @@ fn choose_next_object(
     frames.frames[i..=j].rotate_right(1);
     plans[i..=j].rotate_right(1);
     outcomes[i..=j].rotate_right(1);
+    records[i..=j].rotate_right(1);
 }
 
 /// Whether one player's or object's part of `ins`, planned as `plan`, is a process of
@@ -1502,8 +1582,26 @@ fn process_steps(e: &Effect) -> usize {
     match e {
         Effect::Seq(v) => v.iter().map(process_steps).sum(),
         Effect::GrantPlayPermission { .. } => 0,
+        // One of the branches is performed ("if no one has yet, note that a player did").
+        Effect::If {
+            then, otherwise, ..
+        } => process_steps(then).max(process_steps(otherwise)),
         e if is_bookkeeping(e) => 0,
         _ => 1,
+    }
+}
+
+/// Whether a part is one action (not itself a sequence) followed only by what records it or
+/// grants permissions (see [`process_steps`]).
+fn one_action_then_records(v: &[Effect]) -> bool {
+    match v.split_first() {
+        Some((action, records)) => {
+            !matches!(action, Effect::Seq(_))
+                && process_steps(action) == 1
+                && !records.is_empty()
+                && records.iter().all(|r| process_steps(r) == 0)
+        }
+        None => false,
     }
 }
 
@@ -1634,14 +1732,21 @@ fn perform_plans(
             out[i].moved = res[r].to_vec();
         }
     }
+    // Then the searchers shuffle, in APNAP order, each library they searched once: a player
+    // who searched the same library again in this instruction made one search (CR 701.23h).
+    let mut shuffled: Vec<(PlayerId, PlayerId)> = Vec::new();
     for plan in plans.iter().flatten() {
         if let Plan::Search {
+            searcher,
             owner,
             shuffle: true,
             ..
         } = plan
         {
-            g.shuffle_library(*owner);
+            if !shuffled.contains(&(*searcher, *owner)) {
+                shuffled.push((*searcher, *owner));
+                g.shuffle_library(*owner);
+            }
         }
     }
     // Tokens: created at the same time (CR 101.4, 614.12).
@@ -1714,7 +1819,8 @@ fn perform_plans(
 /// Records what a player's planned action did (as the effect itself would have).
 fn record(g: &mut Game, plan: Plan, outcome: Outcome, ctx: &mut Ctx) {
     match plan {
-        Plan::Nothing | Plan::Exec(_) => {}
+        // (`Plan::Then` is taken apart before the plans are performed.)
+        Plan::Nothing | Plan::Exec(_) | Plan::Then(..) => {}
         Plan::Control(grant) => crate::control_change::record(grant.as_ref(), ctx),
         Plan::PayLife { .. } => ctx.prev_happened = true,
         Plan::Tokens { .. } => {
@@ -1731,8 +1837,12 @@ fn record(g: &mut Game, plan: Plan, outcome: Outcome, ctx: &mut Ctx) {
         Plan::Move { battlefield, .. } => {
             let res: Vec<ObjectId> = outcome.moved.into_iter().flatten().collect();
             // CR 712.21c, 730.3c: a melded or merged permanent became several cards.
-            let res = crate::merge::found_all(g, res);
+            let mut res = crate::merge::found_all(g, res);
             if battlefield {
+                // A card put somewhere else instead (Containment Priest, CR 614.6) didn't
+                // enter: "it" and "if they do" refer only to what's on the battlefield (as
+                // in `Game::exec`).
+                res.retain(|o| g.obj(*o).zone == Zone::Battlefield);
                 g.link_to_creator(ctx, &res);
             }
             ctx.prev_affected = res.iter().map(|o| Entity::Object(*o)).collect();

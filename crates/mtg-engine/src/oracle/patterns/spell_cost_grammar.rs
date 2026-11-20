@@ -380,8 +380,8 @@ fn for_each_spell(s: &str) -> Option<Value> {
             ])));
         }
     }
-    // "creature it targets" (each time it's targeted counts, Battlefield Thaumaturge
-    // ruling).
+    // "creature it targets" (each creature once, however many times it's targeted:
+    // interpretation `thaumaturge-counts-each-targeted-creature-once`).
     if let Some(r) = s.strip_suffix(" it targets") {
         let t = CardType::from_word(r)?;
         return Some(Value::Custom(rules::targets_of_type(t).into()));

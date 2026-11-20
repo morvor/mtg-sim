@@ -179,7 +179,9 @@ impl KeywordRules for MorphFaceUp {
             cost.mana = Some(m.with_x(x as u32));
             chosen_x = Some(x as i32);
         }
-        let ctx = Ctx::new(Some(obj), p);
+        let mut ctx = Ctx::new(Some(obj), p);
+        // A cost with {X} is a cost that contains {X}, whatever X is (CR 106.6, 107.3d).
+        ctx.cost_has_x = chosen_x.is_some();
         // Mana that may be spent only to turn permanents face up pays it (CR 106.6).
         let purpose = Some(crate::mana::SpendPurpose::TurnFaceUp(way));
         if !crate::special_actions::pay_for(g, p, &cost, Some(obj), &ctx, purpose) {

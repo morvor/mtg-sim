@@ -878,15 +878,32 @@ impl Renderer<'_> {
                 self.default_head = saved;
                 Ev::new(obj(self, attacker), format!("becomes blocked by {b}"))
             }
-            TriggerCond::BlockedByN { attacker, n } => {
+            TriggerCond::BlockedByN {
+                attacker,
+                blocker,
+                n,
+            } => {
                 let o = obj(self, attacker);
+                let saved = self.default_head;
+                self.default_head = Some("creature");
+                let b = self.noun_det(blocker, Det::Plural);
+                self.default_head = saved;
                 Ev::new(
                     o,
-                    format!(
-                        "becomes blocked by {} or more creatures",
-                        number_word(*n as i32)
-                    ),
+                    format!("becomes blocked by {} or more {b}", number_word(*n as i32)),
                 )
+            }
+            TriggerCond::BlocksN {
+                blocker,
+                attacker,
+                n,
+            } => {
+                let o = obj(self, blocker);
+                let saved = self.default_head;
+                self.default_head = Some("creature");
+                let a = self.noun_det(attacker, Det::Plural);
+                self.default_head = saved;
+                Ev::new(o, format!("blocks {} or more {a}", number_word(*n as i32)))
             }
             TriggerCond::DealsDamage {
                 source,
@@ -1890,7 +1907,8 @@ impl Renderer<'_> {
                         | BatchPer::Player
                         | BatchPer::AnyPlayer
                         | BatchPer::Recipient
-                        | BatchPer::OtherController,
+                        | BatchPer::OtherController
+                        | BatchPer::ObjectController,
                     ) => {
                         Det::OneOrMore
                     }
@@ -2219,6 +2237,11 @@ fn names_another_object(trig: &str) -> bool {
         }
         // What's attacked ("Whenever ~ attacks a battle") isn't what "it" names after.
         if i >= 1 && matches!(words[i - 1], "attacks" | "attack") {
+            continue;
+        }
+        // "Whenever ~ blocks two or more creatures, it gains first strike": what it
+        // blocks is plural, never "it".
+        if quantity && i >= 3 && words[i - 3] == "blocks" {
             continue;
         }
         // The noun: skip modifiers ("a +1/+1 counter", "a nontoken creature").

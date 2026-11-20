@@ -33,8 +33,8 @@ fn it() -> Sel {
 /// "that creature enters with a finality counter on it", "it enters tapped", "that
 /// artifact enters with an additional +1/+1 counter on it", "it enters with a finality
 /// counter on it and is a Vampire in addition to its other types": the replacement effect
-/// for the permanent `Var(IT)` (the spell) becomes (CR 614.1c), and whether it's "enters
-/// tapped".
+/// for the permanent `Var(IT)` (the spell) becomes (CR 614.1c), with the type given to the
+/// spell (kept by the permanent, CR 400.7a), and whether it's "enters tapped".
 fn enters_rider(x: &str) -> Option<(Effect, bool)> {
     let (x, ty) = match x
         .strip_suffix(" in addition to its other types")
@@ -62,7 +62,7 @@ fn enters_rider(x: &str) -> Option<(Effect, bool)> {
     ]
     .iter()
     .find_map(|p| x.strip_prefix(p))?;
-    let (mut parts, tapped) = if r == "tapped" {
+    let (parts, tapped) = if r == "tapped" {
         (vec![Effect::EnterTapped], true)
     } else {
         let r = r.strip_prefix("with ")?;
@@ -70,27 +70,31 @@ fn enters_rider(x: &str) -> Option<(Effect, bool)> {
         n.as_const()?;
         (vec![Effect::EnterWithCounters { kind, n }], false)
     };
-    // "... and is a Vampire": the permanent has that type as it enters (not the spell).
-    if let Some(ty) = ty {
-        parts.push(Effect::OnEntry(Box::new(Effect::Modify {
-            what: Sel::This,
-            mods: vec![Modification::AddSubtypes(vec![ty.into()])],
-            duration: Duration::Permanent,
-        })));
-    }
-    Some((
-        Effect::AddReplacement {
-            def: ReplacementDef {
-                event: ReplacementEvent::EntersBattlefield(Filter::In(Box::new(it()))),
-                action: ReplacementAction::AsEnters(Box::new(Effect::seq(parts))),
-                self_replacement: false,
-                optional: false,
-            },
-            duration: Duration::Permanent,
-            uses: Some(1),
+    let replacement = Effect::AddReplacement {
+        def: ReplacementDef {
+            event: ReplacementEvent::EntersBattlefield(Filter::In(Box::new(it()))),
+            action: ReplacementAction::AsEnters(Box::new(Effect::seq(parts))),
+            self_replacement: false,
+            optional: false,
         },
-        tapped,
-    ))
+        duration: Duration::Permanent,
+        uses: Some(1),
+    };
+    // "... and is a Vampire in addition to its other types": the spell is a Vampire on the
+    // stack, and by CR 400.7a so is the permanent it becomes (The Tomb of Aclazotz's
+    // ruling).
+    let e = match ty {
+        Some(ty) => Effect::seq(vec![
+            Effect::Modify {
+                what: it(),
+                mods: vec![Modification::AddSubtypes(vec![ty.into()])],
+                duration: Duration::Permanent,
+            },
+            replacement,
+        ]),
+        None => replacement,
+    };
+    Some((e, tapped))
 }
 
 /// "it has affinity for artifacts", "that spell has undaunted", "it gains flying": a

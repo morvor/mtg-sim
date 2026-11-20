@@ -94,26 +94,23 @@ fn votes_in(g: &Game, serial: i32) -> Vec<(PlayerId, i64)> {
 
 /// For an ability that triggered on players finishing a vote (its event's amount is the
 /// vote's number this turn): whether `p` voted for a choice the ability's controller voted
-/// for (`Some(true)`), voted only for choices they didn't vote for (`Some(false)`), or
-/// didn't vote (`None`). Only that vote counts, not earlier ones (Grudge Keeper's
-/// rulings).
-pub fn voted_like(g: &Game, ctx: &Ctx, p: PlayerId) -> Option<bool> {
-    let serial = ctx.event.as_ref().map(|e| e.amount)?;
+/// for (`like`), or for a choice they didn't vote for (`!like`). A player with several
+/// votes can be both (Erestor of the Council's ruling); a player who didn't vote is
+/// neither. Only that vote counts, not earlier ones (Grudge Keeper's rulings).
+pub fn voted_like(g: &Game, ctx: &Ctx, p: PlayerId, like: bool) -> bool {
+    let Some(serial) = ctx.event.as_ref().map(|e| e.amount) else {
+        return false;
+    };
     let votes = votes_in(g, serial);
     let mine: Vec<i64> = votes
         .iter()
         .filter(|(v, _)| *v == ctx.controller)
         .map(|(_, c)| *c)
         .collect();
-    let theirs: Vec<i64> = votes
+    votes
         .iter()
         .filter(|(v, _)| *v == p)
-        .map(|(_, c)| *c)
-        .collect();
-    if theirs.is_empty() {
-        return None;
-    }
-    Some(theirs.iter().any(|c| mine.contains(c)))
+        .any(|(_, c)| mine.contains(c) == like)
 }
 
 /// Result variables (`Ctx::nums` / `Ctx::vars`).

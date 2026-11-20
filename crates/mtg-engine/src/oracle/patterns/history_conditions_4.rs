@@ -282,7 +282,10 @@ inventory::submit! { super::AbilityPattern { name: "history 4: if ~ is the first
 
 /// "it's the first time that creature has become tapped this turn" (Captain America,
 /// Living Legend): the event about that object is the only one of its kind this turn.
-/// Becoming tapped is one event per tapping (CR 701.26a).
+/// Becoming tapped is one event per tapping (CR 701.26a). It's about the event that made
+/// the ability trigger, so only the events up to that one count, also as the ability
+/// resolves (CR 603.4; `HistoryWindow::ThisTurnUntilTriggered`, interpretation
+/// `first-time-is-about-the-trigger-event`).
 pub fn first_time_referent(
     c: &str,
     b: &mut crate::oracle::effects::Builder,
@@ -304,10 +307,12 @@ pub fn first_time_referent(
         return None;
     }
     let cond = history_condition(&format!("~ {verb} this turn"))?;
-    let Condition::Compare(v, Cmp::Ge, Value::Const(1)) = cond else {
+    let Condition::Compare(Value::EventsThisTurn(event, tally), Cmp::Ge, Value::Const(1)) = cond
+    else {
         return None;
     };
-    let once = Condition::Compare(v, Cmp::Eq, Value::Const(1));
+    let until = Value::EventsDuring(HistoryWindow::ThisTurnUntilTriggered, event, tally);
+    let once = Condition::Compare(until, Cmp::Eq, Value::Const(1));
     if matches!(sel, Sel::This) {
         return Some(once);
     }

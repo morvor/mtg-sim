@@ -44,7 +44,14 @@ fn for_each_value(s: &str, b: &mut Builder) -> Option<Value> {
 
 /// "It gets +1/+1 until end of turn for each other creature you control": "other" is
 /// other than the object getting the bonus (Sigil of Valor ruling), as well as the source.
+/// "Attacking creatures you control get +1/+0 until end of turn for each other attacking
+/// creature" (Run): with a group, other than each affected object, as for a group's static
+/// bonus (`filters_relational::other_than_affected`; the resolver fixes the value for each
+/// of them, CR 608.2h).
 fn other_than_it(n: Value, what: &Sel) -> Value {
+    if matches!(what, Sel::All(_)) {
+        return super::filters_relational::other_than_affected(n);
+    }
     if !matches!(what, Sel::Target(_) | Sel::TriggerObject | Sel::AttachedTo) {
         return n;
     }

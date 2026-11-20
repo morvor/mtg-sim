@@ -234,11 +234,15 @@ impl Game {
         // CR 603.10d: who controlled each permanent whose control changes in the current
         // batch immediately before those simultaneous changes.
         let mut control_before = control_before_fn(&events[batch_start..]);
+        // The events of the current batch that haven't been processed yet: while triggers
+        // are detected for one, those after it in the batch (`Game::batch_ahead`).
+        self.batch_ahead = batch_of(&events[batch_start..]);
         for (i, ev) in events.iter().enumerate() {
             if matches!(ev, Event::BatchBoundary) {
                 self.check_batch_triggers(&events[batch_start..i], &born_later);
                 batch_start = i + 1;
                 control_before = control_before_fn(&events[batch_start..]);
+                self.batch_ahead = batch_of(&events[batch_start..]);
                 // The next batch's objects exist from now on.
                 for e in events[batch_start..]
                     .iter()
@@ -262,18 +266,13 @@ impl Game {
             // Recorded before detection so "for the first time each turn" can see which
             // events of this turn precede this one.
             self.turn_events.push(ev.clone());
-            self.excess_ahead = events[i + 1..]
-                .iter()
-                .take_while(|e| !matches!(e, Event::BatchBoundary))
-                .filter(|e| matches!(e, Event::ExcessDamage { .. }))
-                .cloned()
-                .collect();
+            self.batch_ahead.pop_front();
             if let Some(f) = self.observer.as_ref().map(|o| o.on_event.clone()) {
                 f(self, ev);
             }
             once_delayed.extend(self.detect_triggers(ev, &recent, &born_later, &control_before));
         }
-        self.excess_ahead.clear();
+        self.batch_ahead.clear();
         self.check_batch_triggers(&events[batch_start..], &born_later);
         self.fire_once_delayed(once_delayed);
         // Static abilities' conditions can depend on what happened this turn ("as long as
@@ -282,6 +281,19 @@ impl Game {
         self.dirty = true;
         // Events emitted while detecting triggers (rare) are handled by the next pass of
         // `flush_events`.
+    }
+
+    /// The trigger event's information as the ability triggers on it, with how many of
+    /// this turn's events have happened by then: the recorded ones, the trigger event
+    /// among them, and the rest of its batch of simultaneous events (`batch_ahead`, which
+    /// counts as having happened, interpretation
+    /// `simultaneous-events-count-as-an-ability-triggers`). "If it's the first time ...
+    /// this turn" is about the trigger event, and it's checked again as the ability
+    /// resolves against these events only (CR 603.4; interpretation
+    /// `first-time-is-about-the-trigger-event`).
+    fn seen_as_triggered(&self, mut info: EventInfo) -> EventInfo {
+        info.turn_events_seen = Some(self.turn_events.len() + self.batch_ahead.len());
+        info
     }
 
     /// Marks the end of a group of simultaneous events (see [`Event::BatchBoundary`]).
@@ -482,6 +494,9 @@ impl Game {
                     BatchPer::OtherController => {
                         i.other.map(|o| Entity::Player(self.obj(o).controller))
                     }
+                    BatchPer::ObjectController => {
+                        i.object.map(|o| Entity::Player(self.obj(o).controller))
+                    }
                 };
                 let mut groups: Vec<Vec<EventInfo>> = Vec::new();
                 let mut group_extra: Vec<usize> = Vec::new();
@@ -522,6 +537,17 @@ impl Game {
                         break;
                     }
                     let mut info = g[0].clone();
+                    // "One or more creatures an opponent controls ..., that opponent ...": the
+                    // opponent the group is for, whose creatures they were as it triggered
+                    // (`that-opponent-fixed-as-it-triggers`).
+                    let grouped_by = match per {
+                        BatchPer::OtherController => g[0].other,
+                        BatchPer::ObjectController => g[0].object,
+                        _ => None,
+                    };
+                    if let Some(o) = grouped_by {
+                        info.player = Some(self.obj(o).controller);
+                    }
                     // "That much"/"that many": the total amount (damage, life, ...), or the
                     // number of events for events without an amount (objects entering, ...).
                     info.amount = g.iter().map(|i| i.amount).sum();
@@ -598,6 +624,7 @@ impl Game {
                     // rulings).
                     let times =
                         crate::trigger_limits::allowed(self, src, a.uid, t.limit, 1 + extra);
+                    let info = self.seen_as_triggered(info);
                     for _ in 0..times {
                         self.trigger_order += 1;
                         found.push(PendingTrigger {
@@ -906,6 +933,7 @@ impl Game {
                 // would trigger, additional times included (Acrobatic Cheerleader's
                 // rulings).
                 let times = crate::trigger_limits::allowed(self, src, a.uid, t.limit, times);
+                let info = self.seen_as_triggered(info);
                 for _ in 0..times {
                     self.trigger_order += 1;
                     found.push(PendingTrigger {
@@ -1195,6 +1223,20 @@ impl Game {
         base: &Ctx,
         ev: &Event,
     ) -> Vec<EventInfo> {
+        let mut infos = self.trigger_event_infos(cond, base, ev);
+        // Who controlled the event's objects as it triggered: "that player" of "Whenever a
+        // creature an opponent controls enters, that player ..." is that opponent even if
+        // the creature changes control before the ability resolves
+        // (`that-opponent-fixed-as-it-triggers`, `PlayerRef::ControllerAsTriggered`).
+        for i in &mut infos {
+            i.object_controller = i.object.map(|o| self.obj(o).controller);
+            i.other_controller = i.other.map(|o| self.obj(o).controller);
+        }
+        infos
+    }
+
+    /// The body of [`Game::trigger_matches_ctx`].
+    fn trigger_event_infos(&self, cond: &TriggerCond, base: &Ctx, ev: &Event) -> Vec<EventInfo> {
         let src = base.source.unwrap_or(ObjectId(0));
         let ctl = base.controller;
         let ctx = base.clone();
@@ -2760,6 +2802,16 @@ impl Game {
         self.exec(&body.effect, &mut ctx);
         crate::structure::record(&t.ability, &self.obj(t.source).chars.name, "resolved");
     }
+}
+
+/// The events of the batch of simultaneous events that `events` starts with (up to the
+/// next [`Event::BatchBoundary`]).
+fn batch_of(events: &[Event]) -> std::collections::VecDeque<Event> {
+    events
+        .iter()
+        .take_while(|e| !matches!(e, Event::BatchBoundary))
+        .cloned()
+        .collect()
 }
 
 /// For the events of one batch (up to the next [`Event::BatchBoundary`]), the controller

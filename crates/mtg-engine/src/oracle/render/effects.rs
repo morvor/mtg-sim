@@ -711,11 +711,12 @@ impl Renderer<'_> {
             // "Return the exiled card to the battlefield": each card linked to this object.
             // "Put each card exiled with ~ into its owner's hand" (an object that exiles
             // one card says "the exiled card").
-            Effect::ForEach {
-                sel: Sel::Linked,
-                var,
-                effect,
-            } => {
+            Effect::ForEach { sel, var, effect }
+                if matches!(sel, Sel::Linked)
+                    || matches!(sel, Sel::All(Filter::And(v)) if v.len() == 2
+                        && matches!(&v[0], Filter::In(x) if matches!(x.as_ref(), Sel::Linked))
+                        && matches!(v[1], Filter::InZone(ZoneKind::Exile))) =>
+            {
                 let all = Sel::All(Filter::And(vec![
                     Filter::In(Box::new(Sel::Linked)),
                     Filter::InZone(ZoneKind::Exile),
@@ -1904,6 +1905,16 @@ impl Renderer<'_> {
                     None => self.move_effect(what, to),
                 }
             }
+            // "[reveal cards ... until they reveal four land cards], then puts those cards
+            // into their graveyard": every card revealed (Mirko Vosk, Mind Drinker).
+            Effect::Move {
+                what: Sel::Var(v),
+                to,
+            } if *v == vars::REVEALED
+                && format!("{to:?}") == format!("{:?}", Destination::zone(ZoneKind::Graveyard)) =>
+            {
+                "{opt:that player} put those cards into its owner's graveyard".into()
+            }
             Effect::Move { what, to } => self.move_effect(what, to),
             Effect::Tap { what } => {
                 let w = self.sel(what, Case::Obj);
@@ -2314,6 +2325,11 @@ impl Renderer<'_> {
                         return format!(
                             "{s} doesn't untap during {{alt:its controller's|its}} next {n} untap steps"
                         );
+                    }
+                }
+                if let Restriction::DoesntUntapDuringUntapStepOf { who, what } = restriction {
+                    if let Some(s) = self.doesnt_untap_during_players_step(who, what, duration) {
+                        return s;
                     }
                 }
                 // "The tokens are goaded for the rest of the game": the tokens just
@@ -5809,7 +5825,19 @@ impl Renderer<'_> {
                 }),
             ) = (v.get(i), v.get(i + 1), v.get(i + 2))
             {
-                let is_opt_in = matches!(opt.as_ref(), Effect::May { who: PlayerRef::Iterated, effect }
+                let opt = match opt.as_ref() {
+                    Effect::If {
+                        cond: Condition::Custom(c),
+                        then,
+                        otherwise,
+                    } if c == crate::search_rules::ITERATED_CAN_SEARCH
+                        && matches!(otherwise.as_ref(), Effect::Noop) =>
+                    {
+                        then
+                    }
+                    o => o,
+                };
+                let is_opt_in = matches!(opt, Effect::May { who: PlayerRef::Iterated, effect }
                     if matches!(effect.as_ref(), Effect::Custom(n) if n == crate::scry_rules::OPT_IN));
                 if is_opt_in && *opted == crate::scry_rules::OPTED && v2 == var {
                     let inner = match act.as_ref() {

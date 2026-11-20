@@ -139,9 +139,12 @@ impl KeywordRules for Casualty {
         // the same exceptions.
         let mut all = vec![first];
         all.extend(crate::copy::additional_copies(g, spell, ctx.controller));
-        for copy in all {
+        for copy in all.iter().copied() {
             apply_copy_exceptions(g, copy, exceptions, x, ctx.controller);
         }
+        // CR 405.3: put onto the stack at the same time, in the order their controller
+        // chooses.
+        crate::copy::order_copies(g, ctx.controller, &all);
         true
     }
 

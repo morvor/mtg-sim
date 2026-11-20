@@ -467,6 +467,21 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   perform one combined action (one `move_objects` call / one event batch). Keep per-player sequencing for
   bodies that the rules process separately (608.2f).
 - Size: M-L
+- Residual (found in the review of rulings-P149, Nov 19; the two-phase executor, `simultaneous.rs`, now does
+  the above for moves, sacrifices, discards, searches, damage, life, tokens and control changes): a dig's
+  "take" step is performed for each player in turn, its reveal and its move together. Explore the Vastlands
+  ("Each player looks at the top five cards of their library and may reveal a land card and/or an instant or
+  sorcery card from among them. Each player puts the cards they revealed this way into their hand and the
+  rest on the bottom of their library in a random order.") compiles the reveal and the "puts ... into their
+  hand" of the next sentence into one `DigStep::Take`, which the executor can't plan, so a scratch test
+  found the active player's two revealed cards already in their hand when the next player chose (CR 101.4:
+  all reveal, in turn order, then the cards are put into hands together). Its ruling (the order of the
+  reveals, each player knowing the earlier ones) holds and is cited
+  (`tests/rulings/r_p149_payments.rs`, `explore_the_vastlands_players_choose_in_turn_order_seeing_earlier_reveals`).
+  No observable difference was found: the instruction's events are one batch either way, and the revealed
+  cards are known to the later players anyway. Fix: plan `DigStep::Take` in `simultaneous.rs` (choose and
+  reveal for each player in turn, then move the chosen cards together, as `Plan::Search` does), or compile
+  the reveal as its own step that leaves the cards in place (`dig_grammar.rs`). Size S-M.
 
 ### G25. "Shuffle ... into their library" doesn't shuffle when there's nothing to shuffle in
 - Rules: CR 701.24c, 701.24d (the library is shuffled even if the set of objects is empty or they aren't
@@ -725,6 +740,20 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   unless a real meld pair resolves, but the instruction "exile them, then meld them" should still exile both
   and leave them in exile (CR 701.42b-c: objects that can't be melded stay where they are, i.e. exiled).
   Size S.
+- A "for each" instruction that creates a token in each pass creates them one pass at a time (found in the
+  review of ruling-conflicts-11, Nov 19). Wurmquake ("Then for each opponent with three or more poison
+  counters, you create another one of those tokens.") compiles to `Repeat { CreateToken }`, each pass its
+  own creation: with Peregrin Took ("If one or more tokens would be created under your control, those
+  tokens plus an additional Food token are created instead.") and three such opponents, a scratch test
+  made 4 Wurms and 4 Foods. Its ruling (2023-02-04) has "then you create a number of tokens equal to the
+  number of opponents with three of more poison counters and they enter the battlefield at the same time":
+  one creation, so 2 Foods (the ruling is CITED for its first part, in
+  `tests/cards/cards2_more_tokens_counters.rs`, with one poisoned opponent). Endless Ranks of HYDRA ("For
+  each opponent, you create a 2/1 black Villain creature token with menace.") made 3 Foods for 3
+  opponents the same way, while Brass's Bounty ("For each land you control, create a Treasure token.")
+  creates its tokens together (Xorn adds one). Fix: one creation for one instruction's tokens, as one copy
+  event for one instruction's copies (register `copy-for-each-one-copy-event`; myriad's and Tempting
+  Contract's rulings say their "for each" tokens are created at the same time). Size S-M.
 
 ---
 

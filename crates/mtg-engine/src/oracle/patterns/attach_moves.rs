@@ -18,7 +18,8 @@ fn random_host_it_can_enchant(block: &str, ctx: &CompileContext) -> Option<Vec<A
     if block.contains('\n') {
         return None;
     }
-    let rewritten = format!("{head}return ~ to the battlefield attached to a creature chosen at random.");
+    let rewritten =
+        format!("{head}return ~ to the battlefield attached to a creature chosen at random.");
     let v = crate::oracle::parse_ability(&rewritten, ctx)?;
     let mut out = Vec::new();
     for a in v {
@@ -167,9 +168,7 @@ fn if_still_on_battlefield_attach(block: &str, ctx: &CompileContext) -> Option<V
     let mut b = Builder::new(ctx);
     b.in_trigger = true;
     b.it = Sel::Var(FOUND);
-    let otherwise = otherwise
-        .to_lowercase()
-        .replace("the aura card", "it");
+    let otherwise = otherwise.to_lowercase().replace("the aura card", "it");
     let other = parse_clause(&otherwise, &mut b)?;
     if !b.targets.is_empty() {
         return None;
@@ -355,9 +354,9 @@ inventory::submit! { AbilityPattern { name: "attach moves: exile enchanted creat
 /// "[trigger], you may attach to it any number of Auras on the battlefield and you may put
 /// onto the battlefield attached to it any number of Aura cards that could enchant it from
 /// your graveyard and/or hand." (Bruna, Light of Alabaster): Auras chosen (not targeted)
-/// are attached to the source (CR 701.3a: one that can't legally be stays where it is);
-/// Aura cards that could enchant it are put onto the battlefield attached to it (CR
-/// 303.4f).
+/// are attached to the source (CR 701.3a: one that can't legally be stays where it is,
+/// and only those that could enchant it are offered, per Bruna's ruling); Aura cards
+/// that could enchant it are put onto the battlefield attached to it (CR 303.4f).
 fn attach_and_put_auras_onto_it(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     const BODY: &str = ", you may attach to it any number of Auras on the battlefield and you may put onto the battlefield attached to it any number of Aura cards that could enchant it from your graveyard and/or hand.";
     let trigger = block.strip_suffix(BODY)?;
@@ -376,6 +375,7 @@ fn attach_and_put_auras_onto_it(block: &str, ctx: &CompileContext) -> Option<Vec
         Filter::Subtype("Aura".into()),
         Filter::InZone(ZoneKind::Battlefield),
         Filter::not(Filter::AttachedTo(Box::new(Sel::This))),
+        Filter::CouldAttachTo(Box::new(Sel::This)),
     ]);
     let cards = Filter::and(vec![
         Filter::Subtype("Aura".into()),
@@ -417,7 +417,10 @@ inventory::submit! { AbilityPattern { name: "attach moves: attach to it any numb
 /// battlefield attached to target creature, then attach any number of Equipment that were
 /// attached to it to that creature." (Cass, Hand of Vengeance): the Auras and Equipment
 /// attached to the creature as it last existed on the battlefield (CR 608.2h).
-fn return_auras_and_equipment_that_were_attached(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+fn return_auras_and_equipment_that_were_attached(
+    block: &str,
+    ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
     const BODY: &str = ", return any number of Aura cards that were attached to it from your graveyard to the battlefield attached to target creature, then attach any number of Equipment that were attached to it to that creature.";
     let trigger = block.strip_suffix(BODY)?;
     if block.contains('\n') {
@@ -480,7 +483,10 @@ const HERALD_RETURNED: Var = vars::USER + 52028;
 /// could enchant is chosen (CR 303.4f, not targeted), and they're all returned at the same
 /// time, each attached to its creature (`kw/auras_to_chosen_hosts.rs`); an Aura with no
 /// such creature stays in the graveyard (CR 303.4g).
-fn return_auras_attached_to_creatures_you_control(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
+fn return_auras_attached_to_creatures_you_control(
+    block: &str,
+    ctx: &CompileContext,
+) -> Option<Vec<Ability>> {
     use crate::kw::auras_to_chosen_hosts::{AURAS, HOSTS, PUT_AURAS_ONTO_CHOSEN_HOSTS};
     const BODY: &str = ", return any number of Aura cards from your graveyard to the battlefield attached to creatures you control. Exile those Auras at the beginning of your next end step. If those Auras would leave the battlefield, exile them instead of putting them anywhere else.";
     let trigger = block.strip_suffix(BODY)?;
@@ -570,7 +576,8 @@ inventory::submit! { AbilityPattern { name: "attach moves: return Aura cards att
 /// enchanted creature; otherwise (no payment, or no token created) the Insect.
 fn pay_if_attached_then_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> {
     let (trigger, rest) = block.split_once(", you may pay ")?;
-    let (cost, rest) = rest.split_once(" if ~ is attached to a creature you control. If you do, ")?;
+    let (cost, rest) =
+        rest.split_once(" if ~ is attached to a creature you control. If you do, ")?;
     let (copy, other) = rest.split_once(". If you didn't create a token this way, ")?;
     if block.contains('\n') || copy != "create a token that's a copy of that creature" {
         return None;
@@ -587,7 +594,9 @@ fn pay_if_attached_then_copy(block: &str, ctx: &CompileContext) -> Option<Vec<Ab
         return None;
     };
     let pay = pt.body.effect.clone();
-    if !matches!(pay, Effect::PayOptional { .. }) || !matches!(ft.body.effect, Effect::CreateToken { .. }) {
+    if !matches!(pay, Effect::PayOptional { .. })
+        || !matches!(ft.body.effect, Effect::CreateToken { .. })
+    {
         return None;
     }
     let attached = Condition::SelMatches(

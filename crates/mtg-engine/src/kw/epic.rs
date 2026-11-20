@@ -31,6 +31,8 @@ pub fn copy_without_epic(g: &mut Game, lki: ObjectId, p: PlayerId) -> Option<Obj
     // copies made this way too.
     let mut ids = vec![id];
     ids.extend(crate::copy::additional_copies(g, lki, p));
+    // CR 405.3: put onto the stack at the same time, in the order `p` chooses.
+    crate::copy::order_copies(g, p, &ids);
     let eid = g.new_effect_id();
     let ts = g.new_timestamp();
     g.effects.push(ContinuousEffect {

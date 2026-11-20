@@ -13,20 +13,23 @@ inventory::submit! { ManualAbility {
     face: 0,
     text: TEXT,
     build: |_| {
-        let instead = Effect::Seq(vec![
-            Effect::AddPlayerCounters {
-                who: PlayerRef::You,
-                kind: crate::types::counters::POISON.into(),
-                n: Value::Const(1),
-            },
-            Effect::AddPlayerEffect {
+        // The event is modified to one poison counter (rather than replaced by a new event
+        // putting one, which replacement effects already applied to this event, such as
+        // Vorinclex, Monstrous Raider's, would get another chance at: CR 614.5); the
+        // restriction follows it.
+        let action = ReplacementAction::Then(
+            Box::new(ReplacementAction::Subtract(Value::Diff(
+                Box::new(Value::EventAmount),
+                Box::new(Value::Const(1)),
+            ))),
+            Box::new(Effect::AddPlayerEffect {
                 who: PlayerRef::You,
                 effect: PlayerModification::Custom(
                     crate::multiplayer::two_headed::CANT_GET_POISON.into(),
                 ),
                 duration: Duration::EndOfTurn,
-            },
-        ]);
+            }),
+        );
         vec![AbilityDef::new(
             AbilityKind::Static(StaticAbility::new(StaticEffect::Replacement(ReplacementDef {
                 event: ReplacementEvent::PutCounters {
@@ -34,7 +37,7 @@ inventory::submit! { ManualAbility {
                     on_players: Some(PlayerFilter::You),
                     kind: Some(crate::types::counters::POISON.into()),
                 },
-                action: ReplacementAction::Instead(Box::new(instead)),
+                action,
                 self_replacement: false,
                 optional: false,
             }))),

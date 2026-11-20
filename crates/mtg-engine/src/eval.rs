@@ -105,6 +105,11 @@ pub struct Ctx {
     /// `Game::legal_target_candidates` on their own copy of the context.
     #[serde(default)]
     pub target_legality: bool,
+    /// The cost a resolving spell or ability asks for had {X} in it before X was replaced
+    /// by its value (`mana_abilities::bind_x_for_payment`): mana that may be spent only
+    /// on costs that contain {X} can pay it (CR 107.3; Elementalist's Palette's rulings).
+    #[serde(default)]
+    pub cost_has_x: bool,
 }
 
 /// Modifications to how a permanent enters, collected while applying an "as this
@@ -490,9 +495,7 @@ impl Game {
             PlayerFilter::Chose(w) => self
                 .source_choices(ctx)
                 .is_some_and(|ch| crate::choices::player_choice_matches(ch, p, w)),
-            PlayerFilter::VotedLikeYou(like) => {
-                crate::kwa::vote::voted_like(self, ctx, p) == Some(*like)
-            }
+            PlayerFilter::VotedLikeYou(like) => crate::kwa::vote::voted_like(self, ctx, p, *like),
             // Twice the life total against the starting life total: no rounding.
             PlayerFilter::HalfStartingLife(cmp) => cmp.eval(
                 2 * self.player(p).life as i64,
@@ -580,6 +583,21 @@ impl Game {
                 }
                 v.dedup();
                 v
+            }
+            // "That player" of "Whenever a creature an opponent controls enters, ...": the
+            // opponent the trigger condition named, as it triggered
+            // (`that-opponent-fixed-as-it-triggers`).
+            PlayerRef::ControllerAsTriggered(sel) => {
+                let e = ctx.event.as_ref();
+                let recorded = match sel.as_ref() {
+                    Sel::TriggerObject => e.and_then(|e| e.object_controller),
+                    Sel::TriggerOtherObject => e.and_then(|e| e.other_controller),
+                    _ => None,
+                };
+                match recorded {
+                    Some(p) => vec![p],
+                    None => self.eval_players_unranged(&PlayerRef::ControllerOf(sel.clone()), ctx),
+                }
             }
             PlayerRef::OwnerOf(sel) => {
                 let mut v: Vec<PlayerId> = self

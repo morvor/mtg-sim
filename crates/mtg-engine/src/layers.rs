@@ -282,6 +282,8 @@ impl Game {
         if self.dependent_effects_shape() != before {
             self.compute_characteristics(true);
         }
+        // The same conditions of the durations of abilities waiting on the stack.
+        crate::duration_windows::watch(self);
     }
 
     /// How many effects from resolved spells and abilities exist, and how many objects
@@ -379,6 +381,13 @@ impl Game {
                     if self.is_live(*t) {
                         let before = self.objects[t.0 as usize].chars.clone();
                         let mut c = before.clone();
+                        // A double-faced token copy's copy exceptions (CR 707.8a) are
+                        // applied this way: the characteristic-defining abilities of what
+                        // it copies that define a characteristic they set aren't copied
+                        // (CR 707.9d; a 1/1 Soul Separator copy of Sage of Ancient Lore).
+                        if crate::copy_rules::is_double_faced_token(self, *t) {
+                            crate::copy::drop_overridden_cdas(&mut c, mods);
+                        }
                         for m in mods {
                             apply_mod(&mut c, m, self, &ctx, *t);
                         }
@@ -841,6 +850,10 @@ impl Game {
             Duration::WhileSourceOnBattlefield => source.is_none_or(|s| {
                 !self.is_live(s) || self.obj(s).zone != Zone::Battlefield || self.obj(s).phased_out
             }),
+            // Phasing out isn't leaving the battlefield (CR 702.26d).
+            Duration::UntilSourceLeavesBattlefield => {
+                source.is_none_or(|s| !self.is_live(s) || self.obj(s).zone != Zone::Battlefield)
+            }
             Duration::WhileYouControlSource => source.is_none_or(|s| {
                 !self.is_live(s)
                     || self.obj(s).zone != Zone::Battlefield
@@ -1588,6 +1601,7 @@ impl Game {
                         ctl,
                         p.clone(),
                         crate::kw::once_each_turn_cast::once_slot(s),
+                        a.link,
                     )),
                     StaticEffect::FlashPermission { who, what } => {
                         st.flash_permissions.push((id, ctl, *who, what.clone()))
@@ -1630,7 +1644,7 @@ impl Game {
                         .map(|_| smol_str::SmolStr::from(format!("effect {}", e.id)));
                     for p in &e.players {
                         st.play_permissions
-                            .push((src, *p, pp.clone(), once.clone()));
+                            .push((src, *p, pp.clone(), once.clone(), 0));
                     }
                 }
                 // "You may cast sorcery spells this turn as though they had flash."
@@ -1942,7 +1956,9 @@ pub fn apply_mod(
             for t in ts {
                 c.card_types.remove(*t);
             }
-            // Subtypes that no longer correspond to a card type are removed (CR 205.1b-ish).
+            // Subtypes that no longer correspond to a card type are removed (CR 205.1a; they
+            // stay removed if a later effect gives the card type back: register
+            // `subtypes-removed-with-a-card-type-stay-removed-once-it-returns`).
             let types = c.card_types;
             c.subtypes.retain(|s| subtype_still_valid(s, types));
             if !types.contains(CardType::Creature) && !types.contains(CardType::Kindred) {
@@ -2290,7 +2306,7 @@ fn drop_ungainable_subtypes(c: &mut Characteristics, orig: &Characteristics) {
     }
 }
 
-fn subtype_still_valid(s: &str, types: CardTypeSet) -> bool {
+pub(crate) fn subtype_still_valid(s: &str, types: CardTypeSet) -> bool {
     let kinds = subtype_kinds(s);
     // A subtype on several lists (Spacecraft) is valid with any of those card types.
     kinds.is_empty()

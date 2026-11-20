@@ -463,6 +463,9 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
     // effect is in `effects`, and its value, if it could be read.
     let mut x_defined: Option<(usize, Option<Value>)> = None;
     let mut x_stored = false;
+    // The last instruction is the one that defines X (with the sentences that followed up
+    // on it): see `joins_definition` below.
+    let mut last_defines_x = false;
     let mut prev_sentence: Option<String> = None;
     for s in split_sentences(t) {
         // "~ deals 1 damage to each creature. If it was kicked, it deals 2 damage to each
@@ -491,6 +494,7 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
         // about the instructions so far (see `patterns::followup_loops`).
         if x_defined.is_none() && super::patterns::followup_loops::sentence(&s, &mut effects, b) {
             b.sentences += 1;
+            last_defines_x = false;
             continue;
         }
         // Sentences that modify the previous one ("It can't be regenerated.").
@@ -531,6 +535,7 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
                         ))
                 {
                     b.sentences += 1;
+                    last_defines_x = false;
                     continue;
                 }
                 super::patterns::oracle_hardening_referents::abandon_introduced(b, introduced);
@@ -553,8 +558,20 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
         // damage to you.": an X the text defined in an earlier sentence is that value, not
         // the X chosen for the spell or ability. It's determined once (CR 608.2h), as the
         // defining instruction is performed, and kept for the later ones.
+        //
+        // A sentence that followed up on the defining instruction itself ("That player may
+        // pay {X}, where X is that creature's mana value. If they don't pay, ..."; "you may
+        // pay {X}, where X is the difference. If you do, ...") joins it: when it sets X as
+        // it's performed (`Effect::SetX`), the X it uses, the defined X's own included
+        // ("pay {X}"), is that value already (CR 107.3c), not a later use to bind.
+        let joins_definition = followed_up
+            && last_defines_x
+            && effects
+                .last()
+                .is_some_and(super::patterns::r107_numbers::sets_x);
         if let Some((at, value)) = &x_defined {
             if !defines_x
+                && !joins_definition
                 && effects
                     .last()
                     .is_some_and(super::patterns::r107_numbers::uses_x)
@@ -589,6 +606,7 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
             x_defined = Some((effects.len().saturating_sub(1), defined_value));
             x_stored = false;
         }
+        last_defines_x = defines_x || (followed_up && last_defines_x);
         // "Look at the top four cards of your library.": later sentences may choose "from
         // among them" (`patterns::dig_grammar`).
         super::patterns::dig_grammar::note_source(effects.last(), b);
@@ -1267,11 +1285,12 @@ pub fn duration_suffix(s: &str) -> (Duration, &str) {
             " until the end of your next turn",
             Duration::UntilEndOfYourNextTurn,
         ),
-        // CR 611.2b: a continuous effect "until ~ leaves the battlefield" lasts for as
-        // long as it remains there.
+        // A continuous effect "until ~ leaves the battlefield" lasts while it remains
+        // there, phased out or not (CR 702.26d; register
+        // `phasing-out-ends-a-waiting-for-as-long-as-duration`).
         (
             " until ~ leaves the battlefield",
-            Duration::WhileSourceOnBattlefield,
+            Duration::UntilSourceLeavesBattlefield,
         ),
         (
             " for as long as ~ remains on the battlefield",
@@ -2606,6 +2625,16 @@ pub fn is_mana_effect(e: &Effect) -> bool {
         Effect::If {
             then, otherwise, ..
         } => is_mana_effect(then) && is_mana_effect(otherwise),
+        // "Add one mana of that color unless any player pays {1}" (Rhystic Cave): it could
+        // add mana (CR 605.1a), and otherwise adds none.
+        Effect::PayOptional {
+            then, otherwise, ..
+        } => {
+            let mana_or_nothing = |e: &Effect| is_mana_effect(e) || matches!(e, Effect::Noop);
+            (is_mana_effect(then) || is_mana_effect(otherwise))
+                && mana_or_nothing(then)
+                && mana_or_nothing(otherwise)
+        }
         _ => false,
     }
 }

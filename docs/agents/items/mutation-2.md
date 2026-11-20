@@ -39,3 +39,12 @@ rate. Target: every file at or above 90% with every remaining survivor classifie
 DONE when the five full runs and the eleven fresh samples are in docs/MUTATION.md with
 their survivors classified and the (b)/(c) ones killed, `cargo test --workspace` passes, and the
 item's row (mutants run, missing tests added, engine bugs) is in docs/agents/yield.tsv.
+
+## Progress
+
+- `simultaneous.rs` (landed Nov 19, `mutation-2/simultaneous`): full run of all 279 mutants,
+  71.8% → 98.1% with 5 equivalent survivors; 8 engine bugs and 3 compiler fixes; two
+  provisional register entries (`choices-for-each-player-made-in-turn`,
+  `mixed-each-player-instruction`). Report: docs/MUTATION.md, "Second round, Nov 2026".
+  `scripts/mutants.sh` gained `FULL=1` (every mutant) and `RESUME=1` (continue a run a
+  machine restart interrupted). Next in the order above: `permissions.rs`.

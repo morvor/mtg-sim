@@ -1018,3 +1018,31 @@ fn stolen_identity_can_be_encoded_on_its_new_token_if_its_a_creature() {
     assert_eq!(t.named_on_battlefield("Mind Stone").len(), 2);
     assert!(t.in_graveyard(P0, "Stolen Identity"));
 }
+
+#[test]
+fn identity_thief_returns_only_the_card_it_exiled() {
+    cr!("607.2a", "400.7");
+    // Identity Thief exiles the Bears; they return at the end step. On P0's next turn it
+    // exiles the Hill Giant: at that end step only the Giant returns ("the exiled card"),
+    // not the Bears it returned before, which stay the same object.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    let thief = thief_attacks_copying(&mut t, bears);
+    t.advance_to(P0, Step::End);
+    t.settle();
+    t.resolve_all();
+    let back = t.g.current(bears);
+    assert!(t.on_battlefield(back), "{}", t.dump_log());
+    t.advance_to(P0, Step::BeginningOfCombat);
+    t.answer_yes(P0, true);
+    t.answer_targets(P0, &[obj(giant)]);
+    t.attack(&[(thief, Entity::Player(P1))], &[]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(t.g.current(giant)));
+    t.advance_to(P0, Step::End);
+    t.settle();
+    t.resolve_all();
+    assert!(t.on_battlefield(t.g.current(giant)));
+    assert_eq!(t.g.current(back), back, "the Bears didn't move again");
+}

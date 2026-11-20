@@ -147,14 +147,16 @@ impl Renderer<'_> {
         let Effect::Seq(steps) = body.as_ref() else {
             return None;
         };
-        let [act, Effect::StoreValue {
-            var: set,
-            value: Value::Const(1),
-        }] = steps.as_slice()
-        else {
+        let [act, note] = steps.as_slice() else {
             return None;
         };
-        if set != var {
+        if *var != crate::oracle::patterns::any_player_may_have_damage::CHOSE
+            || format!("{note:?}")
+                != format!(
+                    "{:?}",
+                    crate::oracle::patterns::any_player_may_have_damage::chose()
+                )
+        {
             return None;
         }
         let a = self.effect(act);
@@ -751,11 +753,18 @@ impl Renderer<'_> {
     /// The instructions after one that sets X ("roll a d20", then "create X Treasure
     /// tokens"), with ", where X is [value]" after the first sentence that uses X.
     pub(crate) fn x_defined_later(&mut self, value: &Value, rest: &[Effect]) -> Option<String> {
+        let before = (self.introduced.clone(), self.gaps.len());
         let x = self.value(value);
         if x == "X" || rest.is_empty() {
             return None;
         }
+        // The value is said after the sentence that uses X, so a target both mention is
+        // introduced in that sentence and the value refers back to it ("Counter target
+        // spell unless its controller pays {X}, where X is its mana value.").
+        self.introduced = before.0;
+        self.gaps.truncate(before.1);
         let text = self.seq(rest);
+        let x = self.value(value);
         let uses_x = |s: &str| {
             s.split(|c: char| !c.is_alphanumeric() && c != '{' && c != '}')
                 .any(|w| w == "X" || w == "{X}")

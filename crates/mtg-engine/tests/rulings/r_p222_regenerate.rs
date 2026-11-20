@@ -126,7 +126,10 @@ fn gatherer_of_graces_dies_to_the_lost_aura_bonus_before_regenerating() {
 #[test]
 fn dark_dabbling_draws_as_it_resolves_and_does_nothing_if_its_target_is_illegal() {
     cr!("608.2b", "608.2c", "701.19a");
-    ruling!("Dark Dabbling", "You draw a card as Dark Dabbling resolves, not as the creature actually regenerates.");
+    ruling!(
+        "Dark Dabbling",
+        "You draw a card as Dark Dabbling resolves, not as the creature actually regenerates."
+    );
     ruling!("Dark Dabbling", "If the target creature is an illegal target by the time Dark Dabbling tries to resolve, the ability doesn’t resolve. You don’t draw a card and no creatures are regenerated.");
     supported("Dark Dabbling");
     for spoil in [false, true] {
@@ -256,7 +259,16 @@ fn reknit_regenerates_a_noncreature_permanent() {
     cr!("701.19a");
     ruling!("Reknit", "Reknit can regenerate an artifact, creature, enchantment, land, or planeswalker. If you regenerate a noncreature permanent, the next time that permanent would be destroyed that turn, instead tap it. If that permanent had any damage on it (because it had been a creature earlier in the turn), that damage is removed.");
     supported("Reknit");
-    for name in ["Forest", "Mind Stone", "Glorious Anthem", "Grizzly Bears"] {
+    // And a battle, a permanent type the ruling's list predates (register
+    // `pre-battle-rulings-give-way-to-the-cr`, CR 110.4).
+    interp!("pre-battle-rulings-give-way-to-the-cr");
+    for name in [
+        "Forest",
+        "Mind Stone",
+        "Glorious Anthem",
+        "Grizzly Bears",
+        "Invasion of Azgol",
+    ] {
         let mut t = TestGame::new(2);
         t.set_step(P0, Step::PrecombatMain);
         let p = t.battlefield(P0, name);

@@ -246,6 +246,23 @@ def name_index(cards):
     return all_oids
 
 
+def unescape(s):
+    """The value of a Rust string literal's contents, as `mtg-tools`' `unescape` reads it:
+    escaped quotes and backslashes, newlines, tabs, Unicode escapes and line
+    continuations."""
+    def esc(m):
+        e = m.group(1)
+        if e.startswith('u{'):
+            try:
+                return chr(int(e[2:-1], 16))
+            except ValueError:
+                return ''
+        if e.startswith('\n'):
+            return ''
+        return {'n': '\n', 't': '\t'}.get(e, e)
+    return re.sub(r'\\(u\{[0-9a-fA-F]*\}|\n\s*|.)', esc, s)
+
+
 def citations(names, cards=None):
     """(oracle_id, normalized needle) pairs cited anywhere in the workspace sources.
 
@@ -254,14 +271,18 @@ def citations(names, cards=None):
     all_oids = name_index(cards)
     pat = re.compile(r'ruling!\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"', re.S)
     out = collections.defaultdict(list)
-    for f in glob.glob(os.path.join(ROOT, 'crates/**/*.rs'), recursive=True):
+    # The files `mtg-tools rulings-coverage` reads (`ruling_citations`): the engine and the
+    # API's tests (mtg-data and mtg-tools mention the macro in docs and their own tests).
+    files = (glob.glob(os.path.join(ROOT, 'crates/mtg-engine/**/*.rs'), recursive=True)
+             + glob.glob(os.path.join(ROOT, 'crates/mtg-api/tests/**/*.rs'), recursive=True))
+    for f in files:
         src = open(f, encoding='utf-8').read()
         if 'ruling!' not in src:
             continue
         for m in pat.finditer(src):
-            name = m.group(1).replace('\\"', '"').lower()
+            name = unescape(m.group(1)).lower()
             oids = all_oids.get(name) or ([names[name]] if name in names else [])
-            needle = m.group(2).replace('\\"', '"').replace('\\\\', '\\').replace('\\n', ' ')
+            needle = unescape(m.group(2)).replace('\n', ' ')
             for oid in oids:
                 out[oid].append(normalize(needle))
     return out

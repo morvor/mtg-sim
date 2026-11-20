@@ -707,3 +707,29 @@ fn rakdos_the_defiler_cant_sacrifice_demons() {
         assert!(!offered.contains(&rakdos) && !offered.contains(&demon));
     }
 }
+
+#[test]
+fn killing_wave_another_players_payment_doesnt_count_against_yours() {
+    cr!("119.4", "101.4");
+    ruling!(
+        "Killing Wave",
+        "Then each player pays life and sacrifices creatures at the same time."
+    );
+    supported("Killing Wave");
+    // Both players have 5 life and one creature, and pay 3 life for it: only a player's
+    // own earlier payments count against what they can pay.
+    let mut t = TestGame::new(2);
+    t.g.players[P0.idx()].life = 5;
+    t.g.players[P1.idx()].life = 5;
+    let mine = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Runeclaw Bear");
+    t.answer_yes(P0, true);
+    t.answer_yes(P1, true);
+    t.lands(P0, "Swamp", 4);
+    let spell = t.hand(P0, "Killing Wave");
+    t.answer(P0, DecisionKind::X, Answer::Number(3));
+    t.cast(P0, spell).go();
+    t.resolve_all();
+    assert!(t.on_battlefield(mine) && t.on_battlefield(theirs));
+    assert_eq!((t.life(P0), t.life(P1)), (2, 2));
+}

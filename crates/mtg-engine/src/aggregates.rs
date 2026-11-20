@@ -57,18 +57,7 @@ pub fn distinct_among(g: &Game, what: Among, sel: &Sel, ctx: &Ctx) -> i64 {
                 set = set.union(c.card_types);
             }
             set.iter()
-                .filter(|t| {
-                    what == Among::CardTypes
-                        || matches!(
-                            t,
-                            CardType::Artifact
-                                | CardType::Battle
-                                | CardType::Creature
-                                | CardType::Enchantment
-                                | CardType::Land
-                                | CardType::Planeswalker
-                        )
-                })
+                .filter(|t| what == Among::CardTypes || t.is_permanent_type())
                 .count() as i64
         }
         Among::CreatureTypes => {

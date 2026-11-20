@@ -678,6 +678,8 @@ inventory::submit! { EffectPattern { name: "iteration: for each {C}{C} spent to 
 /// object of that quality; objects moved to the same place move together.
 fn for_each_quality(l: &str, b: &mut Builder) -> Option<Effect> {
     let r = end(l).strip_prefix("for each ")?;
+    use crate::types::CardType;
+    let permanent_types = CardType::PERMANENT_TYPES.map(CardType::word);
     let (qualities, marker, y): (&[&str], &str, &str) = if let Some(y) = r.strip_prefix("color, ") {
         (
             &["white", "blue", "black", "red", "green"],
@@ -685,18 +687,7 @@ fn for_each_quality(l: &str, b: &mut Builder) -> Option<Effect> {
             y,
         )
     } else if let Some(y) = r.strip_prefix("permanent type, ") {
-        (
-            &[
-                "artifact",
-                "battle",
-                "creature",
-                "enchantment",
-                "land",
-                "planeswalker",
-            ],
-            " of that type",
-            y,
-        )
+        (&permanent_types, " of that type", y)
     } else {
         return None;
     };

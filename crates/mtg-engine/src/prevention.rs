@@ -233,6 +233,7 @@ pub fn lock_players(g: &Game, f: &PlayerFilter, ctx: &Ctx) -> PlayerFilter {
                 | PlayerRef::TriggerMover
                 | PlayerRef::Iterated
                 | PlayerRef::ControllerOf(_)
+                | PlayerRef::ControllerAsTriggered(_)
                 | PlayerRef::OwnerOf(_) => g.eval_players(r, ctx).into_iter().collect(),
                 _ => return f.clone(),
             };

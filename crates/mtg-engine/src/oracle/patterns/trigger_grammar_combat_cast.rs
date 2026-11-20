@@ -1423,13 +1423,19 @@ fn creatures_attack(r: &str) -> Option<Parsed> {
         )),
         "you and aren't blocked" if n == 1 => Some((
             // Declared unblocked while attacking you (CR 509.1h): "that player" is the
-            // attacking player.
-            batch(TriggerCond::AttacksUnblocked(Filter::and(vec![
-                f,
-                Filter::AttackingPlayer(PlayerRel::You),
-            ]))),
+            // attacking player, the creatures' controller as it triggered
+            // (`that-opponent-fixed-as-it-triggers`). With shared team turns several
+            // opponents attack at once (CR 805.10a): once for each of them (Coveted
+            // Jewel's ruling).
+            TriggerCond::Batched {
+                trigger: Box::new(TriggerCond::AttacksUnblocked(Filter::and(vec![
+                    f,
+                    Filter::AttackingPlayer(PlayerRel::You),
+                ]))),
+                per: BatchPer::ObjectController,
+            },
             objs,
-            PlayerRef::ActivePlayer,
+            PlayerRef::TriggerPlayer,
         )),
         _ => None,
     }
@@ -1512,21 +1518,31 @@ fn block_events(r: &str) -> Option<Parsed> {
         ));
     }
     if let Some((s, o)) = r.split_once(" blocks or becomes blocked by ") {
-        let (g, many, tail) = block_object(o)?;
+        let (g_noun, many, tail) = block_object(o)?;
         if !end(tail).is_empty() {
             return None;
         }
-        let g = Filter::and(vec![g, Filter::creature()]);
+        let g = Filter::and(vec![g_noun.clone(), Filter::creature()]);
         if s == "~" && many {
-            // Once per combat (CR 509.3a, 509.3c), if any of those creatures matches.
+            // Only creatures block or are blocked (CR 506.4): "one or more Orcs".
+            let g = g_noun;
+            // "~ blocks or becomes blocked by one or more black creatures" (Serra
+            // Inquisitors): once per combat, as it first blocks or is blocked by such a
+            // creature, when blockers are declared or when an effect adds one to its block
+            // (CR 509.3e).
             return Some((
-                TriggerCond::Where {
-                    trigger: Box::new(TriggerCond::BlocksOrBecomesBlocked(Filter::Source)),
-                    cond: Condition::Exists(Filter::and(vec![
-                        g,
-                        Filter::Or(vec![Filter::BlockingSource, Filter::BlockedBySource]),
-                    ])),
-                },
+                TriggerCond::AnyOf(vec![
+                    TriggerCond::BlocksN {
+                        blocker: Filter::Source,
+                        attacker: g.clone(),
+                        n: 1,
+                    },
+                    TriggerCond::BlockedByN {
+                        attacker: Filter::Source,
+                        blocker: g,
+                        n: 1,
+                    },
+                ]),
                 Sel::This,
                 PlayerRef::You,
             ));
@@ -1536,7 +1552,28 @@ fn block_events(r: &str) -> Option<Parsed> {
             _ => return None,
         };
         if many {
-            return None;
+            // "Whenever equipped creature blocks or becomes blocked by one or more
+            // creatures" (Godsend): once per combat (CR 509.3a, 509.3c), not once for each
+            // of them. Only with no quality: "one or more black creatures" would also
+            // trigger when an effect adds the first black one to a block (CR 509.3e).
+            if end(o) != "one or more creatures" {
+                return None;
+            }
+            return Some((
+                TriggerCond::Where {
+                    trigger: Box::new(TriggerCond::BlocksOrBecomesBlocked(f)),
+                    cond: Condition::Exists(Filter::and(vec![
+                        g,
+                        Filter::BlockRelation {
+                            rel: BlockRel::BlockingOrBlockedBy,
+                            other: Box::new(Sel::AttachedTo),
+                            when: BlockWhen::Now,
+                        },
+                    ])),
+                },
+                Sel::AttachedTo,
+                PlayerRef::You,
+            ));
         }
         // Once for each creature it blocks or is blocked by (CR 509.3b, 509.3d): "that
         // creature" is that one.
@@ -1610,7 +1647,11 @@ fn block_events(r: &str) -> Option<Parsed> {
         parts.extend(attacking);
         let attacker = Filter::and(parts);
         return Some((
-            TriggerCond::BlockedByN { attacker, n },
+            TriggerCond::BlockedByN {
+                attacker,
+                blocker: Filter::creature(),
+                n,
+            },
             Sel::TriggerObject,
             PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
         ));
@@ -1618,16 +1659,17 @@ fn block_events(r: &str) -> Option<Parsed> {
     if let Some((s, o)) = r.split_once(" blocks ") {
         if s == "~" {
             // "~ blocks one or more black creatures", "~ blocks two or more creatures":
-            // once per combat (CR 509.3a), counting the creatures it blocks.
+            // once per combat, as it first blocks that many such creatures, when blockers
+            // are declared or when an effect makes it block one more (CR 509.3e).
             let (n, g, tail) = count_phrase(o)?;
             if !end(tail).is_empty() {
                 return None;
             }
-            let blocked = Value::Count(Filter::and(vec![g, Filter::BlockedBySource]));
             return Some((
-                TriggerCond::Where {
-                    trigger: Box::new(TriggerCond::Blocks(Filter::Source)),
-                    cond: Condition::Compare(blocked, Cmp::Ge, Value::c(n as i32)),
+                TriggerCond::BlocksN {
+                    blocker: Filter::Source,
+                    attacker: g,
+                    n,
                 },
                 Sel::This,
                 PlayerRef::You,
