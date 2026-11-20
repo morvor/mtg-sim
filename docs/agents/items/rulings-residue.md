@@ -194,3 +194,14 @@ Split in two by batch id (OPEN counts on Nov 20 in brackets):
   `docs/rulings-exemptions/rulings-P011.tsv`; the register entry decided), or it stands (the
   register entry reversed: the effects judged again with the card on the stack, and the list
   of legal actions made to judge them so too).
+  **Settled** by work item ruling-conflicts-13 (Nov 20; its item file has the investigation):
+  the ruling is outdated, but not by the CR effective 2019-10-04, which moved 601.3's "no
+  longer allowed ... after completing its proposal" sentence to a new 601.4 (now 601.6)
+  rather than removing it. The CR effective 2022-04-29 (Streets of New Capenna) added 601.4a,
+  now 601.6a: "Once a player has begun casting a spell that had flash because certain
+  conditions were met or that could be cast as though it had flash because certain
+  conditions were met (see 601.3d), they may continue to cast that spell as though it had
+  flash even if those conditions stop being met." The ruling is exempt as outdated
+  (`docs/rulings-exemptions/rulings-P011.tsv`) and an outdated entry in
+  docs/RULING_DISCREPANCIES.md; the engine's reading stands, and
+  `flash-permission-conditions-judged-as-casting-begins` is decided.
