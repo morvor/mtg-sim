@@ -104,6 +104,18 @@ fn sources(g: &Game, from: &Sel, ctx: &Ctx, target: Option<ObjectId>) -> Vec<Obj
         .into_iter()
         .filter(|o| Some(*o) != target)
         .collect();
+    // "As long as the top card of your library is [a card], ~ has all activated abilities
+    // of that card": while a spell is being cast, an ability activated or a special action
+    // taken, a new top card isn't revealed yet (CR 401.5), and an unrevealed top card gives
+    // no abilities (Conspicuous Snoop's ruling).
+    if matches!(from, Sel::TopOfLibrary(..))
+        && (g.special.casting > 0 || g.zones.special_actions > 0)
+    {
+        v.retain(|o| match g.obj(*o).zone {
+            crate::object::Zone::Library(p) => crate::zones::revealed_top(g, p) == Some(*o),
+            _ => true,
+        });
+    }
     v.dedup();
     v
 }
