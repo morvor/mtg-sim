@@ -2126,12 +2126,8 @@ impl Renderer<'_> {
             }
         }
         // "{X}, where X is that spell's mana value" (Kentaro).
-        if let [CostPart::Repeated {
-            cost,
-            times: Value::ManaValueOf(s),
-        }] = c.parts.as_slice()
-        {
-            if c.mana.is_none() && matches!(**s, Sel::This) && cost.parts.is_empty() {
+        if let [CostPart::DefinedX(Value::ManaValueOf(s))] = c.parts.as_slice() {
+            if c.mana.is_none() && matches!(**s, Sel::This) {
                 return format!(
                     "you may pay {{X}} rather than pay the mana cost for {kind}s{who}{quals}, where X is that spell's mana value"
                 );
@@ -2614,6 +2610,18 @@ impl Renderer<'_> {
                 } else {
                     ""
                 };
+                // "{X} for each of those creatures, where X is the number of enchantments
+                // you control" (CR 107.3c): the definition ends the sentence; a tax for each
+                // creature is also said of each one ("each creature with one or more
+                // counters on it can't attack you unless its controller pays {X}, where X
+                // is the number of counters on that creature").
+                if let (None, [CostPart::DefinedX(v)]) = (&cost.mana, cost.parts.as_slice()) {
+                    let v = self.value(v);
+                    let each = self.noun_det(attackers, Det::Each);
+                    return format!(
+                        "{{alt:{a} can't attack {d}{pw} unless their controller pays {{X}} for each {{alt:creature they control that's attacking {d}|of those creatures}}|{each} can't attack {d}{pw} unless its controller pays {{X}}}}, where X is {v}"
+                    );
+                }
                 let c = self.cost(cost);
                 format!(
                     "{a} can't attack {d}{pw} unless their controller pays {c} for each {{alt:creature they control that's attacking {d}|of those creatures}}"

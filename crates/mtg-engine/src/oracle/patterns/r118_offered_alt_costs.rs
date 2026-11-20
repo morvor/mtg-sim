@@ -167,7 +167,8 @@ fn offered_alternative_cost(l: &str, text: &str, ctx: &CompileContext) -> Option
         Some(x) => (x, true),
         None => (r, false),
     };
-    // "{X}, where X is that spell's mana value" (Kentaro): that much generic mana.
+    // "{X}, where X is that spell's mana value" (Kentaro): that much generic mana, in a
+    // cost that contains {X} (CR 107.3c, 106.6; see `defined_x_costs`).
     let (r, x_is_mana_value) = match r.strip_suffix(", where x is that spell's mana value") {
         Some(x) => (x, true),
         None => (r, false),
@@ -180,10 +181,7 @@ fn offered_alternative_cost(l: &str, text: &str, ctx: &CompileContext) -> Option
             if cost != "pay {x}" {
                 return None;
             }
-            Cost::free().with(CostPart::Repeated {
-                cost: Box::new(Cost::mana(ManaCost::generic(1))),
-                times: Value::ManaValueOf(Box::new(Sel::This)),
-            })
+            Cost::free().with(CostPart::DefinedX(Value::ManaValueOf(Box::new(Sel::This))))
         } else {
             offered_action(cost)?
         };

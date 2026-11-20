@@ -174,6 +174,7 @@ fn shadow_puppeteers_on_a_creature_that_stopped_being_a_creature() {
     cr!("205.1b", "205.3d", "611.2c", "613.4b", "208.3", "208.3a");
     interp!("subtype-gained-only-if-it-corresponds-as-the-effect-begins");
     interp!("base-pt-set-on-a-noncreature-applies-once-it-is-a-creature");
+    interp!("subtypes-removed-with-a-card-type-stay-removed-once-it-returns");
     ruling!(
         "Shadow Puppeteers",
         "If the creature stops being a creature before Shadow Puppeteers's last ability resolves, it will become red until end of turn in addition to its other colors."
@@ -203,10 +204,12 @@ fn shadow_puppeteers_on_a_creature_that_stopped_being_a_creature() {
     assert!(is_type(&mut t, crow, CardType::Creature));
     assert_eq!(pt_now(&mut t, crow), (4, 4));
     // It never gains the Dragon subtype, even as a creature: it couldn't as the effect began
-    // (CR 205.3d; decided by the user, Nov 19). (Whether crewing brings back its Bird type,
-    // which Swift Reconfiguration removed with its creature type, is a separate open question
-    // of CR 205.1a: `docs/agents/items/rulings-residue.md`; not asserted here.)
+    // (CR 205.3d; decided by the user, Nov 19). Nor does crewing bring back its Bird type,
+    // which Swift Reconfiguration removed with its creature type (CR 205.1a; decided by the
+    // user, Nov 20).
     assert!(!subtype(&mut t, crow, "Dragon"));
+    assert!(!subtype(&mut t, crow, "Bird"));
+    assert!(creature_types(&mut t, crow).is_empty());
     assert!(has_color(&mut t, crow, Color::Red));
 }
 

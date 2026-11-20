@@ -1956,7 +1956,9 @@ pub fn apply_mod(
             for t in ts {
                 c.card_types.remove(*t);
             }
-            // Subtypes that no longer correspond to a card type are removed (CR 205.1b-ish).
+            // Subtypes that no longer correspond to a card type are removed (CR 205.1a; they
+            // stay removed if a later effect gives the card type back: register
+            // `subtypes-removed-with-a-card-type-stay-removed-once-it-returns`).
             let types = c.card_types;
             c.subtypes.retain(|s| subtype_still_valid(s, types));
             if !types.contains(CardType::Creature) && !types.contains(CardType::Kindred) {

@@ -1015,10 +1015,9 @@ fn tax_cost(action: &str, where_x: Option<&str>, it: &Sel, b: &mut Builder) -> O
             if !end(&rest).is_empty() {
                 return None;
             }
-            return Some(Cost::default().with(CostPart::Repeated {
-                cost: Box::new(resolution_cost("{1}")?),
-                times: v,
-            }));
+            // X generic mana in a cost that contains {X} (CR 107.3c, 106.6; see
+            // `defined_x_costs`), determined as the total cost is (CR 508.1h).
+            return Some(Cost::default().with(CostPart::DefinedX(v)));
         }
         if let Some((c, each)) = r.split_once(" for each ") {
             let times = super::statics::parse_for_each(each, Some(it))?;

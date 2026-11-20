@@ -594,6 +594,8 @@ pub fn spell_relative_cost(cost: &Cost, mv: u32) -> Cost {
             .map(|part| match part {
                 CostPart::PayLife(v) => CostPart::PayLife(fix(v)),
                 CostPart::PayEnergy(v) => CostPart::PayEnergy(fix(v)),
+                // "{X}, where X is that spell's mana value" (Kentaro, the Smiling Cat).
+                CostPart::DefinedX(v) => CostPart::DefinedX(fix(v)),
                 // "by waterbending {X} rather than paying its mana cost, where X is its mana
                 // value" (Hama, the Bloodbender).
                 CostPart::Effect(e) => match &**e {
