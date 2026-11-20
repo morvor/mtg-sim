@@ -1258,8 +1258,19 @@ impl Renderer<'_> {
                 };
             }
             // "Whenever a land enters under an opponent's control, that player loses 2
-            // life": the opponent the trigger named ("Whenever a source an opponent
-            // controls deals damage to you, that player ...": the source's controller).
+            // life", "Whenever a source an opponent controls deals damage to you, that
+            // player ...": the opponent the trigger condition named, as it triggered.
+            PlayerRef::ControllerAsTriggered(_) => {
+                return match case {
+                    Case::Subj => "{alt:that player|that opponent|they}".into(),
+                    Case::Obj => "{alt:that player|that opponent|them}".into(),
+                    Case::Poss => "{alt:that player's|that opponent's|their}".into(),
+                }
+            }
+            // "Whenever a creature an opponent controls dies, that player loses 2 life" (the
+            // creature's last known controller, the same player either way), "Whenever a
+            // source an opponent controls deals damage to ~, that source's controller ...":
+            // read as the ability resolves (CR 608.2h).
             PlayerRef::ControllerOf(sel)
                 if self.trigger_names_opponent
                     && matches!(
@@ -1369,6 +1380,13 @@ impl Renderer<'_> {
             {
                 let s = self.sel(sel, Case::Poss);
                 format!("{{alt:{s} controller|that player}}")
+            }
+            // "Whenever ~ becomes the target of a spell or ability, that spell or ability's
+            // controller sacrifices a land": the spell's controller as the ability
+            // resolves.
+            PlayerRef::ControllerOf(sel) if matches!(sel.as_ref(), Sel::TriggerSpell) => {
+                let s = self.sel(sel, Case::Poss);
+                format!("{{alt:{s} controller|that spell's controller|that spell or ability's controller|that ability's controller}}")
             }
             PlayerRef::ControllerOf(sel) => {
                 let s = self.sel(sel, Case::Poss);

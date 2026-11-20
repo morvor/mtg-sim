@@ -1290,6 +1290,17 @@ pub enum PlayerRef {
     Target(u8),
     /// Controller of the object(s) selected.
     ControllerOf(Box<Sel>),
+    /// The controller the triggering object (`Sel::TriggerObject`) or the event's other
+    /// object (`Sel::TriggerOtherObject`) had as the ability triggered: "that player" /
+    /// "that opponent" whose antecedent is the trigger condition's "an opponent"
+    /// ("Whenever a creature an opponent controls enters, that player loses 1 life";
+    /// "Whenever a source an opponent controls deals damage to you, that player
+    /// sacrifices a permanent"), the same player even if the object changes control
+    /// before the ability resolves (`that-opponent-fixed-as-it-triggers`). Object-based
+    /// wordings ("its controller", "that creature's controller") are `ControllerOf`, read
+    /// as the ability resolves (CR 608.2h). Without a recorded controller, as
+    /// `ControllerOf`.
+    ControllerAsTriggered(Box<Sel>),
     /// Owner of the object(s) selected.
     OwnerOf(Box<Sel>),
     /// The player from the triggering event.

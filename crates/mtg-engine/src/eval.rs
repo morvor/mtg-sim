@@ -584,6 +584,21 @@ impl Game {
                 v.dedup();
                 v
             }
+            // "That player" of "Whenever a creature an opponent controls enters, ...": the
+            // opponent the trigger condition named, as it triggered
+            // (`that-opponent-fixed-as-it-triggers`).
+            PlayerRef::ControllerAsTriggered(sel) => {
+                let e = ctx.event.as_ref();
+                let recorded = match sel.as_ref() {
+                    Sel::TriggerObject => e.and_then(|e| e.object_controller),
+                    Sel::TriggerOtherObject => e.and_then(|e| e.other_controller),
+                    _ => None,
+                };
+                match recorded {
+                    Some(p) => vec![p],
+                    None => self.eval_players_unranged(&PlayerRef::ControllerOf(sel.clone()), ctx),
+                }
+            }
             PlayerRef::OwnerOf(sel) => {
                 let mut v: Vec<PlayerId> = self
                     .eval_sel(sel, ctx)
