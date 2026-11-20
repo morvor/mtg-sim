@@ -30,3 +30,9 @@ Implementation item (effort high; review at max). Quote every CR rule and ruling
    chose that never went through (`Usage::chosen_cast`), apart from "offered but never chosen"; the
    focus agent answers convoke, improvise and delve choices for its card with the engine's default
    (which pays as much that way as the rest needs) 70% of the time.
+4. Partial sweep (`--names`, 88 cards: the repeatable mana-ability cards, Inspired Ultimatum, Hogaak and
+   every card worded "the next upkeep" or "the next turn's upkeep"; 176 games, no failure) merged over the
+   carried-over results with a fresh structure log: verified 19,827 -> 19,835, round-trip 8,901 -> 8,895,
+   compiled 3,348 -> 3,346. Up: Aang, at the Crossroads and Archangel Avacyn (compiled -> verified, with
+   structure tests in `tests/cards/structure_next_upkeep_transformers.rs`), Diamond Kaleidoscope, Hogaak,
+   Inspired Ultimatum, Phyrexian Altar, Treasonous Ogre, Workhorse (round-trip -> verified). No drops.
