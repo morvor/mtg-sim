@@ -869,3 +869,394 @@ fn etrata_as_a_commander_may_go_to_the_command_zone_and_the_library_is_shuffled(
     assert!(!in_library(&t, P0, "Etrata, the Silencer"));
     assert_eq!(shuffles_since(&t, P0, from), 1);
 }
+
+// --- Timothar, Baron of Bats -----------------------------------------------------------------
+
+/// P0 controls Timothar and an Arrogant Vampire, which dies; P0 pays {1} and exiles it
+/// (unless `before` acts on the card while the ability waits). Returns the game, the
+/// Vampire card and the Bats.
+fn timothar(before: fn(&mut TestGame, ObjectId)) -> (TestGame, ObjectId, Vec<ObjectId>) {
+    use mtg_engine::mana::ManaType;
+    supported("Timothar, Baron of Bats");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.battlefield(P0, "Timothar, Baron of Bats");
+    let v = t.battlefield(P0, "Arrogant Vampire");
+    add(&mut t, P0, ManaType::C, 1);
+    t.answer_yes(P0, true);
+    destroy(&mut t, v);
+    t.settle();
+    assert_eq!(triggers_of(&t, "Timothar, Baron of Bats").len(), 1);
+    before(&mut t, v);
+    t.resolve_all();
+    let bats = with_subtype(&t, P0, "Bat");
+    for b in &bats {
+        t.g.objects[b.0 as usize].summoning_sick = false;
+    }
+    (t, v, bats)
+}
+
+#[test]
+fn timothar_cant_pay_if_the_card_cant_be_exiled() {
+    cr!("608.2c", "400.7");
+    ruling!(
+        "Timothar, Baron of Bats",
+        "If you can't exile the card, perhaps because another effect moved the card before the triggered ability started resolving, you can't pay {1} and won't create a token."
+    );
+    let (t, _, bats) = timothar(|t, v| {
+        mv(t, v, Zone::Hand(P0));
+    });
+    assert!(bats.is_empty(), "{}", t.dump_log());
+    assert!(t.in_hand(P0, "Arrogant Vampire"));
+    assert_eq!(t.g.player(P0).mana_pool.total(), 1, "the {{1}} wasn't paid");
+}
+
+#[test]
+fn timothar_bat_is_sacrificed_even_if_the_card_left_exile() {
+    cr!("608.2c", "607.2a");
+    ruling!(
+        "Timothar, Baron of Bats",
+        "If the exiled card is somehow no longer in exile when the Bat token's triggered ability resolves, you will still sacrifice the Bat token."
+    );
+    let (mut t, v, bats) = timothar(|_, _| {});
+    assert_eq!(bats.len(), 1);
+    attack_with(&mut t, &[(bats[0], pl(P1))]);
+    t.answer(P1, DecisionKind::Blockers, Answer::Blockers(vec![]));
+    t.advance_to(P0, Step::CombatDamage);
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "{}", t.dump_log());
+    mv(&mut t, v, Zone::Hand(P0));
+    t.resolve_all();
+    assert!(!t.on_battlefield(bats[0]));
+    assert!(t.named_on_battlefield("Arrogant Vampire").is_empty());
+    assert!(t.in_hand(P0, "Arrogant Vampire"));
+}
+
+#[test]
+fn timothar_bat_ability_belongs_to_the_bats_controller_and_copies_dont_have_it() {
+    cr!("603.3a", "707.2", "613.1a");
+    ruling!(
+        "Timothar, Baron of Bats",
+        "The controller of the Bat token as it deals combat damage to a player will be the controller of its triggered ability, and the exiled card will be returned to the battlefield under that player's control."
+    );
+    ruling!(
+        "Timothar, Baron of Bats",
+        "If another creature enters the battlefield as a copy of the Bat token or another effect creates a copy of the Bat token, it will not have the triggered ability granted by Timothar."
+    );
+    supported("Cackling Counterpart");
+    // A copy of the Bat (Cackling Counterpart) connects: nothing happens.
+    let (mut t, _, bats) = timothar(|_, _| {});
+    t.lands(P0, "Island", 3);
+    let cc = t.hand(P0, "Cackling Counterpart");
+    t.cast(P0, cc).target(obj(bats[0])).go();
+    t.resolve_all();
+    let copy = *with_subtype(&t, P0, "Bat")
+        .iter()
+        .find(|b| **b != bats[0])
+        .expect("the copy");
+    t.g.objects[copy.0 as usize].summoning_sick = false;
+    attack_with(&mut t, &[(copy, pl(P1))]);
+    block_and_finish(&mut t, P1, &[]);
+    t.resolve_all();
+    assert_eq!(t.life(P1), 19);
+    assert!(t.on_battlefield(copy));
+    assert!(t.in_exile("Arrogant Vampire"));
+    // P1 gains control of the Bat and connects with it: the card returns under P1's control.
+    let (mut t, _, bats) = timothar(|_, _| {});
+    give_control(&mut t, bats[0], P1);
+    let bat = t.g.current(bats[0]);
+    t.g.objects[bat.0 as usize].summoning_sick = false;
+    t.advance_to(P1, Step::PrecombatMain);
+    attack_with(&mut t, &[(bats[0], pl(P0))]);
+    t.answer(P0, DecisionKind::Blockers, Answer::Blockers(vec![]));
+    t.advance_to(P1, Step::CombatDamage);
+    t.settle();
+    let trig = t.g.stack.last().copied().expect("the Bat's ability");
+    assert_eq!(stack_controller(&t, trig), P1);
+    t.resolve_all();
+    assert_eq!(n_named(&t, P1, "Arrogant Vampire"), 1, "{}", t.dump_log());
+}
+
+// --- Zara, Renegade Recruiter; Hellkite Courser ------------------------------------------------
+
+#[test]
+fn zara_returns_the_creature_only_if_its_still_on_the_battlefield() {
+    cr!("603.7c", "400.7");
+    ruling!(
+        "Zara, Renegade Recruiter",
+        "The creature is returned to its owner's hand only if it's still on the battlefield as the delayed triggered ability resolves. If it's somewhere else at that time, it stays where it is."
+    );
+    supported("Zara, Renegade Recruiter");
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    let z = t.battlefield(P0, "Zara, Renegade Recruiter");
+    let card = t.hand(P1, "Grizzly Bears");
+    t.answer_choose(P0, &[obj(card)]);
+    attack_with(&mut t, &[(z, pl(P1))]);
+    t.resolve_all();
+    let bears = t.named_on_battlefield("Grizzly Bears");
+    assert_eq!(bears.len(), 1);
+    kill(&mut t, bears[0]);
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"), "{}", t.dump_log());
+    assert!(!t.in_hand(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn hellkite_courser_returns_the_commander_only_from_the_battlefield() {
+    cr!("603.7c", "903.9a");
+    ruling!(
+        "Hellkite Courser",
+        "You'll return the commander to the command zone only if it's still on the battlefield as the delayed triggered ability resolves. If it's in another zone, it will stay where it is."
+    );
+    supported("Hellkite Courser");
+    let mut t = commander_game(2);
+    let c = t.command(P0, "Hill Giant");
+    make_commander(&mut t, c);
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[obj(c)]);
+    t.enter(P0, "Hellkite Courser");
+    t.resolve_all();
+    let giant = t.named_on_battlefield("Hill Giant");
+    assert_eq!(giant.len(), 1);
+    // It dies; its owner leaves it in the graveyard (CR 903.9a).
+    t.answer_yes(P0, false);
+    kill(&mut t, giant[0]);
+    assert!(t.in_graveyard(P0, "Hill Giant"));
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert!(t.in_graveyard(P0, "Hill Giant"), "{}", t.dump_log());
+    assert!(t.g.find_in_zone(Zone::Command, "Hill Giant").is_empty());
+}
+
+// --- Noctis, Heir Apparent -------------------------------------------------------------------
+
+#[test]
+fn noctis_returns_after_attackers_are_declared_even_if_none_are() {
+    cr!("508.1", "508.4", "603.7");
+    ruling!(
+        "Noctis, Heir Apparent",
+        "If Noctis is exiled with its last ability, it will return during its owner's next declare attackers step after that player has finished declaring attackers. It will return even if its owner declares no attackers."
+    );
+    supported("Noctis, Heir Apparent");
+    for with_bears in [false, true] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        let noctis = t.battlefield(P0, "Noctis, Heir Apparent");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        t.lands(P0, "Mountain", 3);
+        t.activate(P0, noctis, 0, &[]).unwrap();
+        t.resolve_all();
+        assert!(t.in_exile("Noctis, Heir Apparent"));
+        let attackers = if with_bears {
+            vec![(bears, pl(P1))]
+        } else {
+            vec![]
+        };
+        // Noctis isn't among the creatures that could be declared.
+        let from = t.asked().len();
+        t.answer(P0, DecisionKind::Attackers, Answer::Attackers(attackers));
+        t.advance_to(P0, Step::DeclareAttackers);
+        let declared = asked_since(&t, from)
+            .into_iter()
+            .any(|(_, d)| matches!(d, mtg_engine::decision::Decision::DeclareAttackers { .. }));
+        assert!(declared);
+        t.resolve_all();
+        let n = t.named_on_battlefield("Noctis, Heir Apparent");
+        assert_eq!(n.len(), 1);
+        assert!(t.g.is_attacking(n[0]));
+        assert_eq!(t.g.is_attacking(bears), with_bears);
+    }
+}
+
+// --- Stumpsquall Hydra -------------------------------------------------------------------------
+
+#[test]
+fn stumpsquall_hydra_distributes_among_commanders_on_the_battlefield() {
+    cr!("608.2d", "903.3", "122.6");
+    ruling!(
+        "Stumpsquall Hydra",
+        "If Stumpsquall Hydra leaves the battlefield before its triggered ability resolves, you can still distribute the counters among any number of commanders, including none of them."
+    );
+    ruling!(
+        "Stumpsquall Hydra",
+        "You can't put +1/+1 counters on commanders that aren't on the battlefield."
+    );
+    ruling!(
+        "Stumpsquall Hydra",
+        "You may put +1/+1 counters on commanders that aren't currently creatures (such as Tevesh Szat, Doom of Fools)."
+    );
+    supported("Stumpsquall Hydra");
+    let mut t = commander_game(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    make_commander(&mut t, bears);
+    // A noncreature commander (a planeswalker) and one in the command zone.
+    let walker = t.battlefield(P0, "Tevesh Szat, Doom of Fools");
+    make_commander(&mut t, walker);
+    let away = t.command(P0, "Hill Giant");
+    make_commander(&mut t, away);
+    t.lands(P0, "Forest", 6);
+    let card = t.hand(P0, "Stumpsquall Hydra");
+    t.set_step(P0, Step::PrecombatMain);
+    t.cast(P0, card).x(3).go();
+    t.resolve();
+    let hydra = t.g.current(card);
+    t.settle();
+    assert_eq!(triggers_of(&t, "Stumpsquall Hydra").len(), 1);
+    // The Hydra leaves first; the counters still go on the commanders.
+    destroy(&mut t, hydra);
+    let from = t.asked().len();
+    t.answer_choose(P0, &[obj(bears), obj(walker)]);
+    t.answer(P0, DecisionKind::Divide, Answer::Numbers(vec![2, 1]));
+    t.resolve_all();
+    assert_eq!(t.counters(bears, counters::PLUS1), 2, "{}", t.dump_log());
+    assert_eq!(t.counters(walker, counters::PLUS1), 1);
+    assert_eq!(t.counters(away, counters::PLUS1), 0);
+    // The commander in the command zone was never a choice.
+    let choices: Vec<Vec<Entity>> = asked_since(&t, from)
+        .into_iter()
+        .filter_map(|(_, d)| match d {
+            mtg_engine::decision::Decision::ChooseEntities { candidates, .. } => Some(candidates),
+            _ => None,
+        })
+        .collect();
+    assert!(!choices.is_empty());
+    assert!(choices.iter().all(|c| !c.contains(&obj(away))));
+}
+
+// --- Sengir, the Dark Baron -------------------------------------------------------------------
+
+#[test]
+fn sengir_triggers_however_the_player_lost() {
+    cr!("104.3a", "104.3c", "104.3d", "704.5a", "704.5c");
+    ruling!(
+        "Sengir, the Dark Baron",
+        "Sengir, the Dark Baron's third ability will trigger no matter how the player lost the game: due to a state-based action (having 0 or less life, trying to draw a card from an empty library, having 10 or more poison counters), because of a spell or effect that states they lose the game, because your awesome might has left them with no choice other than concession, or for any other reason."
+    );
+    supported("Sengir, the Dark Baron");
+    for how in 0..3 {
+        let mut t = TestGame::new(3);
+        // A turn that began (so life totals as it began are recorded).
+        t.advance_to(P1, Step::Upkeep);
+        t.advance_to(P0, Step::PrecombatMain);
+        t.battlefield(P0, "Sengir, the Dark Baron");
+        match how {
+            0 => {
+                t.g.players[P1.idx()]
+                    .counters
+                    .insert(counters::POISON.into(), 10);
+                t.settle();
+            }
+            1 => concede(&mut t, P1),
+            _ => {
+                t.g.players[P1.idx()].life = 0;
+                t.settle();
+            }
+        }
+        assert!(t.has_lost(P1));
+        t.resolve_all();
+        assert_eq!(t.life(P0), 40, "case {how}: {}", t.dump_log());
+    }
+}
+
+// --- Khabál Ghoul, Scavenging Ghoul -------------------------------------------------------------
+
+#[test]
+fn ghouls_count_every_creature_that_died_this_turn_even_before_they_entered() {
+    cr!("700.4", "111.7");
+    ruling!(
+        "Khabál Ghoul",
+        "The effect counts all creatures put into all graveyards from the battlefield during the turn. This includes creature tokens put into a graveyard as well as creatures put into a graveyard before Khabál Ghoul entered the battlefield."
+    );
+    ruling!(
+        "Scavenging Ghoul",
+        "The Ghoul still gets to claim counters even if it enters after the creatures died."
+    );
+    supported("Khabál Ghoul");
+    supported("Scavenging Ghoul");
+    let mut t = TestGame::new(2);
+    t.advance_to(P0, Step::PrecombatMain);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    let tok = create_token(&mut t, P0, "Soldier");
+    kill(&mut t, bears);
+    kill(&mut t, tok);
+    let kg = t.battlefield(P0, "Khabál Ghoul");
+    let sg = t.battlefield(P0, "Scavenging Ghoul");
+    t.advance_to(P0, Step::End);
+    t.resolve_all();
+    assert_eq!(t.counters(kg, counters::PLUS1), 2, "{}", t.dump_log());
+    assert_eq!(t.counters(sg, "corpse"), 2);
+}
+
+// --- Indominus Rex, Alpha; Nissa, Ascended Animist --------------------------------------------
+
+#[test]
+fn indominus_rex_and_nissa_use_their_last_known_counters() {
+    cr!("608.2h", "113.7a", "606.3");
+    ruling!(
+        "Indominus Rex, Alpha",
+        "If Indominus Rex isn't on the battlefield as its last ability resolves, use the number of counters that were on it when it was last on the battlefield to determine how many cards to draw."
+    );
+    ruling!(
+        "Nissa, Ascended Animist",
+        "If Nissa is no longer on the battlefield at the time her first ability resolves, use the number of loyalty counters she had when she last existed on the battlefield to determine the value of X."
+    );
+    supported("Indominus Rex, Alpha");
+    supported("Nissa, Ascended Animist");
+    // Rex discards Serra Angel (flying and vigilance counters) and is destroyed in response.
+    let mut t = TestGame::new(2);
+    let angel = t.hand(P0, "Serra Angel");
+    t.answer_choose(P0, &[obj(angel)]);
+    let rex = t.enter(P0, "Indominus Rex, Alpha");
+    t.settle();
+    assert_eq!(t.counters(rex, "flying") + t.counters(rex, "vigilance"), 2);
+    destroy(&mut t, rex);
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    assert_eq!(t.hand_size(P0), hand + 2, "{}", t.dump_log());
+    // Nissa with 7 loyalty activates +1 (8) and is destroyed in response: an 8/8.
+    let mut t = TestGame::new(2);
+    let n = t.battlefield(P0, "Nissa, Ascended Animist");
+    t.g.objects[n.0 as usize]
+        .counters
+        .insert(counters::LOYALTY.into(), 7);
+    t.activate(P0, n, 0, &[]).expect("+1");
+    destroy(&mut t, n);
+    t.resolve_all();
+    let horrors = with_subtype(&t, P0, "Horror");
+    assert_eq!(horrors.len(), 1, "{}", t.dump_log());
+    assert_eq!(t.pt(horrors[0]), (8, 8));
+}
+
+// --- Boreal Outrider ---------------------------------------------------------------------------
+
+#[test]
+fn boreal_outrider_gives_one_counter_per_trigger() {
+    cr!("603.2", "614.1c");
+    ruling!(
+        "Boreal Outrider",
+        "A creature affected by Boreal Outrider’s triggered ability will enter with only one additional +1/+1 counter on it, even if you spent more than one snow mana of the appropriate color(s) to cast it."
+    );
+    ruling!(
+        "Boreal Outrider",
+        "If you control multiple Boreal Outriders, each of their triggered abilities will trigger separately. A creature could enter the battlefield with multiple +1/+1 counters on it this way, even if you spent only a single snow mana of the appropriate color(s) to cast the creature spell."
+    );
+    supported("Boreal Outrider");
+    for (outriders, snow_forests, expected) in [(1, 2, 1), (2, 1, 2)] {
+        let mut t = TestGame::new(2);
+        for _ in 0..outriders {
+            t.battlefield(P0, "Boreal Outrider");
+        }
+        t.lands(P0, "Snow-Covered Forest", snow_forests);
+        t.lands(P0, "Forest", 2 - snow_forests);
+        let bears = t.hand(P0, "Grizzly Bears");
+        t.cast(P0, bears).go();
+        t.resolve_all();
+        assert_eq!(
+            t.counters(t.g.current(bears), counters::PLUS1),
+            expected,
+            "{outriders} Outriders, {snow_forests} snow"
+        );
+    }
+}
