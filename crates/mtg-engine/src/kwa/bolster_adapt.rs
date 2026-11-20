@@ -2,7 +2,8 @@
 //!
 //! * "Bolster N": choose a creature you control with the least toughness or tied for
 //!   least toughness among creatures you control, and put N +1/+1 counters on it
-//!   (CR 701.39a). The creature is chosen as the action is performed.
+//!   (CR 701.39a). The creature is chosen as the action is performed, among those tied
+//!   for the least toughness that can have +1/+1 counters put on them.
 //! * "Adapt N": if this permanent has no +1/+1 counters on it, put N +1/+1 counters on it
 //!   (CR 701.46a).
 
@@ -20,10 +21,18 @@ pub fn bolster(g: &mut Game, p: PlayerId, n: u32, source: Option<ObjectId>) -> O
         .map(|o| o.id)
         .collect();
     let least = mine.iter().map(|o| g.obj(*o).toughness()).min()?;
+    // Of those with the least toughness (among all the creatures the player controls,
+    // CR 701.39a), only one that can have +1/+1 counters put on it can be chosen (CR 608.2d;
+    // register `counter-choice-excludes-what-cant-have-them`): with Melira's Keepers alone
+    // tied for the least, no creature gets the counters.
     let tied: Vec<ObjectId> = mine
         .into_iter()
         .filter(|o| g.obj(*o).toughness() == least)
+        .filter(|o| !crate::counter_rules::counters_prevented(g, *o, counters::PLUS1))
         .collect();
+    if tied.is_empty() {
+        return None;
+    }
     let pick = g
         .ask_objects(
             p,
