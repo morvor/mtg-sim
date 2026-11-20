@@ -1,10 +1,11 @@
 //! Item ruling-research-2, interpretation `that-opponent-fixed-as-it-triggers`: a
 //! player-referring "that player" / "that opponent" whose antecedent is the trigger
 //! condition's "an opponent" ("[creatures] an opponent controls ...", "a land enters under an
-//! opponent's control", "a spell or ability an opponent controls") is the player the
-//! condition named as the ability triggered, whoever controls the objects when it resolves;
-//! an object-based "its controller" / "that spell's controller" is the object's controller
-//! as the ability resolves, or as it last existed (CR 608.2h).
+//! opponent's control", "a spell or ability an opponent controls"; also "enchanted player
+//! controls") is the player the condition named as the ability triggered, whoever controls
+//! the objects when it resolves; an object-based "its controller" / "that spell's
+//! controller" is the object's controller as the ability resolves, or as it last existed
+//! (CR 608.2h). The initiative's steal keeps the player it triggered for (an open question).
 //!
 //! The two-player control changes of Norn's Decree and Coveted Jewel are tested in
 //! `r_residue_reflexive_refund_3.rs`; the object-based rulings with a control change in
@@ -16,6 +17,7 @@ use crate::r_p015_common::{enter, gain_control};
 use crate::r_p177_common::{cast_targeting, ffa};
 use crate::r_s01_common::{attack_with, supported, triggers_on_stack};
 use crate::r_s02_common::destroy;
+use crate::r_s06_common::attach_new;
 use mtg_engine::decision::Answer;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -148,12 +150,12 @@ fn norns_decree_that_opponent_when_only_some_of_the_creatures_change_control() {
 
 #[test]
 fn coveted_jewel_that_player_when_the_creature_leaves_the_battlefield() {
-    cr!("603.2", "608.2h");
+    cr!("603.2");
     interp!("that-opponent-fixed-as-it-triggers");
-    // The Bears are destroyed before the ability resolves. "That player" is P1 either way:
-    // the player the trigger named, and (CR 608.2h) the Bears' controller as they last
-    // existed. If P0 had gained control of them first, they last existed under P0's control
-    // and "that player" is still P1.
+    // The Bears are destroyed before the ability resolves. "That player" is P1, the player
+    // the trigger named: also the Bears' controller as they last existed, unless P0 had
+    // gained control of them first, when they last existed under P0's control and "that
+    // player" is still P1.
     for stolen_first in [false, true] {
         let mut t = TestGame::new(2);
         let bears = t.battlefield(P1, "Grizzly Bears");
@@ -165,7 +167,11 @@ fn coveted_jewel_that_player_when_the_creature_leaves_the_battlefield() {
         destroy(&mut t, bears);
         assert!(!t.on_battlefield(bears));
         t.resolve_all();
-        assert_eq!(t.obj_now(jewel).controller, P1, "stolen first: {stolen_first}");
+        assert_eq!(
+            t.obj_now(jewel).controller,
+            P1,
+            "stolen first: {stolen_first}"
+        );
         assert_eq!(
             (t.hand_size(P0), t.hand_size(P1)),
             (hands.0, hands.1 + 3),
@@ -176,7 +182,7 @@ fn coveted_jewel_that_player_when_the_creature_leaves_the_battlefield() {
 
 #[test]
 fn norns_decree_that_opponent_when_the_creature_leaves_the_battlefield() {
-    cr!("603.2", "608.2h");
+    cr!("603.2");
     interp!("that-opponent-fixed-as-it-triggers");
     // The Bears die before the Decree's ability resolves (after P0 gained control of them,
     // in the second game): P1 gets the poison counter.
@@ -212,6 +218,25 @@ fn blood_seeker_that_player_is_the_opponent_the_creature_entered_under() {
     t.answer_yes(P0, true);
     t.resolve_all();
     assert_eq!((t.life(P0), t.life(P1)), (20, 19));
+}
+
+#[test]
+fn trespassers_curse_that_player_is_the_enchanted_player_the_creature_entered_under() {
+    cr!("603.6a", "303.4b");
+    interp!("that-opponent-fixed-as-it-triggers");
+    supported("Trespasser's Curse");
+    // "Whenever a creature enchanted player controls enters, that player loses 1 life and
+    // you gain 1 life." The Curse (P0's) enchants P1; P1's Bears enter, and P0 gains control
+    // of them in response. "That player" is P1, the enchanted player they entered under, as
+    // for "a creature an opponent controls": P1 loses the life. Read as the Bears'
+    // controller as the ability resolves, it would be P0 (losing 1 life and gaining 1).
+    let mut t = TestGame::new(2);
+    attach_new(&mut t, P0, "Trespasser's Curse", P1);
+    let bears = enter(&mut t, P1, "Grizzly Bears");
+    assert_eq!(triggers_on_stack(&t, "loses 1 life"), 1);
+    gain_control(&mut t, P0, bears);
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1)), (21, 19));
 }
 
 #[test]
@@ -322,12 +347,11 @@ fn frost_titan_its_controller_is_the_spells_controller_as_the_ability_resolves()
     let (t, titan) = bolt_stolen_in_response("Frost Titan");
     assert_eq!(t.obj_now(titan).damage, 0, "the Bolt was countered");
     assert!(t.in_graveyard(P1, "Lightning Bolt"));
-    let untapped = t
-        .g
-        .battlefield
-        .iter()
-        .filter(|id| t.g.obj(**id).controller == P1 && !t.g.obj(**id).tapped)
-        .count();
+    let untapped =
+        t.g.battlefield
+            .iter()
+            .filter(|id| t.g.obj(**id).controller == P1 && !t.g.obj(**id).tapped)
+            .count();
     assert_eq!(untapped, 2, "P1 paid nothing");
 }
 
@@ -347,7 +371,10 @@ fn bonecrusher_giant_that_spells_controller_is_read_as_the_ability_resolves() {
     let shock = t.hand(P1, "Shock");
     let spell = t.cast(P1, shock).target(giant).go();
     t.settle();
-    assert_eq!(triggers_on_stack(&t, "2 damage to that spell's controller"), 1);
+    assert_eq!(
+        triggers_on_stack(&t, "2 damage to that spell's controller"),
+        1
+    );
     cast_targeting(&mut t, P0, "Aethersnatch", &[Entity::Object(spell)]);
     t.answer_yes(P0, false);
     t.resolve();
@@ -386,5 +413,40 @@ fn monarch_its_controller_is_the_creatures_controller_as_the_ability_resolves() 
         t.resolve_all();
         let expected = if stolen { P0 } else { P1 };
         assert_eq!(t.g.monarch, Some(expected), "stolen: {stolen}");
+    }
+}
+
+#[test]
+fn initiative_the_player_whose_creatures_dealt_the_damage_takes_it_after_a_control_change() {
+    cr!("726.2");
+    interp!("that-opponent-fixed-as-it-triggers");
+    // "Whenever one or more creatures a player controls deal combat damage to you, that
+    // player takes the initiative" (The Initiative; CR 726.2: "... the controller of those
+    // creatures takes the initiative"; the release notes and rulings: "the first player
+    // takes the initiative"). P1's Bears deal combat damage to P0, who has the initiative;
+    // P0 gains control of them before the ability resolves. P1, the player the ability was
+    // created for, takes the initiative (an open question: read as the creatures'
+    // controller as the ability resolves, P0 would keep it). If the Bears leave the
+    // battlefield instead, P1 takes it under either reading.
+    for stolen in [true, false] {
+        let mut t = TestGame::new(2);
+        mtg_engine::designations::take_initiative(&mut t.g, P0);
+        t.g.flush_events();
+        t.resolve_all();
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        t.set_step(P1, Step::BeginningOfCombat);
+        attack_with(&mut t, &[(bears, Entity::Player(P0))]);
+        t.resolve_all();
+        t.advance_to(P1, Step::CombatDamage);
+        t.settle();
+        assert_eq!(t.life(P0), 18);
+        assert_eq!(triggers_on_stack(&t, "takes the initiative"), 1);
+        if stolen {
+            gain_control(&mut t, P0, bears);
+        } else {
+            destroy(&mut t, bears);
+        }
+        t.resolve_all();
+        assert_eq!(t.g.initiative, Some(P1), "stolen: {stolen}");
     }
 }

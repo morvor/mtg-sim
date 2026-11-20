@@ -8,9 +8,11 @@
 //!
 //! The trigger patterns read "that player" of an object the condition names as that
 //! object's controller (`PlayerRef::ControllerOf`). When the condition also names the
-//! controller ("an opponent controls", "a player controls", "under an opponent's control"),
-//! "that player" refers back to the player it named as the event happened: the controller
-//! the object had as the ability triggered (`PlayerRef::ControllerAsTriggered`, recorded by
+//! controller ("an opponent controls", "a player controls", "under an opponent's control",
+//! "enchanted player controls": "Whenever a creature enchanted player controls enters, that
+//! player loses 1 life and you gain 1 life", Trespasser's Curse), "that player" refers back
+//! to the player it named as the event happened: the controller the object had as the
+//! ability triggered (`PlayerRef::ControllerAsTriggered`, recorded by
 //! `Game::trigger_matches_ctx`), even if the object changes control (or leaves the
 //! battlefield) before the ability resolves; nothing checks the trigger condition again
 //! (CR 603.4 checks only an intervening "if"). Object-based wordings ("its controller",
@@ -22,7 +24,9 @@ use crate::ability::*;
 
 /// The parsed trigger condition with its "that player" fixed as it triggers when the
 /// condition names the object's controller (see the module docs).
-pub(crate) fn fix_that_player(parsed: (TriggerCond, Sel, PlayerRef)) -> (TriggerCond, Sel, PlayerRef) {
+pub(crate) fn fix_that_player(
+    parsed: (TriggerCond, Sel, PlayerRef),
+) -> (TriggerCond, Sel, PlayerRef) {
     let (cond, it, who) = parsed;
     let who = match who {
         PlayerRef::ControllerOf(sel) if names_controller(&cond, &sel) => {
@@ -64,9 +68,7 @@ fn names_controller(c: &TriggerCond, sel: &Sel) -> bool {
         // "~ blocks a creature": the attacking creature; "~ becomes blocked by a
         // creature": the blocking creature.
         TriggerCond::BlocksCreature { attacker: f, .. }
-        | TriggerCond::BlockedByCreature { blocker: f, .. } => {
-            object && names_other_controller(f)
-        }
+        | TriggerCond::BlockedByCreature { blocker: f, .. } => object && names_other_controller(f),
         TriggerCond::ZoneChange {
             filter,
             to: Some(ZoneKind::Battlefield),
@@ -91,12 +93,15 @@ fn names_controller(c: &TriggerCond, sel: &Sel) -> bool {
 
 /// Whether an object phrase names its controller as a player other than you ("a creature
 /// an opponent controls", "a land a player controls"; "a land enters under an opponent's
-/// control" is read as "a land an opponent controls enters").
+/// control" is read as "a land an opponent controls enters"; "a creature enchanted player
+/// controls").
 fn names_other_controller(f: &Filter) -> bool {
     match f {
         Filter::And(v) => v.iter().any(names_other_controller),
         // "an artifact or creature an opponent controls" as alternatives.
         Filter::Or(v) => !v.is_empty() && v.iter().all(names_other_controller),
+        // A player the condition names by another description ("enchanted player").
+        Filter::ControlledByPlayer(p) => !matches!(**p, PlayerRef::You),
         f => matches!(
             f,
             Filter::ControlledBy(PlayerRel::Opponent | PlayerRel::Any | PlayerRel::NotYou)

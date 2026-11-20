@@ -247,7 +247,7 @@ the monarch's "its controller". Now:
 | Wording | Reading | Cards (examples) | Code |
 |---|---|---|---|
 | "[creatures] an opponent controls deal combat damage to you / attack you and aren't blocked, that opponent / that player" | F (unchanged) | Norn's Decree, Coveted Jewel | `BatchPer::OtherController` / `ObjectController` record the group's player; `PlayerRef::TriggerPlayer` |
-| "[a permanent] an opponent controls enters / a land enters under an opponent's control / a source an opponent controls deals damage to you ..., that player / they" | **F (was R)** | Blood Seeker, Suture Priest, Gideon the Oathless, Polluted Bonds, Nightshade Harvester, Sire of Stagnation, Invader Parasite, Archaeomancer's Map, Confounding Conundrum, Tunnel Ignus, Charismatic Conqueror, Michiko Konda, Truth Seeker (and any "blocks / is dealt damage / becomes tapped / untapped / phases in" trigger worded so) | `oracle/patterns/that_player_named_controller.rs`; `PlayerRef::ControllerAsTriggered` reads `EventInfo::object_controller` / `other_controller`, recorded by `Game::trigger_matches_ctx` |
+| "[a permanent] an opponent controls enters / a land enters under an opponent's control / a creature enchanted player controls enters / a source an opponent controls deals damage to you ..., that player / they" | **F (was R)** | Blood Seeker, Suture Priest, Gideon the Oathless, Polluted Bonds, Nightshade Harvester, Sire of Stagnation, Invader Parasite, Archaeomancer's Map, Confounding Conundrum, Tunnel Ignus, Charismatic Conqueror, Michiko Konda, Truth Seeker, Trespasser's Curse (added by the review) (and any "blocks / is dealt damage / becomes tapped / untapped / phases in" trigger worded so) | `oracle/patterns/that_player_named_controller.rs`; `PlayerRef::ControllerAsTriggered` reads `EventInfo::object_controller` / `other_controller`, recorded by `Game::trigger_matches_ctx` |
 | "... a spell or ability an opponent controls, that player ..." | F (unchanged) | ward (all ward cards), Ashenmoor Liege, Black Bolt, Scalelord Reckoner, Thunderbreak Regent, Leyline of Combustion, Parnesse, Karmic Justice, Psychic Purge, Mana Web | `PlayerRef::TriggerPlayer` (the event's player) |
 | "[a permanent] an opponent controls dies / is put into a graveyard ..., that player" | the same either way (LKI) | Massacre Wurm, Assault Intercessor, Shriek, Snarlfang Vermin, Pain Distributor, Sardian Avenger, Prince of Thralls, Meathook Massacre II | `ControllerOf(TriggerLki)` |
 | "its controller", "that land's / creature's / source's controller" | R (unchanged) | Tainted Aether, Ankh of Mishra, Celestial Mantle, Relic Putrescence, Archfiend of Spite, Elesh Norn, Flameblade Angel, Kazuul, Tetsuko Umezawa, Contested War Zone, Nelly Borca ("the controller of those creatures") | `PlayerRef::ControllerOf` |
@@ -269,7 +269,7 @@ Konda; ward with the spell stolen in response; Frost Titan's and Bonecrusher Gia
 wordings; the monarch), plus the two-player tests in `r_residue_reflexive_refund_3.rs`. Each fails
 under the other reading (checked by switching the engine's reading, Nov 20): disabling the fix of
 `that_player_named_controller.rs` fails Blood Seeker, Tunnel Ignus and Michiko Konda; reading Norn's
-Decree's and Coveted Jewel's player on resolution fails their seven tests; fixing the
+Decree's and Coveted Jewel's player on resolution fails their eight tests; fixing the
 becomes-the-target object wordings fails Frost Titan and Bonecrusher Giant; fixing the monarch's
 "its controller" fails the monarch test; reading ward's "that player" on resolution fails the ward
 test.
@@ -307,3 +307,34 @@ this item re-checked the cards whose reading changed).
   tappedout.net.
 - Nothing was routed around the blocks; a Hugging Face copy of r/mtgrules Q&A that a search
   surfaced was deliberately not used.
+
+## 10. Review (Nov 20)
+
+- **Scope of the change, measured**: every card compiled with the item's three changes reverted
+  and with them (a temporary dump of every triggered ability's AST): exactly the 23 abilities
+  listed in section 7 changed, each only by the intended replacement (`ControllerOf` of the
+  trigger object or source to `ControllerAsTriggered` for the 12 "that player" / "they"
+  abilities, the event's player to `ControllerOf(Sel::TriggerSpell)` for the 11 becomes-the-target
+  abilities), and no card's unsupported text changed. In all 12 the antecedent of "that player"
+  / "they" is the condition's controller phrase; the central pattern catches nothing else ("a
+  player" as an event's subject and "target player" never reach it: their "that player" isn't
+  the object's controller).
+- **Rulings**: every ruling of the 23 cards (and of Norn's Decree, Coveted Jewel, the ward and
+  "that player" becomes-the-target cards, the monarch and the initiative) re-read: none
+  addresses a control change before the ability resolves, and none contradicts the reading
+  given (Archaeomancer's Map's "If that opponent doesn't still control more lands than you"
+  and Charismatic Conqueror's "the opponent can't choose to tap it" fit F). A search of all
+  rulings for a control change while an ability waits to resolve found only rulings about the
+  source or the ability's controller (Rainbow Vale, evoke, Goblin Festival, the "you won't gain
+  control of ... at all" rulings), about targets, and Tainted Aether's and Garland's (both
+  quoted above).
+- **Added**: Trespasser's Curse ("Whenever a creature enchanted player controls enters, that
+  player loses 1 life and you gain 1 life") read "that player" on resolution, the one remaining
+  "[object] [player] controls [event], that player" trigger; "enchanted player controls" now
+  names the player as "an opponent controls" does (`names_other_controller`), with a test. The
+  initiative's kept reading (fixed, open) is now pinned by a test.
+- **Tests**: each new test fails under the other reading (deliberate engine breaks: the three
+  changes reverted, then ward, Norn's Decree and Coveted Jewel read on resolution, then the
+  enchanted-player case and the initiative switched). Two tests cited 608.2h for a creature
+  leaving the battlefield although "that player" there is the recorded player (with the
+  creature stolen first, the opposite of its last known controller): the citation was dropped.
