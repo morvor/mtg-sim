@@ -287,6 +287,22 @@ Each with a regression test in `crates/mtg-engine/tests`:
   player chooses the face (CR 712.12; `cr/r712_land_faces.rs`).
 - **Triggered mana abilities' resolutions weren't counted** like other abilities'
   (CR 605.4a; `cr/r605_triggered_mana_resolution.rs`).
+- **A repeatable mana ability was planned at most once per payment** (Nov 20 sweep:
+  Inspired Ultimatum with Diamond Kaleidoscope's two Prisms was never castable; Ashnod's
+  Altar with two creatures didn't pay {4}): the payment planner now activates a mana
+  ability whose cost doesn't tap or sacrifice its permanent once per activation the cost
+  needs, with what all the activations sacrifice matched to distinct objects (CR 605.3a,
+  118.3; `cr/r605_003_repeatable_mana_abilities.rs`). Re-swept with `--names` (small-fixes-7):
+  Inspired Ultimatum is cast.
+- **"At the beginning of the next turn's upkeep" fired at an additional upkeep of the same
+  turn** (it compiled like "the next upkeep", CR 603.7b; Paradox Haze): it now waits for
+  the first upkeep of the next turn (`cr/r603_007b_next_turns_upkeep.rs`).
+
+The report tells apart a cast the focus agent chose that never went through ("never cast:
+chosen, but never completed": its payment failed and was reversed, CR 733.1) from one that
+was "offered but never chosen", and the focus agent answers convoke, improvise and delve
+choices for its card with the engine's default (paying that way as much as the rest of the
+cost needs) most of the time (since small-fixes-7; Hogaak's casts failed on random answers).
 
 Hooks added for the fuzzer, usable elsewhere: `Game::observer` (`EventObserver`, sees
 every event and every reversal of an illegal action, `Game::roll_back`),

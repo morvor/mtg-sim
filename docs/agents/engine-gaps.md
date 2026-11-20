@@ -882,7 +882,7 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   used the command zone's order). Game 405: `order_simultaneous_entries` now lists each player's objects by
   owner in APNAP order, then creation order (register `simultaneous-entries-listed-by-owner-then-creation`).
 
-### Residual: a repeatable mana ability is planned at most once per payment (sweep-nov20, open)
+### Residual: a repeatable mana ability is planned at most once per payment (sweep-nov20, closed Nov 20 by small-fixes-7)
 - Rules: CR 601.2g "If the total cost includes a mana payment, the player then has a chance to activate
   mana abilities"; 605.3a "A player may activate an activated mana ability whenever they have priority,
   whenever they are casting a spell or activating an ability that requires a mana payment, ..." (no limit
@@ -935,6 +935,26 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   creatures pay {4} and not {5}; Skirk Prospector with two other Goblins pays {R}{R}{R} and is sacrificed
   last; Krark-Clan Ironworks with one other artifact pays {4}. Then re-sweep the cards above with
   `--names` (Inspired Ultimatum included). Size: S-M.
+- Fixed (small-fixes-7): `sources_inner` lists such an ability once per activation (`repeat_bound`: at
+  most one per unit of mana the cost takes, bounded by its candidates per activation, counters, life and
+  remaining activations; once for {T}, a mana cost, sacrificing itself, an activation condition other than
+  turn and step, or exhaust); the planner uses the copies in order (`Planner::prev_copy`), matches what all
+  the planned activations sacrifice or exile to distinct objects (`match_sacrifices`, `Planner::
+  sac_blocked_all`, replacing the pairwise check inside the planner; a permanent a planned ability
+  sacrifices as itself is never also sacrificed, one a later activation needs only at or after that
+  activation), and bounds the units those sources add by the objects left (`Planner::capacity`); `pay_mana`
+  keeps the later activations' permanents, and what their costs need, out of each activation's sacrifice
+  and exile choices (`kept_for_later`, `Game::mana_keep`). Register: `repeatable-mana-abilities-planned-
+  per-activation`. Tests: `tests/cr/r605_003_repeatable_mana_abilities.rs` (the three repros; the two
+  Altars with two creatures pay {4} and not {5}; Skirk Prospector sacrificed last; Krark-Clan Ironworks
+  with one other artifact pays {4}; Blood Pet with Ashnod's Altar; Workhorse's counters and Treasonous
+  Ogre's life bound the activations; two Ashnod's Altars and Molt Tender, the set-wide matching).
+  Still not planned at all (other gaps, not repeats): mana abilities whose cost taps other untapped
+  permanents ("Tap an untapped Elf you control", Birchlore Rangers, Heritage Druid, Urza, Lord High
+  Artificer, Grand Architect, Seton, Relic of Legends, Meria, Baylen, Supportive Parents, The Cabbage
+  Merchant), discards (Skirge Familiar) or exiles from hand (Cadaverous Bloom); and Squandered
+  Resources, whose mana ("any type the sacrificed land could produce") is known only once the land is
+  chosen, so `production_units` finds none while planning.
 
 ---
 
