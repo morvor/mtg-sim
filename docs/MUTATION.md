@@ -1358,7 +1358,10 @@ otherwise.
   ability ends the other's permissions, though CR 607.1c ("An ability printed on an object
   that fulfills both criteria described in rule 607.1 is linked to itself.") and 607.5 keep
   each linked only to itself. Telling them apart needs the ability's identity on the grant;
-  no other card has two such abilities.
+  no other card has two such abilities. Fixed by small-fixes-5: the permission records the
+  link of the ability that gave it (`PlayTerms::given_by_link`), which `given` compares too
+  (register `until-another-per-ability-instance`; tests
+  `tests/cr/r607_005_until_another_instances.rs`).
 - Register entry `own-permission-first` (`docs/interpretations/decisions-policies.md`,
   policy, provisional): a card's own permission is the one used when an effect's permission
   would allow the same way, without asking; the player is asked only among effects'
