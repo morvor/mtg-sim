@@ -126,6 +126,7 @@ fn conspicuous_snoop_casts_goblins_from_the_library_with_normal_timing_and_costs
 #[test]
 fn conspicuous_snoop_doesnt_reveal_the_new_top_card_while_casting() {
     cr!("401.5", "601.2", "613.1f");
+    interp!("unrevealed-top-card-grants-no-abilities");
     ruling!(
         "Conspicuous Snoop",
         "If the top card of your library changes while you're casting a spell, playing a land, or activating an ability, you don't reveal the new top card until you finish doing so. This means that if you cast the top card of your library, you can't look at the next one until you're done paying for that spell. While the top card isn't revealed, Conspicuous Snoop doesn't have any abilities of that card."
