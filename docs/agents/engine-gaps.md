@@ -754,6 +754,18 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   creates its tokens together (Xorn adds one). Fix: one creation for one instruction's tokens, as one copy
   event for one instruction's copies (register `copy-for-each-one-copy-event`; myriad's and Tempting
   Contract's rulings say their "for each" tokens are created at the same time). Size S-M.
+  Fixed (small-fixes-3, Nov 20): `for_each_events.rs` makes one instruction's tokens, counters and life
+  gained one event in every shape (`Repeat`, per-player and per-object loops), register
+  `for-each-tokens-counters-life-one-event` (provisional). Each part's own tokens stay a creation of their
+  own when they're specified differently: tokens created attacking different players (Adeline, Stampede
+  Surfer, myriad), and tokens a later instruction of the part refers to (Furygale Flocking's "that attack
+  that opponent"; the review found that combining them gave all of Anointed Procession's extra tokens to
+  the first opponent's part). Left: token copies of several objects are still one creation per kind, and a
+  "for each" part compiled as one sequence of several actions (Tempt with Bunnies' draw and Rabbit) is
+  performed per player (Seize the Spotlight's draw and Treasure, two instructions, makes one creation).
+  Also found (review): Sacred Boon's "put a +0/+1 counter on that creature for each 1 damage prevented
+  this way" compiles to one delayed trigger for each 1 damage prevented, each putting one counter, where
+  the card has one delayed trigger putting them all.
 - **Status (gaps-residual-2, Nov 20).** The graveyard-count bit was already fixed (`Value::GraveyardSize`,
   `PlayerFilter::GraveyardSize` and `multiplayer::zone_size` count only cards, CR 108.2b, 111.7) and tested
   (`tests/cr/r111_tokens_arent_cards.rs`); verified, with a test added for "creature cards" (a creature token
@@ -761,7 +773,7 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   named after; the instruction exiles both, and what can't be melded stays in exile, CR 701.42b-c) and tested
   with a Clone (`tests/actions/a701_042_meld.rs`); verified, with a test added for a token copy (Cackling
   Counterpart: both exiled, nothing melds, the token ceases to exist). Engine unchanged for both. The "for
-  each" bit is small-fixes-3's.
+  each" bit is small-fixes-3's (above).
 
 ### Residual: hashed links of acquired abilities (gaps-residual-2 part 2, closed Nov 20)
 - Links of abilities a continuously reevaluated effect gives (`layers::acquired_ability`, "have"; the

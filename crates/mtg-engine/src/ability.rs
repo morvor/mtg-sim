@@ -627,6 +627,12 @@ pub enum CostPart {
     /// (X is 0, CR 107.3h; nothing reduces it: it isn't a spell being cast). Only a card
     /// whose mana cost could be paid may be chosen (see `cost_sets.rs`).
     AndPayItsManaCost(Box<CostPart>),
+    /// "{X}, where X is [value]" in a cost that isn't a spell's or ability's own (an attack
+    /// tax, an alternative cost an effect offers): X generic mana, X defined by the text
+    /// (CR 107.3c) and determined as the total cost is (CR 508.1h, 601.2f). The cost still
+    /// contains {X}: mana that may be spent only on such costs may pay it (CR 106.6; see
+    /// `defined_x_costs.rs`).
+    DefinedX(Value),
 }
 
 // ---------------------------------------------------------------------------
@@ -4166,6 +4172,12 @@ pub struct PlayTerms {
     /// as the permission is given).
     #[serde(default)]
     pub duration_player: Option<PlayerId>,
+    /// For an effect's permission given with `until_another`: the link of the ability
+    /// that gave it (set as the permission is given), which "another card with ~" is
+    /// relative to: an ability linked to itself (CR 607.1c), and each instance of it an
+    /// object gains is linked only to itself (CR 607.5).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub given_by_link: Option<u16>,
     /// "If that spell doesn't target a creature you control, it costs {8} more to cast
     /// this way." (Mavinda, Students' Advocate): a generic increase (CR 601.2f) for a spell
     /// cast with the permission that has no target with these qualities (relative to the

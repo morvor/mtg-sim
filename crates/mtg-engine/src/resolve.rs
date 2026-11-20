@@ -261,7 +261,7 @@ impl Game {
                 otherwise,
             } => {
                 let had_x = ctx.cost_has_x;
-                ctx.cost_has_x = cost.mana.as_ref().is_some_and(|m| m.has_x());
+                ctx.cost_has_x = crate::defined_x_costs::contains_x(cost);
                 let cost = &crate::mana_abilities::bind_x_for_payment(self, cost, ctx);
                 // "[cost] for each ...": the total is determined now (CR 702.24a).
                 let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
@@ -385,8 +385,14 @@ impl Game {
             }
             Effect::Repeat { times, effect } => {
                 let n = self.eval_value(times, ctx).max(0);
-                for _ in 0..n {
-                    self.exec(effect, ctx);
+                // "For each opponent, you create a ... token": one creation (one instruction,
+                // one event; `for_each_events`).
+                if let Some(once) = crate::for_each_events::repeat_as_one(effect, n) {
+                    self.exec(&once, ctx);
+                } else {
+                    for _ in 0..n {
+                        self.exec(effect, ctx);
+                    }
                 }
             }
             Effect::RepeatProcess { body } => crate::repeat_process::run(self, body, ctx),
@@ -402,8 +408,11 @@ impl Game {
                 let i = match hinted {
                     Some(i) => i,
                     None => {
-                        let labels = options.iter().map(|(l, _)| l.clone()).collect();
-                        self.ask_option(p, ctx.source, "Choose one", labels)
+                        // Not an impossible option while another can be done (CR 608.2d).
+                        let ok = crate::impossible_options::choosable(self, options, ctx);
+                        let labels = ok.iter().map(|i| options[*i].0.clone()).collect();
+                        let k = self.ask_option(p, ctx.source, "Choose one", labels);
+                        ok.get(k).copied().unwrap_or(usize::MAX)
                     }
                 };
                 if let Some((_, eff)) = options.get(i) {
@@ -449,9 +458,11 @@ impl Game {
 
             // --- Objects -------------------------------------------------------
             Effect::Destroy { what, no_regen } => {
+                // A permanent chosen as it's destroyed must be one that can be (CR 702.12b).
+                let what = crate::impossible_options::destroyable_choice(what);
                 // What has left the battlefield isn't destroyed (CR 400.7), nor what it
                 // became.
-                let objs = self.resolve_objects(what, ctx);
+                let objs = self.resolve_objects(&what, ctx);
                 let objs = self.all_present(objs);
                 let res = self.destroy_all_by(
                     objs.clone(),
@@ -2793,6 +2804,9 @@ impl Game {
                     if terms.controller_duration {
                         g.terms.duration_player = Some(ctx.controller);
                     }
+                    if terms.until_another {
+                        g.terms.given_by_link = Some(ctx.link);
+                    }
                 }
                 crate::permissions::given(self, before);
             }
@@ -3542,12 +3556,14 @@ impl Game {
         | Restriction::BlockCost { cost, .. }
         | Restriction::BlockCostAgainst { cost, .. } = &mut r
         {
-            if let Some(m) = cost.mana.as_mut().filter(|m| m.has_x()) {
-                *m = m.with_x(ctx.x.max(0) as u32);
-                // X = 0: a cost of {0}, still a cost (CR 118.5; War Tax rulings).
-                if m.symbols.is_empty() {
-                    m.symbols.push(crate::mana::ManaSymbol::Generic(0));
-                }
+            // The cost still contains {X} (CR 106.6), its X now defined (`defined_x_costs`;
+            // X = 0 is a cost of {0}, still a cost, CR 118.5 and War Tax's rulings).
+            if let Some(m) = cost.mana.clone().filter(|m| m.has_x()) {
+                let rest = m.with_x(0);
+                cost.mana = (!rest.symbols.is_empty()).then_some(rest);
+                cost.parts.push(CostPart::DefinedX(Value::c(
+                    m.x_count() as i32 * ctx.x.max(0),
+                )));
             }
         }
         // A restriction on a referenced player ("target player can't play lands this

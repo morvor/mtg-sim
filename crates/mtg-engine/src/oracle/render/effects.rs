@@ -1916,6 +1916,52 @@ impl Renderer<'_> {
                 "{opt:that player} put those cards into its owner's graveyard".into()
             }
             Effect::Move { what, to } => self.move_effect(what, to),
+            // "that player taps an untapped artifact, creature, or land they control for
+            // each fade counter on ~" (Tangle Wire): the player chooses and taps them
+            // (`patterns/followups_4.rs`, `taps_untapped`).
+            Effect::Tap {
+                what:
+                    Sel::Choose {
+                        chooser,
+                        filter: Filter::And(parts),
+                        count,
+                        up_to: false,
+                        store: None,
+                    },
+            } if !matches!(chooser, PlayerRef::You)
+                && parts.iter().any(|f| matches!(f, Filter::Untapped))
+                && matches!(parts.last(), Some(Filter::ControlledByPlayer(c))
+                    if format!("{c:?}") == format!("{chooser:?}")) =>
+            {
+                // The objects (untapped once), without "they control".
+                let mut kinds: Vec<Filter> = Vec::new();
+                for f in &parts[..parts.len() - 1] {
+                    if !kinds.iter().any(|k| format!("{k:?}") == format!("{f:?}")) {
+                        kinds.push(f.clone());
+                    }
+                }
+                let f = Filter::and(kinds);
+                let who = self.player(chooser, Case::Subj);
+                let (det, each) = match count {
+                    Value::Const(1) => (Det::A, String::new()),
+                    Value::Const(n) => (Det::Count(crate::oracle::render::number_word(*n)), String::new()),
+                    // "for each fade counter on ~".
+                    Value::CountersOn(on, Some(kind)) => {
+                        let on = self.sel(on, Case::Obj);
+                        (Det::A, format!(" for each {kind} counter on {on}"))
+                    }
+                    other => match self.per_each(other) {
+                        Some((1, e)) => (Det::A, format!(" for each {e}")),
+                        Some((k, e)) => (
+                            Det::Count(crate::oracle::render::number_word(k)),
+                            format!(" for each {e}"),
+                        ),
+                        None => (self.det_for(other), String::new()),
+                    },
+                };
+                let n = self.noun_det(&f, det);
+                format!("{who} taps {n} {{alt:they control|that player controls}}{each}")
+            }
             Effect::Tap { what } => {
                 let w = self.sel(what, Case::Obj);
                 format!("tap {w}")

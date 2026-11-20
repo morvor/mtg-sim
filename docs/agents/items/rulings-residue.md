@@ -50,6 +50,20 @@ DONE per item when every ruling of its batches is CITED, EXEMPT with a reason or
 named reason in docs/rulings-uncovered.tsv. Report counts: cited, exempt, uncovered, bugs fixed
 (each with its rule), interactions against restatements; and the row in docs/agents/yield.tsv.
 
+## The misc split (Nov 20, by `rulings-residue-misc-1`)
+
+`list` on Nov 20 showed 860 OPEN texts in the batches no themed item covers, leaving out the
+batches of the themed items already landed and those of the two running then
+(`rulings-residue-burn-freeze`: P009 P062; `rulings-residue-shapechange-typal`: P160 P161 P184).
+Split in two by batch id (OPEN counts on Nov 20 in brackets):
+
+- **`rulings-residue-misc-1`** (429): P002 P005 P011 P012 P015 P016 P017 P037 P039 P044 P045 P051
+  P052 P053 P056 P057 P058 P064 P065 P066 P073 P074 P076 P085 P092 P094 P098 P099 P101 P104 P107
+  P108 P109 P112 P113 P115 P116.
+- **`rulings-residue-misc-2`** (431): P117 P122 P124 P125 P126 P133 P134 P136 P137 P141 P142 P143
+  P145 P146 P148 P150 P151 P156 P162 P163 P165 P166 P168 P171 P172 P176 P177 P180 P185 P186 P189
+  P190 P193 P194 P201 P202 P203 P204 P206 P216 P218 P219 P221 P223 P224 P225.
+
 ## Open questions the items found (for the coordinator)
 
 - **"If it's the first time ... this turn" checked again on resolution** (found by
@@ -153,3 +167,30 @@ named reason in docs/rulings-uncovered.tsv. Report counts: cited, exempt, uncove
   rulings on 22 cards exempt in part as outdated (`docs/rulings-exemptions/pre-dominaria-player-rulings.tsv`),
   one grouped entry in docs/RULING_DISCREPANCIES.md, a planeswalker-target test per card
   (`tests/rulings/pre_dominaria_player_target_rulings.rs`).
+- **Swift Reckoning cast from a graveyard: does the card count itself?** (found by
+  `rulings-residue-misc-1`, Nov 20; a conflict case, the ruling left uncited, not exempt).
+  Swift Reckoning: "Spell mastery — If there are two or more instant and/or sorcery cards in
+  your graveyard, you may cast this spell as though it had flash." Its ruling (2018-12-07):
+  "If an effect allows you to cast Swift Reckoning from your graveyard, you need two other
+  instant and/or sorcery cards in your graveyard to cast it as though it had flash." That
+  follows from 601.3 as it read in the CRs effective 2016-07-22 to 2019-08-23 ("... If that
+  player is no longer allowed to cast that spell after completing its proposal, the casting
+  of the spell is illegal and the game returns to the moment before the casting of that
+  spell was proposed ..."), which the CR effective 2019-10-04 replaced with today's "A
+  player can begin to cast a spell only if a rule or effect allows that player to cast it
+  and no rule or effect prohibits that player from casting it." Graveyard Shift's ruling
+  (2022-04-29), under today's rules: "If an effect allows you to cast Graveyard Shift from
+  your graveyard, you may cast it any time you could cast an instant if you have five or more
+  mana values among cards in your graveyard immediately before you begin to cast it, even if
+  moving it to the stack would reduce that number to four." The case for the ruling still
+  holding: 601.2e ("The game checks to see if the proposed spell can legally be cast.") and
+  the cards' different wordings (601.3b's "allows a player to cast a spell ... as though it
+  had flash" against 601.3d's "would have flash only if certain conditions are met"). The
+  engine had followed the ruling while its list of legal actions offered the cast it then
+  refused; it now counts the card itself as the casting begins, so the list and the casting
+  agree (provisional `flash-permission-conditions-judged-as-casting-begins`). To settle:
+  either the ruling is outdated (an outdated entry in docs/RULING_DISCREPANCIES.md, where its
+  note under "Not yet investigated" has the quotes, and an exemption in
+  `docs/rulings-exemptions/rulings-P011.tsv`; the register entry decided), or it stands (the
+  register entry reversed: the effects judged again with the card on the stack, and the list
+  of legal actions made to judge them so too).

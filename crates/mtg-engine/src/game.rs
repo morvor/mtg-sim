@@ -500,11 +500,13 @@ pub struct TurnHistory {
     /// they draw in each of their draw steps", CR 504.1). Recorded by `draw_rules`.
     #[serde(default)]
     pub draw_step_draws: Vec<(PlayerId, usize, ObjectId)>,
-    /// Cards revealed as they were drawn by "You may reveal the first card you draw each
-    /// turn as you draw it" (Inquisitor Eisenhorn): "Whenever you reveal ... this way"
-    /// triggers only for them. Recorded by `kw/reveal_first_draw.rs`.
+    /// Cards revealed as they were drawn by "Reveal the first card you draw each turn" and
+    /// "You may reveal the first card you draw each turn as you draw it" (Primitive
+    /// Etchings, Inquisitor Eisenhorn), with each permanent whose ability revealed them:
+    /// that permanent's "Whenever you reveal ... this way" triggers only for them.
+    /// Recorded by `kw/reveal_first_draw.rs`.
     #[serde(default)]
-    pub first_draws_revealed: Vec<ObjectId>,
+    pub first_draws_revealed: Vec<(ObjectId, ObjectId)>,
     /// Permanents that regenerated this turn, once for each time (CR 701.19a: a
     /// regeneration shield was used to replace its destruction). Recorded by
     /// `replacement.rs`; read by `kw/paper_history.rs`.

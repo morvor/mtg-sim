@@ -790,15 +790,36 @@ pub(crate) fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
         },
     ]);
     let affected = Filter::and(vec![what.clone(), in_var.clone()]);
+    // Objects the instruction moved are new objects (CR 400.7). Those it exiled, destroyed
+    // or returned somewhere other than the battlefield are judged as they last existed
+    // before the move (CR 608.2h): "if a Pirate was exiled this way" by the creature as it
+    // was exiled (a Clone that copied a Pirate is a Clone in exile). Those put onto the
+    // battlefield are judged there ("if you put an artifact onto the battlefield this
+    // way", with Mycosynth Lattice), and "put into a graveyard this way" asks where they
+    // went, so it looks at them there.
+    let moved = matches!(
+        word,
+        "return" | "returned" | "put" | "exile" | "exiled" | "put into exile" | "destroyed"
+    );
+    let leaves = match &instr {
+        Effect::Exile { .. } | Effect::ExileUntil { .. } | Effect::Destroy { .. } => true,
+        Effect::Move { to, .. } => to.zone != ZoneKind::Battlefield,
+        _ => false,
+    };
     // Some affected object matches. (The sacrificed objects are their last known
     // information: they're checked as they were, not looked for where they are.)
     let snapshot = Sel::Var(SNAPSHOT);
+    let judged = if moved && leaves && !graveyard {
+        Sel::Before(Box::new(snapshot.clone()))
+    } else {
+        snapshot.clone()
+    };
     let any_matches = match &what {
         Filter::Any => Condition::SelNonEmpty(snapshot.clone()),
         w => Condition::And(vec![
             Condition::SelNonEmpty(snapshot.clone()),
             Condition::Not(Box::new(Condition::SelMatches(
-                snapshot.clone(),
+                judged.clone(),
                 Filter::not(w.clone()),
             ))),
         ]),
@@ -844,13 +865,8 @@ pub(crate) fn if_this_way(l: &str, prev: &mut Effect, b: &mut Builder) -> bool {
     };
     // The counting quantifiers: the affected objects, each as it last existed if it has
     // left the zone (CR 608.2h).
-    // Objects the instruction moved are new objects (CR 400.7): they're counted as they
-    // last existed before the move ("four or more nontoken permanents you control" were
-    // returned to hand).
-    let moved = matches!(
-        word,
-        "return" | "returned" | "put" | "exile" | "exiled" | "put into exile" | "destroyed"
-    );
+    // Objects the instruction moved are counted as they last existed before the move
+    // too ("four or more nontoken permanents you control" were returned to hand).
     let counted = if moved {
         Sel::Before(Box::new(snapshot.clone()))
     } else {

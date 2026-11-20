@@ -66,6 +66,16 @@ pub(crate) fn uses_x(e: &Effect) -> bool {
     serde_json::to_value(e).is_ok_and(|v| walk(&v))
 }
 
+/// Whether `e` sets X as it's performed ([`Effect::SetX`]): the X of the instructions
+/// after it is that value.
+pub(crate) fn sets_x(e: &Effect) -> bool {
+    match e {
+        Effect::SetX { .. } => true,
+        Effect::Seq(v) => v.iter().any(sets_x),
+        other => serde_json::to_string(other).is_ok_and(|j| j.contains("\"SetX\"")),
+    }
+}
+
 /// Replaces `Value::X` (and optionally `Value::Y` written as the variable `y`) in an
 /// effect.
 pub(crate) fn substitute_x(e: &Effect, x: &Value) -> Option<Effect> {

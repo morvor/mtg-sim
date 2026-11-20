@@ -916,23 +916,6 @@ impl Game {
                     }
                 }
             }
-            // "You may cast spells from your hand without paying their mana costs"
-            // (Omniscience): an alternative cost of nothing (CR 118.9), with normal timing.
-            if in_hand {
-                for face in castable_faces(self, card) {
-                    let chars = self.face_characteristics(card, face);
-                    if let Some(c) = self.free_from_hand_permission(p, card, &chars) {
-                        let mut opt = CastOption::normal(face);
-                        opt.method = CastMethod::Free;
-                        opt.alt_cost = Some(Cost::free());
-                        // A once-each-turn permission is used up by casting with it.
-                        if c.once.is_some() {
-                            opt.permission = Some(c);
-                        }
-                        out.push(opt);
-                    }
-                }
-            }
             // CR 601.3, 601.3e: outside the hand, each way of casting the card must be
             // permitted by a rule or effect given the characteristics it would have (with
             // the terms of the permission it uses, see `permissions.rs`).
@@ -944,6 +927,43 @@ impl Game {
             }
         }
         out.extend(crate::keyword_impls::keyword_cast_options(self, p, card));
+        // "You may cast spells from your hand without paying their mana costs"
+        // (Omniscience): an alternative cost of nothing (CR 118.9), with normal timing.
+        // The card's own ways that aren't alternative costs combine with it too
+        // (CR 118.9a, 118.9d), as with an alternative cost another object offers
+        // (`kw::offered_costs::extend_cast_options`): "as though it had flash if you pay
+        // {2} more" or "if it's cast using teamwork" (an additional cost, CR 601.3c),
+        // offering (CR 702.48a), fused (CR 702.102a), prototyped (CR 718.3). Not its own
+        // alternative costs (CR 118.9a), nor face down (CR 702.37c).
+        if in_hand {
+            let own_ways: Vec<CastOption> = out
+                .iter()
+                .filter(|o| {
+                    o.alt_cost.is_none()
+                        && !matches!(
+                            o.method,
+                            CastMethod::Normal | CastMethod::Half(_) | CastMethod::FaceDown(_)
+                        )
+                })
+                .cloned()
+                .collect();
+            let faces = castable_faces(self, card).into_iter().map(|face| {
+                let mut opt = CastOption::normal(face);
+                opt.method = CastMethod::Free;
+                opt
+            });
+            for mut opt in faces.chain(own_ways) {
+                let chars = self.option_characteristics(card, &opt);
+                if let Some(c) = self.free_from_hand_permission(p, card, &chars) {
+                    opt.alt_cost = Some(Cost::free());
+                    // A once-each-turn permission is used up by casting with it.
+                    if c.once.is_some() {
+                        opt.permission = Some(c);
+                    }
+                    out.push(opt);
+                }
+            }
+        }
         // Lands can't be cast (CR 305.9); nor can a card in a way a keyword's rule
         // prohibits, whatever choices its proposal would make (e.g. aftermath,
         // CR 702.127a).
@@ -957,8 +977,16 @@ impl Game {
     /// CR 400.7g: if an effect granted `card` the keyword ability it's being cast with
     /// ("target card gains flashback", "each instant and sorcery card in your graveyard has
     /// flashback"), that ability continues to apply to the spell `spell` it became, even
-    /// though the effect no longer applies to that new object.
-    fn keep_granted_casting_keyword(&mut self, card: ObjectId, spell: ObjectId, m: &CastMethod) {
+    /// though the effect no longer applies to that new object. `inset` is the keyword an
+    /// effect gave the card only with the characteristics of the inset spell it's cast as
+    /// (CR 601.3e; [`crate::adventure::granted_inset_keyword`]).
+    fn keep_granted_casting_keyword(
+        &mut self,
+        card: ObjectId,
+        spell: ObjectId,
+        m: &CastMethod,
+        inset: Option<crate::keywords::Keyword>,
+    ) {
         let CastMethod::Keyword(k) = *m else {
             return;
         };
@@ -979,6 +1007,7 @@ impl Game {
             .keywords()
             .find(|x| x.kind == k)
             .cloned()
+            .or(inset)
         else {
             return;
         };
@@ -1214,16 +1243,34 @@ impl Game {
     /// characteristics the spell would have given the choices made in its proposal
     /// (CR 601.3b, 601.3e).
     fn flash_permitted(&self, p: PlayerId, card: ObjectId, chars: &Characteristics) -> bool {
+        self.flash_permitted_by(p, card, chars, &self.statics.flash_permissions, card)
+    }
+
+    /// [`Game::flash_permitted`] by the effects `perms` (source, controller, player, spells),
+    /// those that applied as the player began to cast the spell `card`, which was then the
+    /// card `began` (an effect of the card's own, whose source was `began`, is the spell's
+    /// now). Their conditions were judged then, with the card where it was (CR 601.3:
+    /// "A player can begin to cast a spell only if a rule or effect allows that player to
+    /// cast it"); only the qualities they ask of the spell are judged as it's proposed
+    /// (CR 601.3b; interpretation `flash-permission-conditions-judged-as-casting-begins`).
+    fn flash_permitted_by(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+        perms: &[(ObjectId, PlayerId, PlayerRel, Filter)],
+        began: ObjectId,
+    ) -> bool {
         let view = WithChars {
             id: card,
             chars,
             face_down: self.obj(card).face_down,
         };
-        self.statics
-            .flash_permissions
+        perms
             .iter()
             .any(|(s, c, who, what)| {
-                let ctx = Ctx::new(Some(*s), *c);
+                let s = if *s == began { card } else { *s };
+                let ctx = Ctx::new(Some(s), *c);
                 self.player_rel_matches(*who, p, &ctx)
                     && self.matches_view(&view, card, &as_spell_filter(what), &ctx)
             })
@@ -1597,6 +1644,17 @@ impl Game {
                                 None => l,
                             }
                         }
+                        // Without paying its mana cost (CR 118.9), worded as an offered
+                        // one is: Omniscience's alternative cost combined with one of the
+                        // card's own ways of casting it ("prototype", fused, its flash way).
+                        (t, Some(c), None) if c.is_free() => {
+                            let free = "without paying its mana cost";
+                            match (t, &o.method) {
+                                (Some(t), _) => format!("{t}, {free}"),
+                                (None, CastMethod::Keyword(k)) => format!("{k:?}, {free}"),
+                                (None, _) => free.to_string(),
+                            }
+                        }
                         (Some(t), _, _) => t.to_string(),
                         (None, Some(c), None) => format!("{c:?}"),
                         (None, None, _) => format!("{:?}", o.method),
@@ -1724,6 +1782,25 @@ impl Game {
                 && !c.has_keyword(KeywordKind::Flash)
                 && self.flash_permitted(p, card, &c)
         };
+        // The effects that let it be begun that way, with their conditions as they stand
+        // now, before the card moves (Swift Reckoning cast from a graveyard counts itself
+        // among the instant and sorcery cards there).
+        let flash_permissions_begun = if by_flash_permission {
+            self.statics.flash_permissions.clone()
+        } else {
+            Vec::new()
+        };
+        // A keyword an effect gives the card only with the characteristics of the inset
+        // spell it's cast as, and it's cast with (CR 601.3e: Lier's flashback for Stomp),
+        // which the spell keeps (CR 400.7g; see `keep_granted_casting_keyword`).
+        let inset_keyword = match opt.method {
+            CastMethod::Keyword(k)
+                if opt.face == FaceState::Half(1) && !self.obj(card).chars.has_keyword(k) =>
+            {
+                crate::adventure::granted_inset_keyword(self, card, k)
+            }
+            _ => None,
+        };
         // 601.2a: move the card to the stack.
         if let Some(list) = self.zone_list_mut(from) {
             list.retain(|x| *x != card);
@@ -1812,7 +1889,7 @@ impl Game {
         // 611.2f, 611.3a).
         crate::next_spell::spell_put_on_stack(self, id, p);
         self.recompute();
-        self.keep_granted_casting_keyword(card, id, &opt.method);
+        self.keep_granted_casting_keyword(card, id, &opt.method, inset_keyword);
         let chars = self.obj(id).chars.clone();
 
         // 601.2b: optional additional costs (kicker etc.) and X.
@@ -2167,10 +2244,11 @@ impl Game {
         }
         // CR 601.3b: a spell begun as though it had flash because an effect lets spells
         // with certain qualities be cast that way ("if X is 3 or less", "if it targets a
-        // permanent you control") must have them as proposed.
+        // permanent you control") must have them as proposed. The effects are those that
+        // applied as it was begun: moving the card to the stack doesn't end one.
         if by_flash_permission
             && !proposed.has_keyword(KeywordKind::Flash)
-            && !self.flash_permitted(p, id, &proposed)
+            && !self.flash_permitted_by(p, id, &proposed, &flash_permissions_begun, card)
         {
             return Err(Illegal(
                 "the proposed spell can't be cast as though it had flash".into(),
@@ -2252,7 +2330,18 @@ impl Game {
             card_types: chars.card_types,
             subtypes: chars.subtypes.to_vec(),
             all_creature_types: crate::kw::changeling::every_creature_type(&chars),
-            has_x: base_cost_has_x,
+            // An {X} the text of the alternative cost defines counts too (CR 106.6:
+            // "Spend this mana only on costs that contain {X}").
+            has_x: base_cost_has_x
+                || opt
+                    .alt_cost
+                    .as_ref()
+                    .is_some_and(crate::defined_x_costs::has_defined_x)
+                || crate::defined_x_costs::has_defined_x(&extra)
+                || opt
+                    .extra_cost
+                    .as_ref()
+                    .is_some_and(crate::defined_x_costs::has_defined_x),
             source: Some(id),
             any_color: {
                 let mut v = self.any_color_mana(p, id, false);
@@ -2508,6 +2597,12 @@ impl Game {
         let x_part = x * cost.mana.as_ref().map_or(0, |m| m.x_count());
         if let Some(m) = cost.mana.as_mut() {
             *m = m.with_x(x);
+        }
+        // An {X} the text defines ("You may pay {X} rather than pay the mana cost for
+        // Samurai spells you cast, where X is that spell's mana value"): that much generic
+        // mana, which the reductions apply to too (CR 107.3c, 601.2f).
+        if crate::defined_x_costs::has_defined_x(&cost) {
+            cost = crate::defined_x_costs::fold(self, &cost, &Ctx::new(Some(card), p)).0;
         }
         // CR 601.2f: increases apply as they're found, reductions after all of them.
         let mut changes = crate::activation_costs::CostChanges::default();
@@ -3626,6 +3721,8 @@ impl Game {
         snow_any_color: bool,
     ) -> bool {
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
+        // "{X}, where X is ...": that much generic mana.
+        let cost = &crate::defined_x_costs::fold(self, cost, ctx).0;
         // CR 107.3a: parts that use an object described with X can be paid if they could
         // be for some value of X.
         if crate::x_cost_filters::payable_x_values(self, p, src, cost).is_some_and(|v| v.is_empty())
@@ -4066,6 +4163,12 @@ impl Game {
             CostPart::AndPayItsManaCost(part) => {
                 self.and_pay_its_mana_cost_payable(p, part, src, ctx)
             }
+            // A part on its own (the total cost folds it into its mana): that much mana.
+            CostPart::DefinedX(_) => {
+                let one = Cost::free().with(part.clone());
+                let chars = so.map(|o| o.chars.clone()).unwrap_or_default();
+                self.can_pay_cost_optimistic_in(p, &one, src, &chars, ctx)
+            }
         }
     }
 
@@ -4206,6 +4309,13 @@ impl Game {
         let mut paid = PaidCost::default();
         // CR 702.24a: a repeated cost's total is determined as it's paid.
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
+        // "{X}, where X is ...": X generic mana, in a cost that contains {X} (CR 106.6).
+        let (cost, defined_x) = crate::defined_x_costs::fold(self, cost, ctx);
+        let cost = &cost;
+        let spend = &SpendContext {
+            has_x: spend.has_x || defined_x,
+            ..spend.clone()
+        };
         let first = |c: &CostPart| taps_first && matches!(c, CostPart::TapUntapped { .. });
         if taps_first {
             for part in cost.parts.iter().filter(|c| first(c)) {
@@ -4947,6 +5057,20 @@ impl Game {
             }
             CostPart::AndPayItsManaCost(part) => {
                 self.pay_and_its_mana_cost(p, part, src, ctx, paid)?;
+            }
+            // A part on its own (the total cost folds it into its mana): that much mana, in
+            // a cost that contains {X} (CR 106.6).
+            CostPart::DefinedX(_) => {
+                let one = Cost::free().with(part.clone());
+                let spend = SpendContext {
+                    is_ability: true,
+                    source: src,
+                    cost_of: ctx.cost_of,
+                    purpose: crate::keyword_impls::resolving_keyword_purpose(self, ctx),
+                    ..Default::default()
+                };
+                let sub = self.pay_total_cost(p, &one, src, &spend, ctx)?;
+                paid.mana_spent.extend(sub.mana_spent);
             }
         }
         Ok(())
