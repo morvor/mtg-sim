@@ -1362,6 +1362,19 @@ impl Game {
         ctx.cost_of = None;
         ctx.cause = None;
         ctx.x = si.x.unwrap_or(ctx.x);
+        // "When you cast this spell, ... X ...": the X of the spell, which is still on the
+        // stack, as it is now (CR 107.3e, 107.3i): an effect may have changed it since the
+        // ability triggered (Unbound Flourishing's ruling: "you choose whether to double the
+        // value of X before or after that ability resolves").
+        if let StackKind::Triggered { source, ability } = &si.kind {
+            let cast_self = matches!(&ability.kind, AbilityKind::Triggered(tr)
+                if matches!(tr.trigger, TriggerCond::CastSpell { filter: Filter::Source, .. }));
+            if cast_self && self.is_live(*source) && self.obj(*source).zone == Zone::Stack {
+                if let Some(x) = self.obj(*source).stack.as_deref().and_then(|s| s.x) {
+                    ctx.x = x;
+                }
+            }
+        }
         ctx.event = si.event.clone().or(ctx.event);
         // An ability's "if it was kicked", "if you cast it from your hand" etc. refer to how
         // its source was cast.

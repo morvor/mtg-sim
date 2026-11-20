@@ -889,7 +889,9 @@ impl Game {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let mut placed = 0;
                 let mut got = Vec::new();
-                for t in self.resolve_sel(what, ctx) {
+                // A choice offers only what can have the counters (Agitator Ant's ruling).
+                let chosen = crate::kw::counter_choice::chosen_for_counters(what, kind);
+                for t in self.resolve_sel(&chosen, ctx) {
                     let t = self.found_after_move(t, ctx);
                     let n = self.put_counters(t, kind, k, crate::event_causes::CounterPut::of(ctx));
                     if n > 0 {
@@ -1683,13 +1685,17 @@ impl Game {
                 crate::copy::become_copy(self, what, of, duration, exceptions, ctx);
             }
             Effect::Transform { what } => {
+                let mut done = Vec::new();
                 for o in self.resolve_objects(what, ctx) {
                     // CR 701.27f: not if it transformed since its ability was put onto the
                     // stack (or, for a delayed triggered ability, created).
-                    if crate::transform_rules::ability_may_transform(self, o, ctx) {
-                        crate::dfc::transform(self, o);
+                    if crate::transform_rules::ability_may_transform(self, o, ctx)
+                        && crate::dfc::transform(self, o)
+                    {
+                        done.push(Entity::Object(o));
                     }
                 }
+                ctx.set_var(crate::transform_rules::TRANSFORMED_THIS_WAY, done);
             }
             Effect::Regenerate { what } => self.regenerate(what, None, ctx),
             Effect::RegenerateWith { what, then } => self.regenerate(what, Some(then), ctx),
