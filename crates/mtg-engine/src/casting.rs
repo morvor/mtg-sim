@@ -4300,6 +4300,11 @@ impl Game {
         if self.dirty {
             self.recompute();
         }
+        // A part paid with the source can't be paid once the source has left (sacrificed
+        // for mana as the cost was being paid): it's a new object (CR 400.7, 601.2h).
+        if uses_source(part) && src.is_some_and(|s| !self.is_live(s)) {
+            return bad("its source has left");
+        }
         match part {
             CostPart::Tap => {
                 let s = src.ok_or_else(|| Illegal("no source".into()))?;
@@ -5243,22 +5248,33 @@ pub(crate) fn filter_mentions_x(f: &Filter) -> bool {
 #[allow(dead_code)]
 fn _unused(_: SpecialAction) {}
 
-/// Whether a cost uses its source itself ({T}, {Q}, "sacrifice/exile/return ~"), so the
-/// payment must keep the source available: a {T} cost keeps all its own mana abilities
-/// from paying, the others only those that sacrifice it (and no mana ability may
-/// sacrifice it). Mana abilities are activated before costs are paid (CR 601.2g-h,
-/// 602.2b), so a source whose cost doesn't use it may pay for it freely.
+/// Whether a cost uses its source itself ({T}, {Q}, "sacrifice/exile/return ~", "remove
+/// a counter from ~", loyalty, "exert ~"), so the payment must keep the source available: a
+/// {T} cost keeps all its own mana abilities from paying, the others only those that
+/// sacrifice it (and no mana ability may sacrifice it). Mana abilities are activated before
+/// costs are paid (CR 601.2g-h, 602.2b), so a source whose cost doesn't use it may pay for
+/// it freely, while one sacrificed for the mana is a new object the cost can't use (CR
+/// 400.7).
 fn reserves_source(cost: &Cost) -> bool {
-    cost.parts.iter().any(|p| {
-        matches!(
-            p,
-            CostPart::Tap
-                | CostPart::Untap
-                | CostPart::SacrificeSelf
-                | CostPart::ExileSelf
-                | CostPart::ReturnSelfToHand
-        )
-    })
+    cost.parts.iter().any(uses_source)
+}
+
+/// Whether a cost part is paid with the cost's source itself (see [`reserves_source`]).
+fn uses_source(p: &CostPart) -> bool {
+    matches!(
+        p,
+        CostPart::Tap
+            | CostPart::Untap
+            | CostPart::Loyalty(_)
+            | CostPart::SacrificeSelf
+            | CostPart::DiscardSelf
+            | CostPart::ExileSelf
+            | CostPart::ReturnSelfToHand
+            | CostPart::RemoveCounters { .. }
+            | CostPart::AddCounters { .. }
+            | CostPart::RevealSelf
+            | CostPart::ExertSelf
+    )
 }
 
 /// Whether card `c` may be exiled to pay an exile cost whose source is `src`: the source
