@@ -401,7 +401,7 @@ fn dionus_grants_itself_the_ability_but_an_elf_entering_tapped_doesnt_trigger_it
 
 #[test]
 fn dionus_granted_abilities_are_new_for_a_new_dionus_and_resolve_without_it() {
-    cr!("400.7", "113.7a", "603.2h");
+    cr!("400.7", "113.7a");
     ruling!(
         "Dionus, Elvish Archdruid",
         "If Dionus leaves the battlefield and returns to the battlefield in the same turn, or if one Dionus leaves and another Dionus enters, the ability granted by the old one is different from the ability granted by the new one. This means that an Elf that already untapped and got a +1/+1 counter from the previous granted triggered ability could untap and get another +1/+1 counter from the new granted triggered ability if it becomes tapped again later that turn."

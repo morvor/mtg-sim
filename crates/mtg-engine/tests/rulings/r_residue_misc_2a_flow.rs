@@ -883,7 +883,7 @@ fn bazaar_of_baghdad_discards_without_a_window() {
 
 #[test]
 fn phenomenon_investigators_without_a_choice_has_neither_ability() {
-    cr!("700.2a", "607.2a");
+    cr!("614.12c", "607.2m");
     ruling!(
         "Phenomenon Investigators",
         "If you somehow control Phenomenon Investigators and no choice was made for it"

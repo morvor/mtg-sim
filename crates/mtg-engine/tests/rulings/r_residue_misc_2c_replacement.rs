@@ -135,7 +135,7 @@ fn enduring_angel_a_token_copy_is_double_faced_and_transforms() {
 
 #[test]
 fn enduring_angel_a_double_faced_copy_transforms_and_stays_a_copy() {
-    cr!("701.28a", "707.2", "712.8e");
+    cr!("701.27a", "707.2", "613.2a");
     ruling!(
         "Enduring Angel // Angelic Enforcer",
         "If a nonmodal double-faced card has somehow become a copy of Enduring Angel, the replacement effect will apply, the copy of Enduring Angel will transform, and your life total will become 3. However, because the copy effect that makes it Enduring Angel continues to apply to it after it transforms, it will still be a copy of Enduiring Angel. This means that the replacement effect will be applied again if your life total would be reduced to 0 or less a second time while that copy effect is still applied."
@@ -291,7 +291,7 @@ fn doubling_counters_puts_that_many_more_through_replacement_effects() {
 
 #[test]
 fn doubling_power_uses_the_power_as_the_effect_begins() {
-    cr!("701.10d", "608.2h", "611.2c");
+    cr!("701.10b", "608.2h", "611.2c");
     ruling!(
         "Neyith of the Dire Hunt",
         "If an effect instructs you to “double” a creature’s power, that creature gets +X/+0, where X is its power as that effect begins to apply. If its power is negative, instead it gets -X/-0 where X is how far below 0 its power is. The value of X won’t change if another effect alters the creature’s power later in the turn."
@@ -535,4 +535,46 @@ fn unbound_flourishing_doubles_x_before_or_after_a_cast_trigger_that_uses_it() {
     }
     outcomes.sort();
     assert_eq!(outcomes, vec![(false, 1, 1), (true, 2, 2)]);
+}
+
+#[test]
+fn a_cast_trigger_uses_the_x_its_spell_last_had_on_the_stack() {
+    // Review regression: Unbound Flourishing doubles the Krasis's X to 4, then the Krasis
+    // leaves the stack before its cast trigger resolves: the trigger uses the X the spell
+    // last had there (CR 608.2h), 4, not the 2 it had as the ability triggered.
+    cr!("608.2h", "113.7a", "107.3i");
+    for order in [vec![0usize, 1], vec![1, 0]] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Unbound Flourishing");
+        t.lands(P0, "Forest", 1);
+        t.lands(P0, "Island", 1);
+        t.lands(P0, "Wastes", 2);
+        t.answer(P0, DecisionKind::Order, Answer::Indices(order));
+        let krasis = t.hand(P0, "Hydroid Krasis");
+        let hand = t.hand_size(P0) - 1;
+        let spell = t.cast(P0, krasis).x(2).go();
+        t.settle();
+        let top = t.g.stack[2];
+        let flourishing_first = matches!(
+            &t.g.obj(top).stack.as_ref().unwrap().kind,
+            mtg_engine::object::StackKind::Triggered { source, .. }
+                if t.g.obj(*source).chars.name == "Unbound Flourishing"
+        );
+        if !flourishing_first {
+            continue;
+        }
+        t.resolve();
+        mv(&mut t, spell, Zone::Graveyard(P0));
+        assert_eq!(t.stack_len(), 1, "{}", t.dump_log());
+        t.resolve();
+        assert_eq!(
+            (t.life(P0) - 20, t.hand_size(P0) - hand),
+            (2, 2),
+            "{}",
+            t.dump_log()
+        );
+        assert!(t.in_graveyard(P0, "Hydroid Krasis"));
+        return;
+    }
+    panic!("no order put Unbound Flourishing's trigger on top");
 }

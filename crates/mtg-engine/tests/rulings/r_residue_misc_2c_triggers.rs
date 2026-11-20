@@ -65,7 +65,7 @@ fn vito_does_nothing_beyond_the_third_resolution_in_a_turn() {
 
 #[test]
 fn grishnakh_targets_with_a_reflexive_trigger_after_amassing() {
-    cr!("603.12", "701.44a", "115.1");
+    cr!("603.12", "701.47a", "115.1");
     ruling!(
         "Grishnákh, Brash Instigator",
         "You don't choose a target for Grishnákh, Brash Instigator's ability at the time it triggers. Rather, a second \"reflexive\" ability triggers when you amass Orcs this way. You choose a target for that ability as it goes on the stack. Each player may respond to this triggered ability as normal."
@@ -455,7 +455,7 @@ fn quartzwood_crasher_counts_all_damage_of_creatures_with_trample_including_itse
 
 #[test]
 fn avatar_aang_counts_the_bending_done_earlier_in_the_turn() {
-    cr!("701.65b", "701.66b", "701.67c", "702.189b", "701.28a");
+    cr!("701.65b", "701.66b", "701.67c", "702.189b", "701.27a");
     ruling!(
         "Avatar Aang // Aang, Master of Elements",
         "Avatar Aang's last ability looks at the whole turn when determining whether or not Avatar Aang should transform, not just actions you've taken since he entered or came under your control. For example, say you airbend, waterbend, and earthbend, then play Avatar Aang. If you firebend later in the turn, then when Avatar Aang's ability resolves, he'll transform since you've done all four this turn."
@@ -492,7 +492,7 @@ fn avatar_aang_counts_the_bending_done_earlier_in_the_turn() {
 
 #[test]
 fn grist_that_left_the_battlefield_isnt_returned_transformed() {
-    cr!("701.28a", "400.7", "608.2b");
+    cr!("712.14a", "400.7", "608.2c");
     ruling!(
         "Grist, Voracious Larva // Grist, the Plague Swarm",
         "If Grist, Voracious Larva leaves the battlefield while its triggered ability is on the stack, you can't exile it from the zone it's put into, so you won't return it to the battlefield transformed under its owner's control."

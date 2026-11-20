@@ -1128,6 +1128,25 @@ decides whether they become a conflict case.
   `swift_reckoning_cast_from_the_graveyard_counts_itself_as_casting_begins`). If it is
   judged outdated, it becomes an outdated entry with an exemption in
   `docs/rulings-exemptions/rulings-P011.tsv`; if it stands, the register entry is reversed.
+- **Seraph** (rulings-residue-misc-2, pass B and review, Nov 20): "If the other creature is a
+  token, it will cease to exist after being exiled. It won’t be returned to the
+  battlefield." (2007-09-16) for "Whenever a creature dealt damage by this creature this
+  turn dies, put that card onto the battlefield under your control at the beginning of the
+  next end step. ...", which exiles nothing: the token ceases to exist in the graveyard
+  (CR 704.5d). Seraph's ruling of 2004-10-04 ("You do not get the creature back if the
+  creature is not still in the graveyard at the end of the turn.") already has the card
+  return from the graveyard. Tawnos's Coffin has the same sentence on the same day ("If the
+  targeted creature is a token, it will cease to exist after being exiled. ...",
+  2007-09-16), where it fits the card, so the words look copied from it (both are Masters
+  Edition rulings), but no Oracle wording of Seraph that exiled the creature, and so no
+  dated change, was found: the Masters Edition Update Bulletin (2007-08-29; ormos mirror)
+  names Seraph only to say that its Ice Age and Fifth Edition printings worked differently
+  and that Oracle follows the most recent printing, and Gatherer's Oracle history (Wayback
+  Machine) was outside the allowed hosts. The ruling stays cited for what holds (the token
+  isn't returned; `tests/rulings/r_residue_misc_2b_triggers.rs`,
+  `seraph_returns_no_token_and_no_card_that_left_the_graveyard`), not exempt; under
+  `ruling-contradicting-oracle-gives-way` its "after being exiled" would be a template
+  error, for the coordinator to decide.
 - Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (copying errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the

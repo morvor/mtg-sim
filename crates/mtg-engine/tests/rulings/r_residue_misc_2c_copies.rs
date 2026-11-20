@@ -163,7 +163,7 @@ fn olag(t: &mut TestGame, exiled: &[&str], remove: bool) -> ObjectId {
 
 #[test]
 fn olag_with_no_exiled_creature_cards_is_a_plain_4_4() {
-    cr!("712.20", "707.9b", "608.2b");
+    cr!("712.20", "609.3");
     ruling!(
         "Ludevic, Necrogenius // Olag, Ludevic's Hubris",
         "If there are no creature cards exiled with Ludevic as it transforms, perhaps because those cards were removed from exile in response to its activated ability or it transformed another way, Olag won't be a copy of anything. Olag will simply be its 4/4 self with no +1/+1 counters."

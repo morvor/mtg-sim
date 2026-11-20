@@ -286,7 +286,7 @@ fn interplanar_beacon_s_life_trigger_resolves_first_even_if_the_spell_is_counter
 
 #[test]
 fn secluded_courtyard_without_a_chosen_type_mana_pays_nothing() {
-    cr!("106.6", "607.2a");
+    cr!("106.6", "607.2d");
     ruling!(
         "Secluded Courtyard",
         "If Secluded Courtyard is somehow on the battlefield without a chosen type, mana from its second mana ability can't be spent on anything."
@@ -644,7 +644,7 @@ fn cavern_of_souls_mana_on_a_kicker_cost_makes_the_spell_uncounterable() {
 
 #[test]
 fn cavern_of_souls_offers_creature_types_only() {
-    cr!("205.3m", "607.2a");
+    cr!("205.3m");
     ruling!(
         "Cavern of Souls",
         "You must choose an existing creature type, such as Human or Warrior. Card types such as artifact can't be chosen."

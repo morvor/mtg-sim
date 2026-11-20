@@ -573,6 +573,50 @@ fn shivan_sand_mage_with_nothing_suspended_must_choose_the_first_mode() {
     assert!(t.on_battlefield(bears));
 }
 
+// --- Invoke the Firemind ------------------------------------------------------------------------
+
+#[test]
+fn invoke_the_firemind_x_is_announced_before_the_mode_and_a_target_only_for_damage() {
+    // The engine asks for X before the mode, the reverse of CR 601.2b's order (the
+    // deviation `x-announced-before-modes`; Invoke the Firemind's ruling, "first you choose
+    // the mode ..., then you choose the value of X", is left uncovered in
+    // docs/rulings-uncovered.tsv). A target is chosen only for the damage mode (CR 700.2c).
+    cr!("700.2a", "700.2c");
+    interp!("x-announced-before-modes");
+    supported("Invoke the Firemind");
+    for mode in [0usize, 1] {
+        let mut t = TestGame::new(2);
+        t.set_step(P0, Step::PrecombatMain);
+        t.lands(P0, "Island", 3);
+        t.lands(P0, "Mountain", 2);
+        let card = t.hand(P0, "Invoke the Firemind");
+        let hand = t.hand_size(P0) - 1;
+        let from = t.asked().len();
+        t.cast(P0, card).x(2).modes(&[mode]).target(pl(P1)).go();
+        let asked: Vec<&str> = asked_since(&t, from)
+            .iter()
+            .filter_map(|(_, d)| match d {
+                Decision::ChooseX { .. } => Some("X"),
+                Decision::ChooseModes { .. } => Some("modes"),
+                Decision::ChooseTargets { .. } => Some("targets"),
+                _ => None,
+            })
+            .collect();
+        let expected = if mode == 0 {
+            vec!["X", "modes"]
+        } else {
+            vec!["X", "modes", "targets"]
+        };
+        assert_eq!(asked, expected, "mode {mode}");
+        t.resolve_all();
+        if mode == 0 {
+            assert_eq!((t.hand_size(P0), t.life(P1)), (hand + 2, 20));
+        } else {
+            assert_eq!((t.hand_size(P0), t.life(P1)), (hand, 18));
+        }
+    }
+}
+
 // --- World at War, Moraug ---------------------------------------------------------------------
 
 #[test]

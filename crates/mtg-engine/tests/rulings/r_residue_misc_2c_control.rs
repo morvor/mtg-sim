@@ -336,7 +336,7 @@ fn kaima_goads_the_creatures_enchanted_as_it_resolves_and_only_them() {
 
 #[test]
 fn linessa_grandeur_the_player_returns_one_permanent_per_type_in_sequence() {
-    cr!("702.71a", "115.1", "608.2c");
+    cr!("115.1", "608.2c");
     ruling!(
         "Linessa, Zephyr Mage",
         "Linessa’s grandeur ability targets only a player. That player chooses which permanents to return as the ability resolves. The permanents are returned one at a time, in a specific sequence. The player can’t return an artifact creature and have that count as both the artifact and the creature, for example."

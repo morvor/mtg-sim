@@ -243,7 +243,7 @@ fn call_to_arms_s_state_trigger_waits_while_on_the_stack_and_retriggers_if_count
 
 #[test]
 fn call_to_arms_keeps_checking_the_chosen_player_after_a_control_change() {
-    cr!("607.2a", "108.4");
+    cr!("607.2d", "108.4");
     ruling!(
         "Call to Arms",
         "If Call to Arms changes controllers, it will continue to check the nontoken permanents controlled by the player chosen as it entered, even if that player isn't an opponent of its current controller."
@@ -276,17 +276,16 @@ fn promise_of_loyalty_everyone_keeps_one_and_the_promise_follows_the_creature() 
     let mut t = TestGame::new(2);
     let mine = t.battlefield(P0, "Grizzly Bears");
     t.battlefield(P0, "Savannah Lions");
-    let theirs = t.battlefield(P1, "Hill Giant");
+    t.battlefield(P1, "Hill Giant");
     t.battlefield(P1, "Craw Wurm");
     t.answer_choose(P0, &[obj(mine)]);
-    t.answer_choose(P1, &[obj(theirs)]);
-    // Both players try to opt out: an empty answer isn't accepted.
-    t.answer_choose(P0, &[]);
+    // P1 tries to opt out: an empty answer isn't accepted, and P1 keeps a creature too.
+    t.answer_choose(P1, &[]);
     cast_new(&mut t, P0, "Promise of Loyalty", &[]);
     t.resolve_all();
     let p0: Vec<_> = crate::r_s01_common::creatures(&t, P0);
     let p1: Vec<_> = crate::r_s01_common::creatures(&t, P1);
-    assert_eq!(p0.len(), 1, "{}", t.dump_log());
+    assert_eq!(p0, vec![t.g.current(mine)], "{}", t.dump_log());
     assert_eq!(p1.len(), 1);
     assert_eq!(t.counters(p0[0], "vow"), 1);
     assert_eq!(t.counters(p1[0], "vow"), 1);

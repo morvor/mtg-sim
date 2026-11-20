@@ -379,7 +379,7 @@ fn the_elderspell_chooses_the_planeswalker_for_counters_as_it_resolves() {
 
 #[test]
 fn arsenal_thresher_may_reveal_an_artifact_entering_with_it() {
-    cr!("614.12", "614.1c");
+    cr!("614.12", "614.1c", "614.13a");
     interp!("entering-cards-may-be-revealed");
     ruling!(
         "Arsenal Thresher",
@@ -404,10 +404,8 @@ fn arsenal_thresher_may_reveal_an_artifact_entering_with_it() {
                 source: None,
             })
             .collect();
-        let from = t.asked().len();
         t.g.move_objects(moves);
         t.g.flush_events();
-        let _ = from;
         t.settle();
         let th = t.g.current(th);
         assert_eq!(
