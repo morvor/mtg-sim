@@ -933,7 +933,8 @@ impl Game {
         // (CR 118.9a, 118.9d), as with an alternative cost another object offers
         // (`kw::offered_costs::extend_cast_options`): "as though it had flash if you pay
         // {2} more" or "if it's cast using teamwork" (an additional cost, CR 601.3c),
-        // fused (CR 702.102a), prototyped (CR 718.3). Not face down (CR 702.37c).
+        // offering (CR 702.48a), fused (CR 702.102a), prototyped (CR 718.3). Not its own
+        // alternative costs (CR 118.9a), nor face down (CR 702.37c).
         if in_hand {
             let own_ways: Vec<CastOption> = out
                 .iter()
@@ -1614,6 +1615,17 @@ impl Game {
                             match t {
                                 Some(t) => format!("{t}, {l}"),
                                 None => l,
+                            }
+                        }
+                        // Without paying its mana cost (CR 118.9), worded as an offered
+                        // one is: Omniscience's alternative cost combined with one of the
+                        // card's own ways of casting it ("prototype", fused, its flash way).
+                        (t, Some(c), None) if c.is_free() => {
+                            let free = "without paying its mana cost";
+                            match (t, &o.method) {
+                                (Some(t), _) => format!("{t}, {free}"),
+                                (None, CastMethod::Keyword(k)) => format!("{k:?}, {free}"),
+                                (None, _) => free.to_string(),
                             }
                         }
                         (Some(t), _, _) => t.to_string(),

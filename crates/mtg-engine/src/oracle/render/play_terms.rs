@@ -472,14 +472,15 @@ impl Renderer<'_> {
     }
 }
 
-/// Whether `e` ends by letting its player cast the copy the effect created ("copy that
-/// card and you may cast the copy").
+/// Whether `e` only lets its player cast the copy an earlier instruction created ("copy
+/// that card and you may cast the copy"): then the terms' cost reduction, which applies to
+/// every spell cast with them, is the copy's alone. (Not a sequence, whose other steps
+/// could cast spells too.)
 fn casts_created_copy(e: &Effect) -> bool {
     match e {
         Effect::CastCard {
             what: Sel::Var(v), ..
         } => *v == vars::CREATED,
-        Effect::Seq(v) => v.last().is_some_and(casts_created_copy),
         Effect::May { effect, .. } => casts_created_copy(effect),
         _ => false,
     }
