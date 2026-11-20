@@ -2298,10 +2298,15 @@ impl Game {
         let mut out = vec![Vec::new(); batch.len()];
         let mut moves = Vec::new();
         let mut made_by = Vec::new();
-        for (i, (controller, spec, count, source)) in batch.into_iter().enumerate() {
+        // The same tokens for the same player are one creation (one "for each"
+        // instruction's tokens: `for_each_events`).
+        for (controller, spec, count, source, parts) in
+            crate::for_each_events::merge_creations(batch)
+        {
             if count == 0 {
                 continue;
             }
+            let start = moves.len();
             for e in self.replace(ReplEvent::CreateTokens {
                 controller,
                 spec: Box::new(spec),
@@ -2317,12 +2322,12 @@ impl Game {
                     } => {
                         for _ in 0..count {
                             moves.push((controller, self.token_entry(controller, &spec)));
-                            made_by.push(i);
                         }
                     }
                     e => self.execute_repl_event(e),
                 }
             }
+            made_by.extend(crate::for_each_events::credit(&parts, moves.len() - start));
         }
         let entered = self.enter_tokens(moves);
         self.run_post_replacement_effects();

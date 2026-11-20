@@ -350,7 +350,7 @@ fn makes_choice(e: &Effect) -> bool {
     }
 }
 
-fn has_choice(sel: &Sel) -> bool {
+pub(crate) fn has_choice(sel: &Sel) -> bool {
     match sel {
         Sel::Choose { .. } | Sel::AtRandom { .. } => true,
         Sel::Union(v) => v.iter().any(has_choice),
@@ -687,6 +687,17 @@ enum Plan {
     Tokens {
         tokens: Vec<(PlayerId, TokenCreate, u32, Option<ObjectId>)>,
     },
+    /// Life the player gains, gained with what the other players' parts gain them: one
+    /// life gain event for each player (`for_each_events`).
+    GainLife { player: PlayerId, n: u32 },
+    /// Counters to put on objects chosen by no one, put with the other parts' counters:
+    /// one event for each object and putter (`for_each_events`).
+    Counters {
+        how: crate::event_causes::CounterPut,
+        what: Vec<Entity>,
+        kind: CounterKind,
+        n: u32,
+    },
     /// Performed for this player in turn (CR 608.2f).
     Exec(Effect),
     /// One action and what records it ("may have ~ deal 5 damage to them", noting who
@@ -701,6 +712,8 @@ enum Plan {
 struct Outcome {
     moved: Vec<Option<ObjectId>>,
     created: Vec<ObjectId>,
+    /// What got counters (`Plan::Counters`).
+    countered: Vec<Entity>,
     sacrificed: Vec<(ObjectId, ObjectId)>,
     discarded: Vec<ObjectId>,
     damage_from: usize,
@@ -1347,10 +1360,40 @@ fn plan(
             who: who.clone(),
             n: Value::Const(g.eval_value(n, ctx) as i32),
         }),
-        Effect::GainLife { who, n } => Plan::Exec(Effect::GainLife {
-            who: who.clone(),
-            n: Value::Const(g.eval_value(n, ctx) as i32),
-        }),
+        // One "for each" instruction's life gain, counters and tokens: one event with the
+        // other parts' (`for_each_events`).
+        Effect::GainLife { who, n } => {
+            let k = g.eval_value(n, ctx).max(0) as u32;
+            match g.eval_players(who, ctx).as_slice() {
+                [q] if crate::draw_rules::times_named(g, who, ctx).is_none() => {
+                    Plan::GainLife { player: *q, n: k }
+                }
+                _ => Plan::Exec(Effect::GainLife {
+                    who: who.clone(),
+                    n: Value::Const(k as i32),
+                }),
+            }
+        }
+        Effect::AddCounters { what, kind, n } if !has_choice(what) => {
+            let k = g.eval_value(n, ctx).max(0) as u32;
+            let what = g
+                .resolve_sel(what, ctx)
+                .into_iter()
+                .map(|t| g.found_after_move(t, ctx))
+                .collect();
+            Plan::Counters {
+                how: crate::event_causes::CounterPut::of(ctx),
+                what,
+                kind: kind.clone(),
+                n: k,
+            }
+        }
+        Effect::CreateToken {
+            attacking: false, ..
+        } => match token_plan(g, e, ctx) {
+            Some(Plan::Tokens { tokens }) => Plan::Tokens { tokens },
+            _ => Plan::Exec(e.clone()),
+        },
         other => Plan::Exec(other.clone()),
     }
 }
@@ -1765,6 +1808,48 @@ fn perform_plans(
             out[i].created.extend(made);
         }
     }
+    // Life gained: one life gain event for each player, whatever the number of parts that
+    // gain them life (Suffer the Past's ruling; `for_each_events`).
+    let mut gains: Vec<(PlayerId, u32)> = Vec::new();
+    for plan in plans.iter().flatten() {
+        if let Plan::GainLife { player, n } = plan {
+            match gains.iter_mut().find(|(q, _)| q == player) {
+                Some(x) => x.1 += n,
+                None => gains.push((*player, *n)),
+            }
+        }
+    }
+    for (p, n) in gains {
+        g.gain_life(p, n);
+    }
+    // Counters: one event for each object and player putting them (`for_each_events`).
+    let mut puts: Vec<(crate::event_causes::CounterPut, Entity, CounterKind, u32, Vec<usize>)> =
+        Vec::new();
+    for (i, plan) in plans.iter().enumerate() {
+        if let Some(Plan::Counters { how, what, kind, n }) = plan {
+            for t in what {
+                match puts
+                    .iter_mut()
+                    .find(|(h, o, k, ..)| h == how && o == t && k == kind)
+                {
+                    Some(x) => {
+                        x.3 += n;
+                        x.4.push(i);
+                    }
+                    None => puts.push((*how, *t, kind.clone(), *n, vec![i])),
+                }
+            }
+        }
+    }
+    for (how, t, kind, n, by) in puts {
+        if g.put_counters(t, &kind, n, how) > 0 {
+            for i in by {
+                if !out[i].countered.contains(&t) {
+                    out[i].countered.push(t);
+                }
+            }
+        }
+    }
     // Discards: the chosen cards, once everyone has chosen, at the same time (CR 701.9a,
     // 404.3).
     let mut discards: Vec<(usize, (PlayerId, ObjectId))> = Vec::new();
@@ -1823,6 +1908,14 @@ fn record(g: &mut Game, plan: Plan, outcome: Outcome, ctx: &mut Ctx) {
         Plan::Nothing | Plan::Exec(_) | Plan::Then(..) => {}
         Plan::Control(grant) => crate::control_change::record(grant.as_ref(), ctx),
         Plan::PayLife { .. } => ctx.prev_happened = true,
+        Plan::GainLife { .. } => {}
+        Plan::Counters { .. } => {
+            // As `Effect::AddCounters` records them: whether any was put, and "it".
+            ctx.prev_happened = !outcome.countered.is_empty();
+            if !outcome.countered.is_empty() {
+                ctx.set_var(vars::IT, outcome.countered);
+            }
+        }
         Plan::Tokens { .. } => {
             // As `Effect::CreateTokenCopy` records them: "tokens created with ~" (CR
             // 607.1d), "the exiled card" of an ability the exceptions gave them, and
