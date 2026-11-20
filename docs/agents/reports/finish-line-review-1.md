@@ -22,7 +22,12 @@ two gaps), with these effects by the committed files: round trip 28,618 → 28,6
 mismatch; Aang and Archangel Avacyn pass again), tiers after an 88-card partial sweep verified
 19,827 → 19,835 (round-trip 8,895, compiled 3,346), register 203 → 205 entries and 13 → 14
 provisional (new: `next-turns-upkeep-is-the-next-turns-first`). Its leftovers went to a new item,
-small-fixes-8 (f944329): the planner's remaining gaps. The plan below takes these into account.
+small-fixes-8 (f944329): the planner's remaining gaps. Then user-decisions-nov20b landed (calls
+24–39, a26c52d): it marked the 11 entries decided, and the user decided call 37 too
+(`x-announced-before-modes` kept as a documented deviation, on the "Revisit later" list); the
+register now has 206 entries and 3 provisional (`that-opponent-fixed-as-it-triggers`,
+`next-turns-upkeep-is-the-next-turns-first`, and nov20b's new
+`kept-for-counters-none-able-all-sacrificed`). The plan below takes these into account.
 
 ## Headline
 
@@ -352,9 +357,9 @@ mutation testing one file at a time with nothing else heavy on its machine, and
 verified-refresh-final last, once no engine change is pending. The user's answer on the rulings
 stopping signal may add an item (a Forge/XMage comparison).
 
-1. Let the running items land: user-decisions-nov20b, and the triggers.rs and replacement.rs
-   mutation runs (decisions-log-1 and small-fixes-7 landed after the measurement, d85f2d0 and
-   cad6c67).
+1. Let the running items land: the triggers.rs and replacement.rs mutation runs
+   (decisions-log-1, small-fixes-7 and user-decisions-nov20b landed after the measurement,
+   d85f2d0, cad6c67 and a26c52d).
 2. **web-research-1** (issued after the measurement, 9268b42, 1 session): the user allowlisted the
    rules sites on Nov 20, so a worker can now answer Q1–Q10 of
    docs/agents/research/web-questions-nov20.md; its contradictions and Q1
@@ -365,8 +370,9 @@ stopping signal may add an item (a Forge/XMage comparison).
    since Nov 10 (the C9 list above, G32's leftovers and fixed bullet), then fix them in
    small-fixes items (3–5 sessions), starting with the verified cards (Uphill Battle, The
    Mimeoplasm, Hardened Scales with tribute, Thorn Elemental, Word of Command, Green Sun's
-   Zenith; Invoke the Firemind once the user has answered on `x-announced-before-modes`, since
-   its gap is that deviation).
+   Zenith). Invoke the Firemind's gap is the deviation `x-announced-before-modes`, which the user
+   decided after the measurement to keep as documented (call 37, on the "Revisit later" list), so
+   it isn't a fix for now.
 5. **register-sweep-2** (1–2 sessions): every behavioral difference named in a "Remaining" or
    "unless noted" passage since Nov 10 gets a register entry or a fix (C8's second clause).
 6. **roundtrip-probe-1** (2 sessions), then **roundtrip-pairs-7 …** (about 19 sessions at 150 cards
@@ -389,9 +395,9 @@ Each is set out under "Decisions only the user can make (§5), open today" below
 1. The rulings stopping signal: accept "exhausted" as done for C1, or add an oracle (the
    Forge/XMage comparison).
 2. D3: the verified count's approach, and whether it is a criterion.
-3. The provisional entries left after user-decisions-nov20b: `x-announced-before-modes`,
-   `that-opponent-fixed-as-it-triggers`, and `next-turns-upkeep-is-the-next-turns-first`
-   (added by small-fixes-7 after the measurement).
+3. The 3 provisional entries left now that user-decisions-nov20b has landed:
+   `that-opponent-fixed-as-it-triggers`, `next-turns-upkeep-is-the-next-turns-first` (added by
+   small-fixes-7) and `kept-for-counters-none-able-all-sacrificed` (added by nov20b).
 4. The four deviations with no record of the user's review.
 5. The "Revisit later" list, before the project is called done.
 6. How the final sweep treats Charismatic Conqueror's loop (D4 against C6).
@@ -462,9 +468,9 @@ Each is set out under "Decisions only the user can make (§5), open today" below
 
 Also running at the measurement, outside the plan's rows: small-fixes-7 (the planner bug and the
 next turn's upkeep; it landed after the measurement, cad6c67), user-decisions-nov20b (calls
-24–39), decisions-log-1 (a generated docs/DECISIONS.md; it landed after the measurement,
-d85f2d0), and the two mutation runs. Issued after the measurement: web-research-1 (9268b42) and
-small-fixes-8 (f944329).
+24–39; landed after the measurement, a26c52d), decisions-log-1 (a generated docs/DECISIONS.md;
+it landed after the measurement, d85f2d0), and the two mutation runs. Issued after the
+measurement: web-research-1 (9268b42) and small-fixes-8 (f944329).
 
 ## The discrepancy log's human review (§4)
 
@@ -481,7 +487,9 @@ done. Eleven "not yet investigated" notes wait for the coordinator.
    independent audit pass, such as judge-audit-2 over a larger sample, is the cheaper option
    within the current methods.)
 2. **D3** (the verified count: which approach, and whether it is a criterion): undecided.
-3. **`x-announced-before-modes`**: the user asked for more explanation (call 37).
+3. **`x-announced-before-modes`**: at the measurement, the user had asked for more explanation
+   (call 37); decided after it (user-decisions-nov20b): kept as a documented deviation, on the
+   "Revisit later" list. No longer open.
 4. **`that-opponent-fixed-as-it-triggers`**: ruling-research-2's four questions (fixed as it
    triggers or read on resolution; whether the Mutiny decision was meant generally; the
    initiative; two engine changes to confirm); web-research-1's Q1 gathers the sources for it.
@@ -491,7 +499,8 @@ done. Eleven "not yet investigated" notes wait for the coordinator.
    (range of influence, Helm of Obedience with Wheel of Sun and Moon); counter modifiers on an
    entering permanent (Vorinclex); the combat requirement search budget; "N or more" block
    triggers; the subtype and base power and toughness set on a noncreature. user-decisions-nov20b
-   adds two: Ixidron's entering effects (call 24) and the four "for as long as" entries (25–28).
+   added three after the measurement: Ixidron's entering effects (call 24), the four "for as
+   long as" entries (25–28) and a modal spell's X before its modes (call 37).
 7. **Four deviations with no record of the user's review** (C8 note), as D5 proposed.
 8. **D6** (the data refresh) stays "when the project is settled"; the 189 unreleased-set cards
    come with it.
@@ -501,6 +510,9 @@ done. Eleven "not yet investigated" notes wait for the coordinator.
 10. **`next-turns-upkeep-is-the-next-turns-first`** (new after the measurement, small-fixes-7,
     provisional): "the next turn's upkeep" is the first upkeep step of the turn after the one the
     delayed ability was created in, and if that turn has no upkeep step it never triggers.
+11. **`kept-for-counters-none-able-all-sacrificed`** (new after the measurement,
+    user-decisions-nov20b, provisional): a player who can't put Promise of Loyalty's vow counter
+    on any of their creatures keeps none and sacrifices them all.
 
 ## Discrepancies between committed docs and today's measurements
 
@@ -669,12 +681,12 @@ first reviewer).
   (self-granted conditional keywords compiled only where they function), after the sweep's engine.
 - State after the measurement: decisions-log-1 landed docs/DECISIONS.md (d85f2d0), whose counts
   (109 decided by the user, 10 by the sources, 71 by the coordinator or a worker, 13 provisional)
-  the C8 note and risk 11 now cite; small-fixes-7 landed while this review was landing (cad6c67)
-  and small-fixes-8 was issued (f944329): the intro's "After the measurement" paragraph, C9's
-  closing item and notes, the plan (a, b) and §5 now say so, with the committed files' numbers
-  (round trip 28,620 passing, verified 19,835, register 205 entries and 14 provisional: read from
-  docs/ROUNDTRIP.md, the tier file and docs/INTERPRETATIONS.md, not re-measured). The tables keep
-  e17878d's numbers.
+  the C8 note and risk 11 now cite; small-fixes-7 (cad6c67) and user-decisions-nov20b (a26c52d)
+  landed while this review was landing, and small-fixes-8 was issued (f944329): the intro's "After
+  the measurement" paragraph, C9's closing item and notes, the plan (a, b) and §5 now say so, with
+  the committed files' numbers (round trip 28,620 passing, verified 19,835, register 206 entries
+  and 3 provisional: read from docs/ROUNDTRIP.md, the tier file and docs/INTERPRETATIONS.md, not
+  re-measured). The tables keep e17878d's numbers.
 
 docs/agents/finish-line-plan.md §1.2 gained a "Today (Nov 20)" column with the numbers above that
 the second reviewer reproduced or checked against their record, the Nov 9 column kept beside it.

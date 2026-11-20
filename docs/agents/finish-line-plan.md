@@ -110,8 +110,10 @@ full size (the 10,202 random-deck games, and the properties at 500 games and ful
 marked as the first reviewer's and were corroborated by smaller runs. The Nov 9 column is the
 plan's original measurement. Since e17878d, small-fixes-7 (cad6c67) fixed C9's first two gaps
 (the planner's repeatable mana abilities; "the next turn's upkeep") and, by its own committed
-files, moved the round trip to 28,620 passing, verified to 19,835 and the register to 205 entries
-with 14 provisional; small-fixes-8 takes the planner's remaining gaps.
+files, moved the round trip to 28,620 passing and verified to 19,835; small-fixes-8 takes the
+planner's remaining gaps. user-decisions-nov20b (a26c52d) then decided 12 entries (call 37's
+`x-announced-before-modes` among them, kept as a documented deviation), leaving the register at
+206 entries with 3 provisional.
 
 Housekeeping found while measuring: the committed docs/RULINGS_COVERAGE.md (1,558 unique
 texts cited, 4.6%) was never regenerated and is stale; `mtg-tools rulings-coverage --check`
