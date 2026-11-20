@@ -385,8 +385,14 @@ impl Game {
             }
             Effect::Repeat { times, effect } => {
                 let n = self.eval_value(times, ctx).max(0);
-                for _ in 0..n {
-                    self.exec(effect, ctx);
+                // "For each opponent, you create a ... token": one creation (one instruction,
+                // one event; `for_each_events`).
+                if let Some(once) = crate::for_each_events::repeat_as_one(effect, n) {
+                    self.exec(&once, ctx);
+                } else {
+                    for _ in 0..n {
+                        self.exec(effect, ctx);
+                    }
                 }
             }
             Effect::RepeatProcess { body } => crate::repeat_process::run(self, body, ctx),

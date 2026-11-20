@@ -87,6 +87,7 @@ pub mod excess_damage;
 pub mod exchange;
 pub mod facedown;
 pub mod flip;
+pub mod for_each_events;
 pub mod game;
 pub mod game_end;
 pub mod game_terms;
