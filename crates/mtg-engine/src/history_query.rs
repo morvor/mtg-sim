@@ -69,6 +69,14 @@ pub fn window_events<'a>(g: &'a Game, w: &HistoryWindow, ctx: &Ctx) -> Vec<&'a E
             all[start..].to_vec()
         }
         HistoryWindow::ThisGame => g.game_events.iter().chain(this_turn(g)).collect(),
+        // Counted by `kw/value_results.rs` (see `events_during`); listed here as the turn's
+        // events up to the trigger event.
+        HistoryWindow::ThisTurnUntilTriggered => {
+            match ctx.event.as_ref().and_then(|e| e.turn_events_seen) {
+                Some(n) => g.turn_events[..n.min(g.turn_events.len())].iter().collect(),
+                None => this_turn(g).collect(),
+            }
+        }
         HistoryWindow::LastTurn => g
             .past_turns
             .last()
@@ -182,6 +190,10 @@ pub fn events_during(
     tally: Tally,
     ctx: &Ctx,
 ) -> i64 {
+    // This turn's events as `Value::EventsThisTurn` matches them, up to the trigger event.
+    if matches!(w, HistoryWindow::ThisTurnUntilTriggered) {
+        return crate::kw::value_results::events_until_triggered(g, cond, tally, ctx);
+    }
     let mut n = 0i64;
     let mut players = BTreeSet::new();
     for ev in window_events(g, w, ctx) {
@@ -207,6 +219,9 @@ pub fn events_during(
 /// [`crate::ability::Sel::EventsDuring`]: for a spell cast, the spell; for damage dealt,
 /// its source; otherwise the object the event was about. Each object once.
 pub fn objects_during(g: &Game, w: &HistoryWindow, cond: &TriggerCond, ctx: &Ctx) -> Vec<ObjectId> {
+    if matches!(w, HistoryWindow::ThisTurnUntilTriggered) {
+        return crate::kw::value_results::event_objects_until_triggered(g, cond, ctx);
+    }
     let mut out = Vec::new();
     for ev in window_events(g, w, ctx) {
         for info in g.trigger_matches_ctx(cond, ctx, ev) {
