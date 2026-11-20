@@ -133,7 +133,7 @@ fn a_cantrip_cast_in_the_main_phase_draws_at_the_next_turns_upkeep() {
 
 #[test]
 fn the_next_turns_upkeep_skipped_means_no_card() {
-    cr!("603.7b", "614.10");
+    cr!("603.7b", "614.10", "614.10a");
     interp!("next-turns-upkeep-is-the-next-turns-first");
     // Eon Hub ("Players skip their upkeep steps."): the next turn has no upkeep, so Heal's
     // delayed ability never triggers, not even at a later turn's upkeep once the Hub is
@@ -156,5 +156,30 @@ fn the_next_turns_upkeep_skipped_means_no_card() {
     t.resolve_all();
     assert_eq!(t.hand_size(P0), hand);
     t.advance_to(P0, Step::Draw);
+    assert_eq!(t.hand_size(P0), hand + 1);
+}
+
+#[test]
+fn a_skipped_turn_isnt_the_next_turn() {
+    cr!("603.7b", "500.11", "614.10a");
+    interp!("next-turns-upkeep-is-the-next-turns-first");
+    // Heal cast in P0's turn, then P1 activates Chronatog ("{0}: This creature gets +3/+3
+    // until end of turn. You skip your next turn."): P1's turn is skipped, as though it
+    // didn't exist, so the next turn is P0's and Heal's card is drawn as its upkeep begins.
+    let mut t = TestGame::new(2);
+    t.set_step(P0, Step::PrecombatMain);
+    t.lands(P0, "Plains", 1);
+    let tog = t.battlefield(P1, "Chronatog");
+    let heal = t.hand(P0, "Heal");
+    t.cast(P0, heal).target(Entity::Player(P0)).go();
+    t.resolve_all();
+    t.activate(P1, tog, 0, &[]).expect("Chronatog's ability");
+    t.resolve_all();
+    let hand = t.hand_size(P0);
+    let turn = t.g.turn.number;
+    t.advance_to(P0, Step::Upkeep);
+    assert_eq!(t.g.turn.number, turn + 1);
+    assert_eq!(t.hand_size(P0), hand);
+    t.resolve_all();
     assert_eq!(t.hand_size(P0), hand + 1);
 }

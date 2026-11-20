@@ -214,23 +214,51 @@ fn what_each_activation_sacrifices_is_matched_to_a_different_object() {
     interp!("automatic-mana-payment");
     interp!("repeatable-mana-abilities-planned-per-activation");
     // Two Ashnod's Altars, a Grizzly Bears and Molt Tender ("{T}, Exile a card from your
-    // graveyard: Add one mana of any color."), with a card in the graveyard: the Altars
-    // sacrifice the Bears and Molt Tender for {C}{C}{C}{C}, or one of them sacrifices the
-    // Bears and Molt Tender adds one more: {4} at most, never {5} (Molt Tender can't be
-    // both tapped for mana and sacrificed first, nor the Bears sacrificed twice).
+    // graveyard: Add one mana of any color."), with a card in the graveyard: Molt Tender is
+    // tapped for one mana (exiling the card), then sacrificed to an Altar for {C}{C}, and
+    // the Bears to an Altar for {C}{C}: {5}. Never {6}: each creature pays one cost, and
+    // Molt Tender, sacrificed first, couldn't have been tapped for mana (CR 400.7).
     let mut t = main_phase();
     t.battlefield(P0, "Ashnod's Altar");
     t.battlefield(P0, "Ashnod's Altar");
     let bears = t.battlefield(P0, "Grizzly Bears");
     let tender = t.battlefield(P0, "Molt Tender");
     t.graveyard(P0, "Island");
+    let wurmcoil = t.hand(P0, "Wurmcoil Engine");
     let golem = t.hand(P0, "Precursor Golem");
-    let tome = t.hand(P0, "Jayemdae Tome");
-    assert!(!offered(&mut t, P0, golem));
-    assert!(offered(&mut t, P0, tome));
-    t.cast(P0, tome).go();
-    assert!(on_stack(&t, "Jayemdae Tome"));
+    assert!(!offered(&mut t, P0, wurmcoil));
+    assert!(offered(&mut t, P0, golem));
+    t.cast(P0, golem).go();
+    assert!(on_stack(&t, "Precursor Golem"));
     assert!(!t.on_battlefield(bears) && !t.on_battlefield(tender));
+    assert!(t.in_exile("Island"));
+    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
+}
+
+#[test]
+fn a_filters_cost_and_the_rest_of_the_payment_dont_sacrifice_the_same_creature() {
+    cr!("118.3", "605.3a", "601.2g");
+    interp!("automatic-mana-payment");
+    interp!("repeatable-mana-abilities-planned-per-activation");
+    // Celestial Prism ("{2}, {T}: Add one mana of any color.") with Ashnod's Altar to pay
+    // its {2} and Phyrexian Altar ("Sacrifice a creature: Add one mana of any color.") for
+    // the rest: Yore-Tiller Nephilim ({W}{U}{B}{R}) takes four creatures, one for the
+    // Prism's cost and three for the Phyrexian Altar's mana, so three don't pay for it.
+    let mut t = main_phase();
+    t.battlefield(P0, "Ashnod's Altar");
+    t.battlefield(P0, "Phyrexian Altar");
+    t.battlefield(P0, "Celestial Prism");
+    for _ in 0..3 {
+        t.battlefield(P0, "Grizzly Bears");
+    }
+    let nephilim = t.hand(P0, "Yore-Tiller Nephilim");
+    assert!(!offered(&mut t, P0, nephilim));
+    t.battlefield(P0, "Grizzly Bears");
+    assert!(offered(&mut t, P0, nephilim));
+    t.cast(P0, nephilim).go();
+    assert!(on_stack(&t, "Yore-Tiller Nephilim"));
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
 }
 
 #[test]

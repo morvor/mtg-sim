@@ -2315,6 +2315,14 @@ fn plan_with_filter(
             let mut out = first;
             out.extend(with_f);
             out.extend(after);
+            // The two parts were planned apart: what all their activations sacrifice or
+            // exile, in the order they're activated, must still be distinct objects
+            // (Ashnod's Altar paying Celestial Prism's {2} takes a creature Phyrexian
+            // Altar's activations for the rest can't have too).
+            let infos: Vec<SacInfo> = out.iter().map(|(s, _)| s.sac_info()).collect();
+            if match_sacrifices(&infos, None).is_none() {
+                continue;
+            }
             return Some(out);
         }
     }
@@ -2407,9 +2415,13 @@ fn solve_payment(
     if !planner.solve(0) {
         return None;
     }
-    // Which sources are used, and what each of their units should produce.
+    // Which sources are used, and what each of their units should produce, in the order
+    // they're to be activated (`Planner::exec_key`, `pay_mana`).
     let mut out: Vec<(ManaSource, Vec<ManaType>)> = Vec::new();
-    for (si, s) in sources.iter().enumerate() {
+    let mut order: Vec<usize> = (0..sources.len()).collect();
+    order.sort_by_key(|&si| planner.exec_key[si]);
+    for si in order {
+        let s = &sources[si];
         if planner.in_use[si] == 0 {
             continue;
         }
@@ -2475,6 +2487,11 @@ struct Planner<'a> {
     prev_copy: Vec<Option<usize>>,
     /// What each source's activation sacrifices or exiles ([`match_sacrifices`]).
     sac: Vec<SacInfo>,
+    /// The order planned activations are carried out in (`pay_mana`; the matching of
+    /// sacrifices assumes it): those whose costs take no other object first, then those
+    /// whose permanent another source's cost could take (Molt Tender is tapped for mana
+    /// before Ashnod's Altar sacrifices it), then the rest; in the sources' order otherwise.
+    exec_key: Vec<(u8, usize)>,
     /// Some source's cost sacrifices or exiles other objects.
     any_sac: bool,
     /// The objects some source's cost could sacrifice or exile.
@@ -2519,6 +2536,22 @@ impl<'a> Planner<'a> {
             })
             .collect();
         let sac: Vec<SacInfo> = sources.iter().map(|s| s.sac_info()).collect();
+        let exec_key = (0..n)
+            .map(|s| {
+                let i = &sac[s];
+                let k = if i.count == 0 {
+                    0
+                } else if sac
+                    .iter()
+                    .any(|t| t.obj != i.obj && t.pool.contains(&i.obj))
+                {
+                    1
+                } else {
+                    2
+                };
+                (k, s)
+            })
+            .collect();
         let mut pooled: Vec<ObjectId> = Vec::new();
         for x in sac.iter().flat_map(|i| i.pool.iter()) {
             if !pooled.contains(x) {
@@ -2563,6 +2596,7 @@ impl<'a> Planner<'a> {
             x_used: ColorSet::NONE,
             prev_copy,
             sac,
+            exec_key,
             any_sac,
             pooled,
             sac_blocked_cache: std::cell::RefCell::new(None),
@@ -2593,8 +2627,8 @@ impl<'a> Planner<'a> {
                         return false;
                     }
                     let mut acts: Vec<usize> = in_use.clone();
-                    let at = acts.partition_point(|&t| t < s);
-                    acts.insert(at, s);
+                    acts.push(s);
+                    acts.sort_by_key(|&t| self.exec_key[t]);
                     let infos: Vec<SacInfo> = acts.iter().map(|&t| self.sac[t].clone()).collect();
                     match_sacrifices(&infos, None).is_none()
                 })
