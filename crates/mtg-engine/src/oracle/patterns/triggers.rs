@@ -2176,7 +2176,8 @@ fn parse_damage_verb<'a>(s: &'a str, subj: &Subject) -> Option<(Parsed, &'a str)
         // "Whenever a source an opponent controls deals damage to you, that player
         // sacrifices a permanent" (Michiko Konda, Truth Seeker): "that player" is the
         // opponent, the source's controller, not you (as for "one or more creatures an
-        // opponent controls" above).
+        // opponent controls" above), as it dealt the damage
+        // (`that_player_named_controller`).
         (DamageRecipient::Player(PlayerRel::You), false) if controlled_by_opponent(&subj.filter) => (
             cond,
             Sel::TriggerOtherObject,
