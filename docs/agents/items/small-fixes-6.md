@@ -23,3 +23,52 @@ Properties run (release build, `--properties --games 500 --jobs 3`, seed 1, 2,48
 Re-checked one by one with `--slow 300` (replays get three times that): game 83 held (718 s, 4,001
 requests); game 469 was still going at 900 s, and is slow the same way with the engine before this item
 (360 s limit) — a slow game, not a difference.
+
+## Review (Nov 20)
+
+- **Both repro games hold** with the final code (`--properties --property seat --seed 1`: `--only 175
+  --players 4`, 3,555 decisions; `--only 405 --players 2`, 1,470 decisions). The item's tests pass and
+  fail as they should: the deck shuffles iterated in seat order again fail
+  `supplementary_decks_are_shuffled_and_renumbered_whatever_the_seats`; without the sort in
+  `order_simultaneous_entries` both listing tests fail; without the APNAP sort in `variants::begin_game`
+  `vanguards_get_their_timestamps_in_apnap_order` fails (deliberate breaks, debug builds).
+- **Untested: the per-player stream.** Shuffling the supplementary decks with the game's randomness in
+  APNAP order (a deliberate break) passed `supplementary_decks_are_shuffled_and_renumbered_whatever_the_seats`:
+  that is seat symmetric too. New test
+  `a_players_supplementary_decks_are_shuffled_with_their_own_randomness` (a player's Attraction deck is
+  in the same order whether or not the player before them has supplementary decks; fails with that break).
+- **Test error:** `supplementary_decks_are_shuffled_and_renumbered_whatever_the_seats` cited CR 400.7, which
+  it doesn't exercise (a shuffle isn't a zone change; the renumbering is register
+  `deck-order-ids-before-shuffle`). It now cites 101.4e ("If multiple players would make choices or take
+  actions while starting the game, the starting player is considered the active player and each other
+  player is considered a nonactive player."), with 103.3a and 717.2; the same in docs/PROPERTIES.md.
+- **The survey** covered only the trailing form "[this object] has [keyword] ... as long as ...". The review
+  added the other forms: "As long as ..., [this object] has ..." (147 cards), "During ...", "If ...". They
+  give their objects only keywords that function on the battlefield, apart from two spells, so "No instant
+  or sorcery gives itself any other keyword" above was wrong: Viral Spawning ("As long as an opponent has
+  three or more poison counters and this card is in your graveyard, it has flashback {2}{G}.", compiled with
+  the graveyard as its zone, CR 113.6b; `tests/cards/cards3_statics.rs`) and Molten Disaster ("If this spell
+  was kicked, it has split second.", compiled on the stack by `spell_has_keyword_if`, CR 702.61a; its ruling
+  of 2007-05-01: "If Molten Disaster was kicked, Molten Disaster has split second as long as it's on the
+  stack."). Both were already right.
+- **Compiler fix (latent; no card's compilation changed).** The "k702: trailing as long as" pattern compiled a
+  card's own grant of any other keyword that doesn't function on the battlefield ("This spell has storm as
+  long as you control a Wizard." on a creature card; split second, replicate, casualty, convoke, cycling), or
+  of flash or cascade along with another keyword ("has flash and haste"), to an ability of the permanent,
+  where it does nothing, and reported the text supported. It now refuses them
+  (`self_granted_keyword_zone`, formerly `conditional_flash_zone`, using `statics::functions_on_battlefield`).
+  The fallback pattern "statics: has flash as long as" (`conditional_flash`, which no card reaches: the k702
+  pattern comes first) still gave the ability every zone, against CR 113.6e and ruling-conflicts-13; now the
+  stack. Test `a_cards_own_keyword_is_compiled_only_where_it_can_function`; register
+  `self-granted-cascade-functions-on-the-stack` extended (and Molten Disaster's ruling added to its Why).
+  The full `unsupported` listing and the card-coverage numbers are the same before and after.
+- **Judgment calls**: `self-granted-cascade-functions-on-the-stack` (interpretation) and
+  `simultaneous-entries-listed-by-owner-then-creation` (policy) kept decided: every ruling of Bloodbraid
+  Marauder (eleven, all 2021-06-18) was read, none speaks of a zone other than the stack, and no card reads
+  cascade outside the stack (Aurora Phoenix and The First Doctor read "a spell with cascade"); the listing
+  order is a policy for a player's choice. `seeded-randomness` extended (decided).
+- **Control and ownership** (CR 613.7m): `order_simultaneous_entries` still groups the entering objects by the
+  player who will control them; only the listing within a player's group changed.
+- **Remaining gaps:** the planar decks' shuffle (APNAP order, each owner's randomness) has no seat test (the
+  property harness plays no Planechase games); replay game 469 is slow (before this item too); Bloodbraid
+  Marauder's tier is refreshed at the next sweep.

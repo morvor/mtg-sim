@@ -10,9 +10,9 @@
 //!   ability or for a turn.
 
 use super::{AbilityPattern, ConditionPattern, EffectPattern, StaticPattern};
-use crate::oracle::effects::Builder;
 use crate::ability::*;
 use crate::keywords::KeywordKind;
+use crate::oracle::effects::Builder;
 use crate::oracle::phrases::*;
 use crate::oracle::CompileContext;
 use crate::types::CardType;
@@ -69,7 +69,10 @@ fn trailing_as_long_as(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
     {
         return None;
     }
-    let v: Vec<Ability> = v.into_iter().map(|a| conditional_flash_zone(&a)).collect();
+    let v: Vec<Ability> = v
+        .iter()
+        .map(self_granted_keyword_zone)
+        .collect::<Option<_>>()?;
     // On instants and sorceries, only "this spell has flash as long as ..." is a static.
     if ctx.is_spell()
         && !v.iter().all(|a| {
@@ -94,26 +97,47 @@ fn trailing_as_long_as(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
 /// 702.85a); in a hand, a library, a graveyard or on the battlefield the card doesn't have
 /// cascade (register `self-granted-cascade-functions-on-the-stack`). The other keywords
 /// cards give themselves "as long as ..." keep the zone of a permanent's static ability,
-/// the battlefield (CR 113.6).
-fn conditional_flash_zone(a: &Ability) -> Ability {
+/// the battlefield (CR 113.6), where they function. A card's own grant of any other keyword
+/// that doesn't function on the battlefield (storm, split second, cycling, ...), or of
+/// flash or cascade together with anything else, isn't accepted (`None`): no card has one,
+/// and with the battlefield as its zone it would do nothing.
+fn self_granted_keyword_zone(a: &Ability) -> Option<Ability> {
     if let AbilityKind::Static(s) = &a.kind {
-        if let StaticEffect::Continuous { affected, mods } = &s.effect {
-            let grants_only = |kinds: &[KeywordKind]| {
-                !mods.is_empty()
-                    && mods.iter().all(
-                        |m| matches!(m, Modification::AddKeyword(k) if kinds.contains(&k.kind)),
-                    )
-            };
-            if matches!(affected, Filter::Source)
-                && grants_only(&[KeywordKind::Flash, KeywordKind::Cascade])
+        if let StaticEffect::Continuous {
+            affected: Filter::Source,
+            mods,
+        } = &s.effect
+        {
+            let keywords: Vec<KeywordKind> = mods
+                .iter()
+                .filter_map(|m| match m {
+                    Modification::AddKeyword(k) => Some(k.kind),
+                    _ => None,
+                })
+                .collect();
+            if !mods.is_empty()
+                && keywords.len() == mods.len()
+                && keywords
+                    .iter()
+                    .all(|k| matches!(k, KeywordKind::Flash | KeywordKind::Cascade))
             {
                 let mut s = s.clone();
                 s.zone = FunctionZone::Stack;
-                return AbilityDef::with_link(AbilityKind::Static(s), a.text.clone(), a.link);
+                return Some(AbilityDef::with_link(
+                    AbilityKind::Static(s),
+                    a.text.clone(),
+                    a.link,
+                ));
+            }
+            if keywords
+                .iter()
+                .any(|k| !super::statics::functions_on_battlefield(*k))
+            {
+                return None;
             }
         }
     }
-    a.clone()
+    Some(a.clone())
 }
 
 inventory::submit! {
@@ -158,7 +182,10 @@ fn keyword_cost_modifier(l: &str, text: &str, _ctx: &CompileContext) -> Option<V
     let (kw, rest) = if let Some(r) = l.strip_prefix("equip costs you pay cost ") {
         (KeywordKind::Equip, r)
     } else if let Some(r) = l.strip_prefix("equip abilities you activate cost ") {
-        (KeywordKind::Equip, r.strip_suffix(" to activate").unwrap_or(r))
+        (
+            KeywordKind::Equip,
+            r.strip_suffix(" to activate").unwrap_or(r),
+        )
     } else {
         return None;
     };
@@ -408,9 +435,13 @@ inventory::submit! {
 /// "Equipped permanent isn't a planeswalker and is a creature in addition to its other
 /// types." (Luxior, used with "equip planeswalker", CR 702.6e).
 fn attached_type_swap(l: &str, text: &str, _ctx: &CompileContext) -> Option<Vec<Ability>> {
-    let r = ["equipped permanent ", "enchanted permanent ", "equipped creature "]
-        .iter()
-        .find_map(|p| l.strip_prefix(p))?;
+    let r = [
+        "equipped permanent ",
+        "enchanted permanent ",
+        "equipped creature ",
+    ]
+    .iter()
+    .find_map(|p| l.strip_prefix(p))?;
     let r = r.strip_suffix(" in addition to its other types")?;
     let (not, is) = r.strip_prefix("isn't ")?.split_once(" and is ")?;
     let article = |s: &str| {
@@ -812,8 +843,7 @@ fn conditional_and_attack_despite_defender(
     let subject = [" gets ", " has ", " get ", " have "]
         .iter()
         .find_map(|v| first.split_once(v).map(|(s, _)| s))?;
-    let mut v =
-        crate::oracle::statics::parse_static(&format!("as long as {cond}, {first}"), ctx)?;
+    let mut v = crate::oracle::statics::parse_static(&format!("as long as {cond}, {first}"), ctx)?;
     v.extend(crate::oracle::statics::parse_static(
         &format!("as long as {cond}, {subject} can attack as though it didn't have defender"),
         ctx,

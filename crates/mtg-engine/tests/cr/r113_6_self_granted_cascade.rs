@@ -64,3 +64,66 @@ fn a_self_granted_cascade_functions_only_on_the_stack() {
     assert_eq!(t.zone(m), Zone::Battlefield);
     assert!(!t.obj(m).chars.has_keyword(KeywordKind::Cascade));
 }
+
+/// The abilities `text` compiles to on a creature card, or `None` if any of it isn't
+/// supported.
+fn compiled(text: &str) -> Option<Vec<mtg_engine::ability::Ability>> {
+    use mtg_engine::oracle::{self, CompileContext};
+    let tl = mtg_engine::types::TypeLine::parse("Creature — Human Berserker");
+    let ctx = CompileContext {
+        card_name: "Probe",
+        full_name: "Probe",
+        type_line: &tl,
+        layout: mtg_engine::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: Some("3"),
+        toughness: Some("2"),
+    };
+    let c = oracle::compile(text, &ctx);
+    c.unsupported.is_empty().then_some(c.abilities)
+}
+
+#[test]
+fn a_cards_own_keyword_is_compiled_only_where_it_can_function() {
+    // The zone the compiler gives a creature card's own "has [keyword] as long as ...":
+    // the stack for cascade and flash (CR 702.85a; 113.6e), the battlefield for keywords
+    // that function there (CR 113.6). A grant of another keyword that doesn't function on
+    // the battlefield, or of cascade or flash with another keyword, isn't accepted: no card
+    // has one, and it would do nothing on the battlefield (in review: "This spell has storm
+    // as long as ..." compiled to an ability of the permanent).
+    interp!("self-granted-cascade-functions-on-the-stack");
+    use mtg_engine::ability::{AbilityKind, FunctionZone};
+    let zone = |kw: &str| -> Option<FunctionZone> {
+        let abilities = compiled(&format!(
+            "This spell has {kw} as long as you control a Wizard."
+        ))?;
+        match abilities.as_slice() {
+            [a] => match &a.kind {
+                AbilityKind::Static(s) => Some(s.zone),
+                other => panic!("{kw}: {other:?}"),
+            },
+            v => panic!("{kw}: {v:?}"),
+        }
+    };
+    assert_eq!(zone("cascade"), Some(FunctionZone::Stack));
+    assert_eq!(zone("flash"), Some(FunctionZone::Stack));
+    assert_eq!(zone("flash and cascade"), Some(FunctionZone::Stack));
+    assert_eq!(zone("flying"), Some(FunctionZone::Battlefield));
+    assert_eq!(
+        zone("first strike and trample"),
+        Some(FunctionZone::Battlefield)
+    );
+    for kw in [
+        "storm",
+        "split second",
+        "replicate {1}",
+        "casualty 2",
+        "convoke",
+        "cycling {2}",
+        "flash and haste",
+        "cascade and trample",
+    ] {
+        assert_eq!(zone(kw), None, "{kw}");
+    }
+}

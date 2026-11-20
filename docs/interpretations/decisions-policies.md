@@ -220,7 +220,7 @@ defaults; an answer of the wrong shape counts as `Default`. Format and kinds:
 - Why: Reproducibility: mtg-sim prints a repro command with the seed for every failure.
 - Affects: every random event.
 - Code: `crates/mtg-engine/src/game.rs` (`Game::rng`, `Game::rng_for`, `shuffle_library`, `GameConfig::seed`); `crates/mtg-engine/src/dice.rs`; `crates/mtg-engine/src/attraction_cards.rs` (`shuffle_attraction_decks`), `crates/mtg-engine/src/variants.rs` (`shuffle_scheme_decks`), `crates/mtg-engine/src/planechase.rs` (`shuffle_planar_decks`).
-- Tests: `tests/cr/interp_decision_defaults.rs` (`random_results_come_from_the_games_seed`); `tests/properties/seat_symmetry.rs` (`supplementary_decks_are_shuffled_and_renumbered_whatever_the_seats`).
+- Tests: `tests/cr/interp_decision_defaults.rs` (`random_results_come_from_the_games_seed`); `tests/properties/seat_symmetry.rs` (`supplementary_decks_are_shuffled_and_renumbered_whatever_the_seats`, `a_players_supplementary_decks_are_shuffled_with_their_own_randomness`).
 
 ## ability-ids-depend-on-the-process: Ability ids in requests come from a process-wide counter; answers name options by their place
 - Kind: policy

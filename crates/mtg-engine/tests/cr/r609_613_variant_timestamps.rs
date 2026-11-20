@@ -187,7 +187,11 @@ fn vanguards_get_their_timestamps_in_apnap_order() {
         t.library_top(P0, "Grizzly Bears");
         t.library_top(P1, "Grizzly Bears");
         t.g.start();
-        let (first, second) = if starting == P0 { (red, blue) } else { (blue, red) };
+        let (first, second) = if starting == P0 {
+            (red, blue)
+        } else {
+            (blue, red)
+        };
         assert!(
             t.obj_now(first).timestamp < t.obj_now(second).timestamp,
             "starting {starting:?}"
@@ -199,7 +203,15 @@ fn vanguards_get_their_timestamps_in_apnap_order() {
             Zone::Battlefield,
         );
         t.recompute();
-        let later = if starting == P0 { Color::Blue } else { Color::Red };
-        assert_eq!(color_of(&t, bear), colors(&[later]), "starting {starting:?}");
+        let later = if starting == P0 {
+            Color::Blue
+        } else {
+            Color::Red
+        };
+        assert_eq!(
+            color_of(&t, bear),
+            colors(&[later]),
+            "starting {starting:?}"
+        );
     }
 }

@@ -72,7 +72,16 @@ fn objects_entering_together_are_listed_the_same_wherever_the_players_sit() {
         t.set_step(a, Step::PrecombatMain);
         let mut cards: Vec<ObjectId> = [P0, P1]
             .into_iter()
-            .map(|p| t.graveyard(p, if p == a { "Hill Giant" } else { "Grizzly Bears" }))
+            .map(|p| {
+                t.graveyard(
+                    p,
+                    if p == a {
+                        "Hill Giant"
+                    } else {
+                        "Grizzly Bears"
+                    },
+                )
+            })
             .collect();
         cards.sort();
         t.g.move_objects(enter_under(a, &cards));
