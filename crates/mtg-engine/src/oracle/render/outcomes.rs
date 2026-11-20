@@ -135,7 +135,12 @@ fn some_matches(c: &Condition) -> Option<(Var, Filter)> {
         Condition::SelNonEmpty(Sel::Var(s)) => Some((*s, Filter::Any)),
         Condition::And(v) => match v.as_slice() {
             [Condition::SelNonEmpty(Sel::Var(s)), Condition::Not(inner)] => match inner.as_ref() {
-                Condition::SelMatches(Sel::Var(s2), fails) if s == s2 => {
+                // (The moved objects judged as they last existed before the move are the
+                // same objects: "a Pirate was exiled this way".)
+                Condition::SelMatches(sel, fails)
+                    if matches!(sel, Sel::Var(s2) if s == s2)
+                        || matches!(sel, Sel::Before(b) if matches!(b.as_ref(), Sel::Var(s2) if s == s2)) =>
+                {
                     let f = match fails {
                         Filter::Not(x) => (**x).clone(),
                         other => Filter::Not(Box::new(other.clone())),

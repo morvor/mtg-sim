@@ -434,7 +434,7 @@ fn unpredictable_cyclone_casts_the_card_during_the_cycling_ability_ignoring_timi
 
 #[test]
 fn agitator_ant_goads_only_creatures_that_got_the_counters() {
-    cr!("701.15a", "122.1", "614.1a");
+    cr!("701.15a", "608.2d", "614.1a");
     interp!("counter-choice-excludes-what-cant-have-them");
     ruling!(
         "Agitator Ant",

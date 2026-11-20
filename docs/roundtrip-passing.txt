@@ -24384,6 +24384,7 @@ Tangle Hulk
 Tangle Mantis
 Tangle Spider
 Tangle Tumbler
+Tangle Wire
 Tanglebloom
 Tangleclaw Werewolf // Fibrous Entangler
 Tangled Colony

@@ -153,6 +153,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: as the card says: if Shredder becomes a copy of something else while his first ability is on the stack, its tokens are copies of what he is copying; if he leaves the battlefield, they are still created, copies of Shredder as he last existed on the battlefield (with a copy effect that applied to him then); his last ability, resolving after he has left, makes the player lose half their life and creates no tokens.
 - Recorded: exemptions `docs/rulings-exemptions/rulings-P030.tsv` (the first ruling's "before his last ability resolves") and `docs/rulings-exemptions/rulings-P031.tsv` (the second's "while his last ability is on the stack"); the rest of both stays cited; register `ruling-contradicting-oracle-gives-way`; tests `tests/rulings/r_residue_copy_instant_tokens.rs` (`shredder_s_tokens_after_shredder_left`), `tests/rulings/r_p031_token_self_copies.rs` (`shredder_s_tokens_copy_what_it_s_copying`).
 
+### Siege of Towers: "copy Shattering Spree" for "copy Siege of Towers"
+- Kind: template error
+- Status: open for review
+- Ruling, Siege of Towers (2024-01-12): "As the replicate triggered ability resolves, you'll copy Shattering Spree for each time you paid its replicate cost, even if the original spell is no longer on the stack at that time (perhaps because it was countered)."
+- Conflicts with: the card's Oracle text, whose replicate copies Siege of Towers itself and never Shattering Spree: "Replicate {1}{R} (When you cast this spell, copy it for each time you paid its replicate cost. You may choose new targets for the copies.) / Target Mountain becomes a 3/1 creature. It's still a land." CR 702.56a: "... “When you cast this spell, if a replicate cost was paid for it, copy it for each time its replicate cost was paid. If the spell has any targets, you may choose new targets for any of the copies.” ..."
+- Evidence: the ruling is Shattering Spree's, word for word with the same date and the name left unchanged: "As the replicate triggered ability resolves, you'll copy Shattering Spree for each time you paid its replicate cost, even if the original spell is no longer on the stack at that time (perhaps because it was countered)." (2024-01-12), right for Shattering Spree ("Replicate {R} ... Destroy target artifact."). Both cards were reprinted in Ravnica Remastered (released 2024-01-12, the date of both cards' replicate rulings), and the same template names its own card everywhere else in the data: Lose Focus "As the replicate triggered ability resolves, you'll copy Lose Focus for each time you paid its replicate cost, ..." (2021-06-18) and Changing Loyalty "As the replicate triggered ability resolves, you'll copy Changing Loyalty for each time you paid its replicate cost, ..." (2026-03-20). Siege of Towers' other ruling of that day, "The copies that replicate creates are created on the stack, so they're not "cast." Abilities that trigger when a player casts a spell won't trigger." (2024-01-12), is Shattering Spree's too and names no card; it agrees with the card. No rules or Oracle change explains the name. Ravnica Remastered's release notes weren't read (magic.wizards.com is outside this session's allowed network hosts, and the ormos mirror ends in 2022). With Siege of Towers' name read in, the ruling agrees with the card; noted first in ruling-conflicts-11, investigated in work item small-fixes-4.
+- Engine: as the card says: Siege of Towers' replicate trigger copies Siege of Towers once for each time its replicate cost was paid, even if the original was countered first; a Shattering Spree elsewhere (in its controller's hand) isn't copied.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P222.tsv` (the ruling's "you'll copy Shattering Spree"; the rest stays cited under Siege of Towers); register `ruling-contradicting-oracle-gives-way`; tests `tests/rulings/r_siege_of_towers_replicate.rs` (`siege_of_towers_replicate_copies_it_even_after_it_was_countered`), and, for Shattering Spree's own ruling, `tests/rulings/r_s14_replicate_retrace.rs` (`replicate_copies_even_after_the_original_was_countered`).
+
 ## Copying errors
 
 ### Run Out of Town: "controller" for "owner"
@@ -423,6 +432,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Evidence: the ruling names Séance Board; both are Duskmourn: House of Horror cards with rulings dated 2024-09-20 (Séance Board's other ruling, on {X} in mana costs, is attached to Secret Arcade too). Found in work item rulings-residue-misc-2 (pass A).
 - Engine: as the ruling says, for Séance Board.
 - Recorded: test `tests/rulings/r_residue_misc_2a_mana.rs` (`seance_board_doesnt_trigger_for_a_creature_dying_during_the_end_step`), citing it under Séance Board and under Secret Arcade // Dusty Parlor, which takes part with its first door unlocked (Séance Board is an enchantment too, which changes nothing).
+
+### Survey Mechan: Susur Secundi, Void Altar's ruling about its last ability
+- Kind: misattached
+- Status: open for review
+- Ruling, Survey Mechan (2025-07-25): "Use the sacrificed creature’s power as it last existed on the battlefield to determine how many cards to draw with Susur Secundi’s last ability."
+- Conflicts with: Survey Mechan draws no number of cards based on a sacrificed creature's power: "Flying / Hexproof (This creature can't be the target of spells or abilities your opponents control.) / {10}, Sacrifice this creature: It deals 3 damage to any target. Target player draws three cards and gains 3 life. This ability costs {X} less to activate, where X is the number of differently named lands you control." The ruling names and describes Susur Secundi, Void Altar's last ability: "12+ | {1}{B}, {T}, Pay 2 life, Sacrifice a creature: Draw cards equal to the sacrificed creature's power. Activate only as a sorcery."
+- Evidence: both are Edge of Eternities cards (released 2025-08-01 per the card data; the rulings are dated 2025-07-25). Susur Secundi has no rulings in the data; Survey Mechan's other three rulings are about its own last ability (counting differently named lands, no actions while it's activated, the cost fixed once determined). The set's release notes are past the ormos mirror's end (2022), so they weren't compared. Found by work item rulings-residue-misc-1 (pass A, Nov 20).
+- Engine: as the ruling says, for Susur Secundi: the cards drawn are the sacrificed creature's power as it last existed on the battlefield (CR 608.2h), a pump until end of turn included.
+- Recorded: test `tests/rulings/r_residue_misc_1_triggers.rs` (`susur_secundi_draws_the_sacrificed_creatures_last_known_power`), citing it under Survey Mechan, which takes part as the creature sacrificed (a 1/3 made 4/6 by Giant Growth: four cards drawn).
 
 ## Outdated rulings
 
@@ -898,6 +916,33 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: each card can target a planeswalker (Searing Blaze's creature target must then be one its controller controls, and a planeswalker whose controller controls no creature isn't offered as its first target; Searing Blaze was never legal to cast until the review of work item user-decisions-nov20 fixed how the castability check reads that creature target); damage dealt to it removes loyalty counters; its controller discards (Blightning, Rakdos's Return), gains no life (Flames of the Blood Hand), can't block (Concussive Bolt), may pay {U} (Quenchable Fire), creates the Squirrel (Acorn Catapult), and has its creatures dealt damage (Bonfire of the Damned, Chandra's Fury, Angrath, Minotaur Pirate's +2); Angrath's −11 still offers only opponents as its target.
 - Recorded: exemption `docs/rulings-exemptions/pre-dominaria-player-rulings.tsv`; register `pre-dominaria-player-target-rulings-give-way`; tests `tests/rulings/pre_dominaria_player_target_rulings.rs` (`soul_of_shandalar_targets_a_planeswalker`, `chandra_pyromaster_targets_a_planeswalker_and_its_controllers_creature`, `searing_blaze_targets_a_planeswalker_and_a_creature_its_controller_controls`, `sarkhan_the_mad_dragons_deal_damage_to_a_planeswalker`, `vengeful_archon_deals_the_prevented_damage_to_a_planeswalker`, `two_target_burn_targets_a_planeswalker_and_a_creature`, `exploding_borders_damages_a_planeswalker`, `bonfire_and_chandras_fury_target_a_planeswalker_and_hit_its_controllers_creatures`, `flames_of_the_blood_hand_stops_the_planeswalkers_controllers_life_gain`, `blightning_and_rakdos_s_return_make_the_planeswalkers_controller_discard`, `concussive_bolt_on_a_planeswalker_stops_its_controllers_blockers`, `quenchable_fire_on_a_planeswalker_its_controller_may_pay`, `acorn_catapult_gives_the_planeswalkers_controller_the_squirrel`, `firestorm_and_chandra_the_firebrand_target_planeswalkers_among_their_targets`, `angrath_minotaur_pirate_targets_a_planeswalker_with_its_first_ability_only`, `scalding_tongs_targets_a_planeswalker`); the rulings' other parts: `tests/rulings/r_residue_burn_freeze_restatements.rs`, `tests/rulings/r_residue_burn_freeze_burn.rs`, `tests/rulings/r_p007_targets.rs`, `tests/rulings/r_p008_misc.rs`, `tests/rulings/r_p008_prevention.rs`, `tests/rulings/r_p009_targets.rs`, `tests/rulings/r_p009_replacement.rs`, `tests/rulings/r_p030_spell_copies.rs`, `tests/rulings/r_p157_targets.rs`, `tests/rulings/r_p162_targets.rs`, `tests/cards/td_pay_to_stop.rs`.
 
+### Overabundance: "deals one damage even if the land produces no mana"
+- Kind: outdated
+- Status: open for review
+- Ruling, Overabundance (2004-10-04): "The ability deals one damage even if the land produces no mana when it was tapped to use a mana ability. This can happen with lands that produce a variable amount of mana."
+- Conflicts with: CR 106.12a: "An ability that triggers whenever a permanent “is tapped for mana” or is tapped for mana of a specified type triggers whenever such a mana ability resolves and produces mana or the specified type of mana." The card: "Whenever a player taps a land for mana, that player adds one mana of any type that land produced, and this enchantment deals 1 damage to the player." Forsaken Monument's ruling agrees with the rule: "You “tap a permanent for {C}” only if you activate a mana ability of that permanent that includes the {T} symbol in its cost, and only if it produces one or more {C} as it resolves."
+- Evidence: the rule entered the CR effective 2015-07-17 (Magic Origins) as 106.10a, in today's words but for the quotation marks; the CR effective 2015-03-27 has only 106.10, the definition of tapping a permanent for mana (archived CR texts). It has been 106.11a and now 106.12a since. The ruling, eleven years older, reads "taps a land for mana" by that definition alone (a mana ability with {T} in its cost, whatever it produces), as the CR did then. Found by work item rulings-residue-misc-1 (pass B, Nov 20).
+- Engine: "tapped for mana" triggers need the mana ability to have produced mana: Cabal Coffers tapped with no Swamps adds nothing, and Overabundance neither adds mana nor deals damage; with a Swamp, it adds {B} and deals 1 damage.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P099.tsv`; test `tests/rulings/r_residue_misc_1_mana.rs` (`overabundance_doesnt_trigger_for_a_land_that_produced_no_mana`).
+
+### Indestructibility: the planeswalker uniqueness rule
+- Kind: outdated
+- Status: open for review
+- Ruling, Indestructibility (2013-07-01): "Lethal damage, damage from a source with deathtouch, and effects that say “destroy” won’t cause a permanent with indestructible to be put into the graveyard. However, a permanent with indestructible can be put into the graveyard for a number of reasons. The most likely reasons are if it’s sacrificed, if it’s legendary and another legendary permanent with the same name is controlled by the same player, if it’s a planeswalker and another planeswalker with the same subtype is controlled by the same player, if it’s a creature with toughness 0 or less, or if it’s an Aura that’s either unattached or attached to something illegal."
+- Conflicts with: CR 306.4 (no rule puts a planeswalker into the graveyard for sharing a subtype with another): "Previously, planeswalkers were subject to a “planeswalker uniqueness rule” that stopped a player from controlling two planeswalkers of the same planeswalker type. This rule has been removed and planeswalker cards printed before this change have received errata in the Oracle card reference to have the legendary supertype."
+- Evidence: the ruling was right when written: the CR effective 2017-08-25 still has 704.5j "If a player controls two or more planeswalkers that share a planeswalker type, that player chooses one of them, and the rest are put into their owners’ graveyards. This is called the “planeswalker uniqueness rule.”"; the CR effective 2017-09-29 (Ixalan) replaced it with the legend rule's 704.5j and added 306.4's note (archived CR texts). Its other reasons (sacrifice, the legend rule, toughness 0 or less, an Aura unattached or attached illegally) still hold. Found by work item rulings-residue-misc-1 (pass B, Nov 20).
+- Engine: two planeswalkers with the same subtype both stay (Jace Beleren and Jace, the Mind Sculptor, both legendary since the errata, have different names).
+- Recorded: exemption `docs/rulings-exemptions/rulings-P073.tsv` (the planeswalker part); tests `tests/rulings/r_residue_misc_1_leaves.rs` (`two_planeswalkers_with_the_same_subtype_both_stay`, `indestructible_permanents_still_go_to_the_graveyard_other_ways`).
+
+### Uvilda, Dean of Perfection: "hone counter" for "refine counter"
+- Kind: outdated
+- Status: open for review
+- Ruling, Uvilda, Dean of Perfection // Nassari, Dean of Expression (2021-04-16): "After removing the last hone counter, casting the spell is optional. Timing permissions based on the card’s type are ignored. If an effect prohibits you from casting the card or you choose not to cast it, it remains exiled with no hone counters on it, and you won’t be able to cast it later."
+- Conflicts with: Uvilda's Oracle text: "{T}: You may exile an instant or sorcery card from your hand and put three refine counters on it. It gains "At the beginning of your upkeep, if this card is exiled, remove a refine counter from it" and "When the last refine counter is removed from this card, if it's exiled, you may cast it. It costs {4} less to cast this way."" (the card data) CR 122.1j: "A hone counter on an Equipment gives +1/+0 to any creature that Equipment is attached to."
+- Evidence: the ruling names the counter of the card as printed in Strixhaven (2021); the counter's name in the Oracle text became "refine" once hone counters got a rules meaning of their own: 122.1j isn't in the CR effective 2026-04-17 (the latest archived) and is in the CR effective 2026-09-25, and the cards that put hone counters on Equipment (Sting, Bilbo's Sword; Dwalin, Weaponmaster) were released 2026-08-14 per the card data. Only the name is outdated; on an exiled instant or sorcery card a hone counter would do nothing either, and the ruling's play holds for refine counters. Found by work item rulings-residue-misc-1 (pass B, Nov 20).
+- Engine: the counters are refine counters; after the last one is removed in an upkeep, P0 may cast the sorcery then; declined, it stays exiled with no counters and can't be cast later.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P066.tsv` (the counter's name); test `tests/rulings/r_residue_misc_1_casting.rs` (`uvildas_card_cast_or_left_in_exile`).
+
 ## Not yet investigated
 
 Possible further instances found while compiling this log. They haven't been through the
@@ -1048,14 +1093,41 @@ decides whether they become a conflict case.
   `two_target_destruction_with_one_target_left_affects_it`). Whether the Journey into Nyx
   release notes (2014; ormos mirror) have the same spelling wasn't checked. No kind fits a
   misspelled name.
-- **Siege of Towers** (ruling-conflicts-11): "As the replicate triggered ability resolves,
-  you'll copy Shattering Spree for each time you paid its replicate cost, even if the
-  original spell is no longer on the stack at that time (perhaps because it was countered)."
-  (2024-01-12, Ravnica Remastered) names Shattering Spree: it is Shattering Spree's ruling,
-  word for word and with the same date, with the name left unchanged. Replicate works the
-  same on both cards, so with Siege of Towers' name read in, the ruling holds. The text is
-  cited through Shattering Spree (`tests/rulings/r_s14_replicate_retrace.rs`), so it needs
-  no test of its own. Not exempted; not an entry.
+- **Swift Reckoning** (rulings-residue-misc-1, Nov 20; a conflict case for the coordinator):
+  "If an effect allows you to cast Swift Reckoning from your graveyard, you need two other
+  instant and/or sorcery cards in your graveyard to cast it as though it had flash."
+  (2018-12-07, Ultimate Masters) for "Spell mastery — If there are two or more instant
+  and/or sorcery cards in your graveyard, you may cast this spell as though it had flash."
+  It follows from 601.3 as it read from the CR effective 2016-07-22 to the CR effective
+  2019-08-23: "A player can’t begin to cast a spell unless a rule or effect allows that
+  player to cast it. If that player is no longer allowed to cast that spell after completing
+  its proposal, the casting of the spell is illegal and the game returns to the moment
+  before the casting of that spell was proposed (see rule 721, “Handling Illegal
+  Actions”)." (archived CR texts; the card is on the stack once the proposal is complete).
+  The CR effective 2019-10-04 replaced it with today's 601.3: "A player can begin to cast a
+  spell only if a rule or effect allows that player to cast it and no rule or effect
+  prohibits that player from casting it." Graveyard Shift's ruling, written under today's
+  rules for the same situation, has the card count itself: "If an effect allows you to cast
+  Graveyard Shift from your graveyard, you may cast it any time you could cast an instant if
+  you have five or more mana values among cards in your graveyard immediately before you
+  begin to cast it, even if moving it to the stack would reduce that number to four."
+  (2022-04-29), and Swift Reckoning's other ruling of the same day says "The number of
+  instant and/or sorcery cards in your graveyard matters only as you begin to cast Swift
+  Reckoning." Against it: 601.2e still checks whether "the proposed spell can legally be
+  cast", and the two cards are worded differently ("you may cast this spell as though it had
+  flash", 601.3b's kind of effect, against Graveyard Shift's "This spell has flash as long
+  as", 601.3d's). Swift Reckoning's third ruling, the spell mastery note of Magic Origins
+  ("Check to see if there are two or more instant and/or sorcery cards in your graveyard as
+  the spell resolves to determine whether the spell mastery ability applies. The spell
+  itself won't count because it's still on the stack as you make this check.",
+  2015-06-22), is written for spell mastery abilities that change the effect, and says the
+  opposite of the 2018 "matters only as you begin to cast" for this card (it is cited
+  through the other spell mastery cards). The ruling is left uncited, not exempt; the engine
+  counts the card itself (provisional `flash-permission-conditions-judged-as-casting-begins`,
+  `tests/rulings/r_residue_misc_1_stack.rs`,
+  `swift_reckoning_cast_from_the_graveyard_counts_itself_as_casting_begins`). If it is
+  judged outdated, it becomes an outdated entry with an exemption in
+  `docs/rulings-exemptions/rulings-P011.tsv`; if it stands, the register entry is reversed.
 - Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (copying errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the

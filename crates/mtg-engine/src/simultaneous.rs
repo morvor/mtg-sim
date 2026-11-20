@@ -25,7 +25,15 @@
 //!   destroyed this way, its controller may search ...": a player searching the same
 //!   library again continues the same search, one search for all those cards, then shuffles
 //!   that library once, CR 701.23h);
-//! * life gained or lost: each amount is determined before anyone's life total changes;
+//! * life gained or lost: each amount is determined before anyone's life total changes,
+//!   and the life the instruction has one player gain is one life gain event;
+//! * the tokens they create are created together, the same tokens for the same player as
+//!   one creation (unless a later instruction refers to each one's tokens, which are then
+//!   each one's own creation: `Instruction::tokens_apart`), and the counters put on
+//!   objects no one chooses are put on each object as one event for each player putting
+//!   them ("for each opponent, you create a token", "for each opponent who does, put a
+//!   +1/+1 counter on each creature you control": one instruction, one event;
+//!   `for_each_events`);
 //! * control changes: every player's objects are determined (and chosen, by whoever
 //!   chooses them, each chooser knowing the earlier choices) before any control changes,
 //!   then control of all of them changes at the same time ("each player gains control of
@@ -178,6 +186,12 @@ struct Instruction {
     pre: Vec<Effect>,
     action: Option<Effect>,
     post: Vec<Effect>,
+    /// A later instruction of the body refers to the tokens this one creates for each
+    /// player or object ("For each opponent, create two ... tokens with flying that attack
+    /// that opponent this turn if able. They gain haste until end of turn.", Furygale
+    /// Flocking): each part's tokens are its own, so the parts' creations aren't combined
+    /// into one (see [`Plan::Tokens`]).
+    tokens_apart: bool,
 }
 
 /// The body's instructions (CR 608.2e: its separate sentences and clauses).
@@ -202,7 +216,7 @@ fn instructions(body: &Effect) -> Vec<Instruction> {
             out.push(Instruction {
                 pre: std::mem::take(&mut pending),
                 action: Some(e),
-                post: vec![],
+                ..Default::default()
             });
         }
     }
@@ -211,12 +225,42 @@ fn instructions(body: &Effect) -> Vec<Instruction> {
             Some(last) => last.post.extend(pending),
             None => out.push(Instruction {
                 pre: pending,
-                action: None,
-                post: vec![],
+                ..Default::default()
             }),
         }
     }
+    // "... create two ... tokens ... that attack that opponent this turn if able. They gain
+    // haste ...": a later instruction (not bookkeeping that only collects them) refers to
+    // the tokens an instruction creates for each.
+    let refers: Vec<bool> = out
+        .iter()
+        .map(|later| {
+            later
+                .pre
+                .iter()
+                .chain(&later.action)
+                .any(|e| reads_var(e, vars::CREATED))
+        })
+        .collect();
+    for (i, ins) in out.iter_mut().enumerate() {
+        ins.tokens_apart = refers[i + 1..].iter().any(|r| *r);
+    }
     out
+}
+
+/// Whether `e` reads the variable `var` (`{"Var": n}` in its serialized form: `Sel::Var`,
+/// `Value::Var`, `PlayerRef::Var`).
+fn reads_var(e: &Effect, var: Var) -> bool {
+    fn reads(j: &serde_json::Value, var: Var) -> bool {
+        match j {
+            serde_json::Value::Object(m) => m
+                .iter()
+                .any(|(k, x)| (k == "Var" && x.as_u64() == Some(u64::from(var))) || reads(x, var)),
+            serde_json::Value::Array(a) => a.iter().any(|x| reads(x, var)),
+            _ => false,
+        }
+    }
+    serde_json::to_value(e).is_ok_and(|j| reads(&j, var))
 }
 
 /// An instruction that only records something for the instructions after it.
@@ -350,7 +394,7 @@ fn makes_choice(e: &Effect) -> bool {
     }
 }
 
-fn has_choice(sel: &Sel) -> bool {
+pub(crate) fn has_choice(sel: &Sel) -> bool {
     match sel {
         Sel::Choose { .. } | Sel::AtRandom { .. } => true,
         Sel::Union(v) => v.iter().any(has_choice),
@@ -683,9 +727,27 @@ enum Plan {
     /// with the other players' actions (CR 101.4, 118.12).
     PayLife { player: PlayerId, cost: Cost },
     /// Tokens to create (controller, token, how many, source), created together with the
-    /// other players' (CR 101.4, 614.12).
+    /// other players' (CR 101.4, 614.12): the same tokens for the same player as one
+    /// creation (`for_each_events`), unless `apart`.
     Tokens {
         tokens: Vec<(PlayerId, TokenCreate, u32, Option<ObjectId>)>,
+        /// Planned from a plain creation instruction, recorded as `Effect::CreateToken`
+        /// records it ("that many", "if you do").
+        as_creation: bool,
+        /// This part's tokens are its own ([`Instruction::tokens_apart`]): created at the
+        /// same time as the other parts', but not combined with them.
+        apart: bool,
+    },
+    /// Life the player gains, gained with what the other players' parts gain them: one
+    /// life gain event for each player (`for_each_events`).
+    GainLife { player: PlayerId, n: u32 },
+    /// Counters to put on objects chosen by no one, put with the other parts' counters:
+    /// one event for each object and putter (`for_each_events`).
+    Counters {
+        how: crate::event_causes::CounterPut,
+        what: Vec<Entity>,
+        kind: CounterKind,
+        n: u32,
     },
     /// Performed for this player in turn (CR 608.2f).
     Exec(Effect),
@@ -701,6 +763,8 @@ enum Plan {
 struct Outcome {
     moved: Vec<Option<ObjectId>>,
     created: Vec<ObjectId>,
+    /// What got counters (`Plan::Counters`).
+    countered: Vec<Entity>,
     sacrificed: Vec<(ObjectId, ObjectId)>,
     discarded: Vec<ObjectId>,
     damage_from: usize,
@@ -948,8 +1012,11 @@ fn plan(
         }
         Effect::ChooseOne { who, options } => {
             let chooser = g.eval_player(who, ctx).unwrap_or(ctx.controller);
-            let labels = options.iter().map(|(l, _)| l.clone()).collect();
-            let i = g.ask_option(chooser, ctx.source, "Choose one", labels);
+            // Not an impossible option while another can be done (CR 608.2d).
+            let ok = crate::impossible_options::choosable(g, options, ctx);
+            let labels = ok.iter().map(|i| options[*i].0.clone()).collect();
+            let k = g.ask_option(chooser, ctx.source, "Choose one", labels);
+            let i = ok.get(k).copied().unwrap_or(usize::MAX);
             match options.get(i) {
                 Some((_, chosen)) => plan(g, chosen, ctx, p, earlier),
                 None => Plan::Nothing,
@@ -1328,7 +1395,11 @@ fn plan(
                     tokens.push((q, spec, n, ctx.source));
                 }
             }
-            Plan::Tokens { tokens }
+            Plan::Tokens {
+                tokens,
+                as_creation: false,
+                apart: false,
+            }
         }
         // "Any player may have ~ deal 5 damage to them" (and the note that a player did):
         // one action with what records it, planned like the action alone, so the damage is
@@ -1349,10 +1420,44 @@ fn plan(
             who: who.clone(),
             n: Value::Const(g.eval_value(n, ctx) as i32),
         }),
-        Effect::GainLife { who, n } => Plan::Exec(Effect::GainLife {
-            who: who.clone(),
-            n: Value::Const(g.eval_value(n, ctx) as i32),
-        }),
+        // One "for each" instruction's life gain, counters and tokens: one event with the
+        // other parts' (`for_each_events`).
+        Effect::GainLife { who, n } => {
+            let k = g.eval_value(n, ctx).max(0) as u32;
+            match g.eval_players(who, ctx).as_slice() {
+                [q] if crate::draw_rules::times_named(g, who, ctx).is_none() => {
+                    Plan::GainLife { player: *q, n: k }
+                }
+                _ => Plan::Exec(Effect::GainLife {
+                    who: who.clone(),
+                    n: Value::Const(k as i32),
+                }),
+            }
+        }
+        Effect::AddCounters { what, kind, n } if !has_choice(what) => {
+            let k = g.eval_value(n, ctx).max(0) as u32;
+            let what = g
+                .resolve_sel(what, ctx)
+                .into_iter()
+                .map(|t| g.found_after_move(t, ctx))
+                .collect();
+            Plan::Counters {
+                how: crate::event_causes::CounterPut::of(ctx),
+                what,
+                kind: kind.clone(),
+                n: k,
+            }
+        }
+        Effect::CreateToken {
+            attacking: false, ..
+        } => match token_plan(g, e, ctx) {
+            Some(Plan::Tokens { tokens, .. }) => Plan::Tokens {
+                tokens,
+                as_creation: true,
+                apart: false,
+            },
+            _ => Plan::Exec(e.clone()),
+        },
         other => Plan::Exec(other.clone()),
     }
 }
@@ -1387,7 +1492,11 @@ fn token_plan(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Plan> {
             (q, tc, n, ctx.source)
         })
         .collect();
-    Some(Plan::Tokens { tokens })
+    Some(Plan::Tokens {
+        tokens,
+        as_creation: false,
+        apart: false,
+    })
 }
 
 /// Performs one instruction for every player (see the module documentation).
@@ -1434,6 +1543,9 @@ fn perform_instruction(g: &mut Game, ins: &Instruction, frames: &mut Frames, ctx
         while let Plan::Then(inner, then) = plan {
             records[i].splice(0..0, then);
             plan = *inner;
+        }
+        if let Plan::Tokens { apart, .. } = &mut plan {
+            *apart = ins.tokens_apart;
         }
         plans[i] = Some(plan);
     }
@@ -1751,20 +1863,76 @@ fn perform_plans(
             }
         }
     }
-    // Tokens: created at the same time (CR 101.4, 614.12).
+    // Tokens: created at the same time (CR 101.4, 614.12), the same tokens for the same
+    // player as one creation, except a part's own (`apart`).
     let mut tokens = Vec::new();
     let mut created_by = Vec::new();
+    let mut groups = Vec::new();
     for (i, plan) in plans.iter().enumerate() {
-        if let Some(Plan::Tokens { tokens: these }) = plan {
+        if let Some(Plan::Tokens {
+            tokens: these,
+            apart,
+            ..
+        }) = plan
+        {
             for t in these {
                 tokens.push(t.clone());
                 created_by.push(i);
+                groups.push(if *apart { i + 1 } else { 0 });
             }
         }
     }
     if !tokens.is_empty() {
-        for (i, made) in created_by.into_iter().zip(g.create_tokens_together(tokens)) {
+        let made = g.create_tokens_in_groups(tokens, &groups);
+        for (i, made) in created_by.into_iter().zip(made) {
             out[i].created.extend(made);
+        }
+    }
+    // Life gained: one life gain event for each player, whatever the number of parts that
+    // gain them life (Suffer the Past's ruling; `for_each_events`).
+    let mut gains: Vec<(PlayerId, u32)> = Vec::new();
+    for plan in plans.iter().flatten() {
+        if let Plan::GainLife { player, n } = plan {
+            match gains.iter_mut().find(|(q, _)| q == player) {
+                Some(x) => x.1 += n,
+                None => gains.push((*player, *n)),
+            }
+        }
+    }
+    for (p, n) in gains {
+        g.gain_life(p, n);
+    }
+    // Counters: one event for each object and player putting them (`for_each_events`).
+    let mut puts: Vec<(
+        crate::event_causes::CounterPut,
+        Entity,
+        CounterKind,
+        u32,
+        Vec<usize>,
+    )> = Vec::new();
+    for (i, plan) in plans.iter().enumerate() {
+        if let Some(Plan::Counters { how, what, kind, n }) = plan {
+            for t in what {
+                match puts
+                    .iter_mut()
+                    .find(|(h, o, k, ..)| h == how && o == t && k == kind)
+                {
+                    Some(x) => {
+                        x.3 += n;
+                        x.4.push(i);
+                    }
+                    None => puts.push((*how, *t, kind.clone(), *n, vec![i])),
+                }
+            }
+        }
+    }
+    for (how, t, kind, n, by) in puts {
+        if g.put_counters(t, &kind, n, how) > 0 {
+            for i in by {
+                if !out[i].countered.contains(&t) {
+                    out[i].countered.push(t);
+                }
+            }
         }
     }
     // Discards: the chosen cards, once everyone has chosen, at the same time (CR 701.9a,
@@ -1825,7 +1993,44 @@ fn record(g: &mut Game, plan: Plan, outcome: Outcome, ctx: &mut Ctx) {
         Plan::Nothing | Plan::Exec(_) | Plan::Then(..) => {}
         Plan::Control(grant) => crate::control_change::record(grant.as_ref(), ctx),
         Plan::PayLife { .. } => ctx.prev_happened = true,
-        Plan::Tokens { .. } => {
+        Plan::GainLife { .. } => {}
+        Plan::Counters { .. } => {
+            // As `Effect::AddCounters` records them: whether any was put, and "it".
+            ctx.prev_happened = !outcome.countered.is_empty();
+            if !outcome.countered.is_empty() {
+                ctx.set_var(vars::IT, outcome.countered);
+            }
+        }
+        Plan::Tokens {
+            tokens,
+            as_creation,
+            ..
+        } => {
+            if as_creation {
+                // As `Effect::CreateToken` records them: "that many" counts every token
+                // made; "if you do" and "when you do" count only the tokens the instruction
+                // specifies, not the ones a replacement effect creates instead (Ajani,
+                // Nacatl Avenger's ruling), and twice as many is creating them twice (CR
+                // 603.12a).
+                let as_specified = outcome
+                    .created
+                    .iter()
+                    .filter(|t| {
+                        let o = &g.obj(**t).copiable;
+                        tokens.iter().any(|(_, tc, ..)| {
+                            o.name == tc.chars.name
+                                && o.card_types == tc.chars.card_types
+                                && o.subtypes == tc.chars.subtypes
+                        })
+                    })
+                    .count() as u32;
+                ctx.prev_value = outcome.created.len() as i64;
+                ctx.prev_happened = as_specified > 0;
+                ctx.reflexive_times = match tokens.as_slice() {
+                    [(_, _, n, _)] if *n > 0 => Some(as_specified / n),
+                    _ => None,
+                };
+            }
             // As `Effect::CreateTokenCopy` records them: "tokens created with ~" (CR
             // 607.1d), "the exiled card" of an ability the exceptions gave them, and
             // "those tokens".
