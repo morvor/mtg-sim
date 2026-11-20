@@ -865,7 +865,8 @@ impl Game {
             }
         }
         // CR 502.3: untap (each player on the active team, CR 805.4a).
-        for active in self.active_players() {
+        let actives = self.active_players();
+        for &active in &actives {
             self.recompute();
             let mut to_untap: Vec<ObjectId> = self
                 .permanents()
@@ -886,6 +887,12 @@ impl Game {
                     self.objects[id.0 as usize].exerted = false;
                 }
             }
+        }
+        // With shared team turns, the team's untap step is each of its players' untap step
+        // (CR 805.4): an effect lasting through one player's next untap step ends once the
+        // whole team has untapped, as "creatures don't untap during target player's next
+        // untap step" also keeps that player's teammates' creatures tapped.
+        for active in actives {
             self.expire_through_next_untap_step(active);
         }
     }
@@ -1248,6 +1255,17 @@ impl Game {
 /// The player a "doesn't untap" restriction on a group of permanents is about, if its
 /// filter names one ("creatures [that player] controls").
 fn untap_restricted_player(r: &Restriction) -> Option<PlayerId> {
+    // "Creatures don't untap during target player's next untap step": that player.
+    if let Restriction::DoesntUntapDuringUntapStepOf { who, .. } = r {
+        return match who {
+            PlayerFilter::Is(p) => Some(*p),
+            PlayerFilter::Or(v) => match v.as_slice() {
+                [PlayerFilter::Is(p)] => Some(*p),
+                _ => None,
+            },
+            _ => None,
+        };
+    }
     let Restriction::DoesntUntap(f) = r else {
         return None;
     };

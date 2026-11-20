@@ -86,7 +86,7 @@ Decided 2026-10-01.
   (`docs/agents/round2/deferred.tsv`). Sigardian Evangel (conjure; legal in Historic,
   Timeless and Brawl) joined them in round 3 (`docs/agents/round3/deferred.tsv`).
 - **Status:** `card-coverage` counts paper cards only. The plan for them is
-  `docs/agents/items/cards-digital-alchemy.md` (939 unsupported texts), which is not
+  `docs/agents/items/cards-digital-alchemy.md` (600 unsupported texts on Nov 20; 939 in round 1, when 254 of them, on paper cards with an online-only oracle record, were wrongly counted as digital), which is not
   scheduled. Rulings that apply only to digital-only cards are DEFERRED in
   `scripts/rulings_batches.py`.
 

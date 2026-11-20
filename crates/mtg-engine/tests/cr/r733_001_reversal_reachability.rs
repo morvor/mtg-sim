@@ -1061,7 +1061,9 @@ fn part_now(part: &CostPart, now: &mut Now) {
         | CostPart::ExertSelf
         | CostPart::CollectEvidence(_)
         | CostPart::CollectEvidenceOf(_)
-        | CostPart::Forage => {}
+        | CostPart::Forage
+        // Mana ("{X}, where X is ...").
+        | CostPart::DefinedX(_) => {}
     }
 }
 
@@ -1117,7 +1119,9 @@ fn part_can_fail(part: &CostPart) -> bool {
         | CostPart::PayManaCostOf(_)
         | CostPart::PayManaCostOfLess(..)
         | CostPart::Repeated { .. }
-        | CostPart::OneOf(_) => true,
+        | CostPart::OneOf(_)
+        // Mana, which the earlier parts' mana abilities may have used up.
+        | CostPart::DefinedX(_) => true,
     }
 }
 

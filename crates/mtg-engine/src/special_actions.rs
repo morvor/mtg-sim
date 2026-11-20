@@ -378,6 +378,10 @@ pub fn pay_for(
     let spend = SpendContext {
         source: src,
         purpose,
+        // "Spend this mana only on costs that contain {X}": a special action's cost with
+        // {X}, X chosen immediately before it's paid (CR 107.3d; `ctx.cost_has_x` says so
+        // once X is bound).
+        has_x: ctx.cost_has_x || crate::defined_x_costs::contains_x(&cost),
         ..Default::default()
     };
     match g.pay_total_cost(p, &cost, src, &spend, ctx) {
@@ -538,6 +542,10 @@ fn excluding(r: &Restriction, ps: &[PlayerId], objs: &[ObjectId]) -> Restriction
         R::CantBlock(f) => R::CantBlock(not_objects(f, objs)),
         R::CantAttackOrBlock(f) => R::CantAttackOrBlock(not_objects(f, objs)),
         R::DoesntUntap(f) => R::DoesntUntap(not_objects(f, objs)),
+        R::DoesntUntapDuringUntapStepOf { who, what } => R::DoesntUntapDuringUntapStepOf {
+            who: who.clone(),
+            what: not_objects(what, objs),
+        },
         R::CantCast { who, what } => R::CantCast {
             who: not_players(who, ps),
             what: what.clone(),

@@ -14,6 +14,8 @@ fn paper_cards_with_an_online_only_oracle_printing() {
         ("Memnite", "td2"),
         ("Raging Goblin", "oana"),
         ("Pyrogoyf", "aa2"),
+        // Fallen Empires; its oracle record is Masters Edition's.
+        ("Seasinger", "me1"),
     ] {
         let c = cards.by_name(name).unwrap_or_else(|| panic!("{name}"));
         // The case the rule exists for: the oracle printing isn't a paper printing.
@@ -84,4 +86,32 @@ fn the_mtgo_name_sticker_goblin_is_a_digital_version() {
     assert!(!mtgo.is_paper());
     let paper = cards.by_name("_____ Goblin").unwrap();
     assert!(paper.is_paper());
+}
+
+/// The plan for digital-only cards (`docs/agents/items/cards-digital-alchemy.texts.tsv`:
+/// cards blocked, text, example card, piece kind, failing piece) lists as "digital" only
+/// texts of cards that aren't paper. Its first version, made before the paper rule, had
+/// paper cards with an online-only oracle record there (Seasinger, City of Traitors).
+#[test]
+fn digital_rows_of_the_alchemy_plan_name_no_paper_card() {
+    let cards = mtg_data::cards();
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../docs/agents/items/cards-digital-alchemy.texts.tsv"
+    );
+    let text = std::fs::read_to_string(path).expect(path);
+    let mut digital = 0;
+    for line in text.lines().skip(1).filter(|l| !l.is_empty()) {
+        let cols: Vec<&str> = line.split('\t').collect();
+        let (example, kind) = (cols[2], cols[3]);
+        if kind != "digital" {
+            continue;
+        }
+        digital += 1;
+        let c = cards
+            .by_name(example)
+            .unwrap_or_else(|| panic!("{example}: no such card"));
+        assert!(!c.is_paper(), "{example} is a paper card: {line}");
+    }
+    assert!(digital > 0);
 }

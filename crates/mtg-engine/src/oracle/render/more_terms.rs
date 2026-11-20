@@ -39,24 +39,12 @@ pub(super) fn event_amount_words(t: &TriggerCond) -> Option<&'static str> {
 }
 
 /// The kind of card of "Whenever you reveal a [card] this way" after "Reveal the first
-/// card you draw each turn" (or "on each of your turns", or "You may reveal ..."): the condition on a draw trigger
-/// that it's the first card drawn this turn and of that kind.
+/// card you draw each turn" (or "on each of your turns", or "You may reveal ..."): the
+/// condition on the trigger of that reveal (`kw/reveal_first_draw.rs`) that the card is of
+/// that kind.
 pub(super) fn first_draw_revealed(c: &Condition) -> Option<&Filter> {
-    let Condition::And(v) = c else {
-        return None;
-    };
-    match v.as_slice() {
-        [Condition::Compare(Value::EventAmount, Cmp::Eq, Value::Const(1)), Condition::SelMatches(Sel::TriggerObject, f)]
-        | [Condition::Compare(Value::EventAmount, Cmp::Eq, Value::Const(1)), Condition::SelMatches(Sel::TriggerObject, f), Condition::PlayerMatches(PlayerRef::You, PlayerFilter::Active)] => {
-            Some(f)
-        }
-        // After "You may reveal the first card you draw each turn as you draw it": only if
-        // it was revealed.
-        [Condition::Compare(Value::EventAmount, Cmp::Eq, Value::Const(1)), Condition::SelMatches(Sel::TriggerObject, f), Condition::Custom(n)]
-            if n == crate::kw::reveal_first_draw::REVEALED_THIS_WAY =>
-        {
-            Some(f)
-        }
+    match c {
+        Condition::SelMatches(Sel::TriggerObject, f) => Some(f),
         _ => None,
     }
 }

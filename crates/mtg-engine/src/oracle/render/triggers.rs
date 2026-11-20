@@ -1393,7 +1393,8 @@ impl Renderer<'_> {
             // turns), revealed by the static ability next to it
             // (`kw/reveal_first_draw.rs`), if it's that kind of card.
             TriggerCond::Where { trigger, cond }
-                if matches!(trigger.as_ref(), TriggerCond::Draws { who: PlayerRel::You })
+                if matches!(trigger.as_ref(), TriggerCond::Custom(n)
+                    if n == crate::kw::reveal_first_draw::REVEALED_FIRST_DRAW)
                     && super::more_terms::first_draw_revealed(cond).is_some() =>
             {
                 let f = super::more_terms::first_draw_revealed(cond)

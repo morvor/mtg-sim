@@ -994,6 +994,7 @@ Kill rate as above: (caught + timeout) / (caught + missed + timeout).
 | File | Mutants | Caught | Missed | Timeout | Unviable | Kill rate | After new tests |
 |---|---|---|---|---|---|---|---|
 | simultaneous.rs (full run) | 279 | 191 | 75 | 0 | 13 | 71.8% (191/266) | 98.1% (261/266): the 5 survivors not killed are equivalent (one, `1117:14`, in code the fixes removed) |
+| permissions.rs (full run) | 238 | 153 | 74 | 0 | 11 | 67.4% (153/227) | 81.9% (186/227): the 41 survivors not killed are equivalent (three, `514:17`–`516:17`, only since the `attach` fix) |
 
 ### simultaneous.rs (full run)
 
@@ -1161,3 +1162,248 @@ pins. Changes:
   no "if they do" clause: now 101.2 and 608.2d (a player can't choose to search when they
   can't); the Krenko's Buzzcrusher test quoted its lands as targets (they aren't).
 - `1117:14` (equivalent in the run, code removed) counted as equivalent, not killed: 98.1%.
+
+### permissions.rs (full run)
+
+A full run (`FULL=1 scripts/mutants.sh permissions`) of the file at `43fcf29`: all 238
+mutants. The run was stopped by the 2-hour session limit several times and resumed each time
+with `FULL=1 RESUME=1 REV=43fcf29` (this worktree's own `RESUME`, `9c8dd49`–`cb69cb6`, which
+skips the mutants already tested through `--iterate`, with `REV` naming the measured commit;
+the merge took the simultaneous.rs run's version of the script, whose `RESUME` skips them too
+but has no `REV`). About 3.5 minutes per mutant. 153 caught, 74 missed, 0 timeouts, 11 unviable: kill rate **67.4%**
+(153/227).
+
+The 74 survivors were classified from the code in eight batches, written while the run went
+on: 32 killable (b), 39 equivalent (a), and three (`514:17`, `515:17`, `516:17`) that only
+drop a way the engine offered wrongly (c). The triage found three engine bugs, at `196:32`,
+`514:17` and `969:45`. The tests were committed with their batches (`f67b79f`–`ccf8cb7`,
+unbuilt until the run ended); once it had ended the engine was fixed (`c83fe93`: fixes 1 and
+2 and the register entry `own-permission-first`; `09bc166`: fix 3). The 74 survivors were
+re-run at the fixed commit (`RERUN=1 scripts/mutants.sh permissions`; the fixes moved the
+code by up to 15 lines): the 32 killable ones caught; the three (c) ones missed, because fix
+2 made them equivalent (below); the 39 equivalent ones missed. One of those, `347:13`, was killable after all (a land gets a free copy of its
+permission, and playing it asks which permission; below): a test was added (`50c47b1`) and a
+second re-run (`RERUN=1 ONLY=...`) caught it. Final: **33 caught, 41 missed** (all
+equivalent), kill rate after the new tests **81.9%** (186/227: 153 + 33).
+
+Line numbers below are the run's (`43fcf29`). New tests are in `tests/cr/` unless named
+otherwise.
+
+**Survivors killed by new tests (b)**:
+
+- `played_this_way` (`74:28`, `75:28`, `75:50`, `&&`→`||`): a card played with any other
+  permission counts as played "this way" (a delayed ability's way is never 0; every static
+  permission's use is way 0, so `None` matched any source).
+  `fires_of_mount_doom_ignores_a_land_played_with_another_permission` (a Mountain played with
+  Crucible of Worlds deals no damage; Fires of Mount Doom's ruling "but don't play the exiled
+  card this turn using that casting permission, ...") and
+  `galea_ignores_an_equipment_cast_with_another_permission` (Bonesplitter cast with
+  Muldrotha's permission doesn't trigger Galea), both in
+  `r601_003_played_this_way_other_permissions.rs`.
+- `in_permission_zone` (`180:5` → `true`, `184:30`/`184:44`, `196:32`, `197:32`, `201:27`,
+  `202:34`) and `allowing`'s `279:53` (`||`→`&&`): a static permission applied to a card
+  another permission lists outside its zone ("top of your library" as any library's top,
+  "your graveyard" as any graveyard, "top of your graveyard" as the whole graveyard, "your
+  hand" as any hand), or another player's permission read as yours (CR 109.5). One test
+  per pair of permissions in `r601_003_permission_zones.rs`:
+  `bosium_strip_casts_only_the_top_card_while_crucible_of_worlds_lists_the_graveyard`,
+  `crucible_of_worlds_doesnt_play_a_land_from_another_players_graveyard` (Coram, the
+  Undertaker lists every graveyard), `omniscience_doesnt_cast_spells_from_another_players_hand`
+  (three players, Sen Triplets), `future_sight_doesnt_cast_the_top_card_of_another_players_library`
+  (three players, Xanathar, Guild Kingpin), and for `279:53`'s second half
+  `another_players_crucible_of_worlds_doesnt_play_a_land_from_your_graveyard` (Lurrus of the
+  Dream-Den's ruling "Lurrus doesn't let you play lands from your graveyard.").
+- `effect_permitted_cards` (`407:34`/`407:48`, `419:36`, `424:36`, `429:31`; the grants'
+  loop `455:28`, `455:53`): the list of cards a player may play outside the hand included
+  cards no permission of theirs covers, and mutate's way (which asks only that list) let them
+  be cast for their mutate cost with no permission (CR 601.3). Four tests in
+  `r601_003_permission_effects.rs`:
+  `future_sight_doesnt_offer_mutate_for_the_top_card_of_another_players_library` (Future
+  Sight's ruling "If the card has alternative or additional costs, you may pay those."),
+  `bosium_strip_doesnt_offer_mutate_for_a_card_under_the_top_of_your_graveyard` (Muldrotha's
+  ruling "You must pay the costs to cast a spell this way. If it has an alternative cost, you
+  may cast it for that cost instead."), `omniscience_doesnt_offer_mutate_for_a_card_in_another_players_hand`,
+  and `another_players_permission_for_a_card_doesnt_offer_you_mutate_for_it` (P1 activates
+  Fires of Mount Doom: the Sea-Dasher Octopus it exiles is P1's to play, not P0's).
+- `attach` (`510:46` `>`→`==`, `>=`): every permission "changes the way", so a card in the
+  hand with Omniscience out gets a second "for its mana cost" way with Omniscience's
+  permission, and casting it asks which permission. `a_card_cast_from_hand_for_its_mana_cost_with_omniscience_out_asks_no_permission`
+  (`r601_003_permission_choice.rs`, `interp!("own-permission-first")`).
+- `spell_relative_cost` (`583:38` guard → `false`, `598:21` delete the `KeywordAction` arm):
+  "its mana value" left unresolved, so the legal-action check read it for the card where it
+  is. `hama_waterbends_the_mana_value_of_the_half_cast_from_a_split_card` (Fire // Ice in
+  exile: waterbend {2}, Fire's, not {4}; CR 709.4b; Fire // Ice's ruling "A split card's
+  characteristics are a combination of its two halves while it is not on the stack" and Hama,
+  the Bloodbender's on tapping creatures to waterbend), `r601_003_permission_choice.rs`.
+- `choose_land_permission` (`620:42` `||`→`&&`): a land with its own mayhem permission
+  (Oscorp Industries) was played with Muldrotha's once-each-turn land.
+  `a_land_played_with_its_own_mayhem_ability_leaves_muldrothas_land_unused`
+  (`r601_003_permission_choice.rs`, `interp!("own-permission-first")`; Muldrotha's ruling "If
+  multiple effects allow you to play a card from your graveyard, you must announce which
+  permission you're using ...").
+- `choose` (`715:48` `<`→`<=`): an answer one past the last permission named was taken (the
+  last way, not the default; for a land it would index out of bounds).
+  `an_answer_one_past_the_last_permission_uses_the_default_permission`
+  (`r601_003_permission_choice_answers.rs`, beside the `Index(7)` test; Muldrotha's ruling
+  "you may cast an artifact creature spell as your artifact spell and cast another artifact
+  creature spell as your creature spell").
+- `label` (`984:5` → `String::new()`, `"xyzzy".into()`; `995:12` delete `!`): the
+  permissions asked by name all read the same, so an agent can't announce the one it means
+  (the same defect as `casting.rs:420:41`'s option names, also (b)).
+  `the_permissions_asked_by_name_are_named_by_source_and_use` (the options "Muldrotha, the
+  Gravetide's permission (as your artifact spell)" / "(as your creature spell)"; the "you must
+  announce" ruling), `r601_003_permission_choice_answers.rs`.
+- `record_use` (`811:72` `==`→`!=`): the count left of a limited group was written onto every
+  other permission, so all of March of Reckless Joy's cards could be played.
+  `march_of_reckless_joy_plays_only_two_of_the_exiled_cards` (`r601_003_permission_records.rs`;
+  its ruling "You choose which cards that you are playing from exile as you play them, ...").
+- `note_way` (`917:5` → `()`, `917:15` `>=`→`<`): the permissions kept way 0, so with two
+  activations a card cast with the first's permission triggered both delayed abilities.
+  `each_fires_of_mount_doom_activation_deals_damage_only_for_its_own_card`
+  (`r601_003_permission_records.rs`, 18/18 not 16/16; Fires's "this casting permission"
+  ruling).
+- `given` (`969:45`, `975:64`, `&&`→`||`): "until you exile another card with ~" permissions
+  ended by any permission with terms from the same object, or by any object's new one.
+  `myr_welders_other_exile_ability_doesnt_end_its_unstable_amulet_permission` (Myr Welder
+  with Unstable Amulet and Oracle's Vault imprinted; CR 607.1, 607.1c, 607.5; Myr Welder's
+  ruling "treat Myr Welder's version of that ability as though it referenced Myr Welder by
+  name instead") and `another_unstable_amulet_exiling_a_card_doesnt_end_this_ones_permission`
+  (CR 700.7), both in the new `r601_003_permission_given.rs`. The Myr Welder kill rested on
+  Oracle's Vault's free-play text compiling to `WithPlayTerms`; the re-run confirms it.
+- `347:13` (`free_option`, `land || last.free || ...` → `land && last.free || ...`, classified
+  (a) at first, killed after the re-run): a land the permission allows gets the "without
+  paying their mana costs" way too, the same permission twice, and playing it asks "Choose
+  the permission you're using". `a_land_ignite_the_future_exiled_after_flashback_is_played_without_a_permission_choice`
+  (`r601_003_permission_choice.rs`: an Island Ignite the Future exiled after flashback is
+  played with no question; CR 305.1, 116.2a).
+
+**Engine bugs (c)**, each fixed generally, with a regression test that fails before the fix:
+
+- Shaman's Trance (CR 609.4; found triaging `196:32`): "You may play lands and cast
+  spells from other players' graveyards this turn as though those cards were in your
+  graveyard" extended only the keywords' graveyard permissions (flashback, retrace, ...), not
+  effects' "from your graveyard" ones (Crucible of Worlds, Muldrotha, Yawgmoth's Will,
+  Lurrus). `in_permission_zone`'s graveyard arm now asks `as_though::in_graveyard_for`, and
+  `effect_permitted_cards` adds `as_though::other_graveyard_cards`; the `any_owner` and
+  "top of your graveyard" arms stay. `shamans_trance_lets_crucible_of_worlds_play_a_land_from_another_players_graveyard`
+  (`r601_003_permission_zones.rs`). Commit `c83fe93`.
+- One permission's cost per way (CR 702.81a, 601.2f; found triaging `514:17`–`516:17`):
+  `attach` combined a card's own way whose additional cost comes with its own permission
+  (retrace's, jump-start's, Rona, Sheoldred's Faithful's) with another permission's terms: Risen
+  Executioner with retrace (Six) had a third way, a land discarded *and* {1} more for each
+  other creature card. The player uses one permission (the Muldrotha ruling), and the total
+  cost is that way's. `attach` now skips, outside the hand, own ways with an additional cost
+  of their own, as it already did for flashback's alternative cost (in the hand an own
+  additional cost belongs to a timing permission, which an effect's permission may combine
+  with: `rout_cast_with_flash_and_a_permission_to_cast_it_free_costs_only_the_2_more`, added
+  by the review). `risen_executioner_cast_with_retrace_doesnt_cost_more_for_other_creature_cards`
+  (`r601_003_permission_ways.rs`). Commit `c83fe93`. Since the fix
+  `514:17`, `515:17` and `516:17` are equivalent with today's cards (no own way without a
+  cost of its own meets those terms), so they count as (a), not killed.
+- Unstable Amulet's "until you exile another card with this artifact" (CR 109.5, 611.2a;
+  found triaging `969:45`, `975:64`): `given` ended a source's earlier such permissions
+  whichever player the new one was for, so P1 exiling a card with the Amulet they took (Steal
+  Artifact) ended P0's (likewise Superior Foes of Spider-Man under Act of Treason, Furious
+  Rise under Confiscate). `newer` now pairs the source with the player the permission is for.
+  `another_player_exiling_a_card_with_your_unstable_amulet_doesnt_end_your_permission`
+  (`r601_003_permission_given.rs`). Commit `09bc166`.
+
+**Equivalent survivors (a)**, missed by the re-run:
+
+- `102:9` (`true`, `false`), `102:19` (`CastPermission::eq`): dead code; nothing compares
+  permissions (`CastOption` has no `PartialEq`, `same_way` leaves the permission out).
+- `192:24` (`in_permission_zone`'s library branch without `top_only`): every library
+  permission is for the top card.
+- `202:9` (delete the `Hand` arm): differs only for a card in the player's own hand, where
+  nothing reads the answer (the hand needs no effect's permission; hand permissions change no
+  way). Likewise `435:13` in `effect_permitted_cards`: every reader takes the hand's cards
+  without the list.
+- `203:9`, `203:37`, `204:9`, `204:37` (`Command`/`Outside` arms), `436:13`, `439:13`: no play
+  permission is built for the command zone or outside the game (commanders and Wish go other
+  ways; the cards that would need one are legal in no format).
+- `296:30` (delete `!` in a static permission's condition): dead path; no collected play
+  permission has `PlayTerms::condition` set (a static ability's condition is checked by
+  `collect_statics`, and no card's timed class permission has one).
+- `347:26` (`free_option`'s guard, `||`→`&&`): the free rider exists only on Nahiri, Forged in
+  Fury and Ignite the Future, whose grants have no free flag and no alternative cost, so the
+  guard's last two terms are false and only `land` matters, as in the original.
+- `371:30` (every custom quality dropped from the qualities rechecked once proposed): the
+  custom qualities play permissions hold are provenance or graveyard history, which casting
+  doesn't change; the recheck repeats the first check.
+- `380:5`, `385:34`, `391:21` (`may_be_permitted` → `true`, or wider): a fast path; where the
+  original says false, `attach` returns the card's own ways unchanged.
+- `510:46` `>`→`<`, `511:17`, `512:17`, `513:17` (`attach`'s way-changing terms): Urianger
+  Augurelt's reduction, the Adventure face, Abstruse Appropriation's and Draugr Necromancer's
+  spend terms never meet a card's own way. `514:17`, `515:17`, `516:17`: equivalent since fix 2
+  (above).
+- `583:38` (guard → `true`): every relative amount reaching `spell_relative_cost` is
+  `ManaValueOf(Sel::This)`.
+- `671:39`, `697:47` (`-`→`+`, `/`; the clamps): the index is always below the length.
+- `736:68` (`matches_for_some_x`, `&&`→`||`): trying X on a cost without {X} only merges its
+  generic symbols, which no filter can tell; no land has an {X}.
+- `906:13` (`lock_permission_players`, delete the `Not` arm): no class permission has an
+  `OwnedByPlayer` under a `Not`.
+- `921:20` (`true`), `921:23` `>=`: `THIS_WAY` is never stored as 0. `921:20` (`false`),
+  `921:23` `==`, `<`: a fresh way for each permission instruction differs only for an effect
+  with two such instructions and a "this way" ability, which no card has.
+- `957:44`: the group id taken for nobody shifts every later effect id by one, which keeps
+  every comparison. `960:36` (`+`→`*`, `-`): a group need only be nonzero and its own
+  (`new_effect_id()` is at least 2 there). `962:41`: no limited `WithPlayTerms` wraps another
+  or more than one grant.
+
+**Not fixed / notes:**
+
+- Myr Welder that has imprinted two Unstable Amulets (or Mairsil, the Pretender caging them):
+  the engine identifies the "until another" ability by its source object, so each Amulet's
+  ability ends the other's permissions, though CR 607.1c ("An ability printed on an object
+  that fulfills both criteria described in rule 607.1 is linked to itself.") and 607.5 keep
+  each linked only to itself. Telling them apart needs the ability's identity on the grant;
+  no other card has two such abilities.
+- Register entry `own-permission-first` (`docs/interpretations/decisions-policies.md`,
+  policy, provisional): a card's own permission is the one used when an effect's permission
+  would allow the same way, without asking; the player is asked only among effects'
+  permissions. Rules: 601.3 "A player can begin to cast a spell only if a rule or effect allows
+  that player to cast it and no rule or effect prohibits that player from casting it.";
+  702.187c "“Mayhem” without a cost means “You may play this card from your graveyard if you
+  discarded it this turn.”"; Muldrotha, the Gravetide's ruling (2020-11-10): "If multiple
+  effects allow you to play a card from your graveyard, you must announce which permission
+  you're using as you begin to play the card." The card's own permission can't be used up,
+  so announcing it leaves the player every option. Cited by the Omniscience, Oscorp
+  Industries, Risen Executioner and Rout tests.
+- Latent, no card: a static permission's use is identified only by its source (way 0), which
+  would confuse two static permissions of one source; `choose_cast_permission`'s default for a
+  group mixing the card's own way with effects' is option 0 (the own way), not the first
+  payable one as its doc says (after fix 2 no such group arises with today's cards).
+- The new code (the `as_though` arms, `attach`'s extra-cost skip, `given`'s per-player
+  `newer`) hasn't had its own mutants run.
+
+**Review.** Every engine fix's regression test was checked again to fail with its fix
+reverted (the Shaman's Trance, Risen Executioner and stolen Unstable Amulet tests, each
+failing alone), and fix 2's exception for the hand, which no test reached, now has one:
+`rout_cast_with_flash_and_a_permission_to_cast_it_free_costs_only_the_2_more`
+(`r601_003_permission_ways.rs`: Rout in P0's hand, with an effect's permission to cast it
+without paying its mana cost, is cast during P1's turn for {2}; it fails with `attach`'s skip
+applied in the hand too). Changes:
+
+- Tests: the Risen Executioner test cited a Muldrotha, the Gravetide ruling with no Muldrotha
+  in it (dropped; the ruling stays cited by the Muldrotha tests); the Ignite the Future land
+  test cited 601.3, a rule for casting spells, for a land play (now 116.2a); the Coram, the
+  Undertaker test also cites 109.5 ("your graveyard" is its controller's); the regression
+  tests' "fails until the fix" notes now name the fix commits. Both tests of
+  `r601_003_permission_ways.rs` cite `own-permission-first`, whose decision now says why an
+  own way's additional cost is combined with an effect's permission in the hand (it comes
+  with a timing permission there, CR 601.3c).
+- This section: the classification (32 (b) and three (c), not "35 killable"), the script's
+  `REV`, Shaman's Trance's rules (609.4a dropped: Crucible of Worlds isn't an "as though"
+  effect), the Muldrotha ruling no longer listed for the Risen Executioner test.
+- Found, not fixed (outside this file): with Omniscience on the battlefield, a card's own way
+  to cast it as though it had flash for an additional cost isn't offered without paying its
+  mana cost. `Game::permitted_cast_options` gives Omniscience's permission a plain
+  `CastMethod::Free` way of its own, without flash, so Rout can't be cast during an opponent's
+  turn for {2} (P0 with two Plains is refused), though its flash permission's {2} is an
+  additional cost an alternative cost combines with (CR 601.3c, 118.9d; Omniscience's ruling
+  "You can, however, pay additional costs, such as kicker costs."). It affects the nine cards
+  with "as though it had flash if you pay {2} more" (Rout, Harbinger of the Tides, Ghitu Fire,
+  Mystical Tether, ...); the fix belongs with the offered alternative costs
+  (`kw::offered_costs::extend_cast_options`, which already extends every way without an
+  alternative cost).

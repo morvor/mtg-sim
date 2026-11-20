@@ -627,6 +627,12 @@ pub enum CostPart {
     /// (X is 0, CR 107.3h; nothing reduces it: it isn't a spell being cast). Only a card
     /// whose mana cost could be paid may be chosen (see `cost_sets.rs`).
     AndPayItsManaCost(Box<CostPart>),
+    /// "{X}, where X is [value]" in a cost that isn't a spell's or ability's own (an attack
+    /// tax, an alternative cost an effect offers): X generic mana, X defined by the text
+    /// (CR 107.3c) and determined as the total cost is (CR 508.1h, 601.2f). The cost still
+    /// contains {X}: mana that may be spent only on such costs may pay it (CR 106.6; see
+    /// `defined_x_costs.rs`).
+    DefinedX(Value),
 }
 
 // ---------------------------------------------------------------------------
@@ -1284,6 +1290,17 @@ pub enum PlayerRef {
     Target(u8),
     /// Controller of the object(s) selected.
     ControllerOf(Box<Sel>),
+    /// The controller the triggering object (`Sel::TriggerObject`) or the event's other
+    /// object (`Sel::TriggerOtherObject`) had as the ability triggered: "that player" /
+    /// "that opponent" whose antecedent is the trigger condition's "an opponent"
+    /// ("Whenever a creature an opponent controls enters, that player loses 1 life";
+    /// "Whenever a source an opponent controls deals damage to you, that player
+    /// sacrifices a permanent"), the same player even if the object changes control
+    /// before the ability resolves (`that-opponent-fixed-as-it-triggers`). Object-based
+    /// wordings ("its controller", "that creature's controller") are `ControllerOf`, read
+    /// as the ability resolves (CR 608.2h). Without a recorded controller, as
+    /// `ControllerOf`.
+    ControllerAsTriggered(Box<Sel>),
     /// Owner of the object(s) selected.
     OwnerOf(Box<Sel>),
     /// The player from the triggering event.
@@ -2298,6 +2315,11 @@ pub enum Duration {
     /// "for as long as [source] remains on the battlefield" / "for as long as you control".
     WhileSourceOnBattlefield,
     WhileYouControlSource,
+    /// "until [source] leaves the battlefield": like [`Duration::WhileSourceOnBattlefield`],
+    /// except that the source phasing out doesn't end it: phasing isn't leaving the
+    /// battlefield (CR 702.26d), and only "for as long as" durations lose track of a
+    /// phased-out permanent (CR 702.26f).
+    UntilSourceLeavesBattlefield,
     /// "for as long as [object] remains tapped" etc.
     WhileCondition(Condition),
     /// Indefinitely (e.g. "gain control of target creature").
@@ -3228,6 +3250,15 @@ pub enum Restriction {
     CantEnterBattlefield(Filter),
     /// "doesn't untap during its controller's untap step".
     DoesntUntap(Filter),
+    /// "[Permanents] don't untap during [a player]'s untap step": the permanents matching
+    /// `what`, whoever controls them, don't untap during the untap step of a player
+    /// matching `who` (CR 502.3) — "Creatures don't untap during target player's next
+    /// untap step" (Blinding Beam) covers creatures other players control that would
+    /// untap then (Seedborn Muse), as its ruling says.
+    DoesntUntapDuringUntapStepOf {
+        who: PlayerFilter,
+        what: Filter,
+    },
     /// "[Players] can't untap more than [n] [objects] during their untap steps"
     /// (modifies CR 502.3).
     MaxUntaps {

@@ -2,7 +2,8 @@
 //! turn" (and "if it's the Nth [spell] you cast this turn") checked again as the ability
 //! resolves (CR 603.4). The condition is about the event that made the ability trigger:
 //! a later event of the same kind doesn't make that event the second time
-//! (interpretation `first-time-is-about-the-trigger-event`, provisional). A condition that
+//! (interpretation `first-time-is-about-the-trigger-event`, decided by the user Nov 20). A
+//! condition that
 //! isn't about the trigger event ("if you didn't cast a spell this turn") is checked
 //! against the game as it is then.
 
@@ -40,7 +41,8 @@ fn botanical_brawlers_first_time_stays_the_first_time_as_it_resolves() {
         assert_eq!(triggers_on_stack(&t, "first time"), 1, "the first time");
         if second_counter {
             // Another counter on the Bears while the ability waits: the second time
-            // doesn't trigger it, and doesn't stop the first one.
+            // doesn't trigger it, and doesn't stop the first one (the user, Nov 20:
+            // "Brawler would get a single counter in the situation you described").
             give_plus1(&mut t, bears, 1);
             assert_eq!(triggers_on_stack(&t, "first time"), 1, "not the first time");
         }
@@ -290,6 +292,13 @@ fn vengevine_returns_though_a_third_creature_spell_is_cast_in_response() {
         1,
         "not for the third"
     );
+    // The third creature spell resolves first (the user, Nov 20: "the trigger from the
+    // second creature would still return the vengevine, even after the third creature has
+    // resolved").
+    t.resolve();
+    assert_eq!(t.named_on_battlefield("Ambush Viper").len(), 1, "resolved");
+    assert_eq!(triggers_on_stack(&t, "second creature spell"), 1, "still waiting");
+    assert!(!t.on_battlefield(vengevine), "not yet returned");
     t.resolve_all();
     assert!(t.on_battlefield(vengevine), "returned");
     assert_eq!(t.named_on_battlefield("Ambush Viper").len(), 1);

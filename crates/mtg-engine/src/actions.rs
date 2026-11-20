@@ -728,6 +728,7 @@ impl Game {
                     // stop applying as it's turned face up (CR 708.2a, 708.8).
                     let id = self.new_effect_id();
                     let ts = self.new_timestamp();
+                    let first = self.effects.len();
                     self.effects.push(ContinuousEffect {
                         id,
                         source,
@@ -743,6 +744,12 @@ impl Game {
                         layer1: None,
                         created_turn: self.turn.number,
                     });
+                    // CR 205.3d: not a subtype it can't have as it enters (Rise from the
+                    // Grave returning a noncreature God, `subtype_gain.rs`).
+                    crate::subtype_gain::lock_ungainable_parts(self, first);
+                    // CR 113.11: nor an ability it can't have (Valkyrie's Call's "It has
+                    // flying" for a creature that can't have flying, `kw/cant_have.rs`).
+                    crate::kw::cant_have::drop_ungrantable_keywords(self, first);
                 }
                 self.recompute();
                 // Counters it enters with (CR 122.6): planeswalker loyalty (CR 306.5b),
@@ -1402,7 +1409,7 @@ impl Game {
                     && self.matches(obj, f, &Ctx::new(e.source, e.controller))
             }
             _ => false,
-        })
+        }) || crate::untap_choice::kept_tapped_this_untap_step(self, obj)
     }
 
     // ------------------------------------------------------------------
@@ -2288,16 +2295,31 @@ impl Game {
         &mut self,
         batch: Vec<(PlayerId, TokenCreate, u32, Option<ObjectId>)>,
     ) -> Vec<Vec<ObjectId>> {
+        self.create_tokens_in_groups(batch, &[])
+    }
+
+    /// [`Game::create_tokens_together`], where only creations in the same group (`groups`,
+    /// one for each entry of `batch`; group 0 if missing) can be combined.
+    pub(crate) fn create_tokens_in_groups(
+        &mut self,
+        batch: Vec<(PlayerId, TokenCreate, u32, Option<ObjectId>)>,
+        groups: &[usize],
+    ) -> Vec<Vec<ObjectId>> {
         if self.dirty {
             self.recompute();
         }
         let mut out = vec![Vec::new(); batch.len()];
         let mut moves = Vec::new();
         let mut made_by = Vec::new();
-        for (i, (controller, spec, count, source)) in batch.into_iter().enumerate() {
+        // The same tokens for the same player are one creation (one "for each"
+        // instruction's tokens: `for_each_events`).
+        for (controller, spec, count, source, parts) in
+            crate::for_each_events::merge_creations(batch, groups)
+        {
             if count == 0 {
                 continue;
             }
+            let start = moves.len();
             for e in self.replace(ReplEvent::CreateTokens {
                 controller,
                 spec: Box::new(spec),
@@ -2313,12 +2335,12 @@ impl Game {
                     } => {
                         for _ in 0..count {
                             moves.push((controller, self.token_entry(controller, &spec)));
-                            made_by.push(i);
                         }
                     }
                     e => self.execute_repl_event(e),
                 }
             }
+            made_by.extend(crate::for_each_events::credit(&parts, moves.len() - start));
         }
         let entered = self.enter_tokens(moves);
         self.run_post_replacement_effects();

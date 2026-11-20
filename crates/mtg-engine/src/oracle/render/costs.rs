@@ -444,6 +444,11 @@ impl Renderer<'_> {
                 let s = self.sel(s, players::Case::Poss);
                 format!("pay {s} mana cost reduced by {{{n}}}")
             }
+            // "{X}, where X is the number of enchantments you control" (CR 107.3c).
+            CostPart::DefinedX(v) => {
+                let v = self.value(v);
+                format!("{{X}}, where X is {v}")
+            }
             CostPart::Repeated { cost, times } => {
                 if let Some(s) = self.repeated_any_number(cost, times) {
                     return s;
