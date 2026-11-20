@@ -205,8 +205,9 @@ The 15 cards that dropped a tier:
   Vampire per player), Hex (at most five creatures at once), Humble the Brute and
   Radiant's Judgment (no creature with power 4 or more at sorcery speed), It That Betrays
   (at most 11 untapped lands: upkeep activations of Volrath's Laboratory and Animation
-  Module tapped the rest), Karador, Ghost Chieftain (games over by turn 14 with 6 or 7
-  lands and at most one creature card in the graveyard), Lava Blister (only basic lands:
+  Module tapped the rest), Karador, Ghost Chieftain (games over on turns 11 and 14, and no
+  player ever had the lands for its cost after its reduction: 5 to 7 lands against {5}{W}{B}{G}
+  less {1} for each creature card in their graveyard, 6 to 8), Lava Blister (only basic lands:
   it targets a nonbasic land). Hogaak, Arisen Necropolis was chosen many times, but each
   cast failed: the focus agent answers convoke's and delve's choices with a random number
   of creatures and cards, and Hogaak can't be paid with mana for the rest; the report's
@@ -216,7 +217,15 @@ The 15 cards that dropped a tier:
   17, enough for {U}{U}{R}{R}{R}{W}{W}, but the payment planner uses a mana ability
   without {T} at most once per payment (`mana_abilities.rs`: one `ManaSource` per
   ability), so the cast wasn't legal. The same holds for Ashnod's Altar with two
-  creatures paying {4}. Left open for a fix in the planner.
+  creatures paying {4}. An old bug, not a regression; open, with its repro and an approach,
+  in `docs/agents/engine-gaps.md` ("a repeatable mana ability is planned at most once per
+  payment").
+
+The fuzz-cast check moves both ways between sweeps: 32 of the 75 cards this sweep never cast
+were cast in the Nov 5 sweep, and 35 cards that sweep never cast were cast now, of the same
+kinds (spells that need a particular board, such as Aura Graft, Break Open and Wild Ricochet).
+The review replayed Chained to the Rocks, Combust, Lava Blister and Karador (both games each),
+Hogaak and Inspired Ultimatum: the verdicts above hold (Karador's reason corrected).
 
 ### Sweep for the card tiers (Oct 21)
 

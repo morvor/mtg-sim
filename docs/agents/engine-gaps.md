@@ -882,6 +882,60 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   used the command zone's order). Game 405: `order_simultaneous_entries` now lists each player's objects by
   owner in APNAP order, then creation order (register `simultaneous-entries-listed-by-owner-then-creation`).
 
+### Residual: a repeatable mana ability is planned at most once per payment (sweep-nov20, open)
+- Rules: CR 601.2g "If the total cost includes a mana payment, the player then has a chance to activate
+  mana abilities"; 605.3a "A player may activate an activated mana ability whenever they have priority,
+  whenever they are casting a spell or activating an ability that requires a mana payment, ..." (no limit
+  on how often while the ability's cost can be paid, CR 118.3); Skirk Prospector's ruling (2022-12-08,
+  cited in `tests/rulings/r_p062_sacrifice_outlets.rs` with manual activations): "if you'd like to
+  sacrifice multiple Goblins including Skirk Prospector for mana, be sure to sacrifice Skirk Prospector
+  last."
+- Engine now: the automatic payment (`mana_abilities.rs`: `sources_inner` lists one `ManaSource` per mana
+  ability of a permanent, its sacrifice or exile candidates as one `sac_pool` with one `sac_count`; the
+  `Planner` uses each source at most once) never activates a mana ability twice for one payment, although
+  one whose cost doesn't tap or sacrifice its permanent can be activated again as long as its cost can be
+  paid. `legal_actions` asks the same planner, so a spell or ability whose cost needs a second activation
+  isn't offered. The only way around it is activating the mana abilities with priority first, which
+  `legal_actions` doesn't list (mtg-api does; the sweep's focus agent activates only the focus card's).
+  Old, not a regression: the planner has worked this way since at least the start of the visible history
+  (Nov 19), and Inspired Ultimatum's games in the Nov 5 sweep didn't need it.
+- Found by the Nov 20 every-card sweep (`docs/EVERY_CARD.md`): Inspired Ultimatum (card 13895) was never
+  castable; in game 0 player 0 had from turn 17 Plains ×2, Island ×2 and a Mountain untapped and Prisms
+  enough for {U}{U}{R}{R}{R}{W}{W} with Diamond Kaleidoscope ("Sacrifice a Prism token: Add one mana of any
+  color."): `cargo run --release -p mtg-sim -- --every-card --from 13895 --count 1 --game 0 --log`.
+  Scratch repros (run Nov 20, all fail; removed, since an open bug isn't pinned by `#[ignore]` tests):
+  (1) Ashnod's Altar ("Sacrifice a creature: Add {C}{C}.") and two Grizzly Bears, no lands: Jayemdae Tome
+  ({4}) isn't in `legal_actions`, and casting it anyway fails with both Bears left (expected: offered, and
+  casting it sacrifices both Bears; with one Bears and two Wastes it is offered); (2) Diamond Kaleidoscope
+  with two Prism tokens (made with its first ability) and untapped Plains ×2, Island ×2 and Mountain:
+  Inspired Ultimatum isn't offered (expected: offered, paid with both Prisms); (3) Skirk Prospector
+  ("Sacrifice a Goblin: Add {R}.") and two Raging Goblins: Ball Lightning ({R}{R}{R}) isn't offered.
+- Cards (compiled or better) with a mana ability of that kind (no {T}, no mana in the cost; sacrificing or
+  exiling other objects, removing counters, paying life): Ashnod's Altar, Phyrexian Altar, Thermopod,
+  Krark-Clan Ironworks, Diamond Kaleidoscope, Skirk Prospector, Kykar, Wind's Fury, Utopia Mycon, Jungle
+  Patrol, Squandered Resources, Food Chain, Titans' Nest, Workhorse, Crystalline Crawler, Cryptic
+  Trilobite, Morselhoarder, Runaway Steam-Kin, Pentad Prism, Gemstone Array, Druids' Repository, Iceberg,
+  Mana Cache, Rasputin Dreamweaver, Treasonous Ogre, Lord of the Forsaken, Ronin, Shadow Stalker (those
+  with "Activate only once each turn", such as Mana Bloom, Wall of Roots and Kozilek's Translator, aren't
+  affected). Their tiers don't show it: the checks never compare a payment with what the rules allow.
+- Approach: list such an ability once per activation the payment could make (bounded by its candidates
+  divided by what one activation takes, its counters, the life it costs, its remaining activations per
+  turn or in all, and the cost's number of symbols; not for abilities with {T}, a mana cost, which
+  `plan_with_filter` plans once, or a keyword limit such as exhaust), as `offer_sources` already lists one
+  source per use of a special action; make the sacrifice check set-wide (a matching of all the planned
+  activations' sacrifices and exiles to distinct objects, without the permanents that sacrifice themselves
+  for mana: with copies, the pairwise `sacrifices_too_much_with` would let two creatures pay for two
+  activations each of Ashnod's Altar and Phyrexian Altar, 6 mana; it already lets a Blood Pet ("Sacrifice
+  this creature: Add {B}.") both sacrifice itself and be sacrificed to Ashnod's Altar, so with Blood Pet the
+  only creature Worn Powerstone ({3}) is offered and the cast is then reversed, an over-offer of the kind
+  listed under "Not engine rules gaps" below); use copies of one ability in order, so a failing search
+  doesn't try their permutations; and in `pay_mana` keep the source of later activations, and what they
+  need, out of each activation's sacrifice choices, as `mana_reserve` keeps a cost's own source (Skirk
+  Prospector's ruling: it goes last). Tests: the three repros; Ashnod's Altar and Phyrexian Altar with two
+  creatures pay {4} and not {5}; Skirk Prospector with two other Goblins pays {R}{R}{R} and is sacrificed
+  last; Krark-Clan Ironworks with one other artifact pays {4}. Then re-sweep the cards above with
+  `--names` (Inspired Ultimatum included). Size: S-M.
+
 ---
 
 ## Known gaps from the owner's list: status
