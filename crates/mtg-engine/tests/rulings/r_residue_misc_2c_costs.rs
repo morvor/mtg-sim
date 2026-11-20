@@ -616,29 +616,24 @@ fn moraug_twice_in_the_postcombat_main_phase_two_combats_then_the_ending_phase()
     t.play_land(P0, f).expect("land");
     t.enter(P0, "Plains");
     t.resolve_all();
-    let mut steps = vec![];
-    t.g.objects[bears.0 as usize].tapped = true;
-    let ok = t.g.run_until(10_000, |g| {
-        g.turn.active == P1
-            || (g.turn.step == Step::End && g.turn.stage == mtg_engine::turn::Stage::Priority)
-    });
-    assert!(ok);
-    // Collect the phases from the log instead: count the beginning of combat steps after
-    // the main phase.
-    for l in t.dump_log().lines() {
-        if l.contains("Beginning of combat")
-            || l.contains("BeginningOfCombat")
-            || l.contains("main phase")
-        {
-            steps.push(l.to_string());
-        }
+    assert_eq!(t.g.turn.main_phases, 2);
+    // Two additional combats in a row, each untapping the Bears, with no main phase.
+    for n in [2, 3] {
+        t.g.objects[bears.0 as usize].tapped = true;
+        t.advance_to(P0, Step::BeginningOfCombat);
+        t.resolve_all();
+        assert_eq!(t.g.turn.combat_phases, n, "{}", t.dump_log());
+        assert_eq!(t.g.turn.main_phases, 2);
+        assert!(
+            !t.obj_now(bears).tapped,
+            "untapped at the beginning of combat {n}"
+        );
+        t.advance_to(P0, Step::EndOfCombat);
     }
-    assert_eq!(t.g.turn.combat_phases, 3, "{steps:?}\n{}", t.dump_log());
-    assert_eq!(t.g.turn.step, Step::End);
-    assert!(
-        !t.obj_now(bears).tapped,
-        "untapped at the beginning of each combat"
-    );
+    // Then the ending phase.
+    t.advance_to_step(Step::End);
+    assert_eq!(t.g.turn.active, P0);
+    assert_eq!((t.g.turn.combat_phases, t.g.turn.main_phases), (3, 2));
 }
 
 // --- Whirlpool Whelm (clash) ------------------------------------------------------------------

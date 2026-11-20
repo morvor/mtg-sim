@@ -213,8 +213,8 @@ fn debt_of_loyalty_on_an_indestructible_creature_does_nothing() {
     t.resolve_all();
     assert!(t.on_battlefield(myr));
     assert_eq!(controller(&t, myr), P1, "{}", t.dump_log());
-    // Its shield wasn't used: a later lethal damage... a 0/1 with 1 damage is indestructible
-    // too; it simply stays P1's.
+    // Not regenerated (it's still untapped and in no combat), and still P1's next turn.
+    assert!(!t.obj_now(myr).tapped);
     t.advance_to(P1, Step::Upkeep);
     assert_eq!(controller(&t, myr), P1);
 }

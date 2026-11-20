@@ -435,6 +435,7 @@ fn unpredictable_cyclone_casts_the_card_during_the_cycling_ability_ignoring_timi
 #[test]
 fn agitator_ant_goads_only_creatures_that_got_the_counters() {
     cr!("701.15a", "122.1", "614.1a");
+    interp!("counter-choice-excludes-what-cant-have-them");
     ruling!(
         "Agitator Ant",
         "If a creature can't have +1/+1 counters put on it, its controller can't choose it just to have it become goaded. If it can have counters put on it but replacement effects cause it not to receive +1/+1 counters, it doesn't become goaded."

@@ -669,6 +669,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: the token copy of Delver of Secrets // Insectile Aberration is a double-faced token with its front face up, and it transforms into Insectile Aberration.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P077.tsv`; tests `tests/rulings/r_p077_graveyard_cards.rs` (`back_from_the_brink_copies_a_double_faced_cards_front_face`).
 
+### Enduring Angel // Angelic Enforcer: "if it's a token"
+- Kind: outdated
+- Status: open for review
+- Ruling, Enduring Angel // Angelic Enforcer (2021-09-24): "Applying the replacement effect can't cause Enduring Angel to transform if it isn't a double-faced permanent; that is, if it's a token or if a single-faced permanent has become a copy of it. In that situation, you will lose the game."
+- Conflicts with: CR 707.8a: "If an effect creates a token that is a copy of a double-faced permanent or a double-faced card not on the battlefield, the resulting token is a double-faced token that has both a front face and a back face. ..." and CR 701.27a: "... Only permanents represented by double-faced tokens and double-faced cards can transform."
+- Evidence: the ruling (Innistrad: Midnight Hunt, 2021-09-24) followed the CR of its day, as Back from the Brink's (above) did: only permanents represented by transforming double-faced cards could transform, and a token copy of one wasn't such a permanent (the CR effective 2023-02-03 still had 707.8 "When copying a double-faced card, a face-up meld card, or a melded permanent, only the copiable values of the face that’s currently up are copied." and 701.28a "... Only permanents represented by transforming double-faced cards can transform."). The CR effective 2023-04-14 (March of the Machine) added 707.8a (archived CR texts). The ruling's rule ("can't cause Enduring Angel to transform if it isn't a double-faced permanent") and its single-faced case still hold and are cited; a token copy of Enduring Angel is a double-faced permanent now. Found in work item rulings-residue-misc-2, pass C (Nov 20).
+- Engine: a token copy of Enduring Angel is a double-faced token: the replacement transforms it into Angelic Enforcer and its controller's life total becomes 3; a Grizzly Bears that became a copy of Enduring Angel can't transform, and its controller loses the game.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P206.tsv`; tests `tests/rulings/r_residue_misc_2c_replacement.rs` (`enduring_angel_a_token_copy_is_double_faced_and_transforms`, `enduring_angel_a_single_faced_copy_cant_transform_and_loses_the_game`).
+
 ### Hellkite Whelp: a battle's "controller is the defending player"
 - Kind: outdated
 - Status: open for review
