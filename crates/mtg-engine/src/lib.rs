@@ -168,6 +168,7 @@ pub mod step_durations;
 pub mod stickers;
 pub mod structure;
 pub mod subgame;
+pub mod subtype_gain;
 pub mod tallies;
 pub mod target_groups;
 pub mod target_rules;

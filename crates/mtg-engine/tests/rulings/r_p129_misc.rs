@@ -13,6 +13,7 @@ use mtg_engine::*;
 #[test]
 fn terror_of_towashi_makes_a_lasting_phyrexian_only_while_a_creature() {
     cr!("603.12", "205.3d", "611.2a");
+    interp!("subtype-gained-only-if-it-corresponds-as-the-effect-begins");
     ruling!(
         "Terror of Towashi",
         "The effect making the creature a Phyrexian doesn’t have a duration."
@@ -24,6 +25,8 @@ fn terror_of_towashi_makes_a_lasting_phyrexian_only_while_a_creature() {
     let mut t = TestGame::new(2);
     t.lands(P0, "Swamp", 4);
     let terror = t.battlefield(P0, "Terror of Towashi");
+    // Devotion to white five once Heliod is back: a creature as the effect begins.
+    let knights: Vec<_> = (0..4).map(|_| t.battlefield(P0, "Benalish Knight")).collect();
     let god = t.graveyard(P0, "Heliod, God of the Sun");
     t.answer_yes(P0, true);
     t.answer_targets(P0, &[obj(god)]);
@@ -31,7 +34,15 @@ fn terror_of_towashi_makes_a_lasting_phyrexian_only_while_a_creature() {
     t.resolve_all();
     let god = t.g.current(god);
     assert!(t.on_battlefield(god));
-    // Devotion to white below five: Heliod isn't a creature, so not a Phyrexian.
+    assert!(is_creature_now(&t, god));
+    assert!(has_subtype(&t, god, "Phyrexian"));
+    // Devotion to white below five: Heliod stops being a creature, and a Phyrexian.
+    for k in knights {
+        let k = t.g.current(k);
+        t.g.destroy(k, None);
+    }
+    t.settle();
+    t.g.recompute();
     assert!(!is_creature_now(&t, god));
     assert!(!has_subtype(&t, god, "Phyrexian"));
     // With enough devotion it's a creature again, and a Phyrexian again.

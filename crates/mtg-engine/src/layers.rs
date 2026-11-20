@@ -2300,7 +2300,7 @@ fn drop_ungainable_subtypes(c: &mut Characteristics, orig: &Characteristics) {
     }
 }
 
-fn subtype_still_valid(s: &str, types: CardTypeSet) -> bool {
+pub(crate) fn subtype_still_valid(s: &str, types: CardTypeSet) -> bool {
     let kinds = subtype_kinds(s);
     // A subtype on several lists (Spacecraft) is valid with any of those card types.
     kinds.is_empty()
