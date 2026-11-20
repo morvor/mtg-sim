@@ -2122,6 +2122,7 @@ Bequeathal
 Bereaved Survivor // Dauntless Avenger
 Bereavement
 Beregond of the Guard
+Berserk
 Berserk Murlodont
 Berserkers of Blood Ridge
 Berserkers' Onslaught
@@ -25419,6 +25420,7 @@ Tiller of Flesh
 Tilling Treefolk
 Tilonalli's Crown
 Tilonalli's Knight
+Tilonalli's Summoner
 Timber Gorge
 Timber Protector
 Timber Wolves
