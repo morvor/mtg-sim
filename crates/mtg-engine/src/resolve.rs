@@ -405,7 +405,20 @@ impl Game {
                 }
             }
             Effect::Store { var, sel } => {
+                // Cards chosen only to be revealed don't change zones: a card entering the
+                // battlefield at the same time as the permanent whose "as enters" effect
+                // asks for them can be chosen (CR 614.13a excludes only objects that would
+                // change zones; Arsenal Thresher's and Game Trail's rulings). Amplify says
+                // otherwise for its own reveal (CR 702.38a, `kw/amplify.rs`).
+                let entering = if *var == crate::kw::reveal_from_hand::REVEALED {
+                    Some(std::mem::take(&mut self.entering))
+                } else {
+                    None
+                };
                 let mut v = self.resolve_sel(sel, ctx);
+                if let Some(e) = entering {
+                    self.entering = e;
+                }
                 // "~" after its cost moved it (CR 400.7j).
                 if matches!(sel, Sel::This) {
                     v = v

@@ -118,9 +118,19 @@ pub fn tap(t: &mut TestGame, id: ObjectId) {
 }
 
 pub use crate::r_p007_common::divide;
+pub use crate::r_p007_common::pw;
+pub use crate::r_p079_common::cast_card;
 pub use crate::r_p079_common::concede;
 pub use crate::r_p084_common::shuffles_since;
 pub use crate::r_s01_common::stack_library;
 pub use crate::r_s01_common::watch;
 pub use crate::r_s01_common::{creatures, with_subtype};
+pub use crate::r_s01_common::{custom_card, tapped_lands};
 pub use crate::r_s24_common::choose_creature_type;
+
+/// The printed power and toughness of the real card's front face.
+pub fn base_pt(name: &str) -> (i32, i32) {
+    let c = mtg_engine::card::card(name);
+    let f = c.front();
+    (f.chars.power.unwrap_or(0), f.chars.toughness.unwrap_or(0))
+}
