@@ -4,12 +4,12 @@
 //!
 //! Such a duration is a period, not a condition looked at once (Seasinger ruling: "Whether
 //! you control Seasinger is checked continually, starting when the ability is activated.").
-//! The period starts as the ability becomes activated (CR 602.2i, after its costs are paid)
-//! or triggers, or, for a copy of an ability, as the copy is put onto the stack (CR 707.10);
-//! it ends the first moment its condition is false. Once ended, it doesn't begin again
-//! before the ability resolves, even if the condition is true again by then: it can begin
-//! again only during the resolution itself ("doesn't begin again during that spell or
-//! ability's resolution", CR 611.2b). Register entries
+//! The period starts as the ability becomes activated (CR 602.2b, 601.2i: after its costs
+//! are paid) or triggers, or, for a copy of an ability, as the copy is put onto the stack
+//! (CR 707.10); it ends the first moment its condition is false. Once ended, it doesn't
+//! begin again before the ability resolves, even if the condition is true again by then: it
+//! can begin again only during the resolution itself ("doesn't begin again during that
+//! spell or ability's resolution", CR 611.2b). Register entries
 //! `for-as-long-as-checked-continually-from-activation` (the main case),
 //! `copied-ability-duration-starts-as-the-copy-is-created`,
 //! `phasing-out-ends-a-waiting-for-as-long-as-duration`,

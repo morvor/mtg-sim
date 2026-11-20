@@ -306,6 +306,36 @@ fn a_copied_abilitys_period_starts_as_the_copy_is_put_onto_the_stack() {
     assert!(locked(&mut t, goblin));
 }
 
+#[test]
+fn a_copy_of_an_activated_ability_has_a_period_of_its_own_too() {
+    cr!("707.10", "611.2b");
+    interp!("copied-ability-duration-starts-as-the-copy-is-created");
+    supported("Rings of Brighthearth");
+    // Rings of Brighthearth: "Whenever you activate an ability, if it isn't a mana ability,
+    // you may pay {2}. If you do, copy that ability." Seasinger's ability is copied; then
+    // control of Seasinger is lost and regained while the copy and the original wait.
+    for lost in [false, true] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P0, "Rings of Brighthearth");
+        t.lands(P0, "Wastes", 2);
+        t.lands(P0, "Island", 1);
+        t.lands(P1, "Island", 1);
+        let s = t.battlefield(P0, "Seasinger");
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        activate(&mut t, P0, s, "Gain control", &[obj(bears)]);
+        t.answer_yes(P0, true);
+        t.resolve();
+        assert_eq!(t.stack_len(), 2, "lost={lost}");
+        if lost {
+            give_control(&mut t, s, P1);
+            give_control(&mut t, s, P0);
+        }
+        t.resolve_all();
+        let want = if lost { P1 } else { P0 };
+        assert_eq!(controller(&t, bears), want, "lost={lost}");
+    }
+}
+
 // --- Phasing ----------------------------------------------------------------------------------
 
 /// The permanent phases out, and then in again.
@@ -453,21 +483,31 @@ fn a_duration_the_resolution_sets_up_is_checked_as_the_effect_begins() {
     supported("Zygon Infiltrator");
     // Zygon Infiltrator: "{2}{U}: Tap another target creature and put a stun counter on it.
     // This creature becomes a copy of that creature for as long as that creature remains
-    // tapped." The target was tapped as the ability was activated and becomes untapped
-    // while it waits; the resolution taps it again, so the duration begins during the
-    // resolution (CR 611.2b) and the Infiltrator becomes a copy of it.
-    let mut t = TestGame::new(2);
-    let zygon = t.battlefield(P0, "Zygon Infiltrator");
-    let bears = t.battlefield(P1, "Grizzly Bears");
-    tap(&mut t, bears);
-    t.lands(P0, "Island", 1);
-    t.lands(P0, "Wastes", 2);
-    activate(&mut t, P0, zygon, "Tap another target", &[obj(bears)]);
-    assert_eq!(t.stack_len(), 1);
-    untap(&mut t, bears);
-    t.resolve_all();
-    assert!(is_tapped(&t, bears));
-    assert_eq!(t.obj_now(zygon).chars.name.as_str(), "Grizzly Bears");
+    // tapped." The target is tapped as the ability is activated and becomes untapped while
+    // it waits. The resolution taps it again (the duration begins during the resolution,
+    // CR 611.2b), or another effect has tapped it again before the resolution (what happened
+    // while the ability waited doesn't matter): either way the Infiltrator becomes a copy.
+    for retapped in [false, true] {
+        let mut t = TestGame::new(2);
+        let zygon = t.battlefield(P0, "Zygon Infiltrator");
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        tap(&mut t, bears);
+        t.lands(P0, "Island", 1);
+        t.lands(P0, "Wastes", 2);
+        activate(&mut t, P0, zygon, "Tap another target", &[obj(bears)]);
+        assert_eq!(t.stack_len(), 1);
+        untap(&mut t, bears);
+        if retapped {
+            tap(&mut t, bears);
+        }
+        t.resolve_all();
+        assert!(is_tapped(&t, bears));
+        assert_eq!(
+            t.obj_now(zygon).chars.name.as_str(),
+            "Grizzly Bears",
+            "retapped={retapped}"
+        );
+    }
 }
 
 // --- The resolution itself; "and" conditions --------------------------------------------------
