@@ -20,3 +20,6 @@ Both games now hold (`--only 175 --players 4`, `--only 405 --players 2`, seed 1)
 Properties run (release build, `--properties --games 500 --jobs 3`, seed 1, 2,484 s): seat 500/500 held
 (1,134,649 decisions), snapshot 500/500, rollback 500/500 (29,488 reversed actions checked), determinism
 500/500, replay 498 held and 2 stopped at the time limit (games 83 and 469), no violations, no panics.
+Re-checked one by one with `--slow 300` (replays get three times that): game 83 held (718 s, 4,001
+requests); game 469 was still going at 900 s, and is slow the same way with the engine before this item
+(360 s limit) — a slow game, not a difference.
