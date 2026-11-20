@@ -1553,16 +1553,18 @@ fn sources_inner(
                     }
                     // "{T}, Exile a card from your graveyard: Add one mana of any color."
                     // (Molt Tender): the cards it could exile, kept in the same pool as a
-                    // sacrifice so one card pays only one cost (CR 118.3).
+                    // sacrifice so one card pays only one cost (CR 118.3). Likewise
+                    // "Exile a creature you control: Add ..." with the permanents it could
+                    // exile (as a sacrifice is planned: a last resort).
                     CostPart::Exile {
                         filter,
-                        zone: ZoneKind::Graveyard,
+                        zone: zone @ (ZoneKind::Graveyard | ZoneKind::Battlefield),
                         count,
                     } if sac_pool.is_empty() => {
                         let ctx = Ctx::new(Some(o.id), p);
                         sac_count = g.eval_value(count, &ctx).max(0) as usize;
                         sac_pool = g
-                            .exile_cost_cards(p, ZoneKind::Graveyard, filter, &ctx)
+                            .exile_cost_cards(p, *zone, filter, &ctx)
                             .into_iter()
                             .filter(|c| {
                                 Some(*c) != reserve
