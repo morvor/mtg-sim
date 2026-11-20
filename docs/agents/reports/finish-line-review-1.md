@@ -12,9 +12,17 @@ docs/agents/reports/finish-line-review-1-measurements.md.
 An independent second reviewer then re-ran the criteria's commands on the same code, formed
 its own numbers before reading these, and corrected this report where it was wrong (section
 "Second reviewer" at the end lists what was re-measured, every disagreement and every
-correction). Two things landed after the measurement and are reflected here: the user
-allowlisted the rules web sites (item web-research-1, 9268b42), and decisions-log-1 landed
-docs/DECISIONS.md (d85f2d0).
+correction).
+
+**After the measurement.** The tables give e17878d's numbers, as measured and verified. Before
+this report landed: the user allowlisted the rules web sites (item web-research-1 issued,
+9268b42); decisions-log-1 landed docs/DECISIONS.md (d85f2d0); and small-fixes-7 landed (cad6c67),
+fixing the payment planner's repeatable mana abilities and "the next turn's upkeep" (C9's first
+two gaps), with these effects by the committed files: round trip 28,618 → 28,620 passing (3,304
+mismatch; Aang and Archangel Avacyn pass again), tiers after an 88-card partial sweep verified
+19,827 → 19,835 (round-trip 8,895, compiled 3,346), register 203 → 205 entries and 13 → 14
+provisional (new: `next-turns-upkeep-is-the-next-turns-first`). Its leftovers went to a new item,
+small-fixes-8 (f944329): the planner's remaining gaps. The plan below takes these into account.
 
 ## Headline
 
@@ -54,10 +62,11 @@ hand-written cards are the work left.**
   by user-decisions-nov20b); 79 discrepancy entries, 77 "open for review", none reported (the
   user postponed that review to the end).
 - **Engine gaps (C9)**: engine-gaps.md lists one open gap (the payment planner using a repeatable
-  mana ability once), which small-fixes-7 is fixing together with "the next turn's upkeep" (57
-  cards, 40 of them verified). Thirteen more confirmed gaps, nearly all on supported cards
-  (several verified), are recorded only in item notes, in docs/rulings-uncovered.tsv or inside
-  a closed engine-gaps.md entry.
+  mana ability once), which small-fixes-7 fixed after the measurement, together with "the next
+  turn's upkeep" (57 cards, 40 of them verified); the planner's remaining gaps went to
+  small-fixes-8. Thirteen more confirmed gaps, nearly all on supported cards (several verified),
+  are recorded only in item notes, in docs/rulings-uncovered.tsv or inside a closed
+  engine-gaps.md entry.
 - **Gate**: `cargo test --workspace` passes: 33,890 tests, 0 failed, 6 ignored (28,659 on Nov 9),
   14m37s of wall clock including a cold debug build (7m29s), no compiler warnings.
 - Across all kinds of item, docs/agents/yield.tsv records 212 engine bugs in the 90 items
@@ -84,7 +93,7 @@ details behind each row.
 | C6 | a final sweep with 0 failures written up in docs/EVERY_CARD.md; 10,000 random-deck games with 0 panics, recorded there | the Nov 20 sweep: 32,673 cards, 65,346 games, no panic, hang or rules violation, 2 slow games (Charismatic Conqueror's growing loop), written up in docs/EVERY_CARD.md. Random decks today: 10,202 games, no panic, hang or rules violation, 1 slow game; recorded only in this report | both again on the final code, recorded in docs/EVERY_CARD.md; Charismatic Conqueror's loop against "0 failures" | **partly** | verified-refresh-final (the loop: the post-finish loops item, D4) | 1 + about 4 h machine |
 | C7 | no card depends on a `ManualAbility` | 153 cards with hand-written abilities (156 abilities, each tested; `mtg-tools manual-check`: 0 problems). No compile-manual item has started | 153 cards | **not met** | compile-manual-* (6 items, 3 waves; docs/agents/compile-manual-plan.md) | 17–22 |
 | C8 | 0 provisional; every behavioral difference in an item's "Remaining" section registered or fixed; the user has read the deviations; the log's statuses set by the user | register: 203 entries, 13 provisional (user-decisions-nov20b, running, settles 11); 14 deviations, 4 with no record of the user's review. Discrepancy log: 79 entries, 77 open for review, 1 decided, 1 confirmed, 0 reported. The "Remaining" sections written since register-sweep-1 (Nov 10) haven't been swept | 2 provisional after nov20b; the sweep; the user's reviews (postponed) | **not met** | user-decisions-nov20b; the user's answers; register-sweep-2; the log review at the end (D2) | 1–2 + the user |
-| C9 | no confirmed rules gap open for a supported card | docs/agents/engine-gaps.md: 1 open gap (the payment planner uses a repeatable mana ability once per payment: 26 cards, 10 of them verified). 14 more confirmed gaps are recorded only in items, docs/rulings-uncovered.tsv or a closed entry (list in the notes), among them "the next turn's upkeep" (57 cards, 40 of them verified) | 15 confirmed gaps, nearly all on supported cards | **not met** | small-fixes-7 (running: the planner and the next turn's upkeep); a gaps-inventory item and fixes | 1 + 3–5 |
+| C9 | no confirmed rules gap open for a supported card | docs/agents/engine-gaps.md: 1 open gap (the payment planner uses a repeatable mana ability once per payment: 26 cards, 10 of them verified). 14 more confirmed gaps are recorded only in items, docs/rulings-uncovered.tsv or a closed entry (list in the notes), among them "the next turn's upkeep" (57 cards, 40 of them verified) | 15 confirmed gaps, nearly all on supported cards | **not met** | small-fixes-7 (landed after the measurement: the planner and the next turn's upkeep); small-fixes-8 (the planner's remaining gaps); a gaps-inventory item and fixes | 1 + 1 + 3–5 |
 | C10 | every rule cited, covered via subrules or exempt; every example covered | 3,040 cited, 74 via subrules, 52 exempt, 0 uncovered of 3,166 rules; 277 of 277 examples covered | none | **met** (a regression gate) | none | 0 |
 | C11 | report it (D3) | verified 19,827 of 32,111 (61.7%); round-trip or better 28,728 (89.5%); compiled 32,076 (99.9%); 8,838 cards fail only the structure check | report only | **reported** (D3 undecided) | none until the user decides D3 | 0 |
 | gate | `cargo test --workspace` passes | passes: 33,890 tests, 0 failed, 6 ignored; no compiler warnings | none | **met** | none | 0 |
@@ -278,13 +287,17 @@ first has an open entry in engine-gaps.md; item 7's are notes inside G32's close
    (engine-gaps.md, open; small-fixes-7 part 1). The entry lists 26 cards with such an ability:
    10 are **verified** (Ashnod's Altar, Krark-Clan Ironworks, Skirk Prospector, Squandered
    Resources, ...), 13 round-trip, 3 compiled; Inspired Ultimatum dropped from verified because
-   no game could cast it.
+   no game could cast it. Fixed after the measurement by small-fixes-7 (cad6c67, the entry now
+   closed); what it left (mana costs that tap other permanents or discard or exile from the
+   hand, Squandered Resources, a cost's own sacrifices, convoke and improvise, Food Chain) is
+   small-fixes-8.
 2. "At the beginning of the next turn's upkeep" compiles like "the next upkeep" (register-sweep-1's
    note, sweep-nov20; small-fixes-7 part 2): the 57 cards worded "the next turn's upkeep" (all
    compiled or better, **40 of them verified**, among them Heal, Portent and Urza's Bauble) fire
    at a second upkeep of the same turn (Paradox Haze). Aang and Avacyn, worded "the next
    upkeep", play right but dropped to compiled: the renderer words both forms "the next turn's
-   upkeep".
+   upkeep". Fixed after the measurement by small-fixes-7 (a delayed trigger of its own for the
+   next turn's upkeep; register entry `next-turns-upkeep-is-the-next-turns-first`, provisional).
 3. The five engine gaps behind open rulings (C1 note): Word of Command and Invoke the Firemind
    are verified.
 4. Green Sun's Zenith's shuffling player (no record of who shuffles; Green Sun's Zenith is verified).
@@ -334,33 +347,36 @@ attributes.
 
 ### (a) Work a worker can do, in order
 
-In the order to start them; items 2 to 7 can run side by side (they touch mostly different files),
+In the order to start them; items 2 to 8 can run side by side (they touch mostly different files),
 mutation testing one file at a time with nothing else heavy on its machine, and
 verified-refresh-final last, once no engine change is pending. The user's answer on the rulings
 stopping signal may add an item (a Forge/XMage comparison).
 
-1. Let the running items land: small-fixes-7, user-decisions-nov20b, and the triggers.rs and
-   replacement.rs mutation runs (decisions-log-1 landed after the measurement, d85f2d0).
+1. Let the running items land: user-decisions-nov20b, and the triggers.rs and replacement.rs
+   mutation runs (decisions-log-1 and small-fixes-7 landed after the measurement, d85f2d0 and
+   cad6c67).
 2. **web-research-1** (issued after the measurement, 9268b42, 1 session): the user allowlisted the
    rules sites on Nov 20, so a worker can now answer Q1–Q10 of
    docs/agents/research/web-questions-nov20.md; its contradictions and Q1
    (`that-opponent-fixed-as-it-triggers`) come back to the user.
-3. **gaps-inventory** (new, 1 session): bring docs/agents/engine-gaps.md up to date from the items
+3. **small-fixes-8** (issued after the measurement, f944329, 1 session): the payment planner's
+   remaining gaps that small-fixes-7 left (C9 item 1).
+4. **gaps-inventory** (new, 1 session): bring docs/agents/engine-gaps.md up to date from the items
    since Nov 10 (the C9 list above, G32's leftovers and fixed bullet), then fix them in
    small-fixes items (3–5 sessions), starting with the verified cards (Uphill Battle, The
    Mimeoplasm, Hardened Scales with tribute, Thorn Elemental, Word of Command, Green Sun's
    Zenith; Invoke the Firemind once the user has answered on `x-announced-before-modes`, since
    its gap is that deviation).
-4. **register-sweep-2** (1–2 sessions): every behavioral difference named in a "Remaining" or
+5. **register-sweep-2** (1–2 sessions): every behavioral difference named in a "Remaining" or
    "unless noted" passage since Nov 10 gets a register entry or a fix (C8's second clause).
-5. **roundtrip-probe-1** (2 sessions), then **roundtrip-pairs-7 …** (about 19 sessions at 150 cards
+6. **roundtrip-probe-1** (2 sessions), then **roundtrip-pairs-7 …** (about 19 sessions at 150 cards
    each), probe hits first. Two round-trip sessions side by side, as the plan advised.
-6. **judge-audit-2** (1 session plus the coordinator's workflow).
-7. **property-tests-3** (4–5 sessions).
-8. **mutation-2**, the rest (triggers.rs's second half, trigger_timing.rs full, the 11 fresh
+7. **judge-audit-2** (1 session plus the coordinator's workflow).
+8. **property-tests-3** (4–5 sessions).
+9. **mutation-2**, the rest (triggers.rs's second half, trigger_timing.rs full, the 11 fresh
    samples, survivor triage; 4–6 machine-heavy sessions, one at a time).
-9. **compile-manual-*** (6 items in 3 waves, 17–22 sessions).
-10. **verified-refresh-final** (1 session plus about 4 hours of machine time; also regenerates
+10. **compile-manual-*** (6 items in 3 waves, 17–22 sessions).
+11. **verified-refresh-final** (1 session plus about 4 hours of machine time; also regenerates
     docs/CR_COVERAGE.md, docs/RULINGS_COVERAGE.md, docs/STRUCTURE_COVERAGE.md and fixes
     docs/EVERY_CARD.md's "Latest full sweep" section).
 
@@ -373,8 +389,9 @@ Each is set out under "Decisions only the user can make (§5), open today" below
 1. The rulings stopping signal: accept "exhausted" as done for C1, or add an oracle (the
    Forge/XMage comparison).
 2. D3: the verified count's approach, and whether it is a criterion.
-3. The two provisional entries left after user-decisions-nov20b (`x-announced-before-modes`,
-   `that-opponent-fixed-as-it-triggers`).
+3. The provisional entries left after user-decisions-nov20b: `x-announced-before-modes`,
+   `that-opponent-fixed-as-it-triggers`, and `next-turns-upkeep-is-the-next-turns-first`
+   (added by small-fixes-7 after the measurement).
 4. The four deviations with no record of the user's review.
 5. The "Revisit later" list, before the project is called done.
 6. How the final sweep treats Charismatic Conqueror's loop (D4 against C6).
@@ -411,7 +428,7 @@ Each is set out under "Decisions only the user can make (§5), open today" below
 | Rank | Risk | What landed against it since Nov 9 | Still current? |
 |---|---|---|---|
 | 1 | the untriaged round-trip singletons | roundtrip-pairs-6 (150 cards: 1 compiler fix, 1 engine bug); about 2,800–2,880 untriaged now (about 3,100 then); no probe | **yes**, nearly unchanged |
-| 2 | costs, X, casting permissions, the legal-action list | the casting-costs audit (6 bugs), the permissions.rs full run (5), small-fixes-2 ({X} costs), -4 (choice costs), -5 (Omniscience), batches P100, P101, P153–P155 | **yes**: the sweep found the planner bug in exactly this area on Nov 20, and the legal-action property (property-tests-3 part 9) doesn't exist |
+| 2 | costs, X, casting permissions, the legal-action list | the casting-costs audit (6 bugs), the permissions.rs full run (5), small-fixes-2 ({X} costs), -4 (choice costs), -5 (Omniscience), batches P100, P101, P153–P155 | **yes**: the sweep found the planner bug in exactly this area on Nov 20 (small-fixes-7 fixed it after the measurement and found more, now small-fixes-8), and the legal-action property (property-tests-3 part 9) doesn't exist |
 | 3 | "each player" simultaneity | the simultaneous.rs full run (71.8% → 98.1%; 8 engine bugs, 3 compiler fixes), small-fixes-3 (one event per "for each" instruction) | **reduced**; G32's per-player leftovers remain |
 | 4 | triggers: timing, batching, reflexive, delayed | the triggers audit (4 bugs), ruling-conflicts-12, ruling-research-1 and -2; the triggers.rs full run is under way | **partly**: the full runs of triggers.rs and trigger_timing.rs are unfinished |
 | 5 | last known information and departed objects | the zones-lki audit (18 bugs), gaps-residual-2's liveness assertions (3 engine bugs) | **reduced** |
@@ -444,9 +461,10 @@ Each is set out under "Decisions only the user can make (§5), open today" below
 | C4 | loops (post-finish) | **not started** | post-finish by the user's decision (D4) |
 
 Also running at the measurement, outside the plan's rows: small-fixes-7 (the planner bug and the
-next turn's upkeep), user-decisions-nov20b (calls 24–39), decisions-log-1 (a generated
-docs/DECISIONS.md; it landed after the measurement, d85f2d0), and the two mutation runs. Issued
-after the measurement: web-research-1 (9268b42).
+next turn's upkeep; it landed after the measurement, cad6c67), user-decisions-nov20b (calls
+24–39), decisions-log-1 (a generated docs/DECISIONS.md; it landed after the measurement,
+d85f2d0), and the two mutation runs. Issued after the measurement: web-research-1 (9268b42) and
+small-fixes-8 (f944329).
 
 ## The discrepancy log's human review (§4)
 
@@ -480,6 +498,9 @@ done. Eleven "not yet investigated" notes wait for the coordinator.
 9. **D4 against C6**: with loops left to post-finish work (D4), Charismatic Conqueror's growing
    loop will make the final sweep's games fail as slow again, so C6's "0 failures" needs either
    that card's games excused as a registered known loop or the loops work done first.
+10. **`next-turns-upkeep-is-the-next-turns-first`** (new after the measurement, small-fixes-7,
+    provisional): "the next turn's upkeep" is the first upkeep step of the turn after the one the
+    delayed ability was created in, and if that turn has no upkeep step it never triggers.
 
 ## Discrepancies between committed docs and today's measurements
 
@@ -648,7 +669,12 @@ first reviewer).
   (self-granted conditional keywords compiled only where they function), after the sweep's engine.
 - State after the measurement: decisions-log-1 landed docs/DECISIONS.md (d85f2d0), whose counts
   (109 decided by the user, 10 by the sources, 71 by the coordinator or a worker, 13 provisional)
-  the C8 note and risk 11 now cite.
+  the C8 note and risk 11 now cite; small-fixes-7 landed while this review was landing (cad6c67)
+  and small-fixes-8 was issued (f944329): the intro's "After the measurement" paragraph, C9's
+  closing item and notes, the plan (a, b) and §5 now say so, with the committed files' numbers
+  (round trip 28,620 passing, verified 19,835, register 205 entries and 14 provisional: read from
+  docs/ROUNDTRIP.md, the tier file and docs/INTERPRETATIONS.md, not re-measured). The tables keep
+  e17878d's numbers.
 
 docs/agents/finish-line-plan.md §1.2 gained a "Today (Nov 20)" column with the numbers above that
 the second reviewer reproduced or checked against their record, the Nov 9 column kept beside it.
