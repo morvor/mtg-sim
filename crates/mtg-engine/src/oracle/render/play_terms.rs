@@ -221,8 +221,14 @@ impl Renderer<'_> {
                 None => s.push_str(&self.gap("permission term: on cast")),
             }
         }
-        // "Spells you cast this way cost {2} less to cast" (CR 601.2f).
-        if terms.cost_reduction > 0 {
+        // "Spells you cast this way cost {2} less to cast" (CR 601.2f); for a copy the
+        // effect created and lets its player cast, "That copy costs {2} less to cast."
+        if terms.cost_reduction > 0 && casts_created_copy(effect) {
+            s.push_str(&format!(
+                ". That copy costs {{{}}} less to cast",
+                terms.cost_reduction
+            ));
+        } else if terms.cost_reduction > 0 {
             s.push_str(&format!(
                 ". {{alt:Spells you cast this way cost|A spell cast this way costs|Each spell cast this way costs}} {{{}}} less to cast",
                 terms.cost_reduction
@@ -463,6 +469,20 @@ impl Renderer<'_> {
         Some(format!(
             ". {{alt:That spell has {k}|If you do, it has {k}|If you cast a spell this way, it has {k}}}"
         ))
+    }
+}
+
+/// Whether `e` only lets its player cast the copy an earlier instruction created ("copy
+/// that card and you may cast the copy"): then the terms' cost reduction, which applies to
+/// every spell cast with them, is the copy's alone. (Not a sequence, whose other steps
+/// could cast spells too.)
+fn casts_created_copy(e: &Effect) -> bool {
+    match e {
+        Effect::CastCard {
+            what: Sel::Var(v), ..
+        } => *v == vars::CREATED,
+        Effect::May { effect, .. } => casts_created_copy(effect),
+        _ => false,
     }
 }
 

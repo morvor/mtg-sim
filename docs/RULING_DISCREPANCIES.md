@@ -433,6 +433,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Engine: as the rulings say, for Abuelo's Awakening (layer 7b in timestamp order, CR 613.4b, 613.7a; crewing sets no power or toughness, CR 702.122a).
 - Recorded: tests `tests/rulings/r_p149_exile_until.rs` (`returned_artifact_and_enchantment_creature_cards_are_base_1_1`, `returned_permanents_take_later_base_pt_but_stay_1_1_when_crewed`), citing them under Abuelo, Ancestral Echo, which can't take part (its ability returns no card as a creature).
 
+### Secret Arcade // Dusty Parlor: Séance Board's morbid ruling
+- Kind: misattached
+- Status: open for review
+- Ruling, Secret Arcade // Dusty Parlor (2024-09-20): "If no creatures have died in a turn by the time that turn's end step begins, Séance Board's first ability won't trigger at all. Causing a creature to die during the end step won't cause the ability to trigger."
+- Conflicts with: Secret Arcade // Dusty Parlor has no morbid ability and nothing that triggers at the end step ("Nonland permanents you control and permanent spells you control are enchantments in addition to their other types. ... // Whenever you cast an enchantment spell, put a number of +1/+1 counters equal to that spell's mana value on up to one target creature."). The ruling names and describes Séance Board ("Morbid — At the beginning of each end step, if a creature died this turn, put a soul counter on this artifact. ..."), which has the same ruling in the data.
+- Evidence: the ruling names Séance Board; both are Duskmourn: House of Horror cards with rulings dated 2024-09-20 (Séance Board's other ruling, on {X} in mana costs, is attached to Secret Arcade too). Found in work item rulings-residue-misc-2 (pass A).
+- Engine: as the ruling says, for Séance Board.
+- Recorded: test `tests/rulings/r_residue_misc_2a_mana.rs` (`seance_board_doesnt_trigger_for_a_creature_dying_during_the_end_step`), citing it under Séance Board and under Secret Arcade // Dusty Parlor, which takes part with its first door unlocked (Séance Board is an enchantment too, which changes nothing).
+
 ### Survey Mechan: Susur Secundi, Void Altar's ruling about its last ability
 - Kind: misattached
 - Status: open for review
@@ -686,6 +695,15 @@ no clear explanation goes to the coordinator as a conflict case first.
 - Evidence: the ruling (Innistrad, 2011-09-22) followed the CR of its day: a copy of a double-faced card copied only the face that was up, and only permanents represented by transforming double-faced cards could transform (the CR effective 2023-02-03 still had 707.8 "When copying a double-faced card, a face-up meld card, or a melded permanent, only the copiable values of the face that’s currently up are copied." and 701.28a "... Only permanents represented by transforming double-faced cards can transform."). The CR effective 2023-04-14 (March of the Machine) added 707.8a: "If an effect creates a token that is a copy of a transforming permanent or a transforming double-faced card not on the battlefield, the resulting token is a transforming token that has both a front face and a back face. ..." (archived CR texts). The first two sentences of the ruling (the front face's mana cost is paid; the token is a copy of the front face) still hold and are cited. Found in work item rulings-P077 (Nov 8).
 - Engine: the token copy of Delver of Secrets // Insectile Aberration is a double-faced token with its front face up, and it transforms into Insectile Aberration.
 - Recorded: exemption `docs/rulings-exemptions/rulings-P077.tsv`; tests `tests/rulings/r_p077_graveyard_cards.rs` (`back_from_the_brink_copies_a_double_faced_cards_front_face`).
+
+### Enduring Angel // Angelic Enforcer: "if it's a token"
+- Kind: outdated
+- Status: open for review
+- Ruling, Enduring Angel // Angelic Enforcer (2021-09-24): "Applying the replacement effect can't cause Enduring Angel to transform if it isn't a double-faced permanent; that is, if it's a token or if a single-faced permanent has become a copy of it. In that situation, you will lose the game."
+- Conflicts with: CR 707.8a: "If an effect creates a token that is a copy of a double-faced permanent or a double-faced card not on the battlefield, the resulting token is a double-faced token that has both a front face and a back face. ..." and CR 701.27a: "... Only permanents represented by double-faced tokens and double-faced cards can transform."
+- Evidence: the ruling (Innistrad: Midnight Hunt, 2021-09-24) followed the CR of its day, as Back from the Brink's (above) did: only permanents represented by transforming double-faced cards could transform, and a token copy of one wasn't such a permanent (the CR effective 2023-02-03 still had 707.8 "When copying a double-faced card, a face-up meld card, or a melded permanent, only the copiable values of the face that’s currently up are copied." and 701.28a "... Only permanents represented by transforming double-faced cards can transform."). The CR effective 2023-04-14 (March of the Machine) added 707.8a (archived CR texts). The ruling's rule ("can't cause Enduring Angel to transform if it isn't a double-faced permanent") and its single-faced case still hold and are cited; a token copy of Enduring Angel is a double-faced permanent now. Found in work item rulings-residue-misc-2, pass C (Nov 20).
+- Engine: a token copy of Enduring Angel is a double-faced token: the replacement transforms it into Angelic Enforcer and its controller's life total becomes 3; a Grizzly Bears that became a copy of Enduring Angel can't transform, and its controller loses the game.
+- Recorded: exemption `docs/rulings-exemptions/rulings-P206.tsv`; tests `tests/rulings/r_residue_misc_2c_replacement.rs` (`enduring_angel_a_token_copy_is_double_faced_and_transforms`, `enduring_angel_a_single_faced_copy_cant_transform_and_loses_the_game`).
 
 ### Hellkite Whelp: a battle's "controller is the defending player"
 - Kind: outdated
@@ -1093,6 +1111,25 @@ decides whether they become a conflict case.
   `two_target_destruction_with_one_target_left_affects_it`). Whether the Journey into Nyx
   release notes (2014; ormos mirror) have the same spelling wasn't checked. No kind fits a
   misspelled name.
+- **Seraph** (rulings-residue-misc-2, pass B and review, Nov 20): "If the other creature is a
+  token, it will cease to exist after being exiled. It won’t be returned to the
+  battlefield." (2007-09-16) for "Whenever a creature dealt damage by this creature this
+  turn dies, put that card onto the battlefield under your control at the beginning of the
+  next end step. ...", which exiles nothing: the token ceases to exist in the graveyard
+  (CR 704.5d). Seraph's ruling of 2004-10-04 ("You do not get the creature back if the
+  creature is not still in the graveyard at the end of the turn.") already has the card
+  return from the graveyard. Tawnos's Coffin has the same sentence on the same day ("If the
+  targeted creature is a token, it will cease to exist after being exiled. ...",
+  2007-09-16), where it fits the card, so the words look copied from it (both are Masters
+  Edition rulings), but no Oracle wording of Seraph that exiled the creature, and so no
+  dated change, was found: the Masters Edition Update Bulletin (2007-08-29; ormos mirror)
+  names Seraph only to say that its Ice Age and Fifth Edition printings worked differently
+  and that Oracle follows the most recent printing, and Gatherer's Oracle history (Wayback
+  Machine) was outside the allowed hosts. The ruling stays cited for what holds (the token
+  isn't returned; `tests/rulings/r_residue_misc_2b_triggers.rs`,
+  `seraph_returns_no_token_and_no_card_that_left_the_graveyard`), not exempt; under
+  `ruling-contradicting-oracle-gives-way` its "after being exiled" would be a template
+  error, for the coordinator to decide.
 - Work item ruling-conflicts-3 took up the craft copy ruling (now an
   outdated entry above), Run Out of Town and Sanguine Spy (copying errors), Caller of
   the Untamed (the ruling agrees with CR 601.2b; the engine was changed), and Araumi of the

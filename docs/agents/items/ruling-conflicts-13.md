@@ -243,6 +243,10 @@ New tests in `tests/cr/r113_6e_self_granted_flash.rs`:
 - `rulings-coverage --check`: exit 0. 31,460 cited, 200 exempt, 431 open; 0 citations and 0 exemptions unmatched.
 - `mtg-sim --random-decks --games 100`: no panic.
 - `mtg-sim --properties --games 30 --jobs 2`: determinism, replay, rollback, seat and snapshot all held.
+- After merging origin/claude/mtg-rules-engine-lkr27h at 9431dc5 (conflicts only in docs, resolved keeping both sides; docs/INTERPRETATIONS.md regenerated):
+  - `interpretations --check`: 201 entries (13 provisional), 0 problems;
+  - `rulings-coverage --check`: exit 0 (31,880 cited, 200 exempt, 11 open; 0 citations and 0 exemptions unmatched);
+  - `scripts/land.sh` then built and tested the workspace.
 
 **Remaining gaps:**
 - **The judge-forum thread** was read only through search results. Allowing apps.magicjudges.org would let it be quoted.

@@ -916,23 +916,6 @@ impl Game {
                     }
                 }
             }
-            // "You may cast spells from your hand without paying their mana costs"
-            // (Omniscience): an alternative cost of nothing (CR 118.9), with normal timing.
-            if in_hand {
-                for face in castable_faces(self, card) {
-                    let chars = self.face_characteristics(card, face);
-                    if let Some(c) = self.free_from_hand_permission(p, card, &chars) {
-                        let mut opt = CastOption::normal(face);
-                        opt.method = CastMethod::Free;
-                        opt.alt_cost = Some(Cost::free());
-                        // A once-each-turn permission is used up by casting with it.
-                        if c.once.is_some() {
-                            opt.permission = Some(c);
-                        }
-                        out.push(opt);
-                    }
-                }
-            }
             // CR 601.3, 601.3e: outside the hand, each way of casting the card must be
             // permitted by a rule or effect given the characteristics it would have (with
             // the terms of the permission it uses, see `permissions.rs`).
@@ -944,6 +927,43 @@ impl Game {
             }
         }
         out.extend(crate::keyword_impls::keyword_cast_options(self, p, card));
+        // "You may cast spells from your hand without paying their mana costs"
+        // (Omniscience): an alternative cost of nothing (CR 118.9), with normal timing.
+        // The card's own ways that aren't alternative costs combine with it too
+        // (CR 118.9a, 118.9d), as with an alternative cost another object offers
+        // (`kw::offered_costs::extend_cast_options`): "as though it had flash if you pay
+        // {2} more" or "if it's cast using teamwork" (an additional cost, CR 601.3c),
+        // offering (CR 702.48a), fused (CR 702.102a), prototyped (CR 718.3). Not its own
+        // alternative costs (CR 118.9a), nor face down (CR 702.37c).
+        if in_hand {
+            let own_ways: Vec<CastOption> = out
+                .iter()
+                .filter(|o| {
+                    o.alt_cost.is_none()
+                        && !matches!(
+                            o.method,
+                            CastMethod::Normal | CastMethod::Half(_) | CastMethod::FaceDown(_)
+                        )
+                })
+                .cloned()
+                .collect();
+            let faces = castable_faces(self, card).into_iter().map(|face| {
+                let mut opt = CastOption::normal(face);
+                opt.method = CastMethod::Free;
+                opt
+            });
+            for mut opt in faces.chain(own_ways) {
+                let chars = self.option_characteristics(card, &opt);
+                if let Some(c) = self.free_from_hand_permission(p, card, &chars) {
+                    opt.alt_cost = Some(Cost::free());
+                    // A once-each-turn permission is used up by casting with it.
+                    if c.once.is_some() {
+                        opt.permission = Some(c);
+                    }
+                    out.push(opt);
+                }
+            }
+        }
         // Lands can't be cast (CR 305.9); nor can a card in a way a keyword's rule
         // prohibits, whatever choices its proposal would make (e.g. aftermath,
         // CR 702.127a).
@@ -1646,6 +1666,17 @@ impl Game {
                             match t {
                                 Some(t) => format!("{t}, {l}"),
                                 None => l,
+                            }
+                        }
+                        // Without paying its mana cost (CR 118.9), worded as an offered
+                        // one is: Omniscience's alternative cost combined with one of the
+                        // card's own ways of casting it ("prototype", fused, its flash way).
+                        (t, Some(c), None) if c.is_free() => {
+                            let free = "without paying its mana cost";
+                            match (t, &o.method) {
+                                (Some(t), _) => format!("{t}, {free}"),
+                                (None, CastMethod::Keyword(k)) => format!("{k:?}, {free}"),
+                                (None, _) => free.to_string(),
                             }
                         }
                         (Some(t), _, _) => t.to_string(),

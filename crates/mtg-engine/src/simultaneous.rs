@@ -1327,7 +1327,9 @@ fn plan(
             if among_them {
                 return Plan::Exec(e.clone());
             }
-            let chosen = g.resolve_sel(what, ctx);
+            // Only what can have the counters can be chosen (Agitator Ant's ruling).
+            let what = crate::kw::counter_choice::chosen_for_counters(what, kind);
+            let chosen = g.resolve_sel(&what, ctx);
             if let Some(p) = p {
                 let objs = chosen.iter().filter_map(|e| e.object()).collect();
                 g.record_apnap_choice(p, objs);

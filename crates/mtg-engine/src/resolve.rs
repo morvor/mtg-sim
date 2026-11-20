@@ -420,7 +420,20 @@ impl Game {
                 }
             }
             Effect::Store { var, sel } => {
+                // Cards chosen only to be revealed don't change zones: a card entering the
+                // battlefield at the same time as the permanent whose "as enters" effect
+                // asks for them can be chosen (CR 614.13a excludes only objects that would
+                // change zones; Arsenal Thresher's and Game Trail's rulings). Amplify says
+                // otherwise for its own reveal (CR 702.38a, `kw/amplify.rs`).
+                let entering = if *var == crate::kw::reveal_from_hand::REVEALED {
+                    Some(std::mem::take(&mut self.entering))
+                } else {
+                    None
+                };
                 let mut v = self.resolve_sel(sel, ctx);
+                if let Some(e) = entering {
+                    self.entering = e;
+                }
                 // "~" after its cost moved it (CR 400.7j).
                 if matches!(sel, Sel::This) {
                     v = v
@@ -887,7 +900,9 @@ impl Game {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let mut placed = 0;
                 let mut got = Vec::new();
-                for t in self.resolve_sel(what, ctx) {
+                // A choice offers only what can have the counters (Agitator Ant's ruling).
+                let chosen = crate::kw::counter_choice::chosen_for_counters(what, kind);
+                for t in self.resolve_sel(&chosen, ctx) {
                     let t = self.found_after_move(t, ctx);
                     let n = self.put_counters(t, kind, k, crate::event_causes::CounterPut::of(ctx));
                     if n > 0 {
@@ -1681,13 +1696,17 @@ impl Game {
                 crate::copy::become_copy(self, what, of, duration, exceptions, ctx);
             }
             Effect::Transform { what } => {
+                let mut done = Vec::new();
                 for o in self.resolve_objects(what, ctx) {
                     // CR 701.27f: not if it transformed since its ability was put onto the
                     // stack (or, for a delayed triggered ability, created).
-                    if crate::transform_rules::ability_may_transform(self, o, ctx) {
-                        crate::dfc::transform(self, o);
+                    if crate::transform_rules::ability_may_transform(self, o, ctx)
+                        && crate::dfc::transform(self, o)
+                    {
+                        done.push(Entity::Object(o));
                     }
                 }
+                ctx.set_var(crate::transform_rules::TRANSFORMED_THIS_WAY, done);
             }
             Effect::Regenerate { what } => self.regenerate(what, None, ctx),
             Effect::RegenerateWith { what, then } => self.regenerate(what, Some(then), ctx),
@@ -2773,6 +2792,9 @@ impl Game {
                     g.terms.merge(terms);
                     if terms.controller_duration {
                         g.terms.duration_player = Some(ctx.controller);
+                    }
+                    if terms.until_another {
+                        g.terms.given_by_link = Some(ctx.link);
                     }
                 }
                 crate::permissions::given(self, before);

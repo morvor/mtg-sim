@@ -1358,7 +1358,10 @@ otherwise.
   ability ends the other's permissions, though CR 607.1c ("An ability printed on an object
   that fulfills both criteria described in rule 607.1 is linked to itself.") and 607.5 keep
   each linked only to itself. Telling them apart needs the ability's identity on the grant;
-  no other card has two such abilities.
+  no other card has two such abilities. Fixed by small-fixes-5: the permission records the
+  link of the ability that gave it (`PlayTerms::given_by_link`), which `given` compares too
+  (register `until-another-per-ability-instance`; tests
+  `tests/cr/r607_005_until_another_instances.rs`).
 - Register entry `own-permission-first` (`docs/interpretations/decisions-policies.md`,
   policy, provisional): a card's own permission is the one used when an effect's permission
   would allow the same way, without asking; the player is asked only among effects'
@@ -1406,4 +1409,8 @@ applied in the hand too). Changes:
   with "as though it had flash if you pay {2} more" (Rout, Harbinger of the Tides, Ghitu Fire,
   Mystical Tether, ...); the fix belongs with the offered alternative costs
   (`kw::offered_costs::extend_cast_options`, which already extends every way without an
-  alternative cost).
+  alternative cost). Fixed by small-fixes-5: `Game::permitted_cast_options` offers
+  Omniscience-style permissions with each of the card's own ways that has no alternative cost
+  (the flash way, in each of its three wordings; fused, CR 702.102a, teamwork's flash way,
+  offering, CR 702.48a, and prototyped, CR 718.3, which had the same gap), never with its own
+  alternative costs (CR 118.9a); tests `tests/cr/r601_003c_omniscience_own_flash_cost.rs`.

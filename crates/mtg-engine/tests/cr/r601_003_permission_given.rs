@@ -90,6 +90,7 @@ fn another_unstable_amulet_exiling_a_card_doesnt_end_this_ones_permission() {
 #[test]
 fn myr_welders_other_exile_ability_doesnt_end_its_unstable_amulet_permission() {
     cr!("607.1", "607.1c", "607.5", "611.2a");
+    interp!("until-another-per-ability-instance");
     ruling!(
         "Myr Welder",
         "treat Myr Welder's version of that ability as though it referenced Myr Welder by name instead"
