@@ -1062,7 +1062,11 @@ impl Game {
                     .find_map(|e| e.object());
                 let mut total = 0;
                 if let Some(from) = from {
-                    for t in self.resolve_sel(to, ctx) {
+                    // Nothing is put on an object that has left (CR 400.7): "double the
+                    // number of +1/+1 counters on that creature" once it died (Sword of
+                    // Hours).
+                    let to = self.resolve_sel(to, ctx);
+                    for t in self.all_present_entities(to) {
                         total += crate::counter_rules::put_counters_of(
                             self,
                             from,
