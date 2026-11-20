@@ -164,3 +164,33 @@ fn hama_waterbends_the_mana_value_of_the_half_cast_from_a_split_card() {
     t.resolve_all();
     assert_eq!(t.life(P1), 18);
 }
+
+/// Kills `permissions.rs:347:13` (in `permissions::free_option`, `if land || last.free ||
+/// last.terms.alt_cost.is_some() { return; }` with `land && last.free || ...`: a land the
+/// permission allows also gets the "without paying their mana costs" way, a copy of the same
+/// permission). Ignite the Future cast with flashback exiles the top three cards of P0's
+/// library, which P0 may play this turn, and "may play cards this way without paying their
+/// mana costs". A land is played, not cast (CR 305.1), so there's no mana cost to pay or not:
+/// the exiled Island is played with the one permission and nobody is asked which. The mutant
+/// offers the same permission twice for the Island, and playing it asks "Choose the
+/// permission you're using".
+#[test]
+fn a_land_ignite_the_future_exiled_after_flashback_is_played_without_a_permission_choice() {
+    cr!("305.1", "601.3");
+    let mut t = TestGame::new(2);
+    let ignite = t.graveyard(P0, "Ignite the Future");
+    t.lands(P0, "Mountain", 8);
+    t.library_top(P0, "Grizzly Bears");
+    let island = t.library_top(P0, "Island");
+    t.library_top(P0, "Forest");
+    t.cast(P0, ignite)
+        .method(CastMethod::Keyword(mtg_engine::keywords::KeywordKind::Flashback))
+        .go();
+    t.resolve_all();
+    let island = t.g.current(island);
+    assert_eq!(t.zone(island), Zone::Exile);
+    let from = t.asked().len();
+    t.play_land(P0, island).expect("played from exile");
+    assert!(!asked_for_a_permission(&t, from));
+    assert!(t.on_battlefield(t.g.current(island)));
+}
