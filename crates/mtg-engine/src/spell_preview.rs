@@ -66,6 +66,7 @@ pub fn spell_characteristics(
             source_lki: None,
             chosen_values: Default::default(),
             source_attached_to: None,
+            window: Default::default(),
         }));
     }
     h.stack.push(id);

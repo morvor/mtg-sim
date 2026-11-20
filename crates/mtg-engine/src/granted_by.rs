@@ -62,11 +62,12 @@ enum Rewrite {
 
 /// Constructs that refer to the object an ability is on in ways this rewriting doesn't
 /// translate: such quotes are left unsupported.
-const UNTRANSLATED: [&str; 8] = [
+const UNTRANSLATED: [&str; 9] = [
     "\"AttachedToThis\"",
     "\"BlockingSource\"",
     "\"BlockedBySource\"",
     "\"WhileSourceOnBattlefield\"",
+    "\"UntilSourceLeavesBattlefield\"",
     "\"WhileYouControlSource\"",
     "\"ExertSelf\"",
     "\"AddThisAbility\"",
