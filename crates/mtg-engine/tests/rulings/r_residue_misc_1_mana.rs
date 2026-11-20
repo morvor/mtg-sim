@@ -43,7 +43,10 @@ fn spawn_token(t: &mut TestGame) -> ObjectId {
     let before = tokens(t, P0);
     t.enter(P0, "Kozilek's Predator");
     t.resolve_all();
-    *tokens(t, P0).iter().find(|id| !before.contains(id)).unwrap()
+    *tokens(t, P0)
+        .iter()
+        .find(|id| !before.contains(id))
+        .unwrap()
 }
 
 fn clear_pool(t: &mut TestGame, p: PlayerId) {
@@ -369,7 +372,11 @@ fn terrarion_and_wizards_rockets_mana_then_the_draw() {
         "Wizard's Rockets",
         "You must choose the colors of mana Wizard's Rockets produces before its last ability has you draw a card."
     );
-    for (name, colors) in [("Terrarion", [1, 1]), ("Terrarion", [0, 3]), ("Wizard's Rockets", [2, 4])] {
+    for (name, colors) in [
+        ("Terrarion", [1, 1]),
+        ("Terrarion", [0, 3]),
+        ("Wizard's Rockets", [2, 4]),
+    ] {
         let mut t = TestGame::new(2);
         let id = t.battlefield(P0, name);
         t.g.players[0].mana_pool.add_type(C, 2);
@@ -434,8 +441,14 @@ fn terrarion_and_wizards_rockets_draw_however_they_go_to_the_graveyard() {
 #[test]
 fn doubling_cube_doubles_each_type_but_not_the_restrictions() {
     cr!("605.1a", "605.3b", "106.6", "106.1b");
-    ruling!("Doubling Cube", "Any restrictions on the unspent mana aren't copied.");
-    ruling!("Doubling Cube", "Doubling Cube's ability is a mana ability.");
+    ruling!(
+        "Doubling Cube",
+        "Any restrictions on the unspent mana aren't copied."
+    );
+    ruling!(
+        "Doubling Cube",
+        "Doubling Cube's ability is a mana ability."
+    );
     ruling!(
         "Doubling Cube",
         "The \"type\" of mana is its color, or lack thereof (if the mana is colorless)."
@@ -584,7 +597,11 @@ fn one_mana_of_a_type_the_land_produced() {
         "Zendikar Resurgent",
         "If the land’s mana ability produces more than one type of mana, choose one of those types to determine what mana Zendikar Resurgent produces."
     );
-    for name in ["Mirari's Wake", "Zendikar Resurgent", "Nikya of the Old Ways"] {
+    for name in [
+        "Mirari's Wake",
+        "Zendikar Resurgent",
+        "Nikya of the Old Ways",
+    ] {
         let mut t = TestGame::new(2);
         t.battlefield(P0, name);
         let aqueduct = t.battlefield(P0, "Dimir Aqueduct");
@@ -1086,4 +1103,150 @@ fn unspent_mana_is_lost_at_the_end_of_the_step_its_keeper_left_in() {
         t.advance_to(P0, Step::PrecombatMain);
         assert_eq!(mana(&t, P0, G), 0, "{name}: lost as the draw step ended");
     }
+}
+
+// ---------------------------------------------------------------------------------------
+// Spending mana as though it were another type
+// ---------------------------------------------------------------------------------------
+
+#[test]
+fn quicksilver_elemental_unattaches_an_opponents_leonin_bola() {
+    cr!("113.2c", "701.3d", "602.2b");
+    ruling!(
+        "Quicksilver Elemental",
+        "You can actually unattach your opponent's Bola as part of the cost of activating the Elemental-copied ability."
+    );
+    let mut t = TestGame::new(2);
+    let qe = t.battlefield(P0, "Quicksilver Elemental");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    // Leonin Bola: "Equipped creature has "{T}, Unattach Leonin Bola: Tap target
+    // creature."" — on P1's Bears.
+    let bola = attach_new(&mut t, P1, "Leonin Bola", bears);
+    let victim = t.battlefield(P1, "Hill Giant");
+    t.g.players[0].mana_pool.add_type(U, 1);
+    t.activate(P0, qe, 0, &[obj(bears)]).unwrap();
+    t.resolve_all();
+    t.answer_targets(P0, &[obj(victim)]);
+    activate_containing(&mut t, P0, qe, "Unattach").unwrap();
+    t.resolve_all();
+    assert!(t.obj_now(qe).tapped);
+    assert_eq!(attached_to(&t, bola), None, "P1's Bola was unattached");
+    assert!(t.obj_now(victim).tapped);
+}
+
+#[test]
+fn vizier_of_the_menagerie_looks_at_the_top_card_any_time() {
+    cr!("401.5", "406.3");
+    ruling!(
+        "Vizier of the Menagerie",
+        "Vizier of the Menagerie lets you look at the top card of your library whenever you want (with one restriction—see below), even if you don't have priority."
+    );
+    let mut t = TestGame::new(2);
+    let second = t.library_top(P0, "Grizzly Bears");
+    let top = t.library_top(P0, "Hill Giant");
+    assert!(!mtg_engine::zones::can_see_in_library(&t.g, P0, top));
+    t.battlefield(P0, "Vizier of the Menagerie");
+    t.g.recompute();
+    // During the opponent's turn, with no priority.
+    t.set_step(P1, Step::Upkeep);
+    t.g.turn.priority = None;
+    assert!(mtg_engine::zones::can_see_in_library(&t.g, P0, top));
+    assert!(!mtg_engine::zones::can_see_in_library(&t.g, P0, second));
+    assert!(!mtg_engine::zones::can_see_in_library(&t.g, P1, top));
+}
+
+#[test]
+fn vizier_of_the_menagerie_costs_including_emerge() {
+    cr!("118.9", "702.119a", "601.2f");
+    ruling!(
+        "Vizier of the Menagerie",
+        "You'll still pay all costs for that spell, including additional costs. You may also pay alternative costs such as emerge or that of As Foretold."
+    );
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Vizier of the Menagerie");
+    // Elder Deep-Fiend ({8}, emerge {5}{U}{U}) from the top of the library, emerging from
+    // Hill Giant (mana value 4): {1}{U}{U}.
+    let fiend = t.library_top(P0, "Elder Deep-Fiend");
+    let giant = t.battlefield(P0, "Hill Giant");
+    t.g.players[0].mana_pool.add_type(G, 1);
+    t.g.players[0].mana_pool.add_type(U, 2);
+    t.answer_choose(P0, &[obj(giant)]);
+    t.cast(P0, fiend)
+        .method(mtg_engine::object::CastMethod::Keyword(
+            keywords::KeywordKind::Emerge,
+        ))
+        .go();
+    assert_eq!(t.zone(giant), Zone::Graveyard(P0));
+    assert_eq!(pool(&t, P0), 0);
+    // Without mana, it can't be cast from the library for nothing.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Vizier of the Menagerie");
+    let fiend = t.library_top(P0, "Elder Deep-Fiend");
+    assert!(t.cast(P0, fiend).try_go().is_err());
+}
+
+/// An agent for P0 that answers every choice of an option with the first one and records
+/// P0's hand size each time it's asked to choose one (otherwise it passes and takes the
+/// engine's defaults).
+struct HandWatcher(std::sync::Arc<std::sync::Mutex<Vec<usize>>>);
+
+impl mtg_engine::decision::Agent for HandWatcher {
+    fn decide(
+        &mut self,
+        g: &mtg_engine::game::Game,
+        p: PlayerId,
+        d: &mtg_engine::decision::Decision,
+    ) -> Answer {
+        use mtg_engine::decision::{Action, Decision};
+        match d {
+            Decision::ChooseOption { .. } => {
+                self.0.lock().unwrap().push(g.player(p).hand.len());
+                Answer::Index(0)
+            }
+            Decision::Priority { .. } => Answer::Action(Action::Pass),
+            _ => Answer::Default,
+        }
+    }
+}
+
+#[test]
+fn manamorphose_colors_are_chosen_before_the_draw() {
+    cr!("608.2c", "106.1b");
+    ruling!(
+        "Manamorphose",
+        "You choose which color or colors of mana to add before you draw a card."
+    );
+    let mut t = TestGame::new(2);
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    t.g.agents.0.lock().unwrap()[0] = Box::new(HandWatcher(seen.clone()));
+    let morph = cast_new(&mut t, P0, "Manamorphose", &[]);
+    let hand = t.hand_size(P0);
+    t.resolve_all();
+    assert_eq!(t.zone(morph), Zone::Graveyard(P0));
+    assert_eq!(t.hand_size(P0), hand + 1);
+    assert_eq!(mana(&t, P0, W), 2);
+    let seen = seen.lock().unwrap().clone();
+    // (A choice of how to pay {R/G} may come first, while casting.)
+    assert!(seen.len() >= 2, "{seen:?}");
+    assert!(
+        seen.iter().all(|h| *h == hand),
+        "both colors chosen before the draw: {seen:?}"
+    );
+}
+
+#[test]
+fn mirari_s_wake_leaving_makes_damage_lethal() {
+    cr!("704.5g", "120.6", "611.3a");
+    ruling!(
+        "Mirari's Wake",
+        "Because damage remains marked on a creature until the cleanup step or an effect removes that damage, nonlethal damage dealt to creatures you control may become lethal if Mirari's Wake leaves the battlefield."
+    );
+    let mut t = TestGame::new(2);
+    let wake = t.battlefield(P0, "Mirari's Wake");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    cast_resolve(&mut t, P1, "Shock", &[obj(bears)]);
+    assert!(t.on_battlefield(bears), "a 3/3 with 2 damage");
+    destroy(&mut t, wake);
+    t.resolve_all();
+    assert!(!t.on_battlefield(bears));
 }

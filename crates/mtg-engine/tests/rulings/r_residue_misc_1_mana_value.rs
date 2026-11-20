@@ -232,7 +232,10 @@ fn temporary_lockdown_returning_auras_and_what_stays_behind() {
         })
         .collect();
     assert!(!offered.is_empty());
-    assert!(offered.iter().all(|c| !c.contains(&obj(bears))), "{offered:?}");
+    assert!(
+        offered.iter().all(|c| !c.contains(&obj(bears))),
+        "{offered:?}"
+    );
 }
 
 #[test]
@@ -546,7 +549,12 @@ fn fires_of_invention_doesnt_restrict_lands_or_abilities() {
     cast_resolve(&mut t, P0, "Ornithopter", &[]);
     cast_resolve(&mut t, P0, "Ornithopter", &[]);
     let third = t.hand(P0, "Ornithopter");
-    assert!(!can_cast(&mut t, P0, third, mtg_engine::object::CastMethod::Normal));
+    assert!(!can_cast(
+        &mut t,
+        P0,
+        third,
+        mtg_engine::object::CastMethod::Normal
+    ));
     let forest = t.hand(P0, "Forest");
     assert!(t.play_land(P0, forest).is_ok());
     let seal = t.battlefield(P0, "Seal of Fire");
@@ -601,12 +609,27 @@ fn lukka_exiled_creatures_castable_with_any_lukka() {
     let bears = t.g.current(bears);
     assert_eq!(t.zone(bears), Zone::Exile);
     lands_for_cost(&mut t, P0, "Grizzly Bears");
-    assert!(can_cast(&mut t, P0, bears, mtg_engine::object::CastMethod::Normal));
+    assert!(can_cast(
+        &mut t,
+        P0,
+        bears,
+        mtg_engine::object::CastMethod::Normal
+    ));
     destroy(&mut t, lukka);
     t.resolve_all();
-    assert!(!can_cast(&mut t, P0, bears, mtg_engine::object::CastMethod::Normal));
+    assert!(!can_cast(
+        &mut t,
+        P0,
+        bears,
+        mtg_engine::object::CastMethod::Normal
+    ));
     t.battlefield(P0, "Lukka, Bound to Ruin");
-    assert!(can_cast(&mut t, P0, bears, mtg_engine::object::CastMethod::Normal));
+    assert!(can_cast(
+        &mut t,
+        P0,
+        bears,
+        mtg_engine::object::CastMethod::Normal
+    ));
 }
 
 #[test]
@@ -617,10 +640,15 @@ fn agadeems_awakening_one_card_of_each_mana_value_up_to_x() {
         "if X is 3, you may target up to four creature cards: one with mana value 3, one with mana value 2, one with mana value 1, and one with mana value 0."
     );
     let mut t = TestGame::new(2);
-    let cards: Vec<ObjectId> = ["Centaur Courser", "Grizzly Bears", "Llanowar Elves", "Ornithopter"]
-        .iter()
-        .map(|n| t.graveyard(P0, n))
-        .collect();
+    let cards: Vec<ObjectId> = [
+        "Centaur Courser",
+        "Grizzly Bears",
+        "Llanowar Elves",
+        "Ornithopter",
+    ]
+    .iter()
+    .map(|n| t.graveyard(P0, n))
+    .collect();
     let spell = t.hand(P0, "Agadeem's Awakening // Agadeem, the Undercrypt");
     mana_for(&mut t, P0, 3);
     let targets: Vec<Entity> = cards.iter().map(|c| obj(*c)).collect();

@@ -396,8 +396,11 @@ impl Game {
                 let i = match hinted {
                     Some(i) => i,
                     None => {
-                        let labels = options.iter().map(|(l, _)| l.clone()).collect();
-                        self.ask_option(p, ctx.source, "Choose one", labels)
+                        // Not an impossible option while another can be done (CR 608.2d).
+                        let ok = crate::impossible_options::choosable(self, options, ctx);
+                        let labels = ok.iter().map(|i| options[*i].0.clone()).collect();
+                        let k = self.ask_option(p, ctx.source, "Choose one", labels);
+                        ok.get(k).copied().unwrap_or(ok[0])
                     }
                 };
                 if let Some((_, eff)) = options.get(i) {

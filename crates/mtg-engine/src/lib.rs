@@ -91,6 +91,7 @@ pub mod game_terms;
 pub mod granted_by;
 pub mod granted_captures;
 pub mod history_query;
+pub mod impossible_options;
 pub mod keyword_actions;
 pub mod keyword_actions_impl;
 pub mod keyword_impls;
