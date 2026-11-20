@@ -63,6 +63,7 @@ pub mod custom;
 pub mod decision;
 pub mod deck;
 pub mod default_x;
+pub mod defined_x_costs;
 pub mod delayed_batches;
 pub mod designations;
 pub mod destinations;

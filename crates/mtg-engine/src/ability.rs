@@ -627,6 +627,12 @@ pub enum CostPart {
     /// (X is 0, CR 107.3h; nothing reduces it: it isn't a spell being cast). Only a card
     /// whose mana cost could be paid may be chosen (see `cost_sets.rs`).
     AndPayItsManaCost(Box<CostPart>),
+    /// "{X}, where X is [value]" in a cost that isn't a spell's or ability's own (an attack
+    /// tax, an alternative cost an effect offers): X generic mana, X defined by the text
+    /// (CR 107.3c) and determined as the total cost is (CR 508.1h, 601.2f). The cost still
+    /// contains {X}: mana that may be spent only on such costs may pay it (CR 106.6; see
+    /// `defined_x_costs.rs`).
+    DefinedX(Value),
 }
 
 // ---------------------------------------------------------------------------

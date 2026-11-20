@@ -378,6 +378,10 @@ pub fn pay_for(
     let spend = SpendContext {
         source: src,
         purpose,
+        // "Spend this mana only on costs that contain {X}": a special action's cost with
+        // {X}, X chosen immediately before it's paid (CR 107.3d; `ctx.cost_has_x` says so
+        // once X is bound).
+        has_x: ctx.cost_has_x || crate::defined_x_costs::contains_x(&cost),
         ..Default::default()
     };
     match g.pay_total_cost(p, &cost, src, &spend, ctx) {

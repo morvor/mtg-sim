@@ -1049,24 +1049,22 @@ fn p_may_pay_x_where(l: &str, b: &mut Builder) -> Option<Effect> {
         b.targets.truncate(n);
         return None;
     }
-    // {X}: X generic mana, the amount determined as the payment is offered.
-    let cost = Cost::default().with(CostPart::Repeated {
-        cost: Box::new(Cost {
-            mana: Some(crate::mana::ManaCost::parse("{1}")?),
-            parts: vec![],
-        }),
-        times: v,
-    });
+    // {X}, X determined as the payment is offered (CR 107.3c, 608.2h): a cost that contains
+    // {X}, which mana spendable only on such costs may pay (CR 106.6).
+    let cost = Cost::mana(crate::mana::ManaCost::parse("{X}")?);
     b.it_player = who.clone();
-    Some(Effect::AsPlayer {
-        who,
-        effect: Box::new(Effect::PayOptional {
-            who: PlayerRef::You,
-            cost,
-            then: Box::new(Effect::Noop),
-            otherwise: Box::new(Effect::Noop),
-        }),
-    })
+    Some(Effect::seq(vec![
+        Effect::SetX { value: v },
+        Effect::AsPlayer {
+            who,
+            effect: Box::new(Effect::PayOptional {
+                who: PlayerRef::You,
+                cost,
+                then: Box::new(Effect::Noop),
+                otherwise: Box::new(Effect::Noop),
+            }),
+        },
+    ]))
 }
 
 inventory::submit! { EffectPattern { name: "combat 4: [player] may pay {X}, where X is [value]", priority: 90, parse: p_may_pay_x_where } }
@@ -1074,11 +1072,16 @@ inventory::submit! { EffectPattern { name: "combat 4: [player] may pay {X}, wher
 /// Whether the last instruction of `e` is a payment of an X the text defines (see
 /// [`p_may_pay_x_where`]).
 fn pays_defined_x(e: &Effect) -> bool {
-    match e {
-        Effect::Seq(v) => v.last().is_some_and(pays_defined_x),
-        Effect::AsPlayer { effect, .. } => matches!(&**effect, Effect::PayOptional { cost, .. }
-            if cost.parts.iter().any(|p| matches!(p, CostPart::Repeated { .. }))),
-        _ => false,
+    let Effect::Seq(v) = e else {
+        return false;
+    };
+    match v.as_slice() {
+        [.., Effect::SetX { .. }, Effect::AsPlayer { effect, .. }] => {
+            matches!(&**effect, Effect::PayOptional { cost, .. }
+                if cost.mana.as_ref().is_some_and(|m| m.has_x()))
+        }
+        [.., last] => pays_defined_x(last),
+        [] => false,
     }
 }
 

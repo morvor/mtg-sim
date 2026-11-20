@@ -2251,7 +2251,18 @@ impl Game {
             card_types: chars.card_types,
             subtypes: chars.subtypes.to_vec(),
             all_creature_types: crate::kw::changeling::every_creature_type(&chars),
-            has_x: base_cost_has_x,
+            // An {X} the text of the alternative cost defines counts too (CR 106.6:
+            // "Spend this mana only on costs that contain {X}").
+            has_x: base_cost_has_x
+                || opt
+                    .alt_cost
+                    .as_ref()
+                    .is_some_and(crate::defined_x_costs::has_defined_x)
+                || crate::defined_x_costs::has_defined_x(&extra)
+                || opt
+                    .extra_cost
+                    .as_ref()
+                    .is_some_and(crate::defined_x_costs::has_defined_x),
             source: Some(id),
             any_color: {
                 let mut v = self.any_color_mana(p, id, false);
@@ -2507,6 +2518,12 @@ impl Game {
         let x_part = x * cost.mana.as_ref().map_or(0, |m| m.x_count());
         if let Some(m) = cost.mana.as_mut() {
             *m = m.with_x(x);
+        }
+        // An {X} the text defines ("You may pay {X} rather than pay the mana cost for
+        // Samurai spells you cast, where X is that spell's mana value"): that much generic
+        // mana, which the reductions apply to too (CR 107.3c, 601.2f).
+        if crate::defined_x_costs::has_defined_x(&cost) {
+            cost = crate::defined_x_costs::fold(self, &cost, &Ctx::new(Some(card), p)).0;
         }
         // CR 601.2f: increases apply as they're found, reductions after all of them.
         let mut changes = crate::activation_costs::CostChanges::default();
@@ -3625,6 +3642,8 @@ impl Game {
         snow_any_color: bool,
     ) -> bool {
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
+        // "{X}, where X is ...": that much generic mana.
+        let cost = &crate::defined_x_costs::fold(self, cost, ctx).0;
         // CR 107.3a: parts that use an object described with X can be paid if they could
         // be for some value of X.
         if crate::x_cost_filters::payable_x_values(self, p, src, cost).is_some_and(|v| v.is_empty())
@@ -4065,6 +4084,12 @@ impl Game {
             CostPart::AndPayItsManaCost(part) => {
                 self.and_pay_its_mana_cost_payable(p, part, src, ctx)
             }
+            // A part on its own (the total cost folds it into its mana): that much mana.
+            CostPart::DefinedX(_) => {
+                let one = Cost::free().with(part.clone());
+                let chars = so.map(|o| o.chars.clone()).unwrap_or_default();
+                self.can_pay_cost_optimistic_in(p, &one, src, &chars, ctx)
+            }
         }
     }
 
@@ -4205,6 +4230,13 @@ impl Game {
         let mut paid = PaidCost::default();
         // CR 702.24a: a repeated cost's total is determined as it's paid.
         let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
+        // "{X}, where X is ...": X generic mana, in a cost that contains {X} (CR 106.6).
+        let (cost, defined_x) = crate::defined_x_costs::fold(self, cost, ctx);
+        let cost = &cost;
+        let spend = &SpendContext {
+            has_x: spend.has_x || defined_x,
+            ..spend.clone()
+        };
         let first = |c: &CostPart| taps_first && matches!(c, CostPart::TapUntapped { .. });
         if taps_first {
             for part in cost.parts.iter().filter(|c| first(c)) {
@@ -4941,6 +4973,20 @@ impl Game {
             }
             CostPart::AndPayItsManaCost(part) => {
                 self.pay_and_its_mana_cost(p, part, src, ctx, paid)?;
+            }
+            // A part on its own (the total cost folds it into its mana): that much mana, in
+            // a cost that contains {X} (CR 106.6).
+            CostPart::DefinedX(_) => {
+                let one = Cost::free().with(part.clone());
+                let spend = SpendContext {
+                    is_ability: true,
+                    source: src,
+                    cost_of: ctx.cost_of,
+                    purpose: crate::keyword_impls::resolving_keyword_purpose(self, ctx),
+                    ..Default::default()
+                };
+                let sub = self.pay_total_cost(p, &one, src, &spend, ctx)?;
+                paid.mana_spent.extend(sub.mana_spent);
             }
         }
         Ok(())
