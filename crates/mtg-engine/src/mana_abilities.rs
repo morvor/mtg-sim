@@ -47,6 +47,12 @@ pub struct ManaSource {
     /// into the pool as the payment began) planned for its own cost. The rest of the
     /// pool's mana is kept for the cost being paid while it's activated (see `pay_mana`).
     pub cost_pool: Vec<usize>,
+    /// Which activation of its mana ability this source is: 0 for the first, `n` for the
+    /// `n + 1`th. A mana ability whose cost neither taps nor sacrifices its permanent nor
+    /// includes mana can be activated again while its cost can be paid (CR 605.3a, 118.3,
+    /// 601.2g), so it's listed once per activation a payment could make (see
+    /// [`repeat_bound`]); the planner uses them in order.
+    pub repeat: u32,
 }
 
 const ALL_COLORS: [ManaType; 5] = [
@@ -1404,12 +1410,104 @@ pub fn mana_sources_with(
     reserve: Option<ObjectId>,
     reserve_may_tap: bool,
 ) -> Vec<ManaSource> {
-    sources_inner(g, p, reserve, reserve_may_tap, false, None)
+    sources_inner(g, p, reserve, reserve_may_tap, false, None, MAX_REPEATS)
+}
+
+/// The most activations of one repeatable mana ability listed when no particular cost is
+/// being paid ([`mana_sources`], [`potential_mana_count`]).
+const MAX_REPEATS: usize = 40;
+
+/// Whether a mana ability's activation restriction depends only on the turn and step
+/// ("Any player may activate this ability but only during their turn before the end
+/// step"), which activating it can't change: such an ability can be activated again in the
+/// same payment.
+fn timing_only(c: &Condition) -> bool {
+    use crate::oracle::patterns::activation_restrictions::{BEFORE_END_STEP, DRAW_STEP};
+    match c {
+        Condition::YourTurn | Condition::NotYourTurn | Condition::Phase(_) => true,
+        Condition::Custom(n) => n == BEFORE_END_STEP || n == DRAW_STEP,
+        Condition::And(v) | Condition::Or(v) => v.iter().all(timing_only),
+        Condition::Not(c) => timing_only(c),
+        _ => false,
+    }
+}
+
+/// How many times the mana ability `a` of `o`, with total cost `total`, could be activated
+/// in one payment, at most `max` (CR 605.3a, 118.3: as long as its cost can be paid; its
+/// activations per turn or in all, CR 602.5b). Once for an ability whose cost taps or
+/// sacrifices its permanent or includes mana (`plan_with_filter` plans those once), one
+/// with an activation condition that paying could change, and one a keyword limits
+/// (exhaust, CR 702.177a).
+#[allow(clippy::too_many_arguments)]
+fn repeat_bound(
+    g: &Game,
+    p: PlayerId,
+    o: &crate::object::GameObject,
+    a: &Ability,
+    act: &ActivatedAbility,
+    total: &Cost,
+    sac: (usize, usize),
+    max: usize,
+) -> usize {
+    let once = total.parts.iter().any(|c| {
+        !matches!(
+            c,
+            CostPart::Sacrifice { .. }
+                | CostPart::Exile { .. }
+                | CostPart::PayLife(_)
+                | CostPart::RemoveCounters { .. }
+                | CostPart::AddCounters { .. }
+        )
+    }) || total.mana.as_ref().is_some_and(|m| !m.is_zero())
+        || act.condition.as_ref().is_some_and(|c| !timing_only(c))
+        || crate::kw::exhaust::is_exhaust(a);
+    if once {
+        return 1;
+    }
+    let ctx = Ctx::new(Some(o.id), p);
+    let mut n = max;
+    let (pool, each) = sac;
+    if each > 0 {
+        n = n.min(pool / each);
+    }
+    for part in &total.parts {
+        match part {
+            CostPart::RemoveCounters { kind, count } => {
+                let each = g.eval_value(count, &ctx).max(0) as u32;
+                if each > 0 {
+                    n = n.min((o.counter(kind) / each) as usize);
+                }
+            }
+            CostPart::PayLife(v) => {
+                let each = g.eval_value(v, &ctx).max(0) as u32;
+                if each > 0 {
+                    n = n.min((payable_life(g, p) / each) as usize);
+                }
+            }
+            _ => {}
+        }
+    }
+    let left = |used: u32, max: i64| (max - used as i64).max(0) as usize;
+    if let Some(max) = act.max_per_turn {
+        let used = o.activations_this_turn.get(&a.uid).copied().unwrap_or(0);
+        n = n.min(left(used, max as i64));
+    }
+    if let Some(v) = &act.max_per_turn_value {
+        let used = o.activations_this_turn.get(&a.uid).copied().unwrap_or(0);
+        n = n.min(left(used, g.eval_value(v, &ctx)));
+    }
+    if let Some(max) = act.max_total {
+        let used = o.activations.get(&a.uid).copied().unwrap_or(0);
+        n = n.min(left(used, max as i64));
+    }
+    n.max(1)
 }
 
 /// [`mana_sources_with`]; with `filters`, mana abilities that cost mana are listed too
 /// (with [`ManaSource::mana`]); with `beginning`, only abilities that could be activated
-/// while that ability is being activated ([`crate::kw::activation_allowed_during`]).
+/// while that ability is being activated ([`crate::kw::activation_allowed_during`]). A
+/// mana ability that can be activated more than once in a payment is listed once per
+/// activation, at most `repeats` times ([`repeat_bound`]).
 fn sources_inner(
     g: &Game,
     p: PlayerId,
@@ -1417,6 +1515,7 @@ fn sources_inner(
     reserve_may_tap: bool,
     filters: bool,
     beginning: Option<(ObjectId, u64)>,
+    repeats: usize,
 ) -> Vec<ManaSource> {
     let mut out = Vec::new();
     // A player casting a spell "if able" who chose to activate no mana abilities for it
@@ -1655,22 +1754,39 @@ fn sources_inner(
                 if o.is_creature() {
                     rank = rank.max(1);
                 }
+                let uses = if alternatives.len() == 1 {
+                    repeat_bound(
+                        g,
+                        p,
+                        o,
+                        a,
+                        act,
+                        &total,
+                        (sac_pool.len(), sac_count),
+                        repeats,
+                    )
+                } else {
+                    1
+                };
                 // Alternatives of one ability tap the permanent, so they conflict: only
                 // one of them is used.
                 for units in alternatives.into_iter().filter(|u| !u.is_empty()) {
-                    out.push(ManaSource {
-                        obj: o.id,
-                        ability: a.clone(),
-                        units,
-                        cost_rank: rank,
-                        sac_pool: sac_pool.clone(),
-                        sac_count,
-                        offer: None,
-                        life,
-                        damage: self_damage(g, p, &act.body.effect, &ctx),
-                        mana: filter_cost.clone(),
-                        cost_pool: Vec::new(),
-                    });
+                    for repeat in 0..uses as u32 {
+                        out.push(ManaSource {
+                            obj: o.id,
+                            ability: a.clone(),
+                            units: units.clone(),
+                            cost_rank: rank,
+                            sac_pool: sac_pool.clone(),
+                            sac_count,
+                            offer: None,
+                            life,
+                            damage: self_damage(g, p, &act.body.effect, &ctx),
+                            mana: filter_cost.clone(),
+                            cost_pool: Vec::new(),
+                            repeat,
+                        });
+                    }
                 }
             }
         }
@@ -1761,6 +1877,7 @@ fn offer_sources(g: &Game, p: PlayerId) -> Vec<ManaSource> {
                 damage: 0,
                 mana: None,
                 cost_pool: Vec::new(),
+                repeat: 0,
             });
         }
     }
@@ -1785,9 +1902,25 @@ impl ManaSource {
     /// permanent can't be tapped to pay a cost (CR 118.3), so a Volcanic Island pays either
     /// {U} or {R}, not both.
     pub fn conflicts_with(&self, other: &ManaSource) -> bool {
-        (self.obj == other.obj
-            && ((self.taps() && other.taps()) || (self.sacrifices() && other.sacrifices())))
-            || self.sacrifices_too_much_with(other)
+        self.conflicts_on_object(other) || self.sacrifices_too_much_with(other)
+    }
+
+    /// Whether this source and `other` belong to the same permanent and both tap it, or
+    /// both sacrifice it.
+    fn conflicts_on_object(&self, other: &ManaSource) -> bool {
+        self.obj == other.obj
+            && ((self.taps() && other.taps()) || (self.sacrifices() && other.sacrifices()))
+    }
+
+    /// What its activation does to objects, for [`match_sacrifices`].
+    fn sac_info(&self) -> SacInfo {
+        SacInfo {
+            obj: self.obj,
+            pool: self.sac_pool.clone(),
+            count: self.sac_count,
+            self_sac: self.sacrifices(),
+            offer: self.offer.is_some(),
+        }
     }
 
     /// Whether this source and `other` both sacrifice other permanents and there aren't
@@ -1800,6 +1933,107 @@ impl ManaSource {
         both.extend(other.sac_pool.iter().filter(|o| !self.sac_pool.contains(o)));
         both.len() < self.sac_count + other.sac_count
     }
+}
+
+/// One planned activation of a mana ability, as far as the objects its cost sacrifices or
+/// exiles go (see [`match_sacrifices`]).
+#[derive(Clone, Debug)]
+struct SacInfo {
+    /// The permanent whose ability it is (or the source of a special action).
+    obj: ObjectId,
+    /// The objects its cost could sacrifice or exile, and how many it takes.
+    pool: Vec<ObjectId>,
+    count: usize,
+    /// Its cost sacrifices its own permanent.
+    self_sac: bool,
+    /// A use of a special action (`ManaSource::offer`): it doesn't need its source.
+    offer: bool,
+}
+
+/// Matches what the activations `acts` (in the order they're activated) sacrifice or exile
+/// to distinct objects (one object pays only one cost, CR 118.3; it's then a new object,
+/// CR 400.7): never a permanent one of them sacrifices as itself, and a permanent one of
+/// them needs (its own ability, tapping it) only once its last such activation is under
+/// way, so Skirk Prospector is sacrificed to its own ability last (its ruling). With
+/// `fixed`, the first activation's cost takes that object. Returns the objects matched to
+/// each activation, or `None` if there's no such matching.
+fn match_sacrifices(acts: &[SacInfo], fixed: Option<ObjectId>) -> Option<Vec<Vec<ObjectId>>> {
+    // One slot per object an activation takes: (activation, its candidates).
+    let mut slots: Vec<(usize, Vec<ObjectId>)> = Vec::new();
+    for (i, a) in acts.iter().enumerate() {
+        if a.count == 0 {
+            continue;
+        }
+        let cands: Vec<ObjectId> = a
+            .pool
+            .iter()
+            .copied()
+            .filter(|o| {
+                acts.iter()
+                    .enumerate()
+                    .all(|(j, b)| b.obj != *o || b.offer || (!b.self_sac && j <= i))
+            })
+            .collect();
+        for k in 0..a.count {
+            let cands = match fixed {
+                Some(f) if i == 0 && k == 0 => {
+                    if !cands.contains(&f) {
+                        return None;
+                    }
+                    vec![f]
+                }
+                Some(f) => cands.iter().copied().filter(|o| *o != f).collect(),
+                None => cands.clone(),
+            };
+            if cands.is_empty() {
+                return None;
+            }
+            slots.push((i, cands));
+        }
+    }
+    if slots.is_empty() {
+        return Some(vec![Vec::new(); acts.len()]);
+    }
+    // Kuhn's augmenting paths.
+    let mut owner: Vec<(ObjectId, usize)> = Vec::new();
+    fn augment(
+        s: usize,
+        slots: &[(usize, Vec<ObjectId>)],
+        owner: &mut Vec<(ObjectId, usize)>,
+        seen: &mut Vec<ObjectId>,
+    ) -> bool {
+        for &o in &slots[s].1 {
+            if seen.contains(&o) {
+                continue;
+            }
+            seen.push(o);
+            match owner.iter().position(|(x, _)| *x == o) {
+                None => {
+                    owner.push((o, s));
+                    return true;
+                }
+                Some(i) => {
+                    let prev = owner[i].1;
+                    if augment(prev, slots, owner, seen) {
+                        let i = owner.iter().position(|(x, _)| *x == o).unwrap_or(i);
+                        owner[i].1 = s;
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+    for s in 0..slots.len() {
+        if !augment(s, &slots, &mut owner, &mut Vec::new()) {
+            return None;
+        }
+    }
+    let mut out = vec![Vec::new(); acts.len()];
+    for (o, s) in owner {
+        out[slots[s].0].push(o);
+    }
+    Some(out)
 }
 
 /// Number of mana units the player could produce (pool excluded).
@@ -1963,11 +2197,30 @@ pub fn plan_payment(
     if spend.no_mana {
         return solve_payment(g, p, &reqs, spend, &[], &[]).map(|x| x.0);
     }
-    let sources = sources_inner(g, p, reserve, spend.reserve_may_tap, false, spend.beginning);
+    let repeats = units_needed(&reqs);
+    let sources = sources_inner(
+        g,
+        p,
+        reserve,
+        spend.reserve_may_tap,
+        false,
+        spend.beginning,
+        repeats,
+    );
     if let Some((plan, _)) = solve_payment(g, p, &reqs, spend, &sources, &[]) {
         return Some(plan);
     }
     plan_with_filter(g, p, &reqs, spend, reserve, &sources)
+}
+
+/// The most units of mana a payment of `reqs` can take: one per symbol, two for a {2/W}
+/// paid with generic mana. Each activation of a mana ability that's planned adds at least
+/// one, so no ability is planned more often than this.
+fn units_needed(reqs: &[Req]) -> usize {
+    reqs.iter()
+        .map(|r| if matches!(r, Req::TwoHybrid(_)) { 2 } else { 1 })
+        .sum::<usize>()
+        .max(1)
 }
 
 /// The most mana abilities that cost mana tried for one payment.
@@ -1997,12 +2250,19 @@ fn plan_with_filter(
     if !any {
         return None;
     }
-    let filters: Vec<ManaSource> =
-        sources_inner(g, p, reserve, spend.reserve_may_tap, true, spend.beginning)
-            .into_iter()
-            .filter(|s| s.mana.is_some())
-            .take(MAX_FILTERS)
-            .collect();
+    let filters: Vec<ManaSource> = sources_inner(
+        g,
+        p,
+        reserve,
+        spend.reserve_may_tap,
+        true,
+        spend.beginning,
+        units_needed(reqs),
+    )
+    .into_iter()
+    .filter(|s| s.mana.is_some())
+    .take(MAX_FILTERS)
+    .collect();
     let same = |a: &ManaSource, b: &ManaSource| a.obj == b.obj && a.ability.uid == b.ability.uid;
     for f in &filters {
         let Some(f_reqs) = f.mana.as_ref().and_then(|m| expand(m, None)) else {
@@ -2209,6 +2469,20 @@ struct Planner<'a> {
     /// of those paying it so far.
     x_distinct: bool,
     x_used: ColorSet,
+    /// For each source, the previous activation of its ability (`ManaSource::repeat`):
+    /// activations of one ability are used in order, so a failing search doesn't try
+    /// their permutations.
+    prev_copy: Vec<Option<usize>>,
+    /// What each source's activation sacrifices or exiles ([`match_sacrifices`]).
+    sac: Vec<SacInfo>,
+    /// Some source's cost sacrifices or exiles other objects.
+    any_sac: bool,
+    /// The objects some source's cost could sacrifice or exile.
+    pooled: Vec<ObjectId>,
+    /// For each source: it can't be activated along with the sources in use, as there
+    /// aren't enough objects for their costs between them (cached until the sources in
+    /// use change).
+    sac_blocked_cache: std::cell::RefCell<Option<Vec<bool>>>,
 }
 
 impl<'a> Planner<'a> {
@@ -2220,13 +2494,38 @@ impl<'a> Planner<'a> {
                 source_units[s].push(u);
             }
         }
+        // Two sources that sacrifice other objects can conflict only through the objects
+        // all the sources in use need between them (`sac_blocked`).
         let conflict: Vec<Vec<bool>> = (0..n)
             .map(|a| {
                 (0..n)
-                    .map(|b| a != b && sources[a].conflicts_with(&sources[b]))
+                    .map(|b| a != b && sources[a].conflicts_on_object(&sources[b]))
                     .collect()
             })
             .collect();
+        let prev_copy = (0..n)
+            .map(|s| {
+                let src = &sources[s];
+                (src.repeat > 0)
+                    .then(|| {
+                        (0..n).find(|&t| {
+                            sources[t].obj == src.obj
+                                && sources[t].ability.uid == src.ability.uid
+                                && sources[t].offer == src.offer
+                                && sources[t].repeat + 1 == src.repeat
+                        })
+                    })
+                    .flatten()
+            })
+            .collect();
+        let sac: Vec<SacInfo> = sources.iter().map(|s| s.sac_info()).collect();
+        let mut pooled: Vec<ObjectId> = Vec::new();
+        for x in sac.iter().flat_map(|i| i.pool.iter()) {
+            if !pooled.contains(x) {
+                pooled.push(*x);
+            }
+        }
+        let any_sac = sac.iter().any(|i| i.count > 0);
         let mut groups: Vec<Vec<usize>> = Vec::new();
         let mut lone_sources = Vec::new();
         for s in 0..n {
@@ -2262,7 +2561,49 @@ impl<'a> Planner<'a> {
             life_for: Vec::new(),
             x_distinct: false,
             x_used: ColorSet::NONE,
+            prev_copy,
+            sac,
+            any_sac,
+            pooled,
+            sac_blocked_cache: std::cell::RefCell::new(None),
         }
+    }
+
+    /// Whether source `s` takes part in the matching of sacrifices: its cost sacrifices or
+    /// exiles other objects, or its permanent is one some cost could take.
+    fn sac_relevant(&self, s: usize) -> bool {
+        self.any_sac && (self.sac[s].count > 0 || self.pooled.contains(&self.sac[s].obj))
+    }
+
+    /// For each source not in use: activating it too would leave the sources in use
+    /// without enough objects to sacrifice or exile between them ([`match_sacrifices`]):
+    /// two creatures pay for two activations of Ashnod's Altar and Phyrexian Altar
+    /// together, and a Blood Pet that sacrifices itself for mana can't also be sacrificed
+    /// to Ashnod's Altar.
+    fn sac_blocked_all(&self) -> std::cell::Ref<'_, Vec<bool>> {
+        if self.sac_blocked_cache.borrow().is_none() {
+            let n = self.sac.len();
+            let in_use: Vec<usize> = (0..n).filter(|&t| self.in_use[t] > 0).collect();
+            let v = (0..n)
+                .map(|s| {
+                    if self.in_use[s] > 0 || !self.sac_relevant(s) {
+                        return false;
+                    }
+                    if self.sac[s].count == 0 && in_use.iter().all(|&t| self.sac[t].count == 0) {
+                        return false;
+                    }
+                    let mut acts: Vec<usize> = in_use.clone();
+                    let at = acts.partition_point(|&t| t < s);
+                    acts.insert(at, s);
+                    let infos: Vec<SacInfo> = acts.iter().map(|&t| self.sac[t].clone()).collect();
+                    match_sacrifices(&infos, None).is_none()
+                })
+                .collect();
+            *self.sac_blocked_cache.borrow_mut() = Some(v);
+        }
+        std::cell::Ref::map(self.sac_blocked_cache.borrow(), |c| {
+            c.as_ref().expect("filled above")
+        })
     }
 
     /// The damage the sources in use deal to the player.
@@ -2292,6 +2633,8 @@ impl<'a> Planner<'a> {
             .iter()
             .zip(&self.in_use)
             .any(|(c, n)| *c && *n > 0)
+            || self.prev_copy[s].is_some_and(|p| self.in_use[p] == 0)
+            || self.sac_blocked_all()[s]
     }
 
     /// Whether a unit is still free to pay with, ignoring conflicts.
@@ -2334,6 +2677,7 @@ impl<'a> Planner<'a> {
         if let Some(s) = self.units[u].source {
             if self.in_use[s] == 0 {
                 self.life_used += self.source_life[s];
+                *self.sac_blocked_cache.get_mut() = None;
             }
             self.in_use[s] += 1;
         }
@@ -2347,6 +2691,7 @@ impl<'a> Planner<'a> {
                 self.in_use[s] -= 1;
                 if self.in_use[s] == 0 {
                     self.life_used -= self.source_life[s];
+                    *self.sac_blocked_cache.get_mut() = None;
                 }
             }
         }
@@ -2355,7 +2700,11 @@ impl<'a> Planner<'a> {
     /// The most units matching `f` that could still be used together: exact for generic
     /// mana, and an upper bound for pruning otherwise.
     fn capacity(&self, f: &dyn Fn(&Unit) -> bool) -> usize {
+        let blocked = self.sac_blocked_all();
         let free = |s: usize| {
+            if blocked[s] {
+                return 0;
+            }
             self.source_units[s]
                 .iter()
                 .filter(|&&u| self.open(u) && f(&self.units[u]))
@@ -2364,10 +2713,53 @@ impl<'a> Planner<'a> {
         let pool = (0..self.units.len())
             .filter(|&u| self.units[u].source.is_none() && self.open(u) && f(&self.units[u]))
             .count();
+        // Sources not in use that would take objects some cost could sacrifice or exile
+        // (their own, or others): together they can't take more objects than are left. An
+        // upper bound: the best units per object taken, as if each could take any of them.
+        let consumes = |s: usize| {
+            let i = &self.sac[s];
+            if !self.any_sac || i.offer {
+                0
+            } else if i.count > 0 {
+                i.count
+            } else if i.self_sac && self.pooled.contains(&i.obj) {
+                1
+            } else {
+                0
+            }
+        };
+        let (consumers, lone): (Vec<usize>, Vec<usize>) = self
+            .lone_sources
+            .iter()
+            .partition(|&&s| self.in_use[s] == 0 && consumes(s) > 0);
+        let consumed: usize = (0..self.sac.len())
+            .filter(|&s| self.in_use[s] > 0)
+            .map(consumes)
+            .sum();
+        let mut objects_left = self.pooled.len().saturating_sub(consumed);
+        let mut items: Vec<(usize, usize)> = consumers
+            .iter()
+            .map(|&s| (free(s), consumes(s)))
+            .filter(|(n, _)| *n > 0)
+            .collect();
+        // Most units per object first (compared as fractions).
+        items.sort_by(|a, b| (b.0 * a.1).cmp(&(a.0 * b.1)));
+        let mut by_objects = 0;
+        for (n, each) in items {
+            if objects_left == 0 {
+                break;
+            }
+            if each <= objects_left {
+                by_objects += n;
+                objects_left -= each;
+            } else {
+                by_objects += n * objects_left / each;
+                break;
+            }
+        }
         // Sources whose use costs life: those in use, then as many others as the life
         // left pays for, cheapest first.
-        let (costly, free_sources): (Vec<usize>, Vec<usize>) = self
-            .lone_sources
+        let (costly, free_sources): (Vec<usize>, Vec<usize>) = lone
             .iter()
             .partition(|&&s| self.source_life[s] > 0 && self.in_use[s] == 0);
         let mut costly: Vec<(u32, usize)> = costly
@@ -2391,7 +2783,7 @@ impl<'a> Planner<'a> {
             .iter()
             .map(|gr| self.best_in_group(gr, &free))
             .sum();
-        pool + lone + grouped
+        pool + lone + grouped + by_objects
     }
 
     /// The most free units one permanent's conflicting abilities can still produce: the
@@ -2688,7 +3080,8 @@ pub fn pay_mana(
     if plan_now.is_none() {
         let pool_len = g.player(p).mana_pool.mana.len();
         let plan = plan_payment(g, p, cost, spend, reserve)?;
-        for (src, types) in plan {
+        let infos: Vec<SacInfo> = plan.iter().map(|(s, _)| s.sac_info()).collect();
+        for (k, (src, types)) in plan.into_iter().enumerate() {
             // Triggered mana abilities (CR 605.4a, "whenever enchanted land is tapped for
             // mana, ... adds an additional {G}") may already have added enough.
             if try_pool(g, 0).is_some() {
@@ -2722,7 +3115,10 @@ pub fn pay_mana(
             }
             g.mana_hint = Some(types);
             let prev_reserve = std::mem::replace(&mut g.mana_reserve, reserve);
+            let keep = kept_for_later(g, &infos[k..]);
+            let prev_keep = std::mem::replace(&mut g.mana_keep, keep);
             let r = g.activate_ability(p, src.obj, src.ability.uid);
+            g.mana_keep = prev_keep;
             g.mana_reserve = prev_reserve;
             g.mana_hint = None;
             if !held.is_empty() {
@@ -2848,6 +3244,57 @@ pub fn pay_mana(
         }
     }
     Some(spent)
+}
+
+/// The objects the first of the planned activations `acts` (the rest of a payment, in
+/// order) may not sacrifice or exile for its cost: the permanents of the later activations
+/// (their abilities, or tapping them, need them: Skirk Prospector's ruling, "be sure to
+/// sacrifice Skirk Prospector last"), and those its cost could take that would leave the
+/// later activations' costs unpayable ([`match_sacrifices`]). Objects already gone are
+/// left out of every activation's candidates.
+fn kept_for_later(g: &Game, acts: &[SacInfo]) -> Vec<ObjectId> {
+    let Some(first) = acts.first() else {
+        return Vec::new();
+    };
+    let mut keep: Vec<ObjectId> = acts[1..]
+        .iter()
+        .filter(|a| !a.offer)
+        .map(|a| a.obj)
+        .collect();
+    if first.count == 0 || !acts[1..].iter().any(|a| a.count > 0) {
+        return keep;
+    }
+    let present = |o: &ObjectId| g.is_live(*o);
+    let acts: Vec<SacInfo> = acts
+        .iter()
+        .map(|a| SacInfo {
+            pool: a.pool.iter().copied().filter(present).collect(),
+            ..a.clone()
+        })
+        .collect();
+    let allowed: Vec<ObjectId> = if acts[0].count == 1 {
+        // Each object it could take with which the rest can still be paid.
+        acts[0]
+            .pool
+            .iter()
+            .copied()
+            .filter(|o| match_sacrifices(&acts, Some(*o)).is_some())
+            .collect()
+    } else {
+        // Several objects at once: those one matching gives it, and those no later
+        // activation needs in it.
+        match match_sacrifices(&acts, None) {
+            Some(m) => acts[0]
+                .pool
+                .iter()
+                .copied()
+                .filter(|o| m[0].contains(o) || !m[1..].iter().any(|x| x.contains(o)))
+                .collect(),
+            None => return keep,
+        }
+    };
+    keep.extend(acts[0].pool.iter().filter(|o| !allowed.contains(o)));
+    keep
 }
 
 /// The most life `p` can pay toward a cost (CR 119.4): their life total, or none if they
