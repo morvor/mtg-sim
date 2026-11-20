@@ -2793,6 +2793,9 @@ impl Game {
                     if terms.controller_duration {
                         g.terms.duration_player = Some(ctx.controller);
                     }
+                    if terms.until_another {
+                        g.terms.given_by_link = Some(ctx.link);
+                    }
                 }
                 crate::permissions::given(self, before);
             }

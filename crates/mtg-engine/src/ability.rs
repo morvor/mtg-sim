@@ -4172,6 +4172,12 @@ pub struct PlayTerms {
     /// as the permission is given).
     #[serde(default)]
     pub duration_player: Option<PlayerId>,
+    /// For an effect's permission given with `until_another`: the link of the ability
+    /// that gave it (set as the permission is given), which "another card with ~" is
+    /// relative to: an ability linked to itself (CR 607.1c), and each instance of it an
+    /// object gains is linked only to itself (CR 607.5).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub given_by_link: Option<u16>,
     /// "If that spell doesn't target a creature you control, it costs {8} more to cast
     /// this way." (Mavinda, Students' Advocate): a generic increase (CR 601.2f) for a spell
     /// cast with the permission that has no target with these qualities (relative to the

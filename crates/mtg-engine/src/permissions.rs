@@ -963,7 +963,7 @@ pub fn land_played_with(g: &mut Game, perm: Option<&CastPermission>, land: Objec
 /// The permissions `g.play_grants[before..]` were just given with their terms: those
 /// with a limit ("you may cast a spell from among those cards") share a group, used up
 /// together (see [`record_use`]); one given "until you exile another card with ~" ends
-/// the earlier such permissions its source gave the same player.
+/// the earlier such permissions the same ability of its source gave the same player.
 pub fn given(g: &mut Game, before: usize) {
     if before >= g.play_grants.len() {
         return;
@@ -981,17 +981,23 @@ pub fn given(g: &mut Game, before: usize) {
         }
     }
     // "You" is the player the permission is for (CR 109.5): another player exiling a card
-    // with the same source doesn't end it (CR 611.2a).
-    let newer: Vec<(Option<ObjectId>, PlayerId)> = g.play_grants[before..]
+    // with the same source doesn't end it (CR 611.2a). "Another card with ~" is one the same
+    // ability exiles, an ability linked to itself (CR 607.1c): one of two instances of it
+    // the source gained from different objects (Myr Welder with two Unstable Amulets) is
+    // linked only to itself (CR 607.5), so the other's exiling a card doesn't end it.
+    type Giver = (Option<ObjectId>, Option<u16>, PlayerId);
+    let giver = |gr: &crate::casting::PlayGrant| -> Giver {
+        (gr.source, gr.terms.given_by_link, gr.duration_player())
+    };
+    let newer: Vec<Giver> = g.play_grants[before..]
         .iter()
         .filter(|gr| gr.terms.until_another && gr.source.is_some())
-        .map(|gr| (gr.source, gr.duration_player()))
+        .map(giver)
         .collect();
     if !newer.is_empty() {
         let mut i = 0;
         g.play_grants.retain(|gr| {
-            let keep = i >= before
-                || !(gr.terms.until_another && newer.contains(&(gr.source, gr.duration_player())));
+            let keep = i >= before || !(gr.terms.until_another && newer.contains(&giver(gr)));
             i += 1;
             keep
         });
