@@ -5,9 +5,15 @@
 //! spell unless its controller discards a card" (Reality Smasher).
 //!
 //! In these triggers "that spell or ability" is the spell or ability that targeted the
-//! object (CR 603.2, 115.1), and its controller is the trigger's player. The block is
-//! rewritten to internal forms ("counter the targeting spell", "that player") and parsed
-//! as an ordinary triggered ability; the ability keeps its printed text.
+//! object (CR 603.2, 115.1). The block is rewritten to internal forms ("counter the
+//! targeting spell", "that player") and parsed as an ordinary triggered ability; the
+//! ability keeps its printed text. "That player" of "... a spell or ability an opponent
+//! controls, that player loses 4 life" is that opponent, the spell's controller as it
+//! targeted (`PlayerRef::TriggerPlayer`); the object-based "that spell's controller" /
+//! "that spell or ability's controller" / "its controller" is the spell's controller as
+//! the ability resolves, or as it last existed on the stack (CR 608.2h,
+//! `PlayerRef::ControllerOf(Sel::TriggerSpell)`), as for "that source's controller"
+//! (Archfiend of Spite's ruling). Interpretation `that-opponent-fixed-as-it-triggers`.
 
 use super::statics::parse_for_each;
 use super::{AbilityPattern, EffectPattern};
@@ -75,7 +81,51 @@ fn targeted_by_block(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>> 
         return None;
     }
     let a = crate::oracle::triggers::parse_triggered(&text, ctx)?;
-    Some(vec![AbilityDef::new(a.kind.clone(), t)])
+    // The object-based wording names the spell's controller as the ability resolves (CR
+    // 608.2h), not the player the trigger event named: unless the printed text also says
+    // "that player" / "that opponent", its "that player" (the internal form) is the
+    // spell's controller.
+    let kind = if object_based(&lower) {
+        controller_of_the_spell(&a.kind)?
+    } else {
+        a.kind.clone()
+    };
+    Some(vec![AbilityDef::new(kind, t)])
+}
+
+/// Whether the effect names the targeting spell's controller only by the object-based
+/// wording ("that spell's controller", "that spell or ability's controller").
+fn object_based(lower: &str) -> bool {
+    const OBJECT_BASED: [&str; 3] = [
+        "that spell or ability's controller",
+        "that spell's controller",
+        "that ability's controller",
+    ];
+    let (_, effect) = lower.split_once(", ").unwrap_or(("", lower));
+    OBJECT_BASED.iter().any(|p| effect.contains(p))
+        && !effect.contains("that player")
+        && !effect.contains("that opponent")
+}
+
+/// `kind` with each "that player" (`PlayerRef::TriggerPlayer`) read as the targeting
+/// spell's controller as the ability resolves (`PlayerRef::ControllerOf(Sel::TriggerSpell)`).
+fn controller_of_the_spell(kind: &AbilityKind) -> Option<AbilityKind> {
+    use serde_json::Value as J;
+    fn walk(v: J, from: &J, to: &J) -> J {
+        if v == *from {
+            return to.clone();
+        }
+        match v {
+            J::Array(a) => J::Array(a.into_iter().map(|x| walk(x, from, to)).collect()),
+            J::Object(m) => {
+                J::Object(m.into_iter().map(|(k, x)| (k, walk(x, from, to))).collect())
+            }
+            x => x,
+        }
+    }
+    let from = serde_json::to_value(PlayerRef::TriggerPlayer).ok()?;
+    let to = serde_json::to_value(PlayerRef::ControllerOf(Box::new(Sel::TriggerSpell))).ok()?;
+    serde_json::from_value(walk(serde_json::to_value(kind).ok()?, &from, &to)).ok()
 }
 
 /// "counter the targeting spell [unless its controller pays {2}]" (internal form, see
@@ -116,8 +166,9 @@ fn counter_targeting_spell(l: &str, _b: &mut Builder) -> Option<Effect> {
     } else {
         return None;
     };
+    // "Its controller": the spell's controller as the ability resolves (CR 608.2h).
     Some(Effect::PayOptional {
-        who: PlayerRef::TriggerPlayer,
+        who: PlayerRef::ControllerOf(Box::new(Sel::TriggerSpell)),
         cost,
         then: Box::new(Effect::Noop),
         otherwise: Box::new(counter),

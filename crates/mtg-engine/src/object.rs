@@ -384,6 +384,16 @@ pub struct EventInfo {
     /// condition ("enters or attacks", "enters, if ...").
     #[serde(default)]
     pub triggered_by: Option<crate::events::TriggeringEvent>,
+    /// The controllers of `object` and `other` as the ability triggered (CR 603.2,
+    /// 603.10): "that player" of "Whenever a creature an opponent controls enters, that
+    /// player loses 1 life" or of "Whenever a source an opponent controls deals damage to
+    /// you, that player sacrifices a permanent" is the opponent the trigger condition
+    /// named, even if the object changes control before the ability resolves
+    /// (`that-opponent-fixed-as-it-triggers`). Read by `PlayerRef::ControllerAsTriggered`.
+    #[serde(default)]
+    pub object_controller: Option<PlayerId>,
+    #[serde(default)]
+    pub other_controller: Option<PlayerId>,
 }
 
 /// The kind of object on the stack.

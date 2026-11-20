@@ -1208,6 +1208,20 @@ impl Game {
         base: &Ctx,
         ev: &Event,
     ) -> Vec<EventInfo> {
+        let mut infos = self.trigger_event_infos(cond, base, ev);
+        // Who controlled the event's objects as it triggered: "that player" of "Whenever a
+        // creature an opponent controls enters, that player ..." is that opponent even if
+        // the creature changes control before the ability resolves
+        // (`that-opponent-fixed-as-it-triggers`, `PlayerRef::ControllerAsTriggered`).
+        for i in &mut infos {
+            i.object_controller = i.object.map(|o| self.obj(o).controller);
+            i.other_controller = i.other.map(|o| self.obj(o).controller);
+        }
+        infos
+    }
+
+    /// The body of [`Game::trigger_matches_ctx`].
+    fn trigger_event_infos(&self, cond: &TriggerCond, base: &Ctx, ev: &Event) -> Vec<EventInfo> {
         let src = base.source.unwrap_or(ObjectId(0));
         let ctl = base.controller;
         let ctx = base.clone();

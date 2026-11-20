@@ -95,6 +95,7 @@ fn bind_duration_players(g: &Game, d: &Duration, ctx: &Ctx) -> Duration {
         r,
         PlayerRef::TriggerPlayer
             | PlayerRef::TriggerMover
+            | PlayerRef::ControllerAsTriggered(_)
             | PlayerRef::Target(_)
             | PlayerRef::Iterated
     ) {
