@@ -66,7 +66,8 @@ pub fn tokens_with(t: &TestGame, p: PlayerId, subtype: &str) -> Vec<ObjectId> {
         .collect()
 }
 
-/// Whether the object (followed across zone changes) is goaded by anyone now.
+/// Whether the object (followed across zone changes) is goaded by anyone now (by a goad
+/// action or a static "is goaded" effect).
 pub fn goaded(t: &TestGame, id: ObjectId) -> bool {
-    !t.obj_now(id).goaded_by.is_empty()
+    !t.g.goaders(t.g.current(id)).is_empty()
 }
