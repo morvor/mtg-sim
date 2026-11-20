@@ -241,9 +241,10 @@ fn find_attribution(text: &str) -> Option<usize> {
         return Some(p);
     }
     let mut from = 0;
-    while let Some(p) = text[from..]
-        .find("decided by ")
-        .or_else(|| text[from..].find("decided in "))
+    while let Some(p) = ["decided by ", "decided in "]
+        .iter()
+        .filter_map(|pat| text[from..].find(pat))
+        .min()
     {
         let at = from + p;
         let before = text[..at].trim_end_matches(' ');
