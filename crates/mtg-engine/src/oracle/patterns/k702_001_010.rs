@@ -72,30 +72,43 @@ fn trailing_as_long_as(block: &str, ctx: &CompileContext) -> Option<Vec<Ability>
     let v: Vec<Ability> = v.into_iter().map(|a| conditional_flash_zone(&a)).collect();
     // On instants and sorceries, only "this spell has flash as long as ..." is a static.
     if ctx.is_spell()
-        && !v.iter().all(
-            |a| matches!(&a.kind, AbilityKind::Static(s) if s.zone == FunctionZone::Anywhere),
-        )
+        && !v.iter().all(|a| {
+            matches!(&a.kind, AbilityKind::Static(s)
+                if matches!(s.zone, FunctionZone::Stack | FunctionZone::Anywhere))
+        })
     {
         return None;
     }
     Some(with_text(v, block))
 }
 
-/// "[This] has flash as long as ..." modifies how the object can be cast, so it functions
-/// in every zone it could be cast from and on the stack (CR 113.6e, 601.3d, 702.8a).
-/// Likewise "this spell has cascade as long as ..." (Bloodbraid Marauder): cascade
-/// triggers on casting, so it must function on the stack (CR 702.85a).
+/// "[This] has flash as long as ..." grants the object an ability that modifies how it can
+/// be cast, so it functions only on the stack (CR 113.6e: "An object’s ability that grants
+/// it another ability that restricts or modifies how that particular object can be played
+/// or cast functions only on the stack."): Crashing Tide in a hand or library, or Colossal
+/// Rattlewurm on the battlefield, doesn't have flash. Its condition still lets the card be
+/// begun as though it had flash, judged with the card where it is (CR 601.3d; see
+/// `Game::would_have_flash_as_it_begins`). "This spell has cascade as long as ..."
+/// (Bloodbraid Marauder) functions everywhere, the stack included: cascade triggers on
+/// casting (CR 702.85a).
 fn conditional_flash_zone(a: &Ability) -> Ability {
     if let AbilityKind::Static(s) = &a.kind {
         if let StaticEffect::Continuous { affected, mods } = &s.effect {
+            let grants = |kinds: &[KeywordKind]| {
+                !mods.is_empty()
+                    && mods.iter().all(
+                        |m| matches!(m, Modification::AddKeyword(k) if kinds.contains(&k.kind)),
+                    )
+            };
             if matches!(affected, Filter::Source)
-                && !mods.is_empty()
-                && mods.iter().all(
-                    |m| matches!(m, Modification::AddKeyword(k) if matches!(k.kind, KeywordKind::Flash | KeywordKind::Cascade)),
-                )
+                && grants(&[KeywordKind::Flash, KeywordKind::Cascade])
             {
                 let mut s = s.clone();
-                s.zone = FunctionZone::Anywhere;
+                s.zone = if grants(&[KeywordKind::Flash]) {
+                    FunctionZone::Stack
+                } else {
+                    FunctionZone::Anywhere
+                };
                 return AbilityDef::with_link(AbilityKind::Static(s), a.text.clone(), a.link);
             }
         }

@@ -1193,19 +1193,18 @@ impl Game {
         if !self.has_priority(p) {
             return false;
         }
-        // CR 601.3d: a spell that has flash only while a condition is met can be cast as
-        // though it had flash while the condition is met (its characteristics include flash).
-        // The condition is checked before the card moves to the stack: a card whose own
-        // ability gives it flash where it is now (Graveyard Shift with five mana values in
-        // the graveyard, itself among them) may begin to be cast with flash even if moving
-        // it would end the condition (CR 601.6a). (Not for a spell cast face down: it has no
-        // abilities, CR 708.2.)
+        // CR 601.3d: a spell that would have flash only if a condition is met may be begun
+        // as though it had flash if the condition is met. The condition is judged before the
+        // card moves to the stack, with the card where it is (Graveyard Shift with five mana
+        // values in the graveyard, itself among them), and the casting may continue even if
+        // moving it ends the condition (CR 601.6a). (Not for a spell cast face down: it has
+        // no abilities, CR 708.2.)
         let before_moving = {
             let o = self.obj(card);
             o.zone != Zone::Stack
                 && o.face == opt.face
                 && !matches!(opt.method, CastMethod::FaceDown(_))
-                && o.chars.has_keyword(KeywordKind::Flash)
+                && self.would_have_flash_as_it_begins(p, card, chars)
         };
         let instant_speed = chars.is(CardType::Instant)
             || chars.has_keyword(KeywordKind::Flash)
@@ -1217,6 +1216,29 @@ impl Game {
                 || self.is_sorcery_timing(p);
         }
         self.is_sorcery_timing(p)
+    }
+
+    /// CR 601.3d: whether `card`, not yet on the stack, would have flash as the spell
+    /// `chars` by an ability of its own ("This spell has flash as long as ...", which
+    /// functions only on the stack, CR 113.6e) whose condition is met now, with the card
+    /// where it is (CR 601.3: the casting begins there).
+    fn would_have_flash_as_it_begins(
+        &self,
+        p: PlayerId,
+        card: ObjectId,
+        chars: &Characteristics,
+    ) -> bool {
+        chars.abilities.iter().any(|a| {
+            matches!(&a.kind, AbilityKind::Static(s)
+                if s.zone == FunctionZone::Stack
+                    && matches!(&s.effect, StaticEffect::Continuous { affected: Filter::Source, mods }
+                        if !mods.is_empty()
+                            && mods.iter().all(|m| matches!(m,
+                                Modification::AddKeyword(k) if k.kind == KeywordKind::Flash)))
+                    && s.condition
+                        .as_ref()
+                        .is_none_or(|c| self.eval_cond(c, &Ctx::new(Some(card), p))))
+        })
     }
 
     /// Whether an effect lets `p` cast `card` as though it had flash, judged by the
