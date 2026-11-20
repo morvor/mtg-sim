@@ -232,3 +232,23 @@ fn what_each_activation_sacrifices_is_matched_to_a_different_object() {
     assert!(on_stack(&t, "Jayemdae Tome"));
     assert!(!t.on_battlefield(bears) && !t.on_battlefield(tender));
 }
+
+#[test]
+fn phyrexian_altar_pays_each_colored_symbol_with_another_creature() {
+    cr!("605.3a", "601.2g");
+    interp!("automatic-mana-payment");
+    interp!("repeatable-mana-abilities-planned-per-activation");
+    // Phyrexian Altar ("Sacrifice a creature: Add one mana of any color.") and three
+    // creatures pay {R}{R}{R}; with two, they don't.
+    let mut t = main_phase();
+    t.battlefield(P0, "Phyrexian Altar");
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P0, "Grizzly Bears");
+    let ball = t.hand(P0, "Ball Lightning");
+    assert!(!offered(&mut t, P0, ball));
+    t.battlefield(P0, "Grizzly Bears");
+    assert!(offered(&mut t, P0, ball));
+    t.cast(P0, ball).go();
+    assert!(on_stack(&t, "Ball Lightning"));
+    assert!(t.named_on_battlefield("Grizzly Bears").is_empty());
+}
