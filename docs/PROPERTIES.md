@@ -373,12 +373,6 @@ Not bugs in the rules, but found and handled by the properties:
   random games rarely reach them, and the rollback property checks those reversals only
   for what they must undo (section 3); the `a_reversed_cast_keeps_` tests and
   `tests/cr/r733_001_kept_library_actions.rs` check each kind exactly.
-* **Links of abilities continuous effects give are hashes.** Abilities a static or
-  other continuously reevaluated effect gives (`layers::acquired_ability`,
-  `ability_grants::gained_link`) get links hashed from the ability, the granter and the
-  source into 0x8000–0xbfff, recomputed each time characteristics are; two such grants to
-  one object could, very rarely, hash to the same link (CR 607.5). Links resolving
-  effects give are numbered per game (0xc000 on) and can't collide.
 * **Ability ids depend on the process.** They come from a global counter (`ability.rs`)
   and are assigned as abilities are first needed, so the ids in protocol requests
   (`action.ability`) differ between processes unless both play the same games in the same

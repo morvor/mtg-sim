@@ -222,8 +222,8 @@ pub fn rename_uids(s: &str) -> String {
         format!("{}: {{{}}}", &c[1], entries.join(", "))
     });
     // Links of abilities effects give (CR 607.5; numbered per game now, see
-    // `ability_grants::FreshLinks`, but still compared up to renaming), and mana riders'
-    // ids.
+    // `ability_grants::FreshLinks` and `acquired_links`, but still compared up to
+    // renaming), and mana riders' ids.
     static OTHER: OnceLock<Regex> = OnceLock::new();
     let other = OTHER.get_or_init(|| Regex::new(r"(ManaRider \{ id|\blink): (\d+)").unwrap());
     let mut fresh: HashMap<String, usize> = HashMap::new();

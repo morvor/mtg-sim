@@ -763,6 +763,16 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   Counterpart: both exiled, nothing melds, the token ceases to exist). Engine unchanged for both. The "for
   each" bit is small-fixes-3's.
 
+### Residual: hashed links of acquired abilities (gaps-residual-2 part 2, closed Nov 20)
+- Links of abilities a continuously reevaluated effect gives (`layers::acquired_ability`, "have"; the
+  `ability_grants` "has all activated abilities of") were hashes of the ability's link and the granting
+  objects' ids into 0x8000-0xbfff, so two grants to one object from objects whose ids differ by 0x4000 had the
+  same link (CR 607.5: "They can't be linked to any other ability"). Now allocated per object acquiring them
+  (`acquired_links.rs`: the object's next link the first time it acquires a given link from a given source,
+  kept in the game and copied with it), so they can't collide and stay the same across recomputation. Tests:
+  `tests/cr/r607_005_acquired_links.rs` (two Cryptolith Rites; Necrotic Ooze with two Sisters of Stone Death,
+  each placed 0x4000 ids after the first). The gap is removed from docs/PROPERTIES.md "Remaining gaps".
+
 ---
 
 ## Known gaps from the owner's list: status
