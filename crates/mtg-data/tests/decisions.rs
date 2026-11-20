@@ -3,6 +3,7 @@
 
 use mtg_data::decisions::{self, Date, Decider};
 use mtg_data::interpretations::{parse_file, Entry};
+use std::collections::BTreeSet;
 use std::path::Path;
 
 fn date(month: u8, day: u8) -> Date {
@@ -18,6 +19,11 @@ fn entry(decision: &str, why: &str) -> Entry {
         "## some-id: A title\n- Kind: policy\n- Status: decided\n- Decision: {decision}\n- Why: {why}\n"
     );
     parse_file(Path::new("x/area.md"), &text).remove(0)
+}
+
+/// The register ids a test's entries can name: `some-id` (the entry's own) and `other-id`.
+fn ids() -> BTreeSet<&'static str> {
+    ["some-id", "other-id"].into_iter().collect()
 }
 
 #[test]
@@ -153,10 +159,61 @@ fn sources_coordinator_and_unstated_attributions() {
         who("Decided by consensus. Yes."),
         Decider::Unparsed(_)
     ));
-    assert!(matches!(
-        who("(to be fixed later; the user, Nov 12) Not in the engine."),
-        Decider::Unparsed(_)
-    ));
+    // A clause about another entry isn't this entry's attribution.
+    assert_eq!(
+        who("One event, as `other-id` (decided by the user, Nov 9) has it."),
+        Decider::Unstated
+    );
+}
+
+#[test]
+fn the_user_deciding_in_another_form_needs_a_source_line() {
+    let log = |decision: &str, why: &str| {
+        decisions::attribution_for_log(&entry(decision, why), &ids()).decider
+    };
+    for (decision, why) in [
+        (
+            "(to be fixed later; the user, Nov 12) Not in the engine.",
+            "",
+        ),
+        (
+            "Keep.",
+            "The extension was accepted by the user (\"Sure\").",
+        ),
+        ("Keep.", "The user agreed on Nov 20."),
+        ("Keep, as the user's decision of Nov 5 has it.", ""),
+        ("Keep, which the user on Nov 20 called right.", ""),
+    ] {
+        assert!(
+            matches!(log(decision, why), Decider::Unparsed(_)),
+            "{decision} / {why}"
+        );
+    }
+    // Not when the sentence is about another entry, or says the user didn't decide, or
+    // only names the user.
+    for (decision, why) in [
+        (
+            "Keep.",
+            "It ends at the limit, which the user accepted on Oct 21 (`other-id`).",
+        ),
+        ("Keep.", "This part was not decided by the user."),
+        ("Keep.", "The loops work the user postponed is later."),
+        ("Keep.", "The user asked whether it holds; it does."),
+    ] {
+        assert_eq!(log(decision, why), Decider::Unstated, "{decision} / {why}");
+    }
+    // The words shown are the sentence.
+    let a = decisions::attribution_for_log(
+        &entry("Keep. The extension was accepted by the user. More.", ""),
+        &ids(),
+    );
+    assert_eq!(a.clause, "The extension was accepted by the user.");
+    assert_eq!(a.field, "Decision");
+    // An entry whose attribution is read is filed by it.
+    assert_eq!(
+        log("Decided by the user, Nov 4. Yes, the user agreed.", ""),
+        Decider::User(date(11, 4))
+    );
 }
 
 #[test]
@@ -221,6 +278,26 @@ fn the_users_words_are_the_quotations_a_sentence_gives_them() {
         "Decided by the ruling (Strionic Resonator, 2018-03-16: \"copies are linked\")."
     )
     .is_empty());
+    // "The user's <word> (<date>):" introduces them too.
+    assert_eq!(
+        decisions::user_quotes(
+            "Right in its own case. The user's reading of that ruling (Nov 19): \"I think it clarifies\". So it holds."
+        ),
+        vec!["I think it clarifies".to_string()]
+    );
+    // An acceptance introduces them only as a short lead ("Accepted tentatively ("), not as
+    // a sentence that goes on to quote card text.
+    assert!(decisions::user_quotes(
+        "Accepted for every card with this template and its reminder (\"Flying\")."
+    )
+    .is_empty());
+    // The words introducing them, from their sentence (or the Rules line's part).
+    let q = decisions::user_quote_spans(
+        "729.2 \"Randomly determine.\" / The user's decision of Nov 12 (entry `x`): \"always choose\"",
+    );
+    assert_eq!(q.len(), 1);
+    assert_eq!(q[0].lead, "The user's decision of Nov 12 (entry `x`)");
+    assert_eq!(q[0].text, "always choose");
     // Curly quotes pair as written.
     assert_eq!(
         decisions::quotations("a “b “c” d” e"),
@@ -232,10 +309,13 @@ fn the_users_words_are_the_quotations_a_sentence_gives_them() {
 fn the_users_words_are_looked_for_in_the_other_fields_too() {
     let text = "## a: T\n- Kind: policy\n- Status: decided\n- Rules: 1.1 / The user's decision of Nov 5: \"Agreed.\"\n- Decision: Decided by the user, Nov 5. Yes.\n- Why: W.\n";
     let e = parse_file(Path::new("x/area.md"), text).remove(0);
+    let (field, quotes) = decisions::entry_user_quotes(&e, "Decision");
+    assert_eq!(field, "Rules");
     assert_eq!(
-        decisions::entry_user_quotes(&e, "Decision"),
-        vec![("Rules".to_string(), "Agreed.".to_string())]
+        quotes.iter().map(|q| q.text.as_str()).collect::<Vec<_>>(),
+        vec!["Agreed."]
     );
+    assert_eq!(quotes[0].lead, "The user's decision of Nov 5");
 }
 
 #[test]
@@ -244,7 +324,7 @@ fn low_confidence_marks_are_found() {
         "Decided by the user, Nov 12, for now (accepting it).",
         "The user: \"I'm not sure\".",
     );
-    let marks = decisions::low_confidence(&e);
+    let marks = decisions::low_confidence(&e, &ids());
     let names: Vec<&str> = marks.iter().map(|(m, _)| *m).collect();
     assert_eq!(names, vec!["for now", "not sure"]);
     assert_eq!(marks[1].1, "The user: \"I'm not sure\".");
@@ -254,10 +334,101 @@ fn low_confidence_marks_are_found() {
         "",
     );
     assert_eq!(
-        decisions::low_confidence(&long)[0].1,
+        decisions::low_confidence(&long, &ids())[0].1,
         "...part of this decision is long enough to cut, and it holds for now, until the user looks at it again later on in the project...."
     );
-    assert!(decisions::low_confidence(&entry("Decided by the user, Nov 4. Yes.", "")).is_empty());
+    assert!(
+        decisions::low_confidence(&entry("Decided by the user, Nov 4. Yes.", ""), &ids())
+            .is_empty()
+    );
+    // A mark in a sentence about another entry is about that entry; the next occurrence,
+    // about this one, counts.
+    let e = entry(
+        "Decided by the user, Nov 11. Yes. A neighboring call is separate, decided by the user on Nov 12 for now (`other-id`).",
+        "",
+    );
+    assert!(decisions::low_confidence(&e, &ids()).is_empty());
+    let e = entry(
+        "Decided by the user, Nov 11. A neighboring call is separate, decided for now (`other-id`). This one holds for now too.",
+        "",
+    );
+    // The context is around the second occurrence (the first's would start before "A
+    // neighboring").
+    assert!(decisions::low_confidence(&e, &ids())[0]
+        .1
+        .starts_with("...is separate, decided for now (`other-id`). This one holds for now"));
+    // Unless the sentence says it's about this decision; and two marks in one sentence are
+    // one.
+    let e = entry(
+        "Decided by the user, Nov 19. Yes.",
+        "The user later (deciding `other-id`) called this decision one of the low confidence ones, a lower-confidence one.",
+    );
+    let marks = decisions::low_confidence(&e, &ids());
+    assert_eq!(
+        marks.iter().map(|(m, _)| *m).collect::<Vec<_>>(),
+        vec!["low confidence"]
+    );
+    let e = entry(
+        "Decided by the user, Nov 20: \"I'll take it, but not very sure.\"",
+        "",
+    );
+    assert_eq!(decisions::low_confidence(&e, &ids())[0].0, "not very sure");
+}
+
+#[test]
+fn sentences_respect_quotations_brackets_and_abbreviations() {
+    let split = |t: &str| -> Vec<String> {
+        decisions::sentence_spans(t)
+            .into_iter()
+            .map(|(s, e)| t[s..e].to_string())
+            .collect()
+    };
+    assert_eq!(
+        split("Yes. The ruling: \"It is. So.\" Then (see 608.2h. Not here) it ends. Last"),
+        vec![
+            "Yes.",
+            "The ruling: \"It is. So.\"",
+            "Then (see 608.2h. Not here) it ends.",
+            "Last"
+        ]
+    );
+    assert_eq!(
+        split("Decided by the user, Nov. 20. Many, e.g. Shock, or 2. 3 is next... Fine."),
+        vec![
+            "Decided by the user, Nov. 20.",
+            "Many, e.g. Shock, or 2. 3 is next... Fine."
+        ]
+    );
+    // A sentence may start with a rule number or a backtick.
+    assert_eq!(
+        split("It holds. 613.1 applies. `x` too."),
+        vec!["It holds.", "613.1 applies.", "`x` too."]
+    );
+}
+
+#[test]
+fn excerpts_end_at_a_sentence_and_mark_the_cut() {
+    let one = "First sentence here.";
+    assert_eq!(decisions::excerpt(one, 10, 100), "First sentence here.");
+    let text = "Short. Then a longer second sentence follows. And a third one.";
+    // Sentences are added while the excerpt is shorter than the minimum.
+    assert_eq!(decisions::excerpt(text, 5, 100), "Short. …");
+    assert_eq!(
+        decisions::excerpt(text, 10, 100),
+        "Short. Then a longer second sentence follows. …"
+    );
+    // A sentence that would pass the maximum isn't added, unless the excerpt is still
+    // shorter than half the minimum: then it's cut at a space.
+    assert_eq!(decisions::excerpt(text, 10, 30), "Short. …");
+    assert_eq!(
+        decisions::excerpt(text, 100, 30),
+        "Short. Then a longer second …"
+    );
+    // A first sentence longer than the maximum is cut at a space outside quotations.
+    assert_eq!(
+        decisions::excerpt("One two (\"three four five\") six seven.", 1, 30),
+        "One two (\"three four five\") …"
+    );
 }
 
 #[test]
@@ -316,14 +487,17 @@ fn render_sorts_entries_into_sections() {
     let log = "## Outdated rulings\n\n### Card A: \"old\"\n- Kind: outdated\n- Status: open for review\n- Ruling, Card A (2010-01-01): \"Old words.\"\n";
     let out = decisions::render_from(&entries, plan, log);
     let pos = |s: &str| out.find(s).unwrap_or_else(|| panic!("{s:?} not in\n{out}"));
-    // Newest first, with the user's words.
+    // Newest first, with the user's words, and the reading after them.
     assert!(pos("### Nov 19") < pos("### Oct 21"));
     assert!(pos("**`u-new`**") < pos("**`u-old`**"));
     assert!(out.contains("  - The user: \"my words\"\n"));
+    assert!(out.contains("  - Reading chosen: New.\n"));
+    assert!(out.contains("  - Reading chosen: Old.\n"));
+    assert!(out.contains("  - Alternatives not chosen: other\n"));
     assert!(pos("## Decided by the sources") < pos("**`s`**"));
-    assert!(out.contains("Basis: Decided by the ruling (X, 2020-01-01)."));
+    assert!(out.contains("Basis: Decided by the ruling (X, 2020-01-01).\n"));
     assert!(pos("### Naming no decider") < pos("**`w`**"));
-    assert!(out.contains("Basis: Least commitment."));
+    assert!(out.contains("Basis: Least commitment. … On the \"Revisit later\" list.\n"));
     assert!(pos("## Provisional") < pos("**`p`**"));
     assert!(pos("## Revisit later") < pos("- `w` again"));
     assert!(out.contains("| outdated | 1 | 0 | 0 | 0 | 1 |"));

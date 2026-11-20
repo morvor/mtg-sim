@@ -10,8 +10,10 @@
 //!   normalizes the formats used), and the user's own words where the entry quotes them
 //!   ([`user_quotes`]); to the sources (a ruling, a rule, a dated change); or to the
 //!   coordinator or a worker. An entry that names no decider was decided when it was
-//!   written; one whose words name a decider this module can't read is listed under
-//!   "needs a source line", never guessed;
+//!   written; one whose words name a decider this module can't read, or mention the user
+//!   deciding in another form ([`unread_user_mention`]), is listed under "needs a source
+//!   line", never guessed. Each decision is shown in brief (the opening sentences of its
+//!   fields, [`excerpt`]), with a link to the full entry;
 //! - the "Revisit later" list of `docs/agents/finish-line-plan.md` ([`revisit_later`]);
 //! - the ruling discrepancy log, `docs/RULING_DISCREPANCIES.md` ([`crate::discrepancies`]).
 
@@ -29,6 +31,13 @@ pub const PLAN: &str = "docs/agents/finish-line-plan.md";
 /// The year of a date written without one (the register's dates are all of the project's
 /// year). Used only to order dates; a date is shown as written.
 pub const DEFAULT_YEAR: u16 = 2026;
+
+/// How much of a field the log shows: its first sentence, and the next ones while the
+/// excerpt is shorter than the first number of bytes and they keep it within the second.
+const BRIEF: (usize, usize) = (200, 500);
+
+/// How much of a field a one-line basis shows: one sentence, at most this many bytes.
+const BASIS: (usize, usize) = (1, 400);
 
 const MONTHS: &[&str] = &[
     "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
@@ -59,7 +68,7 @@ impl Date {
 impl std::fmt::Display for Date {
     /// "Nov 5"; "Nov 5, 2025" for a year other than [`DEFAULT_YEAR`].
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let m = MONTH_NAMES[usize::from(self.month - 1)];
+        let m = MONTH_NAMES[usize::from(self.month.clamp(1, 12) - 1)];
         match self.year {
             Some(y) if y != DEFAULT_YEAR => write!(f, "{m} {}, {y}", self.day),
             _ => write!(f, "{m} {}", self.day),
@@ -206,6 +215,20 @@ pub struct Attribution {
     pub field: &'static str,
 }
 
+/// True if `before` (the text before a period) ends with an abbreviation the period belongs
+/// to ("e.g", "i.e", "cf", "vs", a month's: "Nov. 5").
+fn ends_with_abbreviation(before: &str) -> bool {
+    let word = &before[before
+        .trim_end_matches(|c: char| c.is_ascii_alphabetic() || c == '.')
+        .len()..];
+    let w = word.to_ascii_lowercase();
+    [
+        "e.g", "i.e", "cf", "vs", "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept",
+        "oct", "nov", "dec",
+    ]
+    .contains(&w.as_str())
+}
+
 /// The end of the clause starting at `from`: after its first parenthesis, if it has one
 /// before the clause ends; else at the first ". ", ": " or "; ", or at a ")" closing a
 /// parenthesis the clause is inside ("(option B, decided by the coordinator on Oct 14)").
@@ -222,16 +245,28 @@ fn clause_end(s: &str, from: usize) -> usize {
                     return at + 1;
                 }
             }
+            '.' if depth == 0 && ends_with_abbreviation(&s[..at]) => {}
             '.' | ':' | ';' if depth == 0 && s[at + 1..].starts_with(' ') => return at,
             _ => {}
         }
     }
-    s.len() - s[from..].len() + s[from..].trim_end_matches('.').len()
+    from + s[from..].trim_end_matches('.').len()
+}
+
+/// True if the text before a clause opener ends with a backticked word ("`other-id` (" or
+/// "`other-id`, "): the clause then describes that entry or thing, not this one.
+fn after_backticked_word(before: &str) -> bool {
+    before
+        .trim_end_matches(['(', ',', ';'])
+        .trim_end()
+        .ends_with('`')
 }
 
 /// Where the text names a decider: the start of "Decided by"/"Decided in" (a sentence's
 /// start), else of a lowercase "decided by"/"decided in" opening a clause ("(option B,
-/// decided by the coordinator ..."). Not "not decided by", "would be decided by", ...
+/// decided by the coordinator ..."), unless the clause describes a backticked entry before
+/// it ("`other-id` (decided by the user, Nov 9)"). Not "not decided by", "would be decided
+/// by", ...
 fn find_attribution(text: &str) -> Option<usize> {
     if let Some(p) = ["Decided by ", "Decided in "]
         .iter()
@@ -248,7 +283,9 @@ fn find_attribution(text: &str) -> Option<usize> {
     {
         let at = from + p;
         let before = text[..at].trim_end_matches(' ');
-        if before.is_empty() || before.ends_with(['(', ',', ';']) {
+        if (before.is_empty() || before.ends_with(['(', ',', ';']))
+            && !after_backticked_word(before)
+        {
             return Some(at);
         }
         from = at + 1;
@@ -277,16 +314,16 @@ fn names_a_source(phrase: &str) -> bool {
 fn classify(text: &str, at: usize, field: &'static str) -> Attribution {
     let end = clause_end(text, at);
     let clause = text[at..end].trim_end_matches(['.', ',']).to_string();
-    let rest = &text[at + "decided by ".len()..];
-    let in_review = text[at..].to_lowercase().starts_with("decided in ");
+    let rest = text[at + "decided by ".len()..].trim_start();
+    let in_review = text[at..].to_ascii_lowercase().starts_with("decided in ");
     // The decider's words, up to a parenthesis or the clause's end.
     let phrase_end = [" (", ",", ": ", ". ", ";"]
         .iter()
         .filter_map(|p| rest.find(p))
         .min()
         .unwrap_or(rest.len());
-    let phrase = rest[..phrase_end].trim().trim_end_matches(['.', ':']);
-    let lower = phrase.to_lowercase();
+    let phrase = rest[..phrase_end].trim_end().trim_end_matches(['.', ':']);
+    let lower = phrase.to_ascii_lowercase();
     let decider = if in_review {
         if lower.contains("review") {
             Decider::Coordinator
@@ -294,8 +331,7 @@ fn classify(text: &str, at: usize, field: &'static str) -> Attribution {
             Decider::Unparsed(format!("\"decided in {phrase}\" names no decider"))
         }
     } else if let Some(after) = lower.strip_prefix("the user") {
-        let after_user = &rest["the user".len()..];
-        let date_text = after_user.trim_start_matches([',', ' ', '(']);
+        let date_text = rest["the user".len()..].trim_start_matches([',', ' ', '(']);
         match parse_date(date_text) {
             Some((d, _)) if after.is_empty() || after.starts_with(' ') => Decider::User(d),
             _ => Decider::Unparsed("\"decided by the user\" with no date after it".to_string()),
@@ -317,46 +353,15 @@ fn classify(text: &str, at: usize, field: &'static str) -> Attribution {
     }
 }
 
-/// "the user, Nov 12" or "the user on Nov 12" opening a clause, without "decided by" (as
-/// in "(to be fixed later; the user, Nov 12)"): the start of "the user".
-fn bare_user_date(text: &str) -> Option<usize> {
-    let mut from = 0;
-    while let Some(p) = text[from..].find("the user") {
-        let at = from + p;
-        let before = text[..at].trim_end_matches(' ');
-        let after = &text[at + "the user".len()..];
-        let dated = after
-            .strip_prefix(',')
-            .or_else(|| after.strip_prefix(" on"))
-            .and_then(parse_date)
-            .is_some();
-        if dated && (before.is_empty() || before.ends_with(['(', ';'])) {
-            return Some(at);
-        }
-        from = at + 1;
-    }
-    None
-}
-
-/// Who decided an entry: the first attribution in its `Decision` field, else in its `Why`
-/// field. A field that dates the user without "Decided by" makes it [`Decider::Unparsed`].
+/// Who decided an entry: the first attribution ("Decided by ...", "Decided in the review
+/// ...") in its `Decision` field, else in its `Why` field; [`Decider::Unstated`] when neither
+/// has one.
 pub fn attribute(e: &Entry) -> Attribution {
-    for field in ["Decision", "Why"] {
-        let text = e.fields.get(field).map(String::as_str).unwrap_or("");
+    for f in ["Decision", "Why"] {
+        let text = field(e, f);
         if let Some(at) = find_attribution(text) {
-            return classify(text, at, field);
+            return classify(text, at, f);
         }
-    }
-    let text = e.fields.get("Decision").map(String::as_str).unwrap_or("");
-    if let Some(at) = bare_user_date(text) {
-        let end = clause_end(text, at);
-        return Attribution {
-            decider: Decider::Unparsed(
-                "names the user and a date without \"Decided by the user, <date>\"".to_string(),
-            ),
-            clause: text[at..end].trim_end_matches([')', '.']).to_string(),
-            field: "Decision",
-        };
     }
     Attribution {
         decider: Decider::Unstated,
@@ -365,6 +370,106 @@ pub fn attribute(e: &Entry) -> Attribution {
     }
 }
 
+/// Verbs that make "the user <verb>" or "<verb> by the user" a decision of the user's.
+const USER_DECISION_VERBS: &[&str] = &[
+    "accepted",
+    "agreed",
+    "approved",
+    "chose",
+    "chosen",
+    "confirmed",
+    "decided",
+    "rejected",
+    "set",
+];
+
+/// True if `sentence` names a register entry other than `id` (in backticks).
+fn names_another_entry(sentence: &str, id: &str, ids: &BTreeSet<&str>) -> bool {
+    backticked(sentence)
+        .iter()
+        .any(|w| *w != id && ids.contains(w))
+}
+
+/// A mention of the user deciding that [`attribute`] doesn't read, in a sentence of the
+/// entry's `Decision` or `Why` that names no other register entry: "the user" followed by
+/// a date ("(to be fixed later; the user, Nov 12)", "the user on Nov 12"), "the user's
+/// decision", "the user <verb>" or "<verb> by the user" (accepted, agreed, approved, chose,
+/// confirmed, decided, rejected, set), not within three words after "not" or "never".
+/// Returns the field and the sentence. For an entry [`attribute`] finds no decider in, this
+/// means the decider is named in a form the log can't read.
+pub fn unread_user_mention<'a>(
+    e: &'a Entry,
+    ids: &BTreeSet<&str>,
+) -> Option<(&'static str, &'a str)> {
+    for f in ["Decision", "Why"] {
+        let text = field(e, f);
+        for (s, t) in sentence_spans(text) {
+            let sentence = &text[s..t];
+            if names_another_entry(sentence, &e.id, ids) {
+                continue;
+            }
+            // ASCII lowercasing keeps byte offsets.
+            let lower = sentence.to_ascii_lowercase();
+            for (p, _) in lower.match_indices("the user") {
+                let after = &lower[p + "the user".len()..];
+                // The three words before "the user", nearest first.
+                let before_words: Vec<&str> = lower[..p]
+                    .split_whitespace()
+                    .rev()
+                    .take(3)
+                    .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric() && c != '\''))
+                    .collect();
+                if before_words
+                    .iter()
+                    .any(|w| ["not", "never", "wasn't", "isn't", "hasn't"].contains(w))
+                {
+                    continue;
+                }
+                let dated = [",", " (", " on", ""]
+                    .iter()
+                    .any(|sep| after.strip_prefix(sep).and_then(parse_date).is_some());
+                let decision = ["'s decision", "’s decision", "'s answer", "’s answer"]
+                    .iter()
+                    .any(|w| after.starts_with(w));
+                let verb_after = after
+                    .strip_prefix(' ')
+                    .and_then(|a| a.split(|c: char| !c.is_alphanumeric()).next())
+                    .is_some_and(|w| USER_DECISION_VERBS.contains(&w));
+                let verb_before = before_words.first() == Some(&"by")
+                    && before_words
+                        .get(1)
+                        .is_some_and(|w| USER_DECISION_VERBS.contains(w));
+                if dated || decision || verb_after || verb_before {
+                    return Some((f, sentence));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// The attribution of an entry, as the log files it: [`attribute`]'s, except that an entry
+/// naming no decider but mentioning the user deciding ([`unread_user_mention`]) is
+/// [`Decider::Unparsed`].
+pub fn attribution_for_log(e: &Entry, ids: &BTreeSet<&str>) -> Attribution {
+    let a = attribute(e);
+    if a.decider != Decider::Unstated {
+        return a;
+    }
+    match unread_user_mention(e, ids) {
+        Some((f, sentence)) => Attribution {
+            decider: Decider::Unparsed(
+                "mentions the user deciding without \"Decided by the user, <date>\"".to_string(),
+            ),
+            clause: excerpt(sentence, BASIS.0, BASIS.1),
+            field: f,
+        },
+        None => a,
+    }
+}
+
+/// True if the straight quote at byte `i` of `s` opens a quotation: it follows the start,
+/// a space or an opening bracket, and a non-space follows it.
 fn is_open_quote_at(s: &str, i: usize) -> bool {
     let prev = s[..i].chars().next_back();
     let next = s[i + 1..].chars().next();
@@ -415,16 +520,173 @@ pub fn quotations(s: &str) -> Vec<(usize, usize, String)> {
     out
 }
 
+/// True if `rest` (the text after a sentence's terminator and closing marks) starts a new
+/// sentence: the end of the text, or a space and then a capital letter, a backtick, a quote
+/// or an opening bracket, or a digit (unless the terminator follows a digit: "is 2. 3").
+fn starts_a_sentence(before: &str, rest: &str) -> bool {
+    if rest.is_empty() {
+        return true;
+    }
+    let Some(after) = rest.strip_prefix(' ') else {
+        return false;
+    };
+    match after.trim_start().chars().next() {
+        None => true,
+        Some(n) if n.is_uppercase() || "`(\"“[*".contains(n) => true,
+        Some(n) if n.is_ascii_digit() => !before.ends_with(|c: char| c.is_ascii_digit()),
+        _ => false,
+    }
+}
+
+/// The sentences of `text`, as byte spans (start, end): a sentence ends at a ".", "!" or "?"
+/// (with the closing quotes and brackets after it) outside quotations and brackets, where
+/// [`starts_a_sentence`] holds after it; not at "..." or after an abbreviation ("e.g.",
+/// "Nov. 5").
+pub fn sentence_spans(text: &str) -> Vec<(usize, usize)> {
+    let chars: Vec<(usize, char)> = text.char_indices().collect();
+    let skip_spaces = |from: usize| from + (text[from..].len() - text[from..].trim_start().len());
+    let mut out = Vec::new();
+    let mut depth = 0usize;
+    let mut start = skip_spaces(0);
+    let mut k = 0;
+    while k < chars.len() {
+        let (i, c) = chars[k];
+        match c {
+            '(' | '[' | '“' => depth += 1,
+            ')' | ']' | '”' => depth = depth.saturating_sub(1),
+            '"' if is_open_quote_at(text, i) => depth += 1,
+            '"' => depth = depth.saturating_sub(1),
+            '.' | '!' | '?' => {
+                // The terminator and the closing marks after it.
+                let mut m = k + 1;
+                let mut d = depth;
+                while let Some(&(j, ch)) = chars.get(m) {
+                    match ch {
+                        ')' | ']' | '”' => d = d.saturating_sub(1),
+                        '"' if !is_open_quote_at(text, j) => d = d.saturating_sub(1),
+                        _ => break,
+                    }
+                    m += 1;
+                }
+                let end = chars.get(m).map_or(text.len(), |&(j, _)| j);
+                let before = &text[..i];
+                let ellipsis = before.ends_with('.') || text[i + 1..].starts_with('.');
+                let abbreviation = c == '.' && ends_with_abbreviation(before);
+                if d == 0 && !ellipsis && !abbreviation && starts_a_sentence(before, &text[end..]) {
+                    if end > start {
+                        out.push((start, end));
+                    }
+                    start = skip_spaces(end);
+                    depth = 0;
+                    k = m;
+                    continue;
+                }
+            }
+            _ => {}
+        }
+        k += 1;
+    }
+    let last = text.trim_end().len();
+    if last > start {
+        out.push((start, last));
+    }
+    out
+}
+
+/// A byte offset at most `max` into `text` to cut it at: the last space outside quotations
+/// and brackets if it's past the middle, else the last space, else `max`.
+fn cut_at_space(text: &str, max: usize) -> usize {
+    let mut m = max.min(text.len());
+    while !text.is_char_boundary(m) {
+        m -= 1;
+    }
+    let mut depth = 0usize;
+    let (mut outside, mut any) = (None, None);
+    for (i, c) in text[..m].char_indices() {
+        match c {
+            '(' | '[' | '“' => depth += 1,
+            ')' | ']' | '”' => depth = depth.saturating_sub(1),
+            '"' if is_open_quote_at(text, i) => depth += 1,
+            '"' => depth = depth.saturating_sub(1),
+            ' ' => {
+                any = Some(i);
+                if depth == 0 {
+                    outside = Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    match (outside, any) {
+        (Some(o), _) if o >= m / 2 => o,
+        (_, Some(a)) => a,
+        _ => m,
+    }
+}
+
+/// The opening of `text`, in brief: its first sentence, then the next ones while the excerpt
+/// is shorter than `min` bytes and they keep it within `max`; a sentence that would take it
+/// past `max` is cut at a space instead if the excerpt is still shorter than `min / 2` (a
+/// first sentence longer than `max` always is). A trailing " …" marks that the text goes
+/// on.
+pub fn excerpt(text: &str, min: usize, max: usize) -> String {
+    let text = text.trim();
+    let spans = sentence_spans(text);
+    let Some(&(_, first)) = spans.first() else {
+        return String::new();
+    };
+    let mut end = first;
+    for &(_, e) in &spans[1..] {
+        if end >= min {
+            break;
+        }
+        if e > max {
+            if end < min / 2 {
+                end = e;
+            }
+            break;
+        }
+        end = e;
+    }
+    if end > max {
+        let cut = cut_at_space(text, max);
+        return format!(
+            "{} …",
+            text[..cut].trim_end_matches([',', ';', ':', ' ', '(', '—'])
+        );
+    }
+    let shown = text[..end].trim_end();
+    if end < text.len() {
+        format!("{shown} …")
+    } else {
+        shown.to_string()
+    }
+}
+
+/// A quotation a field gives as the user's words.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UserQuote {
+    /// The quotation's byte span in the field, quotes included.
+    pub start: usize,
+    pub end: usize,
+    /// The words inside the quotes.
+    pub text: String,
+    /// The words that introduce it, from the start of their sentence ("As recommended; the
+    /// user", "The user's decision of Nov 12"), without the ":" or "(" before the quote.
+    pub lead: String,
+}
+
 /// True if `lead` (the text of a sentence up to a quotation) introduces the user's words:
 /// it ends with ":" or "(" and names the user as the speaker ("the user: ", "Decided by the
-/// user, Nov 19: ", "(the user, Nov 19: ", "Decided by the user, Nov 19 (") or opens with
-/// an acceptance ("Accepted tentatively (", "As recommended: ").
+/// user, Nov 19: ", "(the user, Nov 19: ", "Decided by the user, Nov 19 (", "The user's
+/// reading (Nov 19): ") or is an acceptance ("Accepted tentatively (", "As recommended: ").
 fn introduces_user_words(lead: &str) -> bool {
     let t = lead.trim_end();
     if !t.ends_with([':', '(']) {
         return false;
     }
-    let lower = t.to_lowercase();
+    // ASCII lowercasing keeps byte offsets.
+    let lower = t.to_ascii_lowercase();
     let speaker = lower.match_indices("the user").any(|(p, _)| {
         // Not inside a parenthesis that closes before the quotation ("(decided by the
         // user, Nov 19: ...) ... rulings (").
@@ -443,35 +705,58 @@ fn introduces_user_words(lead: &str) -> bool {
         after.starts_with([':', ',', '('])
             || after.starts_with(" (")
             || after.starts_with(" on ")
-            || ((after.starts_with("'s decision") || after.starts_with("’s decision"))
-                && t.ends_with(':'))
+            || ((after.starts_with("'s ") || after.starts_with("’s ")) && t.ends_with(':'))
             || parse_date(after).is_some()
     });
-    speaker
-        || ["accepted", "accepting", "as recommended"]
-            .iter()
-            .any(|w| lower.trim_start().starts_with(w))
+    let acceptance = ["accepted", "accepting", "as recommended"]
+        .iter()
+        .any(|w| lower.trim_start().starts_with(w))
+        && lower.split_whitespace().count() <= 4;
+    speaker || acceptance
 }
 
-/// The user's own words that a field quotes: each quotation that a sentence introduces as
-/// the user's ([`introduces_user_words`]), in order.
-pub fn user_quotes(text: &str) -> Vec<String> {
+/// The quotations of a field that a sentence introduces as the user's words
+/// ([`introduces_user_words`]), in order.
+pub fn user_quote_spans(text: &str) -> Vec<UserQuote> {
     let mut out = Vec::new();
     let mut prev_end = 0;
     for (start, end, inner) in quotations(text) {
         let between = &text[prev_end..start];
-        let lead = between.rfind(". ").map_or(between, |p| &between[p + 2..]);
+        // The lead starts after the sentence (or the Rules line's " / " part) before it.
+        let from = [
+            between.rfind(". ").map(|p| p + 2),
+            between.rfind(" / ").map(|p| p + 3),
+        ]
+        .into_iter()
+        .flatten()
+        .max()
+        .unwrap_or(0);
+        let lead = &between[from..];
         if introduces_user_words(lead) {
-            out.push(inner);
+            out.push(UserQuote {
+                start,
+                end,
+                text: inner,
+                lead: lead
+                    .trim()
+                    .trim_end_matches([':', '('])
+                    .trim_end()
+                    .to_string(),
+            });
         }
         prev_end = end;
     }
     out
 }
 
+/// The user's own words that a field quotes ([`user_quote_spans`]), in order.
+pub fn user_quotes(text: &str) -> Vec<String> {
+    user_quote_spans(text).into_iter().map(|q| q.text).collect()
+}
+
 /// The user's words an entry quotes: those of `first` (the field its attribution is in),
-/// else of its other fields (Decision, Why, Rules), with the field each came from.
-pub fn entry_user_quotes(e: &Entry, first: &str) -> Vec<(String, String)> {
+/// else of its other fields (Decision, Why, Rules), with the field they came from.
+pub fn entry_user_quotes(e: &Entry, first: &str) -> (String, Vec<UserQuote>) {
     let mut fields = vec![if first.is_empty() { "Decision" } else { first }];
     for f in ["Decision", "Why", "Rules"] {
         if !fields.contains(&f) {
@@ -479,12 +764,12 @@ pub fn entry_user_quotes(e: &Entry, first: &str) -> Vec<(String, String)> {
         }
     }
     for f in fields {
-        let quotes = user_quotes(e.fields.get(f).map(String::as_str).unwrap_or(""));
+        let quotes = user_quote_spans(field(e, f));
         if !quotes.is_empty() {
-            return quotes.into_iter().map(|q| (f.to_string(), q)).collect();
+            return (f.to_string(), quotes);
         }
     }
-    Vec::new()
+    (String::new(), Vec::new())
 }
 
 /// Words that mark a decision the user or the entry holds with low confidence.
@@ -492,27 +777,52 @@ pub const LOW_CONFIDENCE: &[&str] = &[
     "for now",
     "tentative",
     "not sure",
+    "not very sure",
+    "not entirely sure",
     "unsure",
     "low confidence",
     "low-confidence",
+    "lower confidence",
+    "lower-confidence",
     "to be fixed later",
 ];
 
 /// The low-confidence marks ([`LOW_CONFIDENCE`]) in an entry's `Decision` and `Why`, each
 /// with the words around its first occurrence (a reviewer judges whether it is about this
-/// decision).
-pub fn low_confidence(e: &Entry) -> Vec<(&'static str, String)> {
+/// decision). An occurrence in a sentence naming another register entry of `ids` is about
+/// that entry, and isn't counted, unless the sentence also says "this decision" (or "this
+/// entry", "this reading", "this call").
+pub fn low_confidence(e: &Entry, ids: &BTreeSet<&str>) -> Vec<(&'static str, String)> {
     let mut found: Vec<(&'static str, String)> = Vec::new();
+    // The sentences (field, start) a mark was found in: another mark there is the same one.
+    let mut seen: Vec<(&str, usize)> = Vec::new();
     for m in LOW_CONFIDENCE {
         if found.iter().any(|(f, _)| f.contains(m) || m.contains(f)) {
             continue;
         }
-        for field in ["Decision", "Why"] {
-            let text = e.fields.get(field).map(String::as_str).unwrap_or("");
+        'fields: for f in ["Decision", "Why"] {
+            let text = field(e, f);
             // ASCII lowercasing keeps byte offsets.
-            if let Some(p) = text.to_ascii_lowercase().find(m) {
-                found.push((m, context(text, p, p + m.len())));
-                break;
+            let lower = text.to_ascii_lowercase();
+            let sentences = sentence_spans(text);
+            for (p, _) in lower.match_indices(m) {
+                let Some(&(s, t)) = sentences.iter().find(|&&(s, t)| s <= p && p < t) else {
+                    continue;
+                };
+                let sentence = &text[s..t];
+                let l = sentence.to_ascii_lowercase();
+                let about_another = names_another_entry(sentence, &e.id, ids)
+                    && !["this decision", "this entry", "this reading", "this call"]
+                        .iter()
+                        .any(|w| l.contains(w));
+                if about_another {
+                    continue;
+                }
+                if !seen.contains(&(f, s)) {
+                    seen.push((f, s));
+                    found.push((m, context(text, p, p + m.len())));
+                }
+                break 'fields;
             }
         }
     }
@@ -565,6 +875,15 @@ pub struct RevisitLater {
     pub bullets: Vec<String>,
 }
 
+/// True if `line` starts a top-level list item ("- ", "* ", "+ " or "1. ").
+fn top_level_item(line: &str) -> bool {
+    if line.starts_with("- ") || line.starts_with("* ") || line.starts_with("+ ") {
+        return true;
+    }
+    let (n, rest) = digits(line);
+    !n.is_empty() && (rest.starts_with(". ") || rest.starts_with(") "))
+}
+
 /// The section of `plan` whose heading starts with "Revisit later" (any level, any case),
 /// up to the next heading.
 pub fn revisit_later(plan: &str) -> Option<RevisitLater> {
@@ -586,8 +905,12 @@ pub fn revisit_later(plan: &str) -> Option<RevisitLater> {
             continue;
         }
         let Some(r) = out.as_mut() else { continue };
-        if line.starts_with("- ") || line.starts_with("* ") {
-            r.bullets.push(format!("- {}", &line[2..]));
+        if top_level_item(line) {
+            let item = match line.strip_prefix("* ").or_else(|| line.strip_prefix("+ ")) {
+                Some(rest) => format!("- {rest}"),
+                None => line.to_string(),
+            };
+            r.bullets.push(item);
         } else if line.trim().is_empty() {
             continue;
         } else if let Some(last) = r.bullets.last_mut() {
@@ -632,44 +955,120 @@ fn entry_link(e: &Entry) -> String {
     )
 }
 
-/// The first sentence of `text` (up to ". " before a capital letter or a backtick).
-fn first_sentence(text: &str) -> &str {
-    let mut from = 0;
-    while let Some(p) = text[from..].find(". ") {
-        let at = from + p;
-        let next = text[at + 2..].chars().next();
-        let prev = text[..at].chars().next_back();
-        let abbreviation = text[..at].ends_with(" e.g") || text[..at].ends_with(" i.e");
-        if next.is_some_and(|c| c.is_uppercase() || c == '`' || c == '(')
-            && prev.is_some_and(|c| c != '.')
-            && !abbreviation
-        {
-            return &text[..at + 1];
-        }
-        from = at + 2;
-    }
-    text
-}
-
 fn field<'a>(e: &'a Entry, name: &str) -> &'a str {
     e.fields.get(name).map(String::as_str).unwrap_or("")
 }
 
-/// "The user: "..." / "..."", naming the field when it isn't the Decision line.
-fn user_words_line(quotes: &[(String, String)]) -> String {
+/// The sentence of `text` that holds the attribution `clause` (one line of basis), or the
+/// clause if it can't be found.
+fn attribution_sentence(text: &str, clause: &str) -> String {
+    let Some(p) = text.find(clause) else {
+        return clause.to_string();
+    };
+    sentence_spans(text)
+        .into_iter()
+        .find(|&(s, t)| s <= p && p < t)
+        .map_or_else(
+            || clause.to_string(),
+            |(s, t)| excerpt(&text[s..t], BASIS.0, BASIS.1),
+        )
+}
+
+/// True if a sentence only records how the decision was taken, not the reading: an
+/// acceptance naming the user ("As recommended: the user agreed to ...") or a note about the
+/// "Revisit later" list.
+fn is_acceptance_note(sentence: &str) -> bool {
+    let l = sentence.to_ascii_lowercase();
+    l.contains("revisit later")
+        || (["as recommended", "accepted", "accepting"]
+            .iter()
+            .any(|w| l.starts_with(w))
+            && l.contains("the user"))
+}
+
+/// Where the reading of a field begins: after an attribution that opens it ("Decided by the
+/// user, Nov 20.") and after the opening sentences that only give the user's words ("As
+/// recommended; the user: "...".", at most 12 other words) or record the acceptance
+/// ([`is_acceptance_note`]); at its start if that leaves nothing.
+fn reading_start(text: &str, attr: &Attribution, name: &str) -> usize {
+    let mut start = 0;
+    let named = matches!(
+        attr.decider,
+        Decider::User(_) | Decider::Sources | Decider::Coordinator
+    );
+    if named && attr.field == name && !attr.clause.is_empty() {
+        if let Some(p) = text.find(attr.clause.as_str()) {
+            if text[..p].trim().is_empty() {
+                start = p + attr.clause.len();
+            }
+        }
+    }
+    let quotes = user_quote_spans(text);
+    loop {
+        let rest = &text[start..];
+        start += rest.len()
+            - rest
+                .trim_start_matches(|c: char| c.is_whitespace() || ".,:;)".contains(c))
+                .len();
+        let Some(&(s, t)) = sentence_spans(&text[start..]).first() else {
+            break;
+        };
+        let (s, t) = (start + s, start + t);
+        let inside: Vec<&UserQuote> = quotes
+            .iter()
+            .filter(|q| q.start >= s && q.end <= t)
+            .collect();
+        let only_quotes = !inside.is_empty() && {
+            let mut other_words = 0;
+            let mut at = s;
+            for q in &inside {
+                other_words += text[at..q.start].split_whitespace().count();
+                at = q.end;
+            }
+            other_words += text[at..t].split_whitespace().count();
+            other_words <= 12
+        };
+        if !only_quotes && !is_acceptance_note(&text[s..t]) {
+            break;
+        }
+        start = t;
+    }
+    if text[start..].trim().is_empty() {
+        0
+    } else {
+        start
+    }
+}
+
+/// A field's reading, in brief ([`reading_start`], [`excerpt`]), with a capital letter.
+fn brief_reading(e: &Entry, attr: &Attribution, name: &str) -> String {
+    let text = field(e, name);
+    let brief = excerpt(&text[reading_start(text, attr, name)..], BRIEF.0, BRIEF.1);
+    let mut c = brief.chars();
+    match c.next() {
+        Some(f) if f.is_ascii_lowercase() => f.to_ascii_uppercase().to_string() + c.as_str(),
+        _ => brief,
+    }
+}
+
+/// "The user: "..." / "..."", naming the field and the words introducing them when it isn't
+/// the Decision line.
+fn user_words_line((field, quotes): &(String, Vec<UserQuote>)) -> String {
     if quotes.is_empty() {
         return String::new();
     }
-    let field = &quotes[0].0;
     let words = quotes
         .iter()
-        .map(|(_, q)| format!("\"{q}\""))
+        .map(|q| format!("\"{}\"", q.text))
         .collect::<Vec<_>>()
         .join(" / ");
     if field == "Decision" {
         format!("  - The user: {words}\n")
     } else {
-        format!("  - The user (quoted in the {field} line): {words}\n")
+        format!(
+            "  - The user (quoted in the entry's {field} line, after \"{}\"): {words}\n",
+            quotes[0].lead
+        )
     }
 }
 
@@ -686,7 +1085,11 @@ struct Groups {
 }
 
 fn groups(entries: &[Entry]) -> Groups {
-    let attrs: Vec<Attribution> = entries.iter().map(attribute).collect();
+    let ids: BTreeSet<&str> = entries.iter().map(|e| e.id.as_str()).collect();
+    let attrs: Vec<Attribution> = entries
+        .iter()
+        .map(|e| attribution_for_log(e, &ids))
+        .collect();
     let decided = |i: usize| entries[i].status != "provisional";
     let by = |pred: &dyn Fn(&Decider) -> bool| -> Vec<usize> {
         (0..entries.len())
@@ -694,13 +1097,18 @@ fn groups(entries: &[Entry]) -> Groups {
             .collect()
     };
     let user = by(&|d| matches!(d, Decider::User(_)));
-    let policies = user
+    let mut policies: Vec<usize> = user
         .iter()
         .copied()
         .filter(|&i| {
             entries[i].kind == "policy" && !affects_a_single_case(field(&entries[i], "Affects"))
         })
         .collect();
+    // Newest first, as the log's dates are (a stable sort keeps the register's order).
+    policies.sort_by_key(|&i| match attrs[i].decider {
+        Decider::User(d) => std::cmp::Reverse(d.key()),
+        _ => std::cmp::Reverse((0, 0, 0)),
+    });
     Groups {
         sources: by(&|d| matches!(d, Decider::Sources)),
         coordinator: by(&|d| matches!(d, Decider::Coordinator)),
@@ -755,6 +1163,13 @@ pub fn render_from(entries: &[Entry], plan: &str, log: &str) -> String {
         .flat_map(|b| backticked(b))
         .filter(|w| ids.contains(w))
         .collect();
+    let on_revisit_list = |e: &Entry| {
+        if revisit_ids.contains(e.id.as_str()) {
+            " On the \"Revisit later\" list."
+        } else {
+            ""
+        }
+    };
     let (log_entries, _) = discrepancies::parse(log);
 
     let mut s = String::new();
@@ -770,11 +1185,12 @@ pub fn render_from(entries: &[Entry], plan: &str, log: &str) -> String {
         "Every judgment call the engine makes about the rules (a reading of an ambiguous or \
          silent rule, a knowing deviation from the Comprehensive Rules, or a policy for a \
          choice the rules leave to players) is an entry of the register. This file sorts them \
-         by who made the call, so a reviewer can see who decided what, and links each to its \
-         full entry (the rules quoted, the question, the alternatives and the reasoning). Who \
-         decided is read from the entry's own words, \"Decided by the user, <date>\", \
-         \"Decided by the ruling (...)\" and the like, in its Decision line (or else its Why \
-         line).\n\n",
+         by who made the call, so a reviewer can see who decided what. Who decided is read \
+         from the entry's own words, \"Decided by the user, <date>\", \"Decided by the ruling \
+         (...)\" and the like, in its Decision line (or else its Why line). Each decision is \
+         shown in brief: the opening sentences of the entry's lines, cut at a sentence's end \
+         (\" …\" marks a cut), and a link to the full entry (the rules quoted, the question, \
+         the alternatives and the reasoning).\n\n",
     );
     s.push_str("Sections:\n\n");
     let sections: [(&str, usize, &str); 8] = [
@@ -790,15 +1206,14 @@ pub fn render_from(entries: &[Entry], plan: &str, log: &str) -> String {
             "Decided by the sources",
             sources.len(),
             "a Wizards ruling, a rule of the Comprehensive Rules or a dated change answers the \
-             question, and the entry records how; one line each, with that basis.",
+             question, and the entry says so; one line each, with that basis.",
         ),
         (
             "Decided by the coordinator or a worker",
             coordinator.len() + unstated.len(),
             "everything else decided: calls the coordinator, a worker or a review made, most of \
-             them defaults for choices an agent leaves unanswered. Entries that name no decider \
-             were decided as they were written and are listed apart; one line each, with the \
-             entry's reasoning.",
+             them defaults for choices an agent leaves unanswered. Those whose entry names no \
+             decider are listed apart; one line each, with the entry's reasoning.",
         ),
         (
             "Provisional",
@@ -852,7 +1267,8 @@ pub fn render_from(entries: &[Entry], plan: &str, log: &str) -> String {
     s.push_str("\n## Decided by the user\n\n");
     s.push_str(
         "Newest first. \"The user\" quotes the user's words as the entry records them; \
-         \"Decision\" is the entry's Decision line in full.\n",
+         \"Reading chosen\" and \"Alternatives not chosen\" open the entry's Decision and \
+         Alternatives lines (after the attribution and the user's words).\n",
     );
     let mut by_date: BTreeMap<(u16, u8, u8), (Date, Vec<usize>)> = BTreeMap::new();
     for &i in &user {
@@ -872,7 +1288,7 @@ pub fn render_from(entries: &[Entry], plan: &str, log: &str) -> String {
                 entry_link(e)
             ));
             s.push_str(&user_words_line(&entry_user_quotes(e, attrs[i].field)));
-            let mut marks: Vec<String> = low_confidence(e)
+            let mut marks: Vec<String> = low_confidence(e, &ids)
                 .iter()
                 .map(|(m, ctx)| format!("\"{m}\" ({ctx})"))
                 .collect();
@@ -884,26 +1300,34 @@ pub fn render_from(entries: &[Entry], plan: &str, log: &str) -> String {
             }
             if attrs[i].field != "Decision" {
                 s.push_str(&format!(
-                    "  - Who decided: {} (in the entry's {} line)\n",
-                    attrs[i].clause, attrs[i].field
+                    "  - Who decided (the entry's {} line): {}\n",
+                    attrs[i].field,
+                    attribution_sentence(field(e, attrs[i].field), &attrs[i].clause)
                 ));
             }
-            s.push_str(&format!("  - Decision: {}\n", field(e, "Decision")));
-            s.push_str(&format!("  - Alternatives: {}\n", field(e, "Alternatives")));
+            s.push_str(&format!(
+                "  - Reading chosen: {}\n",
+                brief_reading(e, &attrs[i], "Decision")
+            ));
+            s.push_str(&format!(
+                "  - Alternatives not chosen: {}\n",
+                excerpt(field(e, "Alternatives"), BRIEF.0, BRIEF.1)
+            ));
         }
     }
 
     // 2. Decided by the sources.
     s.push_str("\n## Decided by the sources\n\n");
-    s.push_str("The basis is the entry's own attribution.\n\n");
+    s.push_str("The basis is the entry's sentence that names the source.\n\n");
     for &i in &sources {
         let e = &entries[i];
         s.push_str(&format!(
-            "- **`{}`**: {} ({}). Basis: {}.\n",
+            "- **`{}`**: {} ({}). Basis: {}{}\n",
             e.id,
             e.title,
             entry_link(e),
-            attrs[i].clause
+            attribution_sentence(field(e, attrs[i].field), &attrs[i].clause),
+            on_revisit_list(e)
         ));
     }
     if sources.is_empty() {
@@ -913,36 +1337,40 @@ pub fn render_from(entries: &[Entry], plan: &str, log: &str) -> String {
     // 2b. Decided by the coordinator or a worker.
     s.push_str("\n## Decided by the coordinator or a worker\n\n");
     s.push_str(
-        "Who decided is the entry's attribution where it names one; the basis is the first \
-         sentence of its Why line.\n\n### Named in the entry\n\n",
+        "\"Decided\" is the entry's sentence that names who decided, where it names one; the \
+         basis is the first sentence of its Why line.\n\n### Named in the entry\n\n",
     );
     for &i in &coordinator {
         let e = &entries[i];
         s.push_str(&format!(
-            "- **`{}`**: {} ({}). Decided: {}. Basis: {}\n",
+            "- **`{}`**: {} ({}). Decided: {} Basis: {}{}\n",
             e.id,
             e.title,
             entry_link(e),
-            attrs[i].clause,
-            first_sentence(field(e, "Why"))
+            attribution_sentence(field(e, attrs[i].field), &attrs[i].clause),
+            excerpt(field(e, "Why"), BASIS.0, BASIS.1),
+            on_revisit_list(e)
         ));
     }
     if coordinator.is_empty() {
         s.push_str("None.\n");
     }
     s.push_str(
-        "\n### Naming no decider\n\nDecided as they were written, by the worker who wrote \
-         them and the review that landed them.\n\n",
+        "\n### Naming no decider\n\nThese entries don't say who decided them. The register \
+         records the user's decisions (\"Decided by the user, <date>\") and the sources' \
+         (\"Decided by the ruling ...\"), so these were decided as they were written: by the \
+         worker who wrote the entry, accepted by the review that landed it.\n\n",
     );
     for &i in &unstated {
         let e = &entries[i];
         s.push_str(&format!(
-            "- **`{}`**: {} ({}, {}). Basis: {}\n",
+            "- **`{}`**: {} ({}, {}). Basis: {}{}\n",
             e.id,
             e.title,
             e.kind,
             entry_link(e),
-            first_sentence(field(e, "Why"))
+            excerpt(field(e, "Why"), BASIS.0, BASIS.1),
+            on_revisit_list(e)
         ));
     }
     if unstated.is_empty() {
@@ -954,15 +1382,28 @@ pub fn render_from(entries: &[Entry], plan: &str, log: &str) -> String {
     for &i in &provisional {
         let e = &entries[i];
         s.push_str(&format!(
-            "- **`{}`**: {} ({}, {})\n",
+            "- **`{}`**: {} ({}, {}){}\n",
             e.id,
             e.title,
             e.kind,
-            entry_link(e)
+            entry_link(e),
+            on_revisit_list(e)
         ));
         s.push_str(&user_words_line(&entry_user_quotes(e, "Decision")));
-        s.push_str(&format!("  - Question: {}\n", field(e, "Question")));
-        s.push_str(&format!("  - Reading proposed: {}\n", field(e, "Decision")));
+        if !matches!(attrs[i].decider, Decider::Unstated | Decider::Unparsed(_)) {
+            s.push_str(&format!(
+                "  - Its Status is provisional, but its {} line says \"{}\".\n",
+                attrs[i].field, attrs[i].clause
+            ));
+        }
+        s.push_str(&format!(
+            "  - Question: {}\n",
+            excerpt(field(e, "Question"), BRIEF.0, BRIEF.1)
+        ));
+        s.push_str(&format!(
+            "  - Reading proposed: {}\n",
+            brief_reading(e, &attrs[i], "Decision")
+        ));
     }
     if provisional.is_empty() {
         s.push_str("None.\n");
@@ -986,6 +1427,9 @@ pub fn render_from(entries: &[Entry], plan: &str, log: &str) -> String {
                 s.push_str(b);
                 s.push('\n');
             }
+            if r.bullets.is_empty() {
+                s.push_str("None.\n");
+            }
         }
         None => s.push_str(&format!(
             "No \"Revisit later\" section found in `{PLAN}`.\n"
@@ -999,9 +1443,20 @@ pub fn render_from(entries: &[Entry], plan: &str, log: &str) -> String {
          quotes the ruling and the source it conflicts with, the evidence and what the \
          engine does. Statuses: *open for review* (not yet checked by a human), *decided* \
          (checked by the user), *reported* (to Wizards), *confirmed* (Wizards changed or \
-         confirmed the ruling). The dates are the rulings' publication dates.\n\n",
+         confirmed the ruling). The dates are the rulings' publication dates.",
     );
     let anchors = heading_anchors(log);
+    if let Some(a) = anchors
+        .values()
+        .find(|a| a.starts_with("not-yet-investigated"))
+    {
+        s.push_str(&format!(
+            " Possible further instances that haven't been through the conflict process yet \
+             are listed in the log's [\"Not yet investigated\"](RULING_DISCREPANCIES.md#{a}) \
+             section; they aren't entries and aren't counted here."
+        ));
+    }
+    s.push_str("\n\n");
     let kind_of = |e: &LogEntry| e.field("Kind").unwrap_or("").trim().to_lowercase();
     let status_of = |e: &LogEntry| e.field("Status").unwrap_or("").trim().to_string();
     let mut kinds: Vec<String> = discrepancies::KINDS.iter().map(|k| k.to_string()).collect();
@@ -1023,7 +1478,7 @@ pub fn render_from(entries: &[Entry], plan: &str, log: &str) -> String {
     }
     s.push_str("| Kind |");
     for st in &statuses {
-        s.push_str(&format!(" {st} |"));
+        s.push_str(&format!(" {} |", cell(st)));
     }
     s.push_str(" Total |\n|---|");
     for _ in &statuses {
@@ -1035,7 +1490,7 @@ pub fn render_from(entries: &[Entry], plan: &str, log: &str) -> String {
         if of_kind.is_empty() {
             continue;
         }
-        s.push_str(&format!("| {k} |"));
+        s.push_str(&format!("| {} |", cell(k)));
         for st in &statuses {
             let n = of_kind
                 .iter()
@@ -1045,7 +1500,7 @@ pub fn render_from(entries: &[Entry], plan: &str, log: &str) -> String {
         }
         s.push_str(&format!(" {} |\n", of_kind.len()));
     }
-    s.push_str(&format!("| all |{}", ""));
+    s.push_str("| all |");
     for st in &statuses {
         let n = log_entries
             .iter()
@@ -1059,7 +1514,11 @@ pub fn render_from(entries: &[Entry], plan: &str, log: &str) -> String {
         if of_kind.is_empty() {
             continue;
         }
-        s.push_str(&format!("\n### {} ({})\n\n", capitalize(k), of_kind.len()));
+        s.push_str(&format!(
+            "\n### {} ({})\n\n",
+            capitalize(if k.is_empty() { "no kind" } else { k }),
+            of_kind.len()
+        ));
         s.push_str("| Entry | Status | Card | Ruling date |\n|---|---|---|---|\n");
         for e in of_kind {
             let mut cards: Vec<&str> = Vec::new();
@@ -1090,7 +1549,7 @@ pub fn render_from(entries: &[Entry], plan: &str, log: &str) -> String {
                 cell(&e.title),
                 cell(&status_of(e)),
                 cell(&cards),
-                dates
+                cell(&dates)
             ));
         }
     }
@@ -1100,7 +1559,7 @@ pub fn render_from(entries: &[Entry], plan: &str, log: &str) -> String {
     s.push_str(
         "The user-decided entries of kind policy whose Affects line names more than one case \
          (a list or a class of cards, not a single card): standing rules for whole classes of \
-         cases, each also listed under its date above.\n\n",
+         cases, newest first, each also listed under its date above.\n\n",
     );
     for &i in &policies {
         let e = &entries[i];
