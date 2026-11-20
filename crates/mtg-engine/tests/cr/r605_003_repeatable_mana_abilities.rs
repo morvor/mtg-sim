@@ -37,6 +37,7 @@ fn on_stack(t: &TestGame, name: &str) -> bool {
 fn ashnods_altar_is_activated_once_per_creature_to_pay_four() {
     cr!("605.3a", "601.2g", "601.2h");
     interp!("automatic-mana-payment");
+    interp!("repeatable-mana-abilities-planned-per-activation");
     let mut t = main_phase();
     t.battlefield(P0, "Ashnod's Altar");
     let a = t.battlefield(P0, "Grizzly Bears");
@@ -53,6 +54,7 @@ fn ashnods_altar_is_activated_once_per_creature_to_pay_four() {
 fn two_creatures_pay_for_four_activations_of_two_altars_at_most_two() {
     cr!("605.3a", "118.3", "601.2h");
     interp!("automatic-mana-payment");
+    interp!("repeatable-mana-abilities-planned-per-activation");
     // Ashnod's Altar ({C}{C}) and Phyrexian Altar (one mana of any color) both sacrifice a
     // creature: with two creatures, two activations between them, so {4} and not {5}.
     let mut t = main_phase();
@@ -73,6 +75,7 @@ fn two_creatures_pay_for_four_activations_of_two_altars_at_most_two() {
 fn diamond_kaleidoscope_sacrifices_both_prisms_for_inspired_ultimatum() {
     cr!("605.3a", "601.2g");
     interp!("automatic-mana-payment");
+    interp!("repeatable-mana-abilities-planned-per-activation");
     let mut t = main_phase();
     let dk = t.battlefield(P0, "Diamond Kaleidoscope");
     // Two Prisms, made with its first ability ("{3}, {T}: Create a 0/1 colorless Prism
@@ -101,6 +104,7 @@ fn diamond_kaleidoscope_sacrifices_both_prisms_for_inspired_ultimatum() {
 fn skirk_prospector_pays_three_red_and_is_sacrificed_last() {
     cr!("605.3a", "601.2g", "400.7");
     interp!("automatic-mana-payment");
+    interp!("repeatable-mana-abilities-planned-per-activation");
     ruling!(
         "Skirk Prospector",
         "if you’d like to sacrifice multiple Goblins including Skirk Prospector for mana, be sure to sacrifice Skirk Prospector last"
@@ -142,6 +146,7 @@ fn skirk_prospector_pays_three_red_and_is_sacrificed_last() {
 fn krark_clan_ironworks_sacrifices_itself_last_to_pay_four() {
     cr!("605.3a", "601.2g");
     interp!("automatic-mana-payment");
+    interp!("repeatable-mana-abilities-planned-per-activation");
     let mut t = main_phase();
     let kci = t.battlefield(P0, "Krark-Clan Ironworks");
     let other = t.battlefield(P0, "Ornithopter");
@@ -157,6 +162,7 @@ fn krark_clan_ironworks_sacrifices_itself_last_to_pay_four() {
 fn a_blood_pet_cant_both_sacrifice_itself_and_be_sacrificed_to_ashnods_altar() {
     cr!("118.3", "400.7", "601.2h");
     interp!("automatic-mana-payment");
+    interp!("repeatable-mana-abilities-planned-per-activation");
     // Blood Pet ("Sacrifice this creature: Add {B}.") is the only creature: either it
     // sacrifices itself ({B}) or it's sacrificed to Ashnod's Altar ({C}{C}), not both.
     let mut t = main_phase();
@@ -176,6 +182,7 @@ fn a_blood_pet_cant_both_sacrifice_itself_and_be_sacrificed_to_ashnods_altar() {
 fn counters_and_life_bound_the_activations() {
     cr!("605.3a", "118.3", "118.3b");
     interp!("automatic-mana-payment");
+    interp!("repeatable-mana-abilities-planned-per-activation");
     // Workhorse ("This creature enters with four +1/+1 counters on it."; "Remove a +1/+1
     // counter from this creature: Add {C}."): one activation per counter, {4} and not {5}.
     let mut t = main_phase();
@@ -205,6 +212,7 @@ fn counters_and_life_bound_the_activations() {
 fn what_each_activation_sacrifices_is_matched_to_a_different_object() {
     cr!("118.3", "400.7", "601.2h");
     interp!("automatic-mana-payment");
+    interp!("repeatable-mana-abilities-planned-per-activation");
     // Two Ashnod's Altars, a Grizzly Bears and Molt Tender ("{T}, Exile a card from your
     // graveyard: Add one mana of any color."), with a card in the graveyard: the Altars
     // sacrifice the Bears and Molt Tender for {C}{C}{C}{C}, or one of them sacrifices the

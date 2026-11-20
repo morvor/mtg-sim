@@ -1010,6 +1010,11 @@ impl Game {
             base.source = d.source;
             // "you" in its trigger condition is the player who performs it.
             base.controller = d.performer.unwrap_or(d.controller);
+            // "At the beginning of the next turn's upkeep" (see `turn_structure`).
+            base.nums.insert(
+                crate::turn_structure::DELAYED_CREATED_TURN,
+                d.created_turn as i64,
+            );
             let left_zone = self.matched_leaving_as_it_entered(&d.trigger, &base, ev);
             if entering_off && !left_zone {
                 continue;
