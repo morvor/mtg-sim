@@ -1,0 +1,8 @@
+# small-fixes-2: {X} costs that X-only mana can't pay, and the sentence loop's X
+
+Implementation item (effort high; review at max). Found by rulings-P106 (see its yield row in docs/agents/yield.tsv and commit 68f23d6cf): mana that may be spent only on costs containing {X} (Elementalist's Palette, Rosheen Meanderer, Nexos) now pays "unless [player] pays {X}, where X is ..." (compiled as {X} with Effect::SetX), but these still pay {X} as generic mana, which X-only mana can't pay:
+- Arcum's Whistle and Champions of Minas Tirith ("[player] may pay {X}, where X is ..."), Transmute Artifact: compiling them the same way left them unsupported, because the sentence loop in crates/mtg-engine/src/oracle/effects.rs takes their merged follow-up sentence for a later use of X. Fix the multi-sentence X substitution generally (the X defined in one sentence and used by the next), not per card.
+- Kentaro, the Smiling Cat's alternative cost ({X} where X is the spell's mana value).
+- {X} attack taxes: Sphere of Safety, Collective Restraint, Nils, Discipline Keeper, War Tax (and any other "pays {X} for each" / "where X is" attack or block cost the survey finds).
+- Also check that X-only mana pays {X} in costs paid outside casting, e.g. a suspend cost with {X} (special action, CR 116.2f) and an activated ability's {X}; fix if not.
+For each: cite CR 107.3 (107.3a–m as relevant), 118.x and the cards' rulings (grep data/rulings.jsonl.gz); tests with Rosheen Meanderer's / Elementalist's Palette's mana paying the cost, and ordinary mana still paying it. Keep every card's round trip (run the round-trip check on each touched card). `cargo test --workspace` passes; yield row; follow worker.md's one-item-per-session rule and notify the coordinator.
