@@ -15,11 +15,11 @@
 //! "named ~" (an object's current name and its printed name differ, CR 201.2a, 201.5:
 //! Spy Kit, clones), which had let the grandeur costs "Discard another card named ~",
 //! compiled as the current name, pass (the compiler now reads them as the printed name);
-//! and "at the beginning of the next upkeep" read as "the next turn's upkeep", which the
-//! parser compiles alike (`TriggerCond::BeginningOf { Upkeep, Any }`, the next upkeep step
-//! to begin) but which differ in a turn with an additional upkeep step (Paradox Haze:
-//! created during the first, "the next upkeep" is that turn's second, "the next turn's
-//! upkeep" the next turn's), so the "next turn's upkeep" cards are the loosely read ones.
+//! and "at the beginning of the next upkeep" read as "the next turn's upkeep", which
+//! differ in a turn with an additional upkeep step (Paradox Haze: created during the first,
+//! "the next upkeep" is that turn's second, "the next turn's upkeep" the next turn's); the
+//! parser compiled them alike then, and since small-fixes-7 each has its own trigger
+//! (`TriggerCond::BeginningOf { Upkeep, Any }` and `turn_structure::next_turns_upkeep`).
 //! A token's following "It gains ..." is no longer read as its text (Timothar, Baron of
 //! Bats's ruling), only "It has ...".
 
@@ -1610,7 +1610,7 @@ fn sentence_rewrites(s: &str) -> String {
         // A rendering's `{alt:...}` / `{opt:...}` (braces nest three deep) is one piece of
         // the sentence, periods inside it included.
         let brace = r"\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}";
-        Regex::new(&format!(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|for as long as [^,]+|at the beginning of the next end step|until the end of your next turn|until your next end step|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ((?:[^."{{]|"[^"]*"|{brace})*?"[^"]*\.""?|(?:[^."{{]|"[^"]*"|{brace})+?\.)"#))
+        Regex::new(&format!(r#"(^|[.:—•] |\n|")(until end of turn|until your next turn|this turn|as long as [^,]+|for as long as [^,]+|at the beginning of the next end step|until the end of your next turn|until your next end step|during your turn|during turns other than yours|during each of your turns|at the beginning of the next turn's upkeep|at the beginning of the next upkeep|at the beginning of the next cleanup step|at the beginning of your next upkeep|at end of combat), ((?:[^."{{]|"[^"]*"|{brace})*?"[^"]*\.""?|(?:[^."{{]|"[^"]*"|{brace})+?\.)"#))
             .ok()
     });
     let mut s = s.to_string();

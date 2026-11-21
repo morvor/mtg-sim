@@ -31,6 +31,12 @@ impl Game {
         if ctx.entering.is_some() && self.effect_on_entering_object(e, ctx) {
             return;
         }
+        // CR 611.2b: the "for as long as" duration of the continuous effect this
+        // instruction of a resolving ability would create ended while the ability waited
+        // (whatever kind of effect it is).
+        if crate::duration_windows::effect_does_nothing(self, e, ctx) {
+            return;
+        }
         // Cards an instruction exiles are exiled with the source of the ability performing
         // it, for the abilities linked to it (CR 607.2a): by its link, however they're
         // exiled ("search your library for seven cards, exile them", a dig).
@@ -54,6 +60,9 @@ impl Game {
         match e {
             Effect::Noop => {}
             Effect::Seq(v) => {
+                // A choice stored for counters only what can have them may get (Eye of Doom).
+                let narrowed = crate::kw::counter_choice::narrowed_stored_choices(v);
+                let v = narrowed.as_ref().unwrap_or(v);
                 // "Create a [token] and a [token]" is one instruction that the compiler
                 // splits into one creation per kind: the tokens enter at the same time, as
                 // one batch of events (CR 603.2c, 608.2c). The compiler gives separate
@@ -257,7 +266,7 @@ impl Game {
                 otherwise,
             } => {
                 let had_x = ctx.cost_has_x;
-                ctx.cost_has_x = cost.mana.as_ref().is_some_and(|m| m.has_x());
+                ctx.cost_has_x = crate::defined_x_costs::contains_x(cost);
                 let cost = &crate::mana_abilities::bind_x_for_payment(self, cost, ctx);
                 // "[cost] for each ...": the total is determined now (CR 702.24a).
                 let cost = &crate::kw::cumulative_upkeep::expand_repeated(self, cost, ctx);
@@ -381,8 +390,14 @@ impl Game {
             }
             Effect::Repeat { times, effect } => {
                 let n = self.eval_value(times, ctx).max(0);
-                for _ in 0..n {
-                    self.exec(effect, ctx);
+                // "For each opponent, you create a ... token": one creation (one instruction,
+                // one event; `for_each_events`).
+                if let Some(once) = crate::for_each_events::repeat_as_one(effect, n) {
+                    self.exec(&once, ctx);
+                } else {
+                    for _ in 0..n {
+                        self.exec(effect, ctx);
+                    }
                 }
             }
             Effect::RepeatProcess { body } => crate::repeat_process::run(self, body, ctx),
@@ -398,8 +413,11 @@ impl Game {
                 let i = match hinted {
                     Some(i) => i,
                     None => {
-                        let labels = options.iter().map(|(l, _)| l.clone()).collect();
-                        self.ask_option(p, ctx.source, "Choose one", labels)
+                        // Not an impossible option while another can be done (CR 608.2d).
+                        let ok = crate::impossible_options::choosable(self, options, ctx);
+                        let labels = ok.iter().map(|i| options[*i].0.clone()).collect();
+                        let k = self.ask_option(p, ctx.source, "Choose one", labels);
+                        ok.get(k).copied().unwrap_or(usize::MAX)
                     }
                 };
                 if let Some((_, eff)) = options.get(i) {
@@ -407,7 +425,20 @@ impl Game {
                 }
             }
             Effect::Store { var, sel } => {
+                // Cards chosen only to be revealed don't change zones: a card entering the
+                // battlefield at the same time as the permanent whose "as enters" effect
+                // asks for them can be chosen (CR 614.13a excludes only objects that would
+                // change zones; Arsenal Thresher's and Game Trail's rulings). Amplify says
+                // otherwise for its own reveal (CR 702.38a, `kw/amplify.rs`).
+                let entering = if *var == crate::kw::reveal_from_hand::REVEALED {
+                    Some(std::mem::take(&mut self.entering))
+                } else {
+                    None
+                };
                 let mut v = self.resolve_sel(sel, ctx);
+                if let Some(e) = entering {
+                    self.entering = e;
+                }
                 // "~" after its cost moved it (CR 400.7j).
                 if matches!(sel, Sel::This) {
                     v = v
@@ -445,7 +476,12 @@ impl Game {
 
             // --- Objects -------------------------------------------------------
             Effect::Destroy { what, no_regen } => {
-                let objs = self.resolve_objects(what, ctx);
+                // A permanent chosen as it's destroyed must be one that can be (CR 702.12b).
+                let what = crate::impossible_options::destroyable_choice(what);
+                // What has left the battlefield isn't destroyed (CR 400.7), nor what it
+                // became.
+                let objs = self.resolve_objects(&what, ctx);
+                let objs = self.all_present(objs);
                 let res = self.destroy_all_by(
                     objs.clone(),
                     crate::event_causes::Cause::of(ctx),
@@ -663,9 +699,21 @@ impl Game {
                 // The player performing the instruction taps them (CR 701.26a): the
                 // controller of the spell or ability, or the player it has do it ("that
                 // player taps an untapped creature they control"; Solitary Sanctuary's
-                // rulings).
-                let by = Some(ctx.controller);
-                for o in self.resolve_objects(what, ctx) {
+                // rulings). "That player taps an untapped artifact, creature, or land they
+                // control" (Tangle Wire) chooses and taps as that player: the chooser
+                // performs it (Sharae of Numbing Depths's ruling). A `Tap` of another
+                // player's `Choose` is compiled only from "[that player] taps ..."
+                // (`followups_4::taps_untapped`); "tap ... of [a player]'s choice" would
+                // need its own form.
+                let by = match what {
+                    Sel::Choose { chooser, .. } if !matches!(chooser, PlayerRef::You) => {
+                        self.eval_player(chooser, ctx).or(Some(ctx.controller))
+                    }
+                    _ => Some(ctx.controller),
+                };
+                // What has left the battlefield isn't tapped (CR 400.7).
+                let objs = self.resolve_objects(what, ctx);
+                for o in self.all_present(objs) {
                     if self.tap_with(o, false, by, false) {
                         tapped.push(Entity::Object(o));
                     }
@@ -675,7 +723,8 @@ impl Game {
                 ctx.set_var(vars::TAPPED, tapped);
             }
             Effect::Untap { what } => {
-                for o in self.resolve_objects(what, ctx) {
+                let objs = self.resolve_objects(what, ctx);
+                for o in self.all_present(objs) {
                     self.untap(o);
                 }
             }
@@ -705,7 +754,9 @@ impl Game {
                 } else {
                     self.damage_source(source, ctx).into_iter().collect()
                 };
+                // An object that has left isn't dealt damage (CR 400.7).
                 let recipients = self.resolve_sel(to, ctx);
+                let recipients = self.all_present_entities(recipients);
                 if !srcs.is_empty() {
                     let mut evs = Vec::new();
                     for &src in &srcs {
@@ -862,8 +913,15 @@ impl Game {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let mut placed = 0;
                 let mut got = Vec::new();
-                for t in self.resolve_sel(what, ctx) {
+                // A choice offers only what can have the counters (Agitator Ant's ruling).
+                let chosen = crate::kw::counter_choice::chosen_for_counters(what, kind);
+                for t in self.resolve_sel(&chosen, ctx) {
                     let t = self.found_after_move(t, ctx);
+                    // An object that has left its zone is a new object (CR 400.7): nothing
+                    // is put on it, so "if you do" sees no counters put (Thought Gorger).
+                    let Some(t) = self.present_entity(t) else {
+                        continue;
+                    };
                     let n = self.put_counters(t, kind, k, crate::event_causes::CounterPut::of(ctx));
                     if n > 0 {
                         got.push(t);
@@ -891,7 +949,10 @@ impl Game {
             Effect::RemoveCounters { what, kind, n } => {
                 let k = self.eval_value(n, ctx).max(0) as u32;
                 let mut total = 0;
-                for t in self.resolve_sel(what, ctx) {
+                // Counters can't be removed from an object that has left its zone, nor
+                // from its last known information (CR 400.7).
+                let targets = self.resolve_sel(what, ctx);
+                for t in self.all_present_entities(targets) {
                     match kind {
                         Some(kind) => {
                             total += self.remove_counters_by(t, kind, k, Some(ctx.controller))
@@ -1032,7 +1093,11 @@ impl Game {
                     .find_map(|e| e.object());
                 let mut total = 0;
                 if let Some(from) = from {
-                    for t in self.resolve_sel(to, ctx) {
+                    // Nothing is put on an object that has left (CR 400.7): "double the
+                    // number of +1/+1 counters on that creature" once it died (Sword of
+                    // Hours).
+                    let to = self.resolve_sel(to, ctx);
+                    for t in self.all_present_entities(to) {
                         total += crate::counter_rules::put_counters_of(
                             self,
                             from,
@@ -1050,13 +1115,11 @@ impl Game {
                 duration,
             } => {
                 // CR 611.2b: a "for as long as" duration that already ended means the
-                // effect does nothing. (One about the affected objects, "for as long as
-                // that creature has a bounty counter on it", is checked for them below.)
+                // effect does nothing (one that ended while the ability waited: see
+                // `exec`). One about the affected objects, "for as long as that creature
+                // has a bounty counter on it", is checked for them below.
                 let about_affected = matches!(duration, Duration::WhileCondition(_));
-                if !about_affected
-                    && (self.effect_expired(duration, ctx.source, ctx.controller)
-                        || crate::untap_choice::ended_before_it_began(self, duration, ctx))
-                {
+                if !about_affected && self.effect_expired(duration, ctx.source, ctx.controller) {
                     return;
                 }
                 // CR 702.26e: a phased-out permanent isn't among the objects it affects,
@@ -1138,6 +1201,8 @@ impl Game {
                 self.dirty = true;
                 // CR 113.11: not for an object that can't have an ability it adds.
                 crate::kw::cant_have::drop_ungrantable_keywords(self, first);
+                // CR 205.3d: nor a subtype it can't have as the effect begins.
+                crate::subtype_gain::lock_ungainable_parts(self, first);
             }
             Effect::AddRestriction {
                 restriction,
@@ -1166,10 +1231,8 @@ impl Game {
                 };
                 // CR 611.2b: a "for as long as" duration that already ended (one about the
                 // objects it applies to, "for as long as it remains tapped", is checked
-                // for them).
-                if self.rule_effect_expired(duration, ctx.source, ctx.controller, &objects)
-                    || crate::untap_choice::ended_before_it_began(self, duration, ctx)
-                {
+                // for them; one that ended while the ability waited: see `exec`).
+                if self.rule_effect_expired(duration, ctx.source, ctx.controller, &objects) {
                     return;
                 }
                 let id = self.new_effect_id();
@@ -1658,13 +1721,17 @@ impl Game {
                 crate::copy::become_copy(self, what, of, duration, exceptions, ctx);
             }
             Effect::Transform { what } => {
+                let mut done = Vec::new();
                 for o in self.resolve_objects(what, ctx) {
                     // CR 701.27f: not if it transformed since its ability was put onto the
                     // stack (or, for a delayed triggered ability, created).
-                    if crate::transform_rules::ability_may_transform(self, o, ctx) {
-                        crate::dfc::transform(self, o);
+                    if crate::transform_rules::ability_may_transform(self, o, ctx)
+                        && crate::dfc::transform(self, o)
+                    {
+                        done.push(Entity::Object(o));
                     }
                 }
+                ctx.set_var(crate::transform_rules::TRANSFORMED_THIS_WAY, done);
             }
             Effect::Regenerate { what } => self.regenerate(what, None, ctx),
             Effect::RegenerateWith { what, then } => self.regenerate(what, Some(then), ctx),
@@ -1676,24 +1743,34 @@ impl Game {
                 let to = &crate::attach::recipient_for_all(self, to, &objs, ctx);
                 let named = self.resolve_sel(to, ctx);
                 if let Some(t) = crate::attach::choose_recipient(self, named, &objs, ctx) {
-                    for o in objs {
-                        any |= self.attach(o, t);
+                    // An object that has left the battlefield isn't attached, and nothing is
+                    // attached to one (CR 400.7, 701.3b).
+                    if self.present_entity(t).is_some() {
+                        for o in self.all_present(objs) {
+                            any |= self.attach(o, t);
+                        }
                     }
                 }
                 ctx.prev_happened = any;
             }
             Effect::AttachAsCreature { what, to } => {
                 let objs = self.resolve_objects(what, ctx);
+                // As for attaching (CR 400.7, 701.3b).
                 if let Some(t) = self.resolve_sel(to, ctx).into_iter().next() {
-                    for o in objs {
-                        self.attach_as_creature(o, t);
+                    if self.present_entity(t).is_some() {
+                        for o in self.all_present(objs) {
+                            self.attach_as_creature(o, t);
+                        }
                     }
                 }
             }
             Effect::Unattach { what } => {
                 let mut done = Vec::new();
                 let mut from = Vec::new();
-                for o in self.resolve_objects(what, ctx) {
+                // An object that has left keeps what it was attached to as last known
+                // information; it isn't unattached (CR 400.7).
+                let objs = self.resolve_objects(what, ctx);
+                for o in self.all_present(objs) {
                     if let Some(h) = self.obj(o).attached_to {
                         self.unattach(o);
                         done.push(Entity::Object(o));
@@ -2751,6 +2828,9 @@ impl Game {
                     if terms.controller_duration {
                         g.terms.duration_player = Some(ctx.controller);
                     }
+                    if terms.until_another {
+                        g.terms.given_by_link = Some(ctx.link);
+                    }
                 }
                 crate::permissions::given(self, before);
             }
@@ -3500,12 +3580,14 @@ impl Game {
         | Restriction::BlockCost { cost, .. }
         | Restriction::BlockCostAgainst { cost, .. } = &mut r
         {
-            if let Some(m) = cost.mana.as_mut().filter(|m| m.has_x()) {
-                *m = m.with_x(ctx.x.max(0) as u32);
-                // X = 0: a cost of {0}, still a cost (CR 118.5; War Tax rulings).
-                if m.symbols.is_empty() {
-                    m.symbols.push(crate::mana::ManaSymbol::Generic(0));
-                }
+            // The cost still contains {X} (CR 106.6), its X now defined (`defined_x_costs`;
+            // X = 0 is a cost of {0}, still a cost, CR 118.5 and War Tax's rulings).
+            if let Some(m) = cost.mana.clone().filter(|m| m.has_x()) {
+                let rest = m.with_x(0);
+                cost.mana = (!rest.symbols.is_empty()).then_some(rest);
+                cost.parts.push(CostPart::DefinedX(Value::c(
+                    m.x_count() as i32 * ctx.x.max(0),
+                )));
             }
         }
         // A restriction on a referenced player ("target player can't play lands this
@@ -3591,6 +3673,18 @@ impl Game {
                         Entity::Player(p) => Some(PlayerFilter::Is(*p)),
                         Entity::Object(o) => Some(PlayerFilter::Is(self.obj(*o).controller)),
                     })
+                    .collect();
+                Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
+            }
+            // "creatures defending player controls without flying can't block this turn"
+            // (The Motherlode, Excavator): the defending player as the effect begins; the
+            // creatures are a class (CR 611.2c).
+            Filter::ControlledBy(rel @ PlayerRel::Defending) => {
+                let ps = self
+                    .player_ids()
+                    .into_iter()
+                    .filter(|p| self.player_rel_matches(*rel, *p, ctx))
+                    .map(PlayerFilter::Is)
                     .collect();
                 Filter::ControllerMatches(Box::new(PlayerFilter::Or(ps)))
             }
@@ -4356,6 +4450,7 @@ fn restriction_object_filter(r: &mut Restriction) -> Option<&mut Filter> {
         | Restriction::AttackOnlyAlone(f)
         | Restriction::CantTransform(f) => Some(f),
         Restriction::CantBe { what, .. } => Some(what),
+        Restriction::DoesntUntapDuringUntapStepOf { what, .. } => Some(what),
         Restriction::AttackTogether { attackers, .. }
         | Restriction::MustAttackOtherThan { attackers, .. } => Some(attackers),
         Restriction::CantActivate { sources, .. } => Some(sources),
@@ -4397,7 +4492,9 @@ fn restriction_player_filter(r: &mut Restriction) -> Option<&mut PlayerFilter> {
         | Restriction::MaxSpellsPerTurn(f, _)
         | Restriction::MaxSpellsOfKindPerTurn { who: f, .. }
         | Restriction::CantPlayLandCards { who: f, .. } => Some(f),
-        Restriction::CantCast { who, .. } | Restriction::CantActivate { who, .. } => Some(who),
+        Restriction::CantCast { who, .. }
+        | Restriction::CantActivate { who, .. }
+        | Restriction::DoesntUntapDuringUntapStepOf { who, .. } => Some(who),
         Restriction::TargetableAsThoughNo { by, .. } => Some(by),
         Restriction::MustAttackPlayer { defender, .. }
         | Restriction::CantAttackPlayer { defender, .. }

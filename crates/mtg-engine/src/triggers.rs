@@ -283,6 +283,19 @@ impl Game {
         // `flush_events`.
     }
 
+    /// The trigger event's information as the ability triggers on it, with how many of
+    /// this turn's events have happened by then: the recorded ones, the trigger event
+    /// among them, and the rest of its batch of simultaneous events (`batch_ahead`, which
+    /// counts as having happened, interpretation
+    /// `simultaneous-events-count-as-an-ability-triggers`). "If it's the first time ...
+    /// this turn" is about the trigger event, and it's checked again as the ability
+    /// resolves against these events only (CR 603.4; interpretation
+    /// `first-time-is-about-the-trigger-event`).
+    fn seen_as_triggered(&self, mut info: EventInfo) -> EventInfo {
+        info.turn_events_seen = Some(self.turn_events.len() + self.batch_ahead.len());
+        info
+    }
+
     /// Marks the end of a group of simultaneous events (see [`Event::BatchBoundary`]).
     pub fn end_event_batch(&mut self) {
         if self.batch_hold == 0
@@ -491,6 +504,9 @@ impl Game {
                     BatchPer::OtherController => {
                         i.other.map(|o| Entity::Player(self.obj(o).controller))
                     }
+                    BatchPer::ObjectController => {
+                        i.object.map(|o| Entity::Player(self.obj(o).controller))
+                    }
                 };
                 let mut groups: Vec<Vec<EventInfo>> = Vec::new();
                 let mut group_extra: Vec<usize> = Vec::new();
@@ -531,6 +547,17 @@ impl Game {
                         break;
                     }
                     let mut info = g[0].clone();
+                    // "One or more creatures an opponent controls ..., that opponent ...": the
+                    // opponent the group is for, whose creatures they were as it triggered
+                    // (`that-opponent-fixed-as-it-triggers`).
+                    let grouped_by = match per {
+                        BatchPer::OtherController => g[0].other,
+                        BatchPer::ObjectController => g[0].object,
+                        _ => None,
+                    };
+                    if let Some(o) = grouped_by {
+                        info.player = Some(self.obj(o).controller);
+                    }
                     // "That much"/"that many": the total amount (damage, life, ...), or the
                     // number of events for events without an amount (objects entering, ...).
                     info.amount = g.iter().map(|i| i.amount).sum();
@@ -607,6 +634,7 @@ impl Game {
                     // rulings).
                     let times =
                         crate::trigger_limits::allowed(self, src, a.uid, t.limit, 1 + extra);
+                    let info = self.seen_as_triggered(info);
                     for _ in 0..times {
                         self.trigger_order += 1;
                         found.push(PendingTrigger {
@@ -663,6 +691,9 @@ impl Game {
                 *self.history.crimes.entry(*player).or_insert(0) += 1
             }
             Event::Damage { source, .. } => crate::kw::value_results::record_damage(self, *source),
+            Event::ExcessDamage { obj, .. } => {
+                crate::kw::value_results::record_excess_damage(self, *obj)
+            }
             // What a permanent was as it entered (its characteristics are computed by
             // now): conditions about permanents that entered this turn look at that, not
             // at what it is later ("a face-down creature entered ...").
@@ -915,6 +946,7 @@ impl Game {
                 // would trigger, additional times included (Acrobatic Cheerleader's
                 // rulings).
                 let times = crate::trigger_limits::allowed(self, src, a.uid, t.limit, times);
+                let info = self.seen_as_triggered(info);
                 for _ in 0..times {
                     self.trigger_order += 1;
                     found.push(PendingTrigger {
@@ -988,6 +1020,11 @@ impl Game {
             base.source = d.source;
             // "you" in its trigger condition is the player who performs it.
             base.controller = d.performer.unwrap_or(d.controller);
+            // "At the beginning of the next turn's upkeep" (see `turn_structure`).
+            base.nums.insert(
+                crate::turn_structure::DELAYED_CREATED_TURN,
+                d.created_turn as i64,
+            );
             let left_zone = self.matched_leaving_as_it_entered(&d.trigger, &base, ev);
             if entering_off && !left_zone {
                 continue;
@@ -1206,6 +1243,20 @@ impl Game {
         base: &Ctx,
         ev: &Event,
     ) -> Vec<EventInfo> {
+        let mut infos = self.trigger_event_infos(cond, base, ev);
+        // Who controlled the event's objects as it triggered: "that player" of "Whenever a
+        // creature an opponent controls enters, that player ..." is that opponent even if
+        // the creature changes control before the ability resolves
+        // (`that-opponent-fixed-as-it-triggers`, `PlayerRef::ControllerAsTriggered`).
+        for i in &mut infos {
+            i.object_controller = i.object.map(|o| self.obj(o).controller);
+            i.other_controller = i.other.map(|o| self.obj(o).controller);
+        }
+        infos
+    }
+
+    /// The body of [`Game::trigger_matches_ctx`].
+    fn trigger_event_infos(&self, cond: &TriggerCond, base: &Ctx, ev: &Event) -> Vec<EventInfo> {
         let src = base.source.unwrap_or(ObjectId(0));
         let ctl = base.controller;
         let ctx = base.clone();

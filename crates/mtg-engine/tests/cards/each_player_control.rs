@@ -489,8 +489,9 @@ fn aminatous_control_changes_outlast_her_and_her_controller() {
         [controller(&t, a), controller(&t, b), controller(&t, c)],
         [P2, P0, P1]
     );
-    t.g.destroy(aminatou, None);
-    t.settle();
+    // Aminatou left as her loyalty went to 0 (CR 704.5i): the effect outlasts her.
+    assert!(!t.g.is_live(aminatou));
+    assert!(t.in_graveyard(P0, "Aminatou, the Fateshifter"));
     assert_eq!(controller(&t, c), P1);
     // P0 leaves: its own cards leave with it, what it took goes back, and the rest of
     // the effect still applies.

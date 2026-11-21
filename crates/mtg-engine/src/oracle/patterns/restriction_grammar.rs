@@ -928,13 +928,13 @@ inventory::submit! { EffectPattern { name: "restriction grammar: objects [restri
 
 /// Whether a filter describes a class of objects a rule-modifying effect can keep
 /// applying to (CR 611.2c): qualities, and players fixed as the effect begins
-/// ("creatures target player controls", "creatures the active player controls", see
-/// `bind_target_players` in `resolve.rs`).
+/// ("creatures target player controls", "creatures the active player controls",
+/// "creatures defending player controls", see `bind_target_players` in `resolve.rs`).
 pub(crate) fn restriction_class(f: &Filter) -> bool {
     match f {
         Filter::And(v) | Filter::Or(v) => v.iter().all(restriction_class),
         Filter::Not(x) => restriction_class(x),
-        Filter::ControlledBy(PlayerRel::Target(_))
+        Filter::ControlledBy(PlayerRel::Target(_) | PlayerRel::Defending)
         | Filter::ControlledByPlayer(_)
         | Filter::Named(_)
         | Filter::Other => true,
@@ -1087,9 +1087,9 @@ fn requirement_effect(l: &str, b: &mut Builder) -> Option<Effect> {
 inventory::submit! { EffectPattern { name: "restriction grammar: requirements with a player or object", priority: 110, parse: requirement_effect } }
 
 /// "[objects] don't untap during [whose] next untap step" (CR 502.3): for specific
-/// objects, through their controllers' next untap steps; for a group a player controls,
-/// through that player's next untap step; "during your next untap step", through its
-/// controller's.
+/// objects, through their controllers' next untap steps; for a group during a targeted
+/// player's next untap step, whoever controls them (Blinding Beam); "during your next
+/// untap step", through its controller's.
 fn doesnt_untap_effect(l: &str, b: &mut Builder) -> Option<Effect> {
     let l = end(l.trim());
     let (subject, whose) = l
@@ -1098,8 +1098,9 @@ fn doesnt_untap_effect(l: &str, b: &mut Builder) -> Option<Effect> {
     let whose = whose
         .strip_suffix(" next untap step")
         .or_else(|| whose.strip_suffix(" next untap steps"))?;
-    // "Creatures don't untap during target player's next untap step": the creatures that
-    // player controls.
+    // "Creatures don't untap during target player's next untap step": every creature,
+    // whoever controls it, during that player's next untap step (Blinding Beam's ruling:
+    // including other players' creatures that untap then because of Seedborn Muse).
     if let Some(pf) = whose.strip_suffix("'s").and_then(|w| match w {
         "target player" => Some(PlayerFilter::Any),
         "target opponent" => Some(PlayerFilter::Opponent),
@@ -1117,10 +1118,10 @@ fn doesnt_untap_effect(l: &str, b: &mut Builder) -> Option<Effect> {
         let slot = b.add_target(TargetSpec::player(pf, text), text);
         b.it_player = PlayerRef::Target(slot);
         return Some(Effect::AddRestriction {
-            restriction: Restriction::DoesntUntap(Filter::and(vec![
-                f,
-                Filter::ControlledBy(PlayerRel::Target(slot)),
-            ])),
+            restriction: Restriction::DoesntUntapDuringUntapStepOf {
+                who: PlayerFilter::Ref(Box::new(PlayerRef::Target(slot))),
+                what: f,
+            },
             duration: Duration::ThroughNextUntapStep,
         });
     }

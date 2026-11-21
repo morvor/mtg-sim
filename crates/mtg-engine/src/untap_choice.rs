@@ -1,7 +1,7 @@
 //! "You may choose not to untap ~ during your untap step." (CR 502.3: the active player
 //! determines which permanents they control will untap) and the durations that go with
-//! it, "for as long as ~ remains tapped" (CR 611.2b), and whether that duration or "for as
-//! long as you control ~" ended while the ability creating the effect was on the stack.
+//! it, "for as long as ~ remains tapped" (CR 611.2b). Whether such a duration ended while
+//! the ability creating the effect was on the stack: `duration_windows`.
 
 use crate::ability::{Condition, Duration, Restriction};
 use crate::eval::Ctx;
@@ -31,24 +31,14 @@ pub fn remains_tapped(control: bool) -> Duration {
     Duration::WhileCondition(Condition::Custom(name.into()))
 }
 
-/// The duration ended before the effect `ctx` (the resolving ability's context) is about
-/// to create could begin (CR 611.2b): see [`changed_while_on_stack`]. "For as long as you
-/// control ~" ended if the ability's controller lost control of ~ while the ability was
-/// on the stack, even if they regained it (register
-/// `control-lost-before-a-for-as-long-as-you-control-effect-begins`).
-pub fn ended_before_it_began(g: &Game, d: &Duration, ctx: &Ctx) -> bool {
-    match d {
-        Duration::WhileCondition(Condition::Custom(n)) => {
-            custom_condition(g, n, ctx) == Some(false)
-        }
-        Duration::WhileYouControlSource => ctx
-            .source
-            .zip(ctx.stack_obj)
-            .is_some_and(|(s, a)| changed_while_on_stack(g, s, a, false, Some(ctx.controller))),
-        _ => false,
-    }
-}
-
+/// "For as long as ~ remains tapped" (and "for as long as you control ~ and ~ remains
+/// tapped"): the source is still that tapped permanent (under the controller's control).
+/// As the ability creating the effect resolves (`ctx` is its resolution), it must also have
+/// stayed so since the ability became activated or triggered, even if it's tapped again
+/// (CR 611.2b; Seasinger, Preacher, Rubinia Soulsinger and Entrancing Lyre rulings): see
+/// `duration_windows`. Once an effect exists (its condition is checked without a resolving
+/// ability), only an untap after that ends it, not one before another ability of the source
+/// was activated.
 pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
     let control = match name {
         SOURCE_REMAINS_TAPPED => false,
@@ -62,60 +52,8 @@ pub fn custom_condition(g: &Game, name: &str, ctx: &Ctx) -> Option<bool> {
             && !o.phased_out
             && o.tapped
             && (!control || o.controller == ctx.controller)
-            && !ctx.stack_obj.is_some_and(|a| {
-                changed_while_on_stack(g, s, a, true, control.then_some(ctx.controller))
-            })
+            && !crate::duration_windows::tapped_source_changed(g, ctx, control)
     }))
-}
-
-/// Whether, after `ability` — the ability of `src` creating the effect, whose resolution
-/// context is the condition's — was put on the stack, `src` became untapped (with
-/// `untapped`) or `controller` lost control of it: its "for as long as ~ remains tapped"
-/// or "for as long as you control ~" duration then ended before the effect could begin,
-/// even if `src` was tapped again (CR 611.2b; Rubinia Soulsinger and Entrancing Lyre
-/// rulings) or control of it was regained (register
-/// `control-lost-before-a-for-as-long-as-you-control-effect-begins`; Willow Satyr ruling).
-/// Once an effect exists (its condition is checked without a resolving ability), only an
-/// untap after that ends it, not one before another ability of `src` was activated.
-fn changed_while_on_stack(
-    g: &Game,
-    src: ObjectId,
-    ability: ObjectId,
-    untapped: bool,
-    controller: Option<PlayerId>,
-) -> bool {
-    use crate::events::Event;
-    use crate::object::StackKind;
-    let top = ability;
-    let of_src = g.obj(top).stack.as_deref().is_some_and(|si| {
-        matches!(&si.kind,
-            StackKind::Activated { source, .. } | StackKind::Triggered { source, .. }
-                if *source == src)
-    });
-    if !of_src {
-        return false;
-    }
-    let mut put_on_stack = false;
-    for ev in g.turn_events.iter().chain(g.events.iter()) {
-        match ev {
-            Event::AbilityActivated {
-                ability: Some(a), ..
-            }
-            | Event::AbilityTriggeredOnStack { ability: a, .. }
-                if *a == top =>
-            {
-                put_on_stack = true;
-            }
-            Event::Untapped { obj } if untapped && put_on_stack && *obj == src => return true,
-            Event::ControlChanged { obj, from, .. }
-                if put_on_stack && *obj == src && Some(*from) == controller =>
-            {
-                return true
-            }
-            _ => {}
-        }
-    }
-    false
 }
 
 /// Whether a "remains tapped" effect from `src` is currently in force: the sensible
@@ -182,6 +120,9 @@ impl Game {
             })
             .map(|(id, _)| id)
             .chain(crate::rule_statics::opponents_steps::extra_untaps(self))
+            // "Creatures don't untap during target player's next untap step" applies to
+            // them too (Blinding Beam's ruling).
+            .filter(|id| !kept_tapped_this_untap_step(self, *id))
             .collect();
         for id in extra {
             if !to_untap.contains(&id) {
@@ -189,4 +130,30 @@ impl Game {
             }
         }
     }
+}
+
+/// Whether an effect keeps the permanent from untapping during the untap step of the
+/// active player, whoever controls it (`Restriction::DoesntUntapDuringUntapStepOf`,
+/// CR 502.3): "Creatures don't untap during target player's next untap step" (Blinding
+/// Beam) covers the creatures other players control that would untap then (Seedborn
+/// Muse), as its ruling says.
+pub(crate) fn kept_tapped_this_untap_step(g: &Game, obj: ObjectId) -> bool {
+    let applies = |who: &crate::ability::PlayerFilter, what, ctx: &Ctx| {
+        g.active_players()
+            .iter()
+            .any(|p| g.player_filter_matches(who, *p, ctx))
+            && g.matches(obj, what, ctx)
+    };
+    g.statics.restrictions.iter().any(|(s, c, r)| match r {
+        Restriction::DoesntUntapDuringUntapStepOf { who, what } => {
+            applies(who, what, &Ctx::new(Some(*s), *c))
+        }
+        _ => false,
+    }) || g.rule_effects.iter().any(|e| match &e.restriction {
+        Restriction::DoesntUntapDuringUntapStepOf { who, what } => {
+            e.objects.as_ref().is_none_or(|v| v.contains(&obj))
+                && applies(who, what, &Ctx::new(e.source, e.controller))
+        }
+        _ => false,
+    })
 }

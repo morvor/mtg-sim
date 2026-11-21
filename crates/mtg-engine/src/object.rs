@@ -384,6 +384,23 @@ pub struct EventInfo {
     /// condition ("enters or attacks", "enters, if ...").
     #[serde(default)]
     pub triggered_by: Option<crate::events::TriggeringEvent>,
+    /// The controllers of `object` and `other` as the ability triggered (CR 603.2,
+    /// 603.10): "that player" of "Whenever a creature an opponent controls enters, that
+    /// player loses 1 life" or of "Whenever a source an opponent controls deals damage to
+    /// you, that player sacrifices a permanent" is the opponent the trigger condition
+    /// named, even if the object changes control before the ability resolves
+    /// (`that-opponent-fixed-as-it-triggers`). Read by `PlayerRef::ControllerAsTriggered`.
+    #[serde(default)]
+    pub object_controller: Option<PlayerId>,
+    #[serde(default)]
+    pub other_controller: Option<PlayerId>,
+    /// For a triggered ability: how many of this turn's events (`Game::turn_events`) had
+    /// happened when it triggered, its trigger event and the events simultaneous with it
+    /// included. "If it's the first time ... this turn" is about the trigger event, which
+    /// later events don't change ([`crate::ability::HistoryWindow::ThisTurnUntilTriggered`];
+    /// interpretation `first-time-is-about-the-trigger-event`).
+    #[serde(default)]
+    pub turn_events_seen: Option<usize>,
 }
 
 /// The kind of object on the stack.
@@ -428,6 +445,10 @@ pub struct StackInfo {
     /// creature" stays legal when the Equipment is moved in response (Plasma Caster).
     #[serde(default)]
     pub source_attached_to: Option<Entity>,
+    /// The period of the "for as long as" durations of its effects while it waits (CR
+    /// 611.2b; see `duration_windows`).
+    #[serde(default)]
+    pub window: crate::duration_windows::Window,
 }
 
 /// Values chosen for a permanent ("as this enters, choose a color").

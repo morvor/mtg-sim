@@ -754,6 +754,223 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   creates its tokens together (Xorn adds one). Fix: one creation for one instruction's tokens, as one copy
   event for one instruction's copies (register `copy-for-each-one-copy-event`; myriad's and Tempting
   Contract's rulings say their "for each" tokens are created at the same time). Size S-M.
+  Fixed (small-fixes-3, Nov 20): `for_each_events.rs` makes one instruction's tokens, counters and life
+  gained one event in every shape (`Repeat`, per-player and per-object loops), register
+  `for-each-tokens-counters-life-one-event` (provisional). Each part's own tokens stay a creation of their
+  own when they're specified differently: tokens created attacking different players (Adeline, Stampede
+  Surfer, myriad), and tokens a later instruction of the part refers to (Furygale Flocking's "that attack
+  that opponent"; the review found that combining them gave all of Anointed Procession's extra tokens to
+  the first opponent's part). Left: token copies of several objects are still one creation per kind, and a
+  "for each" part compiled as one sequence of several actions (Tempt with Bunnies' draw and Rabbit) is
+  performed per player (Seize the Spotlight's draw and Treasure, two instructions, makes one creation).
+  Also found (review): Sacred Boon's "put a +0/+1 counter on that creature for each 1 damage prevented
+  this way" compiles to one delayed trigger for each 1 damage prevented, each putting one counter, where
+  the card has one delayed trigger putting them all.
+- **Status (gaps-residual-2, Nov 20).** The graveyard-count bit was already fixed (`Value::GraveyardSize`,
+  `PlayerFilter::GraveyardSize` and `multiplayer::zone_size` count only cards, CR 108.2b, 111.7) and tested
+  (`tests/cr/r111_tokens_arent_cards.rs`); verified, with a test added for "creature cards" (a creature token
+  isn't one). The meld bit was already fixed (`merge::meld_pair` finds a copy's meld result by the card it's
+  named after; the instruction exiles both, and what can't be melded stays in exile, CR 701.42b-c) and tested
+  with a Clone (`tests/actions/a701_042_meld.rs`); verified, with a test added for a token copy (Cackling
+  Counterpart: both exiled, nothing melds, the token ceases to exist). Engine unchanged for both. The "for
+  each" bit is small-fixes-3's (above).
+
+### Residual: hashed links of acquired abilities (gaps-residual-2 part 2, closed Nov 20)
+- Links of abilities a continuously reevaluated effect gives (`layers::acquired_ability`, "have"; the
+  `ability_grants` "has all activated abilities of") were hashes of the ability's link and the granting
+  objects' ids into 0x8000-0xbfff, so two grants to one object from objects whose ids differ by 0x4000 had the
+  same link (CR 607.5: "They can't be linked to any other ability"). Now allocated per object acquiring them
+  (`acquired_links.rs`: the object's next link the first time it acquires a given link from a given source,
+  kept in the game and copied with it), so they can't collide and stay the same across recomputation. Tests:
+  `tests/cr/r607_005_acquired_links.rs` (two Cryptolith Rites; Necrotic Ooze with two Sisters of Stone Death,
+  each placed 0x4000 ids after the first). The gap is removed from docs/PROPERTIES.md "Remaining gaps".
+  Release properties runs with the final code (after merging small-fixes-5, whose `PlayTerms::given_by_link`
+  tells two instances of a gained ability apart by these links): snapshot 200 games and determinism 200
+  games, no violations (also before the merge).
+
+### Residual: liveness of object ids in the primitives (gaps-residual-2 part 3, closed Nov 20)
+- Every zone change makes a new object (CR 400.7); the actions.rs primitives did nothing to an id of an object
+  that had left, silently, so a stale id that should have been followed (CR 400.7j) or read as last known
+  information went unnoticed. In debug builds the primitives now assert that the ids they act on are live
+  (`liveness.rs`, `Game::assert_live`: move, tap, untap, destroy, sacrifice, put/remove counters, damage
+  recipients, attach, unattach; a damage source may have left, it deals the damage as it last existed, CR
+  608.2h), and code that knowingly holds ids of objects that may have left passes them through
+  `Game::present` / `all_present` / `present_entity` (an instruction about an object that has left does
+  nothing to it).
+- Test suite (debug): 174 firings. 168 in the effect interpreter (`resolve.rs`: Destroy 17, Tap 7, Untap 4,
+  DealDamage recipients 8, AddCounters 108, RemoveCounters 7, Attach 17), all instructions about an object
+  that had left doing nothing as they should (the tests pin it): now explicit. 3 in the state-based actions,
+  which moved again an object a replaced loss had already moved (Lich's Mirror, Exquisite Archangel; CR
+  400.6): no effect, now not attempted. 1 in the untap step, which untapped a land returned "as you untap"
+  (Undiscovered Paradise): no effect, now not attempted. 2 test errors: tests that destroyed an object that
+  had already died (Aminatou at 0 loyalty, CR 704.5i; a Hill Giant dealt deathtouch damage, CR 704.5h), now
+  asserting that it died. Reading the interpreter's other calls: AttachAsCreature and Unattach got the same
+  treatment (an object that left would have been "unattached" as last known information).
+- Every-card chunk in a debug build (`--from 0 --count 4000`, 3 threads): 4,000 cards, 8,000 games in 8,500 s;
+  3 panics, all liveness assertions, 2 distinct paths: `Effect::PutCountersOf` ("double the number of +1/+1
+  counters on that creature" after it died: Sword of Hours, Primordial Hydra; no rules effect, now explicit)
+  and one engine bug: the payment planner reserved a cost's source only for {T}, {Q} and
+  sacrifice/exile/return-self costs, so for Thopter Squadron's "{1}, Remove a +1/+1 counter from this
+  creature", with Ashnod's Altar the only mana, it sacrificed the Squadron for the {1} and the counter cost
+  then failed on the new object: the ability was offered though it couldn't be activated, and the attempt
+  was reversed (CR 601.2g-h, 602.2b, 733.1; with another creature the planner sacrificed that one). Every
+  cost part paid with the source now reserves it, and a part paid with a source that has left fails (for
+  "sacrifice this" it counted as paid, which the reservation kept unreachable). 3 slow games (the 60 s
+  cap, debug speed). The 3 panicking games pass after the fixes (`--names`).
+- Properties fuzz in a debug build (`--properties --games 500 --jobs 3`, after merging origin): 500 games for
+  each of the five properties. Rollback 500 held; determinism 498 and snapshot 499 held (the rest slow: the
+  debug time limit). Replay: 497 held, 2 slow, 1 panic, a liveness assertion and an engine bug: turning a
+  face-down permanent face up (megamorph) paid the {2} with a mana ability that sacrificed the permanent
+  itself (Ashnod's Altar), then turned the departed object face up, put the megamorph counter on it, and
+  succeeded. A special action that acts on its permanent once the cost is paid (turning it face up,
+  unlocking a door) now pays keeping it (`special_actions::pay_keeping_source`, `SpendContext::keep_source`:
+  no mana ability sacrifices it), is offered only if it can be paid so (`Game::can_pay_cost_keeping_source`,
+  review), and if the permanent leaves anyway as the cost is paid it's reversed (CR 400.7, 116.2b, 702.37e,
+  733.1); tests with Rattleclaw Mystic and Raven Guild Initiate; the game passes after the fix. Seat: 497
+  held, 1 slow, 2 violations not from this item (see "Found, not fixed" below).
+- Bugs found by the assertions: 2 engine bugs (the payment planner sacrificing a cost's source when the cost
+  removes counters from it, so an activation that can't be completed was offered; a face-down permanent
+  sacrificed for its own mana turned face up) and 1 found reading the cost code they pointed to
+  (`CostPart::SacrificeSelf` counted as paid when the source had already left; now fails. The implementer
+  called it unreachable; the review reached it: Withercrown's granted "you lose 1 life unless you sacrifice
+  this creature" with the creature returned to its owner's hand before it resolved lost no life, CR 400.7,
+  118.3, 118.12a; test in `tests/cr/r400_007_instructions_about_departed_objects.rs`); 0 compiler fixes; 2
+  test errors. The other firings were instructions about
+  objects that had left doing nothing as they should, now explicit (the SBA re-move and the untap included).
+  The assertions stay (debug builds only).
+- Review (Nov 20). Every site the item made an explicit no-op was logged with the test reaching it (223
+  filtered ids over the engine tests): each is an instruction about an object that had left before it was
+  carried out (a creature that died with its trigger on the stack, an Equipment gone before its attach), and
+  none is an object an earlier part of the same effect moved (CR 400.7j: the Animate Dead family attaches to
+  the returned creature, which `present` passes); the SBA and untap-step filters are behavior-preserving
+  (`move_objects` and `untap` already did nothing to such ids). Problems found and fixed: (1) the check
+  after paying a special action's cost reversed every special action whose source had left, though only
+  turning a permanent face up and unlocking a door act on their source afterwards: sacrificing Volrath's
+  Curse (or Damping Engine) itself to ignore its effect, a legal action that worked before (CR 116.2d,
+  701.21a), was reversed; now only `pay_keeping_source` checks, and the Circling Vultures exception isn't
+  needed (its discard goes through `special_actions::pay` like every action that doesn't act on its source
+  afterwards). (2) Turning a face-down permanent face up and unlocking a door were still offered when only
+  sacrificing that permanent could pay (the availability checks didn't keep the source; the
+  `|| spend.keep_source` added to the planning check was dead code there). (3) The Thopter Squadron test
+  caught bug 1 only through the debug assertion (in a release build it passed without the fix); it now
+  asserts the ability isn't offered, and the Rattleclaw Mystic test what's offered; nothing reached the
+  reversal of a special action whose permanent left during the payment (with the payment keeping it, only a
+  cost part choosing the permanent itself does): test with Raven Guild Initiate returned for its own morph
+  cost under Arcane Adaptation. The reservation of a cost's source is recorded under the existing policy
+  `automatic-mana-payment` (docs/interpretations/stack-casting-costs.md), which the tests now cite. With
+  the final code, 40 properties games in a debug build (rollback, snapshot, determinism, seat): all held,
+  no panics.
+- Part 4 of the item (Inquisitor Eisenhorn's "this way" trigger for a card drawn while casting, CR 121.8)
+  moved to small-fixes-4, which landed it (`kw/reveal_first_draw.rs`, `tests/cr/r121_8_reveal_as_drawn.rs`).
+- Found, not fixed then, fixed by small-fixes-6 (seat symmetry, `--properties --games 500`; not from this item: both reproduce
+  identically, in a debug build, with the engine as it was without it, origin at 9a650bd6).
+  Game 175 (4 players, seed 1000178, rotation 3): before the first turn the nameless face-down objects in
+  the command zone (conspiracies) have different owners in the rotated game (`command[O240 "" own0 ...]`
+  against `own3`): the canonical renaming pairs different objects, or the objects are placed differently.
+  `cargo run --release -p mtg-sim -- --properties --property seat --seed 1 --only 175 --players 4
+  --max-turns 40`. Game 405 (2 players, seed 1000408, rotation 1): at turn 17 an "Order objects entering
+  the battlefield" decision lists Watchful Giant and Deepway Navigator in the opposite order (the answers
+  give the same order, so only the listing differs; `actions.rs`, `order_simultaneous_entries` lists the
+  simultaneous moves in the order they were proposed, probably an order of object ids, which differ between
+  seats). `cargo run --release -p mtg-sim -- --properties --property seat --seed 1 --only 405 --players 2
+  --max-turns 40`.
+  Fixed by small-fixes-6: game 175's face-down objects weren't conspiracies but supplementary-deck cards
+  (Attraction or scheme cards, which random decks can include; planes, the other face-down supplementary cards, are renumbered only in Planechase games). `shuffle_attraction_decks`,
+  `shuffle_scheme_decks` and `shuffle_planar_decks` shuffled them with the game's randomness and made them
+  new objects in seat order; they now go in APNAP order with each owner's randomness (`Game::rng_for`), and
+  vanguards and conspiracies get their start-of-game timestamps in APNAP order (CR 613.7m; `variants::begin_game`
+  used the command zone's order). Game 405: `order_simultaneous_entries` now lists each player's objects by
+  owner in APNAP order, then creation order (register `simultaneous-entries-listed-by-owner-then-creation`).
+
+### Residual: a repeatable mana ability is planned at most once per payment (sweep-nov20, closed Nov 20 by small-fixes-7)
+- Rules: CR 601.2g "If the total cost includes a mana payment, the player then has a chance to activate
+  mana abilities"; 605.3a "A player may activate an activated mana ability whenever they have priority,
+  whenever they are casting a spell or activating an ability that requires a mana payment, ..." (no limit
+  on how often while the ability's cost can be paid, CR 118.3); Skirk Prospector's ruling (2022-12-08,
+  cited in `tests/rulings/r_p062_sacrifice_outlets.rs` with manual activations): "if you'd like to
+  sacrifice multiple Goblins including Skirk Prospector for mana, be sure to sacrifice Skirk Prospector
+  last."
+- Engine now: the automatic payment (`mana_abilities.rs`: `sources_inner` lists one `ManaSource` per mana
+  ability of a permanent, its sacrifice or exile candidates as one `sac_pool` with one `sac_count`; the
+  `Planner` uses each source at most once) never activates a mana ability twice for one payment, although
+  one whose cost doesn't tap or sacrifice its permanent can be activated again as long as its cost can be
+  paid. `legal_actions` asks the same planner, so a spell or ability whose cost needs a second activation
+  isn't offered. The only way around it is activating the mana abilities with priority first, which
+  `legal_actions` doesn't list (mtg-api does; the sweep's focus agent activates only the focus card's).
+  Old, not a regression: the planner has worked this way since at least the start of the visible history
+  (Nov 19), and Inspired Ultimatum's games in the Nov 5 sweep didn't need it.
+- Found by the Nov 20 every-card sweep (`docs/EVERY_CARD.md`): Inspired Ultimatum (card 13895) was never
+  castable; in game 0 player 0 had from turn 17 Plains ×2, Island ×2 and a Mountain untapped and Prisms
+  enough for {U}{U}{R}{R}{R}{W}{W} with Diamond Kaleidoscope ("Sacrifice a Prism token: Add one mana of any
+  color."): `cargo run --release -p mtg-sim -- --every-card --from 13895 --count 1 --game 0 --log`.
+  Scratch repros (run Nov 20, all fail; removed, since an open bug isn't pinned by `#[ignore]` tests):
+  (1) Ashnod's Altar ("Sacrifice a creature: Add {C}{C}.") and two Grizzly Bears, no lands: Jayemdae Tome
+  ({4}) isn't in `legal_actions`, and casting it anyway fails with both Bears left (expected: offered, and
+  casting it sacrifices both Bears; with one Bears and two Wastes it is offered); (2) Diamond Kaleidoscope
+  with two Prism tokens (made with its first ability) and untapped Plains ×2, Island ×2 and Mountain:
+  Inspired Ultimatum isn't offered (expected: offered, paid with both Prisms); (3) Skirk Prospector
+  ("Sacrifice a Goblin: Add {R}.") and two Raging Goblins: Ball Lightning ({R}{R}{R}) isn't offered.
+- Cards (compiled or better) with a mana ability of that kind (no {T}, no mana in the cost; sacrificing or
+  exiling other objects, removing counters, paying life): Ashnod's Altar, Phyrexian Altar, Thermopod,
+  Krark-Clan Ironworks, Diamond Kaleidoscope, Skirk Prospector, Kykar, Wind's Fury, Utopia Mycon, Jungle
+  Patrol, Squandered Resources, Food Chain, Titans' Nest, Workhorse, Crystalline Crawler, Cryptic
+  Trilobite, Morselhoarder, Runaway Steam-Kin, Pentad Prism, Gemstone Array, Druids' Repository, Iceberg,
+  Mana Cache, Rasputin Dreamweaver, Treasonous Ogre, Lord of the Forsaken, Ronin, Shadow Stalker (those
+  with "Activate only once each turn", such as Mana Bloom, Wall of Roots and Kozilek's Translator, aren't
+  affected). Their tiers don't show it: the checks never compare a payment with what the rules allow.
+- Approach: list such an ability once per activation the payment could make (bounded by its candidates
+  divided by what one activation takes, its counters, the life it costs, its remaining activations per
+  turn or in all, and the cost's number of symbols; not for abilities with {T}, a mana cost, which
+  `plan_with_filter` plans once, or a keyword limit such as exhaust), as `offer_sources` already lists one
+  source per use of a special action; make the sacrifice check set-wide (a matching of all the planned
+  activations' sacrifices and exiles to distinct objects, without the permanents that sacrifice themselves
+  for mana: with copies, the pairwise `sacrifices_too_much_with` would let two creatures pay for two
+  activations each of Ashnod's Altar and Phyrexian Altar, 6 mana; it already lets a Blood Pet ("Sacrifice
+  this creature: Add {B}.") both sacrifice itself and be sacrificed to Ashnod's Altar, so with Blood Pet the
+  only creature Worn Powerstone ({3}) is offered and the cast is then reversed, an over-offer of the kind
+  listed under "Not engine rules gaps" below); use copies of one ability in order, so a failing search
+  doesn't try their permutations; and in `pay_mana` keep the source of later activations, and what they
+  need, out of each activation's sacrifice choices, as `mana_reserve` keeps a cost's own source (Skirk
+  Prospector's ruling: it goes last). Tests: the three repros; Ashnod's Altar and Phyrexian Altar with two
+  creatures pay {4} and not {5}; Skirk Prospector with two other Goblins pays {R}{R}{R} and is sacrificed
+  last; Krark-Clan Ironworks with one other artifact pays {4}. Then re-sweep the cards above with
+  `--names` (Inspired Ultimatum included). Size: S-M.
+- Fixed (small-fixes-7): `sources_inner` lists such an ability once per activation (`repeat_bound`: at
+  most one per unit of mana the cost takes, bounded by its candidates per activation, counters, life and
+  remaining activations; once for {T}, a mana cost, sacrificing itself, an activation condition other than
+  turn and step, or exhaust); the planner uses the copies in order (`Planner::prev_copy`), matches what all
+  the planned activations sacrifice or exile to distinct objects (`match_sacrifices`, `Planner::
+  sac_blocked_all`, replacing the pairwise check inside the planner; a permanent a planned ability
+  sacrifices as itself is never also sacrificed, one a later activation needs only at or after that
+  activation), and bounds the units those sources add by the objects left (`Planner::capacity`); `pay_mana`
+  keeps the later activations' permanents, and what their costs need, out of each activation's sacrifice
+  and exile choices (`kept_for_later`, `Game::mana_keep`). Register: `repeatable-mana-abilities-planned-
+  per-activation`. Tests: `tests/cr/r605_003_repeatable_mana_abilities.rs` (the three repros; the two
+  Altars with two creatures pay {4} and not {5}; Skirk Prospector sacrificed last; Krark-Clan Ironworks
+  with one other artifact pays {4}; Blood Pet with Ashnod's Altar; Workhorse's counters and Treasonous
+  Ogre's life bound the activations; two Ashnod's Altars and Molt Tender, the set-wide matching).
+  Review (Nov 20): the matching took the planner's order of preference for the order of activation,
+  so Molt Tender (tapped for mana, ranked after the Altars) couldn't be tapped and then sacrificed
+  ({4} instead of {5}, pinned by the test as the answer): activations that take no other object now
+  come first, then those whose permanent another cost could take (`Planner::exec_key`), and the plan
+  is carried out in that order; and `plan_with_filter` planned a filter's cost and the rest apart, so
+  Ashnod's Altar paying Celestial Prism's {2} and three Phyrexian Altar activations were planned with
+  three creatures and the cast reversed (a regression of the repeats): the combined plan is matched
+  too. Left: a creature convoked or improvised for the spell is still in the planner's sacrifice
+  pools (`pay_mana` leaves it out when the cost is paid, so such a plan can fail and be reversed;
+  convoke's default choice doesn't count the sacrifices either), a chain of consumers taking
+  each other's permanents in an order other than the one `exec_key` gives isn't found, and the plan
+  for a cost's mana doesn't keep what the cost's own other parts sacrifice: Bone Splinters ({B},
+  "As an additional cost to cast this spell, sacrifice a creature.") with Phyrexian Altar and one
+  creature is offered and the cast reversed (on origin too), and since the repeats Fling ({1}{R})
+  with Phyrexian Altar and two creatures likewise (castability is optimistic, register
+  `castability-is-optimistic`: reversed per 733.1; with three creatures it's paid).
+  Still not planned at all (other gaps, not repeats): mana abilities whose cost taps other untapped
+  permanents ("Tap an untapped Elf you control", Birchlore Rangers, Heritage Druid, Urza, Lord High
+  Artificer, Grand Architect, Seton, Relic of Legends, Meria, Baylen, Supportive Parents, The Cabbage
+  Merchant), discards (Skirge Familiar) or exiles from hand (Cadaverous Bloom); and Squandered
+  Resources, whose mana ("any type the sacrificed land could produce") is known only once the land is
+  chosen, so `production_units` finds none while planning.
 
 ---
 

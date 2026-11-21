@@ -16,6 +16,7 @@ Aang, A Lot to Learn
 Aang, Air Nomad
 Aang, Airbending Master
 Aang, Swift Savior // Aang and La, Ocean's Fury
+Aang, at the Crossroads // Aang, Destined Savior
 Aang, the Last Airbender
 Aarakocra Sneak
 Aardvark Sloth
@@ -646,6 +647,7 @@ Amonkhet Raceway
 Amorphous Axe
 Amped Raptor
 Amphibian Downpour
+Amphibious Kavu
 Amphin Cutthroat
 Amphin Mutineer
 Amphin Pathmage
@@ -1027,6 +1029,7 @@ Archaeomancer
 Archaeomancer's Map
 Archaeomender
 Archangel
+Archangel Avacyn // Avacyn, the Purifier
 Archangel Elspeth
 Archangel of Strife
 Archangel of Thune
@@ -2121,6 +2124,7 @@ Bequeathal
 Bereaved Survivor // Dauntless Avenger
 Bereavement
 Beregond of the Guard
+Berserk
 Berserk Murlodont
 Berserkers of Blood Ridge
 Berserkers' Onslaught
@@ -4413,6 +4417,7 @@ Collective Brutality
 Collective Effort
 Collective Nightmare
 Collective Resistance
+Collective Restraint
 Collective Unconscious
 Collector Ouphe
 Collector's Cage
@@ -6885,6 +6890,7 @@ Dwarven Ruins
 Dwarven Scorcher
 Dwarven Shortsword
 Dwarven Shrine
+Dwarven Soldier
 Dwarven Song
 Dwarven Strike Force
 Dwarven Thaumaturgist
@@ -10117,6 +10123,7 @@ Goblin-town
 Goblin-town Flunkies
 Goblins of the Flarg
 Goblinslide
+God-Eternal Kefnet
 God-Eternal Oketra
 God-Eternal Rhonas
 God-Favored General
@@ -11125,6 +11132,7 @@ Hedge Troll
 Hedge Whisperer
 Hedgewitch's Mask
 Hedron Archive
+Hedron Blade
 Hedron Crab
 Hedron Crawler
 Hedron Detonator
@@ -13635,6 +13643,7 @@ Lagonna-Band Trailblazer
 Lagorin, Soul of Alacria
 Laid to Rest
 Lair of the Hydra
+Lairwatch Giant
 Lake of the Dead
 Lake-town
 Lake-town Lookout
@@ -15507,6 +15516,7 @@ Mirri, Cat Warrior
 Mirri, Weatherlight Duelist
 Mirrodin Avenged
 Mirrodin's Core
+Mirror Box
 Mirror Entity
 Mirror Image
 Mirror Mockery
@@ -19075,6 +19085,7 @@ Rapturous Moment
 Rasaad yn Bashir
 Rashel, Fist of Torm
 Rashida Scalebane
+Rashka the Slayer
 Rassilon, the War President
 Rat Colony
 Rat King, Pale Piper
@@ -21351,6 +21362,7 @@ Serra Avenger
 Serra Aviary
 Serra Bestiary
 Serra Disciple
+Serra Inquisitors
 Serra Paladin
 Serra Paragon
 Serra Redeemer
@@ -22909,6 +22921,7 @@ Sphere of Law
 Sphere of Purity
 Sphere of Reason
 Sphere of Resistance
+Sphere of Safety
 Sphere of Truth
 Sphere of the Suns
 Sphinx Mindbreaker
@@ -24121,6 +24134,7 @@ Swift Kick
 Swift Maneuver
 Swift Reckoning
 Swift Response
+Swift Silence
 Swift Spinner
 Swift Warden
 Swift Warkite
@@ -24382,6 +24396,7 @@ Tangle Hulk
 Tangle Mantis
 Tangle Spider
 Tangle Tumbler
+Tangle Wire
 Tanglebloom
 Tangleclaw Werewolf // Fibrous Entangler
 Tangled Colony
@@ -25070,6 +25085,7 @@ Thieving Otter
 Thieving Skydiver
 Thieving Sprite
 Thieving Varmint
+Thijarian Witness
 Thing Swing
 Thing from the Deep
 Thing in the Ice // Awoken Horror
@@ -25406,6 +25422,7 @@ Tiller of Flesh
 Tilling Treefolk
 Tilonalli's Crown
 Tilonalli's Knight
+Tilonalli's Summoner
 Timber Gorge
 Timber Protector
 Timber Wolves

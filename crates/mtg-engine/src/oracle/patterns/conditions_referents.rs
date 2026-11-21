@@ -1587,7 +1587,7 @@ fn other_than_referent(f: Filter, p: &PlayerRef) -> Option<Filter> {
     if !has_other(&f) {
         return Some(f);
     }
-    let PlayerRef::ControllerOf(sel) = p else {
+    let (PlayerRef::ControllerOf(sel) | PlayerRef::ControllerAsTriggered(sel)) = p else {
         return None;
     };
     fn replace(f: Filter, sel: &Sel) -> Filter {

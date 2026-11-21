@@ -327,6 +327,9 @@ Each was fixed, with a regression test citing the rules:
 | seat | Players losing at once were handled in seat order, so what happened as the first of them lost (effects ending, characteristics recomputed) depended on seats | 101.4, 104.4a | in APNAP order | same file |
 | seat | A player whose cards outside a subgame left it with them (they lost the subgame) had their main-game hand and permanents put into their library as the subgame ended, as though brought into it | 729.4, 729.5, 800.4a | such cards are left in the main game | same file |
 | seat | Who goes first in a subgame was drawn among the players in seat order; cards returning from a subgame were created in seat order | 729.2, 101.4 | APNAP order | `tests/properties/seat_symmetry.rs` (`a_subgame_is_seat_symmetric`) |
+| seat | The objects entering the battlefield together that a player orders were listed (and, with no answer, timestamped) in the order the moves were proposed, often an order of object ids, which follow seats | 613.7m, 101.4 | each player's listed by owner in APNAP order, then creation order (`order_simultaneous_entries`; register `simultaneous-entries-listed-by-owner-then-creation`) | `tests/cr/r613_7m_entry_order_listing.rs` |
+| seat | Attraction, scheme and planar decks were shuffled with the game's randomness and their cards made new objects in seat order, so the face-down cards in the command zone had other owners in a rotated game | 103.3a, 717.2, 101.4e | in APNAP order, each with its owner's randomness (`Game::rng_for`) | `tests/properties/seat_symmetry.rs` (`supplementary_decks_are_shuffled_and_renumbered_whatever_the_seats`, `a_players_supplementary_decks_are_shuffled_with_their_own_randomness`) |
+| seat | Vanguards (and conspiracies) received their start-of-game timestamps in the command zone's order, the vanguards' in seat order | 613.7i, 613.7j, 613.7m | in APNAP order (`variants::begin_game`) | `tests/cr/r609_613_variant_timestamps.rs` (`vanguards_get_their_timestamps_in_apnap_order`) |
 | copies | The exceptions of a Clone-like card's own "enter as a copy ..., except ..." applied to a copy effect it entered with otherwise: a token copy of Callidus Assassin that copied nothing as it entered had its "destroy" trigger, and so did a Clone copying it that declined the copied choice | 707.9a, 707.5, 614.12 | the exceptions belong to the copy effect the next enter-as-copy replacement creates, and are dropped if it copies nothing (`EtbInfo::own_copy_exceptions`) | `tests/cr/r707_009_copy_exceptions_and_values.rs` |
 | copies | A copy's values were read as it entered, after its own copied "as this enters" ability had changed the original: a token copy of Ixidron was a face-down 2/2 | 707.2, 614.12a | the values are fixed as the copy is determined (`EtbInfo::copy_values`); interpretation `copy-values-fixed-when-determined` | same file |
 | copies (dynamic) | A permanent entering as a copy applied the copied values' own abilities as its "as this enters" effects, with their links rather than the links they have on the copy: a Clone of Tyrannical Pitlord didn't give the chosen creature +3/+3 | 707.7, 607.2d, 614.12 | the copy effect's id is given as the copy is determined (`EtbInfo::copy_effect`), and the copied abilities are the candidates | `tests/cr/r707_007_copied_linked_abilities.rs` |
@@ -344,11 +347,13 @@ Each was fixed, with a regression test citing the rules:
 
 Not bugs in the rules, but found and handled by the properties:
 
-* Ability ids, some links (CR 607.5: links of abilities an effect gives come from the
-  ability-id counter), mana riders' ids and replacement keys are drawn from a counter shared
-  by the whole process, so they differ between two runs of the same game in one process,
-  and between a protocol game and its replay (a Clue's ability as a player investigates,
-  a delayed trigger's ability as it triggers). The comparisons rename them consistently.
+* Ability ids, mana riders' ids and replacement keys are drawn from a counter shared by
+  the whole process, so they differ between two runs of the same game in one process, and
+  between a protocol game and its replay (a Clue's ability as a player investigates, a
+  delayed trigger's ability as it triggers). The comparisons rename them consistently, and
+  links too (CR 607.5), though the links of abilities effects give are now numbered per
+  game (`ability_grants::FreshLinks`; `acquired_links` for continuously reevaluated
+  effects, gaps-residual-2).
 * Prompts name players by seat ("attacking P2") and objects by id ("Forest #53"); the
   comparison renames those.
 * Properties 5–8 found these to be the rules, not bugs: a copy of a card with an "as this
@@ -373,12 +378,6 @@ Not bugs in the rules, but found and handled by the properties:
   random games rarely reach them, and the rollback property checks those reversals only
   for what they must undo (section 3); the `a_reversed_cast_keeps_` tests and
   `tests/cr/r733_001_kept_library_actions.rs` check each kind exactly.
-* **Links of abilities continuous effects give are hashes.** Abilities a static or
-  other continuously reevaluated effect gives (`layers::acquired_ability`,
-  `ability_grants::gained_link`) get links hashed from the ability, the granter and the
-  source into 0x8000–0xbfff, recomputed each time characteristics are; two such grants to
-  one object could, very rarely, hash to the same link (CR 607.5). Links resolving
-  effects give are numbered per game (0xc000 on) and can't collide.
 * **Ability ids depend on the process.** They come from a global counter (`ability.rs`)
   and are assigned as abilities are first needed, so the ids in protocol requests
   (`action.ability`) differ between processes unless both play the same games in the same

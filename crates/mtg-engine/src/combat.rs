@@ -928,6 +928,15 @@ pub fn attack_requirements(g: &Game) -> Vec<AttackRequirement> {
     }
     // Requirements that rules of keywords and hand-written abilities define.
     out.extend(crate::kw::attack_requirements(g));
+    // A creature that can't attack at all (tapped, summoning sick, "can't attack") isn't
+    // bound by "attacks if able": its requirements ask nothing of the declaration, so a
+    // conditional one ("if Viashino Bey attacks, ... attacks if able") can't make the
+    // declarations that meet its condition obey fewer requirements (CR 508.1d; register
+    // `requirements-of-creatures-unable-to-attack`).
+    if out.iter().any(|r| r.creature().is_some()) {
+        let able: BTreeSet<ObjectId> = attack_options(g).into_iter().map(|(c, _)| c).collect();
+        out.retain(|r| r.creature().is_none_or(|c| able.contains(&c)));
+    }
     out
 }
 
@@ -1043,15 +1052,91 @@ pub fn required_attack_cost(g: &Game, creature: ObjectId, target: Entity) -> Opt
         return None;
     }
     let mut total = Cost::default();
-    for (_, cost) in &costs {
+    for (_, cost, _) in &costs {
         crate::casting::add_cost(&mut total, cost);
     }
     Some(total)
 }
 
+/// A total cost to attack or block (CR 508.1h, 509.1d), with the taxes whose cost contains
+/// {X} (a tax of "{X}, where X is ...", or War Tax's {X}; see `defined_x_costs`) apart from
+/// the others: each tax is a cost of its own (Norn's Annex rulings: "Multiple Norn's Annexes
+/// controlled by the same player will each impose a cost to attack. Players choose how they
+/// pay each cost individually."), so mana that may be spent only on costs that contain {X}
+/// pays only the taxes with {X} (CR 106.6; register `each-attack-tax-is-its-own-cost`).
+#[derive(Clone, Debug, Default)]
+pub struct Taxes {
+    /// The taxes without {X}.
+    pub plain: Cost,
+    /// The taxes with {X}.
+    pub with_x: Cost,
+}
+
+impl Taxes {
+    fn add(&mut self, cost: &Cost, has_x: bool) {
+        let to = if has_x {
+            &mut self.with_x
+        } else {
+            &mut self.plain
+        };
+        crate::casting::add_cost(to, cost);
+    }
+
+    /// The whole total cost.
+    pub fn total(&self) -> Cost {
+        let mut total = self.plain.clone();
+        crate::casting::add_cost(&mut total, &self.with_x);
+        total
+    }
+
+    /// Pays the taxes for `p` (CR 508.1i–j, 509.1e–f), each as a cost of its own: the taxes
+    /// without {X} (which only mana without that restriction can pay) first, then those
+    /// with {X} (which any mana can pay); if that fails, the other way around. Returns
+    /// false (the game rolled back to before the payment) if they can't be paid.
+    fn pay(&self, g: &mut Game, p: PlayerId, ctx: &Ctx) -> bool {
+        let parts: Vec<(&Cost, bool)> = [(&self.plain, false), (&self.with_x, true)]
+            .into_iter()
+            .filter(|(c, _)| !c.is_free())
+            .collect();
+        let pay_all = |g: &mut Game, parts: &[(&Cost, bool)]| {
+            parts.iter().all(|(c, x)| {
+                let mut ctx = ctx.clone();
+                ctx.cost_has_x = *x;
+                g.pay_cost(p, c, None, &ctx)
+            })
+        };
+        if parts.len() < 2 {
+            return pay_all(g, &parts);
+        }
+        let snapshot = g.clone();
+        if pay_all(g, &parts) {
+            return true;
+        }
+        g.roll_back(snapshot.clone());
+        let reversed: Vec<(&Cost, bool)> = parts.iter().rev().copied().collect();
+        if pay_all(g, &reversed) {
+            return true;
+        }
+        g.roll_back(snapshot);
+        false
+    }
+}
+
+/// The total cost to attack as `decl` declares, its taxes with {X} apart (see [`Taxes`]).
+pub fn attack_taxes(g: &Game, decl: &[(ObjectId, Entity)]) -> Taxes {
+    let mut taxes = Taxes::default();
+    for (a, t) in decl {
+        for (_, cost, x) in attack_costs(g, *a, *t) {
+            taxes.add(&cost, x);
+        }
+    }
+    taxes
+}
+
 /// The restrictions that make `creature` pay a cost to attack `target` (CR 508.1d,
-/// 508.1h): each one's index in [`Game::all_restrictions`], with its cost.
-fn attack_costs(g: &Game, creature: ObjectId, target: Entity) -> Vec<(usize, Cost)> {
+/// 508.1h): each one's index in [`Game::all_restrictions`], with its cost, and whether
+/// that cost contains {X}.
+fn attack_costs(g: &Game, creature: ObjectId, target: Entity) -> Vec<(usize, Cost, bool)> {
     let mut out = Vec::new();
     for (i, (s, c, r, locked)) in g.all_restrictions().into_iter().enumerate() {
         if let Restriction::AttackCost {
@@ -1084,10 +1169,9 @@ fn attack_costs(g: &Game, creature: ObjectId, target: Entity) -> Vec<(usize, Cos
                 // "{1} for each +1/+1 counter on it", "{X}, where X is the number of
                 // enchantments you control": counted from the restriction's point of view
                 // as the cost is determined (CR 508.1h).
-                out.push((
-                    i,
-                    crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx),
-                ));
+                let cost = crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx);
+                let (cost, x) = crate::defined_x_costs::fold(g, &cost, &ctx);
+                out.push((i, cost, x));
             }
         }
     }
@@ -1099,7 +1183,7 @@ fn attack_costs(g: &Game, creature: ObjectId, target: Entity) -> Vec<(usize, Cos
 fn attack_cost_sources(g: &Game, creature: ObjectId, target: Entity) -> Vec<usize> {
     attack_costs(g, creature, target)
         .into_iter()
-        .map(|(i, _)| i)
+        .map(|(i, _, _)| i)
         .collect()
 }
 
@@ -1700,16 +1784,11 @@ fn perform_attack_declaration(
             }
         }
     }
-    // CR 508.1h–j: the total cost is locked in, then paid (mana abilities may be activated).
-    let required = total_attack_cost(g, &declared);
-    if !required.is_free()
-        && !g.pay_cost(
-            ap,
-            &required,
-            None,
-            &declaring_ctx(ap, declared.iter().map(|(a, _)| *a)),
-        )
-    {
+    // CR 508.1h–j: the total cost is locked in, then paid (mana abilities may be activated),
+    // each tax as a cost of its own.
+    let taxes = attack_taxes(g, &declared);
+    let ctx = declaring_ctx(ap, declared.iter().map(|(a, _)| *a));
+    if !taxes.pay(g, ap, &ctx) {
         return false;
     }
     for (a, cost, _) in &optional {
@@ -2131,7 +2210,13 @@ fn block_restrictions_ok(
 /// Like a cost to attack, every applicable tax is a cost, even one that comes to {0}
 /// (CR 118.5, 509.1c).
 pub fn required_block_cost(g: &Game, blocker: ObjectId) -> Option<Cost> {
-    let mut total = Cost::default();
+    required_block_cost_x(g, blocker).map(|t| t.total())
+}
+
+/// [`required_block_cost`], its taxes with {X} apart (War Cadence's tax, CR 106.6; see
+/// [`Taxes`]).
+fn required_block_cost_x(g: &Game, blocker: ObjectId) -> Option<Taxes> {
+    let mut total = Taxes::default();
     let mut any = false;
     for (s, c, r, locked) in g.all_restrictions() {
         if let Restriction::BlockCost { blockers, cost } = &r {
@@ -2140,7 +2225,8 @@ pub fn required_block_cost(g: &Game, blocker: ObjectId) -> Option<Cost> {
             if g.restriction_applies(blocker, blockers, &ctx, &locked) {
                 // Scaled amounts are counted from the restriction's point of view (CR 509.1d).
                 let cost = crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx);
-                crate::casting::add_cost(&mut total, &cost);
+                let (cost, x) = crate::defined_x_costs::fold(g, &cost, &ctx);
+                total.add(&cost, x);
                 any = true;
             }
         }
@@ -2152,7 +2238,12 @@ pub fn required_block_cost(g: &Game, blocker: ObjectId) -> Option<Cost> {
 /// the costs to block at all, and those keyed to what it blocks ("can't block creatures
 /// with power 2 or greater unless you pay {1}"), once each.
 pub fn block_cost_for(g: &Game, blocker: ObjectId, blocked: &[ObjectId]) -> Option<Cost> {
-    let base = required_block_cost(g, blocker);
+    block_cost_for_x(g, blocker, blocked).map(|t| t.total())
+}
+
+/// [`block_cost_for`], its taxes with {X} apart (CR 106.6; see [`Taxes`]).
+fn block_cost_for_x(g: &Game, blocker: ObjectId, blocked: &[ObjectId]) -> Option<Taxes> {
+    let base = required_block_cost_x(g, blocker);
     let mut any = base.is_some();
     let mut total = base.unwrap_or_default();
     for (s, c, r, locked) in g.all_restrictions() {
@@ -2168,7 +2259,8 @@ pub fn block_cost_for(g: &Game, blocker: ObjectId, blocked: &[ObjectId]) -> Opti
                 && blocked.iter().any(|a| g.matches(*a, attackers, &ctx))
             {
                 let cost = crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx);
-                crate::casting::add_cost(&mut total, &cost);
+                let (cost, x) = crate::defined_x_costs::fold(g, &cost, &ctx);
+                total.add(&cost, x);
                 any = true;
             }
         }
@@ -2178,20 +2270,32 @@ pub fn block_cost_for(g: &Game, blocker: ObjectId, blocked: &[ObjectId]) -> Opti
 
 /// Total cost to block for each player (CR 509.1d).
 pub fn block_costs_by_player(g: &Game, decl: &[(ObjectId, ObjectId)]) -> Vec<(PlayerId, Cost)> {
+    block_costs_by_player_x(g, decl)
+        .into_iter()
+        .map(|(p, t)| (p, t.total()))
+        .collect()
+}
+
+/// [`block_costs_by_player`], each player's taxes with {X} apart: mana that may be spent
+/// only on costs that contain {X} pays only those (CR 106.6, 509.1d; see [`Taxes`]).
+fn block_costs_by_player_x(g: &Game, decl: &[(ObjectId, ObjectId)]) -> Vec<(PlayerId, Taxes)> {
     let mut blockers: Vec<ObjectId> = decl.iter().map(|(b, _)| *b).collect();
     blockers.sort();
     blockers.dedup();
-    let mut out: Vec<(PlayerId, Cost)> = Vec::new();
+    let mut out: Vec<(PlayerId, Taxes)> = Vec::new();
     for b in blockers {
         let blocked: Vec<ObjectId> = decl
             .iter()
             .filter(|(x, _)| *x == b)
             .map(|(_, a)| *a)
             .collect();
-        if let Some(c) = block_cost_for(g, b, &blocked) {
+        if let Some(c) = block_cost_for_x(g, b, &blocked) {
             let p = g.obj(b).controller;
             match out.iter_mut().find(|(q, _)| *q == p) {
-                Some((_, t)) => crate::casting::add_cost(t, &c),
+                Some((_, t)) => {
+                    t.add(&c.plain, false);
+                    t.add(&c.with_x, true);
+                }
                 None => out.push((p, c)),
             }
         }
@@ -2660,18 +2764,14 @@ pub fn declare_blockers_step(g: &mut Game) {
             }
         };
         // CR 509.1d–f: pay the locked-in costs to block.
-        let costs = block_costs_by_player(g, &blocks);
+        let costs = block_costs_by_player_x(g, &blocks);
         let blocks = if costs.is_empty() {
             blocks
         } else {
             let snapshot = g.clone();
-            let ok = costs.iter().all(|(p, c)| {
-                g.pay_cost(
-                    *p,
-                    c,
-                    None,
-                    &declaring_ctx(*p, blocks.iter().map(|(b, _)| *b)),
-                )
+            let ok = costs.iter().all(|(p, t)| {
+                let ctx = declaring_ctx(*p, blocks.iter().map(|(b, _)| *b));
+                t.pay(g, *p, &ctx)
             });
             if ok {
                 blocks
@@ -3720,6 +3820,8 @@ fn add_block(g: &mut Game, blocker: ObjectId, attacker: ObjectId, entered: bool)
     let Some(c) = g.combat.as_mut() else { return };
     let was_blocking = c.blockers.iter().any(|b| b.id == blocker);
     let was_blocked = c.is_blocked(attacker);
+    let blocking_before = c.blocking(blocker);
+    let blockers_before = c.blockers_of(attacker);
     match c.blockers.iter_mut().find(|x| x.id == blocker) {
         Some(bi) => bi.blocking.push(attacker),
         None => c.blockers.push(BlockerInfo {
@@ -3738,6 +3840,8 @@ fn add_block(g: &mut Game, blocker: ObjectId, attacker: ObjectId, entered: bool)
         entered,
         was_blocking,
         was_blocked,
+        blocking_before,
+        blockers_before,
     });
     if !was_blocked {
         g.emit(Event::BecameBlocked {
@@ -4280,6 +4384,32 @@ pub fn combat_trigger_matches(
                     .collect(),
             )
         }
+        (
+            TriggerCond::BlocksN {
+                blocker,
+                attacker,
+                n,
+            },
+            Event::BlockersDeclared { blocks },
+        ) => {
+            let mut per: BTreeMap<ObjectId, Vec<ObjectId>> = BTreeMap::new();
+            for (b, a) in blocks {
+                if g.matches(*a, attacker, ctx) {
+                    per.entry(*b).or_default().push(*a);
+                }
+            }
+            Some(
+                per.into_iter()
+                    .filter(|(b, as_)| as_.len() as u32 >= *n && g.matches(*b, blocker, ctx))
+                    .map(|(b, as_)| EventInfo {
+                        object: Some(b),
+                        amount: as_.len() as i32,
+                        objects: as_,
+                        ..Default::default()
+                    })
+                    .collect(),
+            )
+        }
         // Blocks added by effects or by creatures entering blocking (CR 509.3a–e, 509.4).
         (
             cond,
@@ -4289,6 +4419,8 @@ pub fn combat_trigger_matches(
                 entered,
                 was_blocking,
                 was_blocked,
+                blocking_before,
+                blockers_before,
             },
         ) => {
             let (b, a) = (*b, *a);
@@ -4332,31 +4464,61 @@ pub fn combat_trigger_matches(
                         vec![]
                     },
                 ),
-                // CR 509.3e: effects that add blockers can make the count reach N.
+                // CR 509.3e: effects that add blockers can make the count reach N: this
+                // blocker brings the number of matching blockers from below N to N,
+                // counted as of this block (one effect may add several; the abilities
+                // trigger once, as the Nth is added).
                 TriggerCond::BlockedByN {
                     attacker,
                     blocker,
                     n,
                 } => {
-                    let count = g
-                        .combat
-                        .as_ref()
-                        .map(|c| {
-                            c.blockers_of(a)
-                                .into_iter()
-                                .filter(|x| g.matches(*x, blocker, ctx))
-                                .count() as u32
-                        })
-                        .unwrap_or(0);
+                    let before = blockers_before
+                        .iter()
+                        .filter(|x| g.matches(**x, blocker, ctx))
+                        .count() as u32;
                     Some(
                         if g.matches(b, blocker, ctx)
-                            && count >= *n
-                            && count.saturating_sub(1) < *n
+                            && before < *n
+                            && before + 1 >= *n
                             && g.matches(a, attacker, ctx)
                         {
                             vec![EventInfo {
                                 object: Some(a),
-                                amount: count as i32,
+                                amount: (before + 1) as i32,
+                                ..Default::default()
+                            }]
+                        } else {
+                            vec![]
+                        },
+                    )
+                }
+                // CR 509.3e: an effect making it block one more matching attacker can
+                // make their number reach N, counted as of this block as above; never
+                // when it enters blocking (it never "blocked", CR 509.4).
+                TriggerCond::BlocksN {
+                    blocker,
+                    attacker,
+                    n,
+                } => {
+                    let mut blocked: Vec<ObjectId> = blocking_before
+                        .iter()
+                        .copied()
+                        .filter(|x| g.matches(*x, attacker, ctx))
+                        .collect();
+                    let before = blocked.len() as u32;
+                    blocked.push(a);
+                    Some(
+                        if !entered
+                            && g.matches(a, attacker, ctx)
+                            && before < *n
+                            && before + 1 >= *n
+                            && g.matches(b, blocker, ctx)
+                        {
+                            vec![EventInfo {
+                                object: Some(b),
+                                amount: (before + 1) as i32,
+                                objects: blocked,
                                 ..Default::default()
                             }]
                         } else {

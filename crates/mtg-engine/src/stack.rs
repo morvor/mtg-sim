@@ -53,6 +53,7 @@ pub fn create_stack_ability(
         source_lki: source_lki.or_else(|| Some(Box::new(g.obj(source).chars.clone()))),
         chosen_values: Default::default(),
         source_attached_to: g.obj(source).attached_to,
+        window: Default::default(),
     }));
     let _ = ability;
     let id = ObjectId(g.objects.len() as u32);
@@ -1328,6 +1329,7 @@ impl Game {
         // CR 117.2e: no player has priority while a spell or ability is resolving.
         let priority = self.turn.priority.take();
         let outer = self.resolving.replace(top);
+        crate::duration_windows::resolution_begins(self, top);
         if is_spell {
             self.resolve_spell(top);
         } else {
@@ -1360,6 +1362,20 @@ impl Game {
         ctx.cost_of = None;
         ctx.cause = None;
         ctx.x = si.x.unwrap_or(ctx.x);
+        // "When you cast this spell, ... X ...": the X of the spell as it is now (CR 107.3e,
+        // 107.3i), or as it last existed on the stack if it has left it (CR 608.2h): an
+        // effect may have changed it since the ability triggered (Unbound Flourishing's
+        // ruling: "you choose whether to double the value of X before or after that ability
+        // resolves"). A spell that left the stack keeps its last stack information.
+        if let StackKind::Triggered { source, ability } = &si.kind {
+            let cast_self = matches!(&ability.kind, AbilityKind::Triggered(tr)
+                if matches!(tr.trigger, TriggerCond::CastSpell { filter: Filter::Source, .. }));
+            if cast_self && self.obj(*source).zone == Zone::Stack {
+                if let Some(x) = self.obj(*source).stack.as_deref().and_then(|s| s.x) {
+                    ctx.x = x;
+                }
+            }
+        }
         ctx.event = si.event.clone().or(ctx.event);
         // An ability's "if it was kicked", "if you cast it from your hand" etc. refer to how
         // its source was cast.
@@ -1995,9 +2011,11 @@ fn filter_mentions_attached(f: &Filter) -> bool {
 }
 
 /// Whether the description of target slot `spec` refers to the target chosen for slot
-/// `j` ("that player", "with equal or lesser mana value": `Sel::Target(j)`).
+/// `j` ("that player", "with equal or lesser mana value": `Sel::Target(j)`; "that player or
+/// that planeswalker's controller", Searing Blaze: `PlayerRel::TargetOrController(j)`).
 fn mentions_target(spec: &TargetSpec, j: usize) -> bool {
-    format!("{:?}", spec.what).contains(&format!("Target({j})"))
+    let what = format!("{:?}", spec.what);
+    what.contains(&format!("Target({j})")) || what.contains(&format!("TargetOrController({j})"))
 }
 
 fn distinct(v: &[Entity]) -> bool {

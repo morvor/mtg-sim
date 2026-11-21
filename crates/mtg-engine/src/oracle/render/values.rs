@@ -2485,12 +2485,12 @@ impl Renderer<'_> {
             }
             Duration::UntilYourNextTurn => "until your next turn".into(),
             Duration::UntilEndOfYourNextTurn => "until the end of your next turn".into(),
-            // CR 611.2b: "until ~ leaves the battlefield" is the same duration.
             Duration::WhileSourceOnBattlefield => {
-                let me = self.me();
-                format!(
-                    "{{alt:for as long as {me} remains on the battlefield|until {me} leaves the battlefield}}"
-                )
+                format!("for as long as {} remains on the battlefield", self.me())
+            }
+            // Not the same duration: phasing out doesn't end it (CR 702.26d, 702.26f).
+            Duration::UntilSourceLeavesBattlefield => {
+                format!("until {} leaves the battlefield", self.me())
             }
             Duration::WhileYouControlSource => format!("for as long as you control {}", self.me()),
             // "until ~ is cast from exile": once it's cast, it's no longer in exile.

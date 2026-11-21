@@ -22,12 +22,18 @@ use std::time::{Duration, Instant};
 static LAST_PANIC: Mutex<Vec<(std::thread::ThreadId, String)>> = Mutex::new(Vec::new());
 
 /// Records panics (instead of printing them) so a game's panic can be reported with it.
+/// With `MTG_PANIC_BACKTRACE` set, the report includes the panic's backtrace.
 pub fn install_panic_hook() {
-    panic::set_hook(Box::new(|info| {
+    let backtrace = std::env::var_os("MTG_PANIC_BACKTRACE").is_some();
+    panic::set_hook(Box::new(move |info| {
+        let mut msg = info.to_string();
+        if backtrace {
+            msg.push_str(&format!("\n{}", std::backtrace::Backtrace::force_capture()));
+        }
         let mut v = LAST_PANIC.lock().unwrap_or_else(|e| e.into_inner());
         let me = std::thread::current().id();
         v.retain(|(t, _)| *t != me);
-        v.push((me, info.to_string()));
+        v.push((me, msg));
     }));
 }
 

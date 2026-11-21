@@ -301,7 +301,8 @@ fn scuttletide_discard_is_part_of_the_cost() {
 
 #[test]
 fn graveyard_shift_counts_itself_before_it_is_cast() {
-    cr!("601.3d", "702.34a");
+    cr!("601.3d", "601.6a", "702.34a");
+    interp!("flash-permission-conditions-judged-as-casting-begins");
     ruling!(
         "Graveyard Shift",
         "If an effect allows you to cast Graveyard Shift from your graveyard, you may cast it any time you could cast an instant if you have five or more mana values among cards in your graveyard immediately before you begin to cast it, even if moving it to the stack would reduce that number to four."

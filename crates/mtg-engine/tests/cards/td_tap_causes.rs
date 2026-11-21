@@ -5,9 +5,9 @@
 
 use crate::combat2_common::*;
 use crate::td_next_turn_durations::mana;
+use mtg_engine::ability::{Effect, Filter, Sel};
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
-use mtg_engine::ability::{Effect, Filter, Sel};
 use mtg_engine::*;
 
 #[test]
@@ -150,4 +150,44 @@ fn verity_circle_ignores_attackers_being_declared() {
     assert!(t.obj_now(vigilant).tapped);
     assert_eq!(t.hand_size(P0), hand + 1);
     assert_eq!(t.counters(rhoda, "+1/+1"), 1);
+}
+
+#[test]
+fn hylda_of_the_icy_crown_pays_and_chooses_a_mode_when_you_tap_an_opponents_creature() {
+    cr!("603.12", "700.2b", "701.26a");
+    supported("Hylda of the Icy Crown");
+    let mut t = TestGame::new(2);
+    let hylda = t.battlefield(P0, "Hylda of the Icy Crown");
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let theirs = t.battlefield(P1, "Grizzly Bears");
+    let island = t.lands(P0, "Island", 1)[0];
+    // P0 taps P1's creature: Hylda triggers; P0 pays {1}, and the reflexive ability puts
+    // a +1/+1 counter on each creature P0 controls.
+    t.answer_yes(P0, true);
+    t.answer(P0, DecisionKind::Modes, Answer::Indices(vec![1]));
+    assert!(t.g.tap_with(theirs, false, Some(P0), false));
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    // As it resolves P0 pays {1}; the reflexive ability then triggers and goes on the stack
+    // (CR 603.12), its mode chosen as it does (CR 700.2b).
+    t.resolve();
+    assert!(t.obj_now(island).tapped, "{{1}} paid");
+    assert_eq!(t.stack_len(), 1, "the reflexive trigger");
+    assert_eq!(t.counters(hylda, "+1/+1"), 0);
+    t.resolve_all();
+    assert_eq!(t.counters(hylda, "+1/+1"), 1);
+    assert_eq!(t.counters(bears, "+1/+1"), 1);
+    assert_eq!(t.counters(theirs, "+1/+1"), 0);
+    // Declining to pay: Hylda triggers again, but no reflexive trigger.
+    let (theirs, island) = (t.g.current(theirs), t.g.current(island));
+    t.g.objects[theirs.0 as usize].tapped = false;
+    t.g.untap(island);
+    t.answer_yes(P0, false);
+    assert!(t.g.tap_with(theirs, false, Some(P0), false));
+    t.settle();
+    assert_eq!(t.stack_len(), 1);
+    t.resolve();
+    assert_eq!(t.stack_len(), 0);
+    assert!(!t.obj_now(island).tapped);
+    assert_eq!(t.counters(hylda, "+1/+1"), 1);
 }

@@ -180,7 +180,9 @@ pub fn detect(g: &mut Game, ev: &Event) {
         }
         _ => {
             // "Whenever a creature deals combat damage to the monarch, its controller
-            // becomes the monarch."
+            // becomes the monarch": the object-based "its controller" is the creature's
+            // controller as the ability resolves, or as it last existed on the battlefield
+            // (CR 608.2h; `that-opponent-fixed-as-it-triggers`).
             if let Some((creature, damaged, controller)) = combat_damage_to_player(g, ev) {
                 if g.monarch == Some(damaged) {
                     sourceless_trigger(
@@ -189,7 +191,7 @@ pub fn detect(g: &mut Game, ev: &Event) {
                         damaged,
                         "Whenever a creature deals combat damage to the monarch, its controller becomes the monarch.",
                         Body::effect(Effect::BecomeMonarch {
-                            who: PlayerRef::TriggerPlayer,
+                            who: PlayerRef::ControllerOf(Box::new(Sel::TriggerObject)),
                         }),
                         EventInfo {
                             object: Some(creature),
@@ -222,6 +224,11 @@ pub fn detect_batch(g: &mut Game, batch: &[Event]) {
         }
     }
     for (controller, creatures) in by_controller {
+        // The player the trigger is for, as it triggered: the Initiative's own text says
+        // "that player takes the initiative" (the release notes: "the first player"), so
+        // the player stays fixed if those creatures change control before it resolves
+        // (an open question for CR 726.2's "the controller of those creatures":
+        // `that-opponent-fixed-as-it-triggers`).
         sourceless_trigger(
             g,
             INITIATIVE_STEAL,

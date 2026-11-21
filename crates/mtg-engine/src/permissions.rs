@@ -24,7 +24,10 @@
 //! with only the card's own permissions ([`own_permissions_only`]: rules and keywords such
 //! as flashback, which let it be cast however other permissions stand) and with all of
 //! them. A way of casting it that exists only with the others is offered once for each
-//! permission that allows it, with that permission's terms ([`attach`]).
+//! permission that allows it, with that permission's terms ([`attach`]); so is one the
+//! card's own permission allows outside its owner's hand, besides the card's own (the
+//! player is asked which they're using, by default the card's own: register
+//! `permission-choice-always-asked`).
 
 use crate::ability::*;
 use crate::casting::{matches_with_chars, CastOption};
@@ -195,7 +198,9 @@ fn in_permission_zone(g: &Game, p: PlayerId, card: ObjectId, perm: &PlayPermissi
         // "from the top of your graveyard", "from any graveyard".
         ZoneKind::Graveyard if perm.terms.any_owner => matches!(o.zone, Zone::Graveyard(_)),
         ZoneKind::Graveyard if perm.top_only => g.player(p).graveyard.last() == Some(&card),
-        ZoneKind::Graveyard => o.zone == Zone::Graveyard(p),
+        // Another player's graveyard counts as `p`'s while an effect lets them play cards
+        // there as though they were in their own (CR 609.4, Shaman's Trance).
+        ZoneKind::Graveyard => crate::as_though::in_graveyard_for(g, p, card),
         ZoneKind::Exile => o.zone == Zone::Exile,
         // "from that player's hand" (Sen Triplets): another player's hand.
         ZoneKind::Hand if perm.terms.any_owner => matches!(o.zone, Zone::Hand(_)),
@@ -426,7 +431,11 @@ pub fn effect_permitted_cards(g: &Game, p: PlayerId) -> Vec<ObjectId> {
             ZoneKind::Graveyard if perm.top_only => {
                 g.player(p).graveyard.last().copied().into_iter().collect()
             }
-            ZoneKind::Graveyard => g.player(p).graveyard.clone(),
+            ZoneKind::Graveyard => {
+                let mut cards = g.player(p).graveyard.clone();
+                cards.extend(crate::as_though::other_graveyard_cards(g, p));
+                cards
+            }
             ZoneKind::Exile => g.exile.clone(),
             ZoneKind::Hand if perm.terms.any_owner => g
                 .players
@@ -476,10 +485,17 @@ pub fn same_way(a: &CastOption, b: &CastOption) -> bool {
 /// The ways `p` may cast `card` from outside their hand: `own`, the ways its own
 /// permissions allow, and the others among `all` (the ways any permission allows), once
 /// for each permission that allows the spell it would become, with that permission's
-/// terms. A way the card's own permission allows is offered with another permission too if
-/// that one changes how it's cast (flash, an alternative cost, mana flexibility), unless
-/// it's already cast for an alternative cost of its own (flashback's cost comes with
-/// flashback's permission).
+/// terms. A way the card's own permission allows is offered with another permission too
+/// (the player announces which one they're using, Muldrotha, the Gravetide's ruling;
+/// register `permission-choice-always-asked`), unless it's already cast for an alternative
+/// cost of its own (flashback's cost comes with flashback's permission) or, outside the
+/// hand, with an additional cost of its own (retrace's comes with retrace's permission,
+/// CR 702.81a): the total cost is one permission's, not both (CR 601.2f). In the hand an
+/// own way's additional cost belongs to a timing permission ("flash if you pay {2} more"),
+/// which combines with a grant; and in the player's own hand, where the rules let them
+/// cast the card (CR 601.3), an effect's permission is offered with it only if it changes
+/// how it's cast (flash, an alternative cost, mana flexibility): Omniscience's permission
+/// to cast from the hand stands for the alternative cost it offers, a way of its own.
 pub fn attach(
     g: &Game,
     p: PlayerId,
@@ -490,7 +506,10 @@ pub fn attach(
     let mut out = own.clone();
     for opt in all {
         let is_own = own.iter().any(|o| same_way(o, &opt));
-        if is_own && opt.alt_cost.is_some() {
+        if is_own
+            && (opt.alt_cost.is_some()
+                || (opt.extra_cost.is_some() && g.obj(card).zone != Zone::Hand(p)))
+        {
             continue;
         }
         let chars = crate::spell_preview::spell_characteristics(g, p, card, &opt);
@@ -516,7 +535,7 @@ pub fn attach(
                 || perm.terms.cost_increase_each.is_some()
                 || perm.terms.spend_any_type
                 || perm.terms.spend_as_any_color;
-            if is_own && !changes_the_way {
+            if is_own && !changes_the_way && g.obj(card).zone == Zone::Hand(p) {
                 continue;
             }
             if let Some(o) = with_permission(&chars, &opt, perm) {
@@ -594,6 +613,8 @@ pub fn spell_relative_cost(cost: &Cost, mv: u32) -> Cost {
             .map(|part| match part {
                 CostPart::PayLife(v) => CostPart::PayLife(fix(v)),
                 CostPart::PayEnergy(v) => CostPart::PayEnergy(fix(v)),
+                // "{X}, where X is that spell's mana value" (Kentaro, the Smiling Cat).
+                CostPart::DefinedX(v) => CostPart::DefinedX(fix(v)),
                 // "by waterbending {X} rather than paying its mana cost, where X is its mana
                 // value" (Hama, the Bloodbender).
                 CostPart::Effect(e) => match &**e {
@@ -617,11 +638,14 @@ pub fn spell_relative_cost(cost: &Cost, mv: u32) -> Cost {
 }
 
 /// The permission `p` uses to play `card` as a land, chosen among those that allow it
-/// (CR 305.1): none if it's in their hand or a rule or its own ability lets them play it.
+/// (CR 305.1): none if it's in their hand, or if they choose the permission of a rule or of
+/// its own ability that lets them play it (mayhem; by default, register
+/// `permission-choice-always-asked`).
 pub fn choose_land_permission(g: &mut Game, p: PlayerId, card: ObjectId) -> Option<CastPermission> {
-    if g.obj(card).zone == Zone::Hand(p) || crate::kw::playable_lands(g, p).contains(&card) {
+    if g.obj(card).zone == Zone::Hand(p) {
         return None;
     }
+    let own = crate::kw::playable_lands(g, p).contains(&card);
     let chars = g.obj(card).chars.clone();
     let chars = if chars.is_land() {
         chars
@@ -632,6 +656,19 @@ pub fn choose_land_permission(g: &mut Game, p: PlayerId, card: ObjectId) -> Opti
     if perms.is_empty() {
         return None;
     }
+    if own {
+        // Its own permission (by default) or an effect's (Muldrotha, the Gravetide's ruling:
+        // "you must announce which permission you're using as you begin to play the card").
+        let mut labels = vec!["its own permission".to_string()];
+        labels.extend(perms.iter().map(|c| label(g, c)));
+        let i = g.ask_option(
+            p,
+            Some(card),
+            "Choose the permission you're using to play this land with",
+            labels,
+        );
+        return (i > 0).then(|| perms.swap_remove(i - 1));
+    }
     let refs: Vec<&CastPermission> = perms.iter().collect();
     let i = choose(g, p, card, &refs, 0, "play this land with");
     Some(perms.swap_remove(i))
@@ -639,7 +676,9 @@ pub fn choose_land_permission(g: &mut Game, p: PlayerId, card: ObjectId) -> Opti
 
 /// The way among `ways` (the same way of casting `card`, with different permissions) that
 /// `p` uses: the player announces which permission they're using (CR 601.2, 601.3). By
-/// default, the first one whose costs could be paid.
+/// default, the card's own permission if it's among them and its costs could be paid,
+/// otherwise the first one whose costs could be paid (register
+/// `permission-choice-always-asked`).
 pub fn choose_cast_permission(
     g: &mut Game,
     p: PlayerId,
@@ -649,9 +688,12 @@ pub fn choose_cast_permission(
     if ways.len() == 1 {
         return ways.swap_remove(0);
     }
+    let castable: Vec<bool> = ways.iter().map(|o| g.can_begin_cast(p, card, o)).collect();
     let default = ways
         .iter()
-        .position(|o| g.can_begin_cast(p, card, o))
+        .zip(&castable)
+        .position(|(o, c)| *c && o.permission.is_none())
+        .or_else(|| castable.iter().position(|c| *c))
         .unwrap_or(0);
     let i = {
         let perms: Vec<&CastPermission> =
@@ -660,14 +702,25 @@ pub fn choose_cast_permission(
             choose(g, p, card, &perms, default, "cast this card with")
         } else {
             // A way with the card's own permission among them.
-            let labels = ways
+            let labels: Vec<String> = ways
                 .iter()
                 .map(|o| match &o.permission {
                     Some(c) => label(g, c),
                     None => "its own permission".to_string(),
                 })
                 .collect();
-            g.ask_option(p, Some(card), "Choose the permission you're using", labels)
+            let n = labels.len();
+            match g.ask(
+                p,
+                crate::decision::Decision::ChooseOption {
+                    source: Some(card),
+                    prompt: "Choose the permission you're using".to_string(),
+                    options: labels,
+                },
+            ) {
+                crate::decision::Answer::Index(i) if i < n => i,
+                _ => default,
+            }
         }
     };
     ways.swap_remove(i.min(ways.len() - 1))
@@ -949,7 +1002,7 @@ pub fn land_played_with(g: &mut Game, perm: Option<&CastPermission>, land: Objec
 /// The permissions `g.play_grants[before..]` were just given with their terms: those
 /// with a limit ("you may cast a spell from among those cards") share a group, used up
 /// together (see [`record_use`]); one given "until you exile another card with ~" ends
-/// its source's earlier such permissions.
+/// the earlier such permissions the same ability of its source gave the same player.
 pub fn given(g: &mut Game, before: usize) {
     if before >= g.play_grants.len() {
         return;
@@ -966,15 +1019,24 @@ pub fn given(g: &mut Game, before: usize) {
             }
         }
     }
-    let newer: Vec<Option<ObjectId>> = g.play_grants[before..]
+    // "You" is the player the permission is for (CR 109.5): another player exiling a card
+    // with the same source doesn't end it (CR 611.2a). "Another card with ~" is one the same
+    // ability exiles, an ability linked to itself (CR 607.1c): one of two instances of it
+    // the source gained from different objects (Myr Welder with two Unstable Amulets) is
+    // linked only to itself (CR 607.5), so the other's exiling a card doesn't end it.
+    type Giver = (Option<ObjectId>, Option<u16>, PlayerId);
+    let giver = |gr: &crate::casting::PlayGrant| -> Giver {
+        (gr.source, gr.terms.given_by_link, gr.duration_player())
+    };
+    let newer: Vec<Giver> = g.play_grants[before..]
         .iter()
         .filter(|gr| gr.terms.until_another && gr.source.is_some())
-        .map(|gr| gr.source)
+        .map(giver)
         .collect();
     if !newer.is_empty() {
         let mut i = 0;
         g.play_grants.retain(|gr| {
-            let keep = i >= before || !(gr.terms.until_another && newer.contains(&gr.source));
+            let keep = i >= before || !(gr.terms.until_another && newer.contains(&giver(gr)));
             i += 1;
             keep
         });

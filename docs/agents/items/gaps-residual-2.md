@@ -40,3 +40,22 @@ own commit so a partial result survives.
 DONE when the four parts are landed with tests citing their rules, docs/agents/engine-gaps.md
 records them as closed, `cargo test --workspace` passes in debug with the assertions on, and the
 item's row (bugs found by the assertions and the fuzz chunk) is in docs/agents/yield.tsv.
+
+## Result (Nov 20)
+
+Scope cut by the coordinator to parts 1-3: part 4 (Inquisitor Eisenhorn) went to small-fixes-4, which
+landed it, and G32's "for each" bit to small-fixes-3. Parts 1-3 are closed in docs/agents/engine-gaps.md
+(G32 status; "Residual: hashed links of acquired abilities"; "Residual: liveness of object ids in the
+primitives", with the review's findings). Engine bugs: the payment planner sacrificing a cost's source for
+mana when the cost removes counters from it (an activation that couldn't be completed was offered); a
+face-down permanent sacrificed for its own morph cost's mana turned face up; "sacrifice this" as a cost
+counted as paid when the source had left (Withercrown's granted "you lose 1 life unless you sacrifice this
+creature" after the creature left). The source reservation is under `automatic-mana-payment`.
+
+## Found, not fixed
+
+Two seat-symmetry violations in the 500 properties games (not from this item; details and repro commands in
+docs/agents/engine-gaps.md, "Residual: liveness of object ids in the primitives", last bullet): game 175
+(face-down conspiracies in the command zone with different owners in the rotated game before the first
+turn) and game 405 (an "Order objects entering the battlefield" decision listing two objects in the
+opposite order in the rotated game).

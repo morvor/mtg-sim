@@ -118,3 +118,36 @@ fn a_copy_of_a_meld_card_exiles_both_and_they_stay_in_exile() {
     // The real Graf Rats (not owned by P0) stays.
     assert!(t.on_battlefield(rats));
 }
+
+#[test]
+fn a_token_copy_of_a_meld_card_exiles_both_and_nothing_melds() {
+    cr!("701.42b", "701.42c", "111.7");
+    // A token copy of Graf Rats has its ability (CR 707.2) and its condition holds (it's
+    // P0's, and so is Midnight Scavengers): both are exiled, but a token can't be melded,
+    // so both stay in exile, where the token then ceases to exist.
+    let mut t = TestGame::new(2);
+    let rats = t.battlefield(P0, "Graf Rats");
+    let scavengers = t.battlefield(P0, "Midnight Scavengers");
+    // The real Graf Rats is P1's (controlled by P0), so only the token's condition holds.
+    t.g.objects[rats.0 as usize].owner = P1;
+    t.g.recompute();
+    t.lands(P0, "Island", 3);
+    // "Create a token that's a copy of target creature you control."
+    let counterpart = t.hand(P0, "Cackling Counterpart");
+    t.cast(P0, counterpart).target(rats).go();
+    t.resolve();
+    let tokens: Vec<ObjectId> = t
+        .named_on_battlefield("Graf Rats")
+        .into_iter()
+        .filter(|o| !t.obj(*o).is_card())
+        .collect();
+    assert_eq!(tokens.len(), 1, "{}", t.dump_log());
+    to_combat(&mut t);
+    assert!(t.named_on_battlefield("Chittering Host").is_empty());
+    assert_eq!(t.zone(scavengers), Zone::Exile, "{}", t.dump_log());
+    assert!(t.in_exile("Midnight Scavengers"));
+    // The token went to exile and ceased to exist there.
+    assert!(!t.g.is_live(tokens[0]));
+    assert!(!t.g.exile.iter().any(|o| !t.obj(*o).is_card()));
+    assert!(t.on_battlefield(rats));
+}

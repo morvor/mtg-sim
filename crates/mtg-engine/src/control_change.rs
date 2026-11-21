@@ -42,12 +42,13 @@ pub fn plan_gain_control(
     duration: &Duration,
     ctx: &mut Ctx,
 ) -> Option<Grant> {
-    // CR 611.2b (Master Thief). A condition about the affected objects ("for as long as
-    // that creature is enchanted") is checked for them below.
+    // CR 611.2b (Master Thief): a duration that ended, also while the ability waited (as in
+    // `Game::exec`, which a simultaneous control change doesn't go through). A condition
+    // about the affected objects ("for as long as that creature is enchanted") is checked
+    // for them below.
     let about_affected = matches!(duration, Duration::WhileCondition(_));
-    if !about_affected
-        && (g.effect_expired(duration, ctx.source, ctx.controller)
-            || crate::untap_choice::ended_before_it_began(g, duration, ctx))
+    if (!about_affected && g.effect_expired(duration, ctx.source, ctx.controller))
+        || crate::duration_windows::ended(g, duration, ctx)
     {
         return None;
     }
@@ -95,6 +96,7 @@ fn bind_duration_players(g: &Game, d: &Duration, ctx: &Ctx) -> Duration {
         r,
         PlayerRef::TriggerPlayer
             | PlayerRef::TriggerMover
+            | PlayerRef::ControllerAsTriggered(_)
             | PlayerRef::Target(_)
             | PlayerRef::Iterated
     ) {

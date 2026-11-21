@@ -584,6 +584,35 @@ impl Game {
                 v.dedup();
                 v
             }
+            // "That player" of "Whenever a creature an opponent controls enters, ...": the
+            // opponent the trigger condition named, as it triggered
+            // (`that-opponent-fixed-as-it-triggers`).
+            PlayerRef::ControllerAsTriggered(sel) => {
+                let e = ctx.event.as_ref();
+                let recorded = match sel.as_ref() {
+                    Sel::TriggerObject => e.and_then(|e| e.object_controller),
+                    Sel::TriggerOtherObject => e.and_then(|e| e.other_controller),
+                    // A triggered ability's own source: its controller as the ability
+                    // triggered is the ability's controller (CR 603.3a).
+                    Sel::This
+                        if ctx.stack_obj.is_some_and(|s| {
+                            self.objects.get(s.0 as usize).is_some_and(|o| {
+                                matches!(
+                                    o.stack.as_ref().map(|si| &si.kind),
+                                    Some(crate::object::StackKind::Triggered { .. })
+                                )
+                            })
+                        }) =>
+                    {
+                        Some(ctx.controller)
+                    }
+                    _ => None,
+                };
+                match recorded {
+                    Some(p) => vec![p],
+                    None => self.eval_players_unranged(&PlayerRef::ControllerOf(sel.clone()), ctx),
+                }
+            }
             PlayerRef::OwnerOf(sel) => {
                 let mut v: Vec<PlayerId> = self
                     .eval_sel(sel, ctx)

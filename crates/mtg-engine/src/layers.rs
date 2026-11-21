@@ -287,6 +287,8 @@ impl Game {
         if self.dependent_effects_shape() != before {
             self.compute_characteristics(true);
         }
+        // The same conditions of the durations of abilities waiting on the stack.
+        crate::duration_windows::watch(self);
     }
 
     /// How many effects from resolved spells and abilities exist, and how many objects
@@ -853,6 +855,10 @@ impl Game {
             Duration::WhileSourceOnBattlefield => source.is_none_or(|s| {
                 !self.is_live(s) || self.obj(s).zone != Zone::Battlefield || self.obj(s).phased_out
             }),
+            // Phasing out isn't leaving the battlefield (CR 702.26d).
+            Duration::UntilSourceLeavesBattlefield => {
+                source.is_none_or(|s| !self.is_live(s) || self.obj(s).zone != Zone::Battlefield)
+            }
             Duration::WhileYouControlSource => source.is_none_or(|s| {
                 !self.is_live(s)
                     || self.obj(s).zone != Zone::Battlefield
@@ -1955,7 +1961,9 @@ pub fn apply_mod(
             for t in ts {
                 c.card_types.remove(*t);
             }
-            // Subtypes that no longer correspond to a card type are removed (CR 205.1b-ish).
+            // Subtypes that no longer correspond to a card type are removed (CR 205.1a; they
+            // stay removed if a later effect gives the card type back: register
+            // `subtypes-removed-with-a-card-type-stay-removed-once-it-returns`).
             let types = c.card_types;
             c.subtypes.retain(|s| subtype_still_valid(s, types));
             if !types.contains(CardType::Creature) && !types.contains(CardType::Kindred) {
@@ -2079,7 +2087,7 @@ pub fn apply_mod(
             // you do, it gains \"... if ~ is exiled ...\"", Cosima) is its own, from the
             // object it is now.
             let from = ctx.source.map(|s| if g.current(s) == _target { _target } else { s });
-            c.abilities.push(acquired_ability(a, from, _target))
+            c.abilities.push(acquired_ability(g, a, from, _target))
         }
         // Replaced by the ability itself as the effect is created (`Game::fix_mods`).
         Modification::AddThisAbility => {}
@@ -2206,29 +2214,41 @@ pub fn apply_mod(
 /// restrictions on its use apply only to it as acquired from that object (CR 602.5c),
 /// and linked abilities acquired together are linked only to each other (CR 607.5).
 /// Derived abilities are cached so their identity is stable across recomputation.
-pub fn acquired_ability(a: &Ability, from: Option<ObjectId>, target: ObjectId) -> Ability {
+pub fn acquired_ability(
+    g: &Game,
+    a: &Ability,
+    from: Option<ObjectId>,
+    target: ObjectId,
+) -> Ability {
     use std::sync::{Mutex, OnceLock};
-    static CACHE: OnceLock<Mutex<HashMap<(u64, u32), Ability>>> = OnceLock::new();
+    static CACHE: OnceLock<Mutex<HashMap<(u64, u32, u16), Ability>>> = OnceLock::new();
     let m = CACHE.get_or_init(Default::default);
     let Some(src) = from.filter(|s| *s != target) else {
         // An ability an object grants itself that names its granter ("Until end of turn,
         // Ms. Marvel gains \"Ms. Marvel's base power is ...\""): the granter is that object.
         if let Some(s) = from.filter(|_| crate::granted_by::refers_to_granter(a)) {
-            let mut g = m.lock().unwrap();
-            return g
-                .entry((a.uid, s.0 | 0x8000_0000))
+            let mut c = m.lock().unwrap();
+            return c
+                .entry((a.uid, s.0 | 0x8000_0000, a.link))
                 .or_insert_with(|| crate::granted_by::bind_granter(a, s))
                 .clone();
         }
         return a.clone();
     };
-    let mut g = m.lock().unwrap();
-    g.entry((a.uid, src.0))
+    // A link distinct from those of printed abilities and of abilities the object acquires
+    // from other objects (CR 607.5), the same each time characteristics are computed
+    // (`acquired_links`).
+    let link = crate::acquired_links::link(
+        g,
+        target,
+        crate::acquired_links::LinkKey::Given {
+            source: src,
+            link: a.link,
+        },
+    );
+    let mut c = m.lock().unwrap();
+    c.entry((a.uid, src.0, link))
         .or_insert_with(|| {
-            // A link id distinct from those of printed abilities and of abilities acquired
-            // from other objects (CR 607.5).
-            // (0x8000 to 0xbfff: below the links resolving effects give, `ability_grants`.)
-            let link = 0x8000 | ((a.link as u32 * 131 + src.0 * 31) % 0x4000) as u16;
             // "Sacrifice Blazing Torch": the object granting the ability (`granted_by`).
             let kind = if crate::granted_by::refers_to_granter(a) {
                 crate::granted_by::bind_granter(a, src).kind.clone()
@@ -2303,7 +2323,7 @@ fn drop_ungainable_subtypes(c: &mut Characteristics, orig: &Characteristics) {
     }
 }
 
-fn subtype_still_valid(s: &str, types: CardTypeSet) -> bool {
+pub(crate) fn subtype_still_valid(s: &str, types: CardTypeSet) -> bool {
     let kinds = subtype_kinds(s);
     // A subtype on several lists (Spacecraft) is valid with any of those card types.
     kinds.is_empty()

@@ -947,7 +947,9 @@ fn reasons(c: &PoolCard, abilities: &[Tracked], u: &Usage) -> Vec<String> {
             .contains(CardType::Conspiracy);
     if !supplementary && !u.cast.contains(&c.def.name) {
         let what = if c.is_land() { "played" } else { "cast" };
-        out.push(if u.offered_cast.contains(&c.def.name) {
+        out.push(if u.chosen_cast.contains(&c.def.name) {
+            format!("never {what}: chosen, but never completed")
+        } else if u.offered_cast.contains(&c.def.name) {
             format!("never {what}: offered but never chosen")
         } else if c.def.front().chars.mana_cost.is_none() && !c.is_land() {
             format!("never {what}: no mana cost")

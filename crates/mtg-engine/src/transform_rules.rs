@@ -36,6 +36,12 @@ pub struct TransformState {
 /// created (CR 701.27f).
 pub const DELAYED_CREATED: Var = vars::USER + 730;
 
+/// The variable an [`Effect::Transform`] sets to the permanents it transformed: "Then if ~
+/// didn't transform this way, ..." (Enduring Angel) asks whether it is among them, not
+/// whether its back face is up (a copy of Enduring Angel transformed back to its front face
+/// transformed all the same).
+pub const TRANSFORMED_THIS_WAY: Var = vars::USER + 731;
+
 /// `Filter::Custom`: "transformed permanent" (CR 701.27g).
 pub const TRANSFORMED: &str = "transformed";
 

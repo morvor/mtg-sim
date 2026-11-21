@@ -354,7 +354,12 @@ fn sproutback_trudge_casts_itself_from_your_graveyard_after_you_gained_life() {
 
 #[test]
 fn swift_reckoning_flash_timing_with_spell_mastery() {
-    cr!("601.3b");
+    cr!("601.3", "601.6");
+    // Swift Reckoning's spell mastery is a permission to cast it, judged as the casting
+    // begins; the general spell mastery note the data also attaches to it ("Check ... as
+    // the spell resolves to determine whether the spell mastery ability applies.") is set
+    // aside on this card (a template error, docs/RULING_DISCREPANCIES.md).
+    interp!("ruling-contradicting-oracle-gives-way");
     ruling!(
         "Swift Reckoning",
         "The number of instant and/or sorcery cards in your graveyard matters only as you begin to cast Swift Reckoning."

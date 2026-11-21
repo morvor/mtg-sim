@@ -309,7 +309,9 @@ fn life_reduced_to_or_less(block: &str, _ctx: &CompileContext) -> Option<Vec<Abi
     let m = Value::c(m.trim().parse().ok()?);
     let transformed = Condition::SelMatches(
         Sel::This,
-        Filter::Custom(crate::transform_rules::TRANSFORMED.into()),
+        Filter::In(Box::new(Sel::Var(
+            crate::transform_rules::TRANSFORMED_THIS_WAY,
+        ))),
     );
     let effect = Effect::seq(vec![
         Effect::Transform { what: Sel::This },

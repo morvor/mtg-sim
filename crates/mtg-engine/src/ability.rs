@@ -627,6 +627,12 @@ pub enum CostPart {
     /// (X is 0, CR 107.3h; nothing reduces it: it isn't a spell being cast). Only a card
     /// whose mana cost could be paid may be chosen (see `cost_sets.rs`).
     AndPayItsManaCost(Box<CostPart>),
+    /// "{X}, where X is [value]" in a cost that isn't a spell's or ability's own (an attack
+    /// tax, an alternative cost an effect offers): X generic mana, X defined by the text
+    /// (CR 107.3c) and determined as the total cost is (CR 508.1h, 601.2f). The cost still
+    /// contains {X}: mana that may be spent only on such costs may pay it (CR 106.6; see
+    /// `defined_x_costs.rs`).
+    DefinedX(Value),
 }
 
 // ---------------------------------------------------------------------------
@@ -1284,6 +1290,17 @@ pub enum PlayerRef {
     Target(u8),
     /// Controller of the object(s) selected.
     ControllerOf(Box<Sel>),
+    /// The controller the triggering object (`Sel::TriggerObject`) or the event's other
+    /// object (`Sel::TriggerOtherObject`) had as the ability triggered: "that player" /
+    /// "that opponent" whose antecedent is the trigger condition's "an opponent"
+    /// ("Whenever a creature an opponent controls enters, that player loses 1 life";
+    /// "Whenever a source an opponent controls deals damage to you, that player
+    /// sacrifices a permanent"), the same player even if the object changes control
+    /// before the ability resolves (`that-opponent-fixed-as-it-triggers`). Object-based
+    /// wordings ("its controller", "that creature's controller") are `ControllerOf`, read
+    /// as the ability resolves (CR 608.2h). Without a recorded controller, as
+    /// `ControllerOf`.
+    ControllerAsTriggered(Box<Sel>),
     /// Owner of the object(s) selected.
     OwnerOf(Box<Sel>),
     /// The player from the triggering event.
@@ -2066,6 +2083,14 @@ pub enum HistoryWindow {
     /// "this game": the events of the whole game kept for such queries (spells cast,
     /// cards cycled, damage dealt; `turn_start::kept_for_game`).
     ThisGame,
+    /// "this turn" in "if it's the first time [the trigger event] this turn" (Botanical
+    /// Brawler, Captain America, Living Legend): this turn's events up to the one the
+    /// ability triggered on, and those simultaneous with it (`EventInfo::turn_events_seen`).
+    /// The condition is about the trigger event, so what happens later doesn't change it
+    /// as the ability resolves (CR 603.4; interpretation
+    /// `first-time-is-about-the-trigger-event`). Without a trigger event (or as the ability
+    /// triggers), this turn's events so far, as [`Value::EventsThisTurn`] counts them.
+    ThisTurnUntilTriggered,
 }
 
 /// What [`Value::AsTurnBegan`] reads of a player's state as the turn began.
@@ -2290,6 +2315,11 @@ pub enum Duration {
     /// "for as long as [source] remains on the battlefield" / "for as long as you control".
     WhileSourceOnBattlefield,
     WhileYouControlSource,
+    /// "until [source] leaves the battlefield": like [`Duration::WhileSourceOnBattlefield`],
+    /// except that the source phasing out doesn't end it: phasing isn't leaving the
+    /// battlefield (CR 702.26d), and only "for as long as" durations lose track of a
+    /// phased-out permanent (CR 702.26f).
+    UntilSourceLeavesBattlefield,
     /// "for as long as [object] remains tapped" etc.
     WhileCondition(Condition),
     /// Indefinitely (e.g. "gain control of target creature").
@@ -3220,6 +3250,15 @@ pub enum Restriction {
     CantEnterBattlefield(Filter),
     /// "doesn't untap during its controller's untap step".
     DoesntUntap(Filter),
+    /// "[Permanents] don't untap during [a player]'s untap step": the permanents matching
+    /// `what`, whoever controls them, don't untap during the untap step of a player
+    /// matching `who` (CR 502.3) — "Creatures don't untap during target player's next
+    /// untap step" (Blinding Beam) covers creatures other players control that would
+    /// untap then (Seedborn Muse), as its ruling says.
+    DoesntUntapDuringUntapStepOf {
+        who: PlayerFilter,
+        what: Filter,
+    },
     /// "[Players] can't untap more than [n] [objects] during their untap steps"
     /// (modifies CR 502.3).
     MaxUntaps {
@@ -4133,6 +4172,12 @@ pub struct PlayTerms {
     /// as the permission is given).
     #[serde(default)]
     pub duration_player: Option<PlayerId>,
+    /// For an effect's permission given with `until_another`: the link of the ability
+    /// that gave it (set as the permission is given), which "another card with ~" is
+    /// relative to: an ability linked to itself (CR 607.1c), and each instance of it an
+    /// object gains is linked only to itself (CR 607.5).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub given_by_link: Option<u16>,
     /// "If that spell doesn't target a creature you control, it costs {8} more to cast
     /// this way." (Mavinda, Students' Advocate): a generic increase (CR 601.2f) for a spell
     /// cast with the permission that has no target with these qualities (relative to the
@@ -4313,6 +4358,16 @@ pub enum TriggerCond {
     BlockedByN {
         attacker: Filter,
         blocker: Filter,
+        n: u32,
+    },
+    /// "Whenever [blocker] blocks N or more [attackers]" (CR 509.3e): as blockers are
+    /// declared, if it blocks at least N attackers matching `attacker`, and when an effect
+    /// makes it block a matching attacker that brings their number to N (not when it's
+    /// put onto the battlefield blocking, as with "blocks", CR 509.3a–b). Once, not once
+    /// for each. Event object = the blocker, objects = those attackers.
+    BlocksN {
+        blocker: Filter,
+        attacker: Filter,
         n: u32,
     },
     /// "Whenever [source filter] deals (combat) damage to [recipient]".
@@ -4604,6 +4659,11 @@ pub enum BatchPer {
     /// damage): "Whenever one or more creatures an opponent controls deal combat damage to
     /// you" triggers once for each opponent whose creatures dealt it.
     OtherController,
+    /// Once per controller of the objects the events are about (`EventInfo::object`):
+    /// "Whenever one or more creatures an opponent controls attack you and aren't
+    /// blocked" triggers once for each opponent whose creatures they are (with shared team
+    /// turns, several opponents attack at once; Coveted Jewel's ruling).
+    ObjectController,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

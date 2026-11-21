@@ -7,9 +7,8 @@ use super::*;
 
 impl Renderer<'_> {
     /// "Artifacts and creatures target opponent controls don't untap during that player's
-    /// next untap step", "Creatures don't untap during target player's next untap step": a
-    /// restriction on the permanents a targeted player controls, lasting through that
-    /// player's next untap step (`turn::untap_restricted_player`).
+    /// next untap step": a restriction on the permanents a targeted player controls,
+    /// lasting through that player's next untap step (`turn::untap_restricted_player`).
     pub(crate) fn doesnt_untap_target_players(
         &mut self,
         f: &Filter,
@@ -47,6 +46,26 @@ impl Renderer<'_> {
         Some(format!(
             "{{alt:{s} doesn't untap during {{alt:its controller's|its|that player's}} next untap step|{plain} don't untap during {p} next untap step}}"
         ))
+    }
+
+    /// "Creatures don't untap during target player's next untap step" (Blinding Beam): a
+    /// restriction on every creature, whoever controls it, during that player's next
+    /// untap step (`Restriction::DoesntUntapDuringUntapStepOf`).
+    pub(crate) fn doesnt_untap_during_players_step(
+        &mut self,
+        who: &PlayerFilter,
+        what: &Filter,
+        duration: &Duration,
+    ) -> Option<String> {
+        if !matches!(duration, Duration::ThroughNextUntapStep) {
+            return None;
+        }
+        let PlayerFilter::Ref(r) = who else {
+            return None;
+        };
+        let s = self.restriction_subject(what);
+        let p = self.player(r, Case::Poss);
+        Some(format!("{s} don't untap during {p} next untap step"))
     }
 
     /// "Each player exiles the top card of their library" (`Exile { what:

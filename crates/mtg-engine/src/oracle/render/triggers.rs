@@ -893,6 +893,18 @@ impl Renderer<'_> {
                     format!("becomes blocked by {} or more {b}", number_word(*n as i32)),
                 )
             }
+            TriggerCond::BlocksN {
+                blocker,
+                attacker,
+                n,
+            } => {
+                let o = obj(self, blocker);
+                let saved = self.default_head;
+                self.default_head = Some("creature");
+                let a = self.noun_det(attacker, Det::Plural);
+                self.default_head = saved;
+                Ev::new(o, format!("blocks {} or more {a}", number_word(*n as i32)))
+            }
             TriggerCond::DealsDamage {
                 source,
                 to,
@@ -1381,7 +1393,8 @@ impl Renderer<'_> {
             // turns), revealed by the static ability next to it
             // (`kw/reveal_first_draw.rs`), if it's that kind of card.
             TriggerCond::Where { trigger, cond }
-                if matches!(trigger.as_ref(), TriggerCond::Draws { who: PlayerRel::You })
+                if matches!(trigger.as_ref(), TriggerCond::Custom(n)
+                    if n == crate::kw::reveal_first_draw::REVEALED_FIRST_DRAW)
                     && super::more_terms::first_draw_revealed(cond).is_some() =>
             {
                 let f = super::more_terms::first_draw_revealed(cond)
@@ -1895,7 +1908,8 @@ impl Renderer<'_> {
                         | BatchPer::Player
                         | BatchPer::AnyPlayer
                         | BatchPer::Recipient
-                        | BatchPer::OtherController,
+                        | BatchPer::OtherController
+                        | BatchPer::ObjectController,
                     ) => {
                         Det::OneOrMore
                     }
@@ -2224,6 +2238,11 @@ fn names_another_object(trig: &str) -> bool {
         }
         // What's attacked ("Whenever ~ attacks a battle") isn't what "it" names after.
         if i >= 1 && matches!(words[i - 1], "attacks" | "attack") {
+            continue;
+        }
+        // "Whenever ~ blocks two or more creatures, it gains first strike": what it
+        // blocks is plural, never "it".
+        if quantity && i >= 3 && words[i - 3] == "blocks" {
             continue;
         }
         // The noun: skip modifiers ("a +1/+1 counter", "a nontoken creature").
