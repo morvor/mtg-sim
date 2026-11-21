@@ -1,8 +1,9 @@
 //! However many replacement effects apply to an event, each is applied once, one after
 //! another, until none is left (CR 614.5, 616.1f): with N Hardened Scales, a creature that
-//! would get one +1/+1 counter gets 1 + N (Hardened Scales's ruling). The engine stops a
-//! chain at a depth meant only to catch loops (`Game::replace_rec`): 33 effects are the
-//! most it lets through, so 34 are cut short (the second test).
+//! would get one +1/+1 counter gets 1 + N (Hardened Scales's ruling). The engine's bound on
+//! the steps of a chain (`Game::replace_rec`, `MAX_REPLACEMENT_STEPS`) is meant only to
+//! catch loops: it once stopped a chain after 33 effects, so 34 were cut short (the second
+//! test), and a chain of one event after another takes no stack (the third).
 
 use crate::r614_audit_common::*;
 use mtg_engine::testing::*;
@@ -31,14 +32,13 @@ fn thirty_three_hardened_scales_each_add_a_counter() {
         "Hardened Scales",
         "Each additional Hardened Scales you control will increase the number of +1/+1 counters placed on a creature you control by one."
     );
-    // 33 is the longest chain the engine's depth guard lets through: a guard one level
-    // lower would leave the Bears with 33 counters.
+    // 33 was the longest chain the engine's old depth guard (`depth > 32`) let through.
     assert_eq!(battlegrowth_under_hardened_scales(33), 34);
 }
 
-/// Fails until fix: the depth guard of `Game::replace_rec` (`depth > 32`) returns the event
-/// as modified so far once 33 effects have been applied, so the 34th Hardened Scales adds
-/// nothing (the Bears get 34 counters, not 35). CR 616.1f repeats the process "until there
+/// Regression test: the depth guard of `Game::replace_rec` (`depth > 32`) returned the event
+/// as modified so far once 33 effects had been applied, so the 34th Hardened Scales added
+/// nothing (the Bears got 34 counters, not 35). CR 616.1f repeats the process "until there
 /// are no more left to apply", and CR 614.5 already bounds the chain (each effect applies
 /// once; `applied` keeps their keys).
 #[test]
@@ -49,4 +49,18 @@ fn thirty_four_hardened_scales_each_add_a_counter() {
         "Each additional Hardened Scales you control will increase the number of +1/+1 counters placed on a creature you control by one."
     );
     assert_eq!(battlegrowth_under_hardened_scales(34), 35);
+}
+
+/// 300 Hardened Scales: a chain far longer than any game needs, each step yielding one
+/// event. `Game::replace_rec` goes on with such a step's event in a loop rather than a
+/// nested call, so the chain doesn't run a test thread (2 MiB of stack) out of stack, as
+/// 300 nested frames of the debug build (about 10 KB each) would.
+#[test]
+fn three_hundred_hardened_scales_each_add_a_counter() {
+    cr!("614.5", "616.1f");
+    ruling!(
+        "Hardened Scales",
+        "Each additional Hardened Scales you control will increase the number of +1/+1 counters placed on a creature you control by one."
+    );
+    assert_eq!(battlegrowth_under_hardened_scales(300), 301);
 }

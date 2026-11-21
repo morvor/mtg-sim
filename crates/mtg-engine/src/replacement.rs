@@ -225,6 +225,13 @@ pub enum ReplKey {
 /// The key of the rules replacement for Attraction cards (CR 717.6).
 const JUNKYARD_KEY: u64 = u64::MAX - 717;
 
+/// The most steps (effects applied or declined) [`Game::replace_rec`] takes for one event
+/// and the events it becomes: a safety net against a loop, which no real chain reaches.
+/// Each effect gets one opportunity to modify an event (CR 614.5, `applied`), so a chain
+/// is as long as the effects that apply to it; the only effect that may apply again, the
+/// Attraction junkyard rule (CR 717.6), ends in the command zone, where it no longer does.
+const MAX_REPLACEMENT_STEPS: u32 = 4096;
+
 #[derive(Clone, Debug)]
 struct Candidate {
     key: ReplKey,
@@ -239,13 +246,16 @@ struct Candidate {
 }
 
 /// The replacement effects that would modify how a permanent enters the battlefield,
-/// determined as the event is first proposed (CR 614.12).
-/// They still apply if applying one of them made a permanent leave the battlefield (an
-/// "as this enters, return a permanent you control" choice returning the permanent that
-/// grants riot), as long as the permanent still enters the same way: not once a copy,
-/// control, back-face, or face-down effect has changed what applies (CR 616.1b–d, 616.1f).
-/// For several permanents entering at the same time, each one's are determined as that
-/// event is proposed, before any of their effects is applied ([`Game::entry_snapshot`]).
+/// determined from the permanent as it would exist there with the effects applied so far
+/// (CR 614.12, 616.2): taken again at each step of the event's replacement until a
+/// permanent leaves the battlefield. They still apply if applying one of them made a
+/// permanent leave the battlefield (an "as this enters, return a permanent you control"
+/// choice returning the permanent that grants riot): those that applied just before it
+/// left, as long as the permanent still enters the same way, not once a copy, control,
+/// back-face, or face-down effect has changed what applies (CR 616.1b–d, 616.1f; register
+/// `entry-effects-of-a-leaving-source`). For several permanents entering at the same time,
+/// each one's are first determined as that event is proposed, before any of their effects
+/// is applied ([`Game::entry_snapshot`]).
 pub(crate) struct EntrySnapshot {
     obj: ObjectId,
     copy_of: Option<ObjectId>,
@@ -412,220 +422,240 @@ impl Game {
 
     /// `parts_of`: an ability (its source and text) one part of which was applied to the
     /// event this one modified, whose other parts apply next (see below).
+    ///
+    /// Each step applies (or declines) one effect not yet applied to the event or the
+    /// events it became (`applied`, CR 614.5), and the process is repeated "until there are
+    /// no more left to apply" (CR 616.1f), however many there are (34 Hardened Scales). A
+    /// step that yields one event goes on in this loop, so a long chain takes no stack;
+    /// `depth`, the number of steps so far, stops only a loop ([`MAX_REPLACEMENT_STEPS`]).
     fn replace_rec(
         &mut self,
-        ev: ReplEvent,
-        applied: Vec<ReplKey>,
-        depth: u32,
+        mut ev: ReplEvent,
+        mut applied: Vec<ReplKey>,
+        mut depth: u32,
         self_only: bool,
-        snap: Option<Rc<EntrySnapshot>>,
-        parts_of: Option<(ObjectId, String)>,
+        mut snap: Option<Rc<EntrySnapshot>>,
+        mut parts_of: Option<(ObjectId, String)>,
     ) -> Vec<ReplEvent> {
-        if depth > 32 {
-            return vec![ev];
-        }
-        if self.dirty {
-            self.recompute();
-        }
-        let mut snap = snap;
-        let mut cands = match &ev {
-            // CR 614.12: which effects modify how a permanent enters, and how, is
-            // determined from the permanent as it would exist on the battlefield.
-            ReplEvent::Move(m) if m.to == Zone::Battlefield => {
-                let m = m.clone();
-                let ev2 = ev.clone();
-                let (mut entry, as_it_would_exist) = self.with_hypothetical_entry(&m, |g| {
-                    (
-                        g.replacement_candidates(&ev2, &applied, CandScope::EntryOnly),
-                        Box::new(g.obj(m.obj).chars.clone()),
-                    )
-                });
-                // The others are checked where the object is ("and it wasn't cast": it's on
-                // the stack), but what they say of the permanent ("if a nontoken creature
-                // would enter", Containment Priest) is checked against the permanent as it
-                // would exist on the battlefield (CR 614.12; Containment Priest's ruling:
-                // a noncreature card entering as a creature is exiled).
-                let outer = self.entering_chars.replace((m.obj, as_it_would_exist));
-                let mut v = self.replacement_candidates(&ev, &applied, CandScope::NotEntry);
-                self.entering_chars = outer;
-                // The entering object's own conditional entry replacements ("If ~ would
-                // enter and it wasn't cast, exile it instead") apply only if it would have
-                // that ability on the battlefield (CR 614.12: not under Humility, Primeval
-                // Spawn's ruling).
-                let own_where = |c: &Candidate| {
-                    matches!(c.key, ReplKey::Static(s, _) if s == m.obj)
-                        && matches!(c.def.event, ReplacementEvent::Where { .. })
-                };
-                if v.iter().any(own_where) {
-                    let key = |d: &ReplacementDef| serde_json::to_string(d).unwrap_or_default();
-                    let kept: Vec<String> = self.with_hypothetical_entry(&m, |g| {
-                        g.obj(m.obj)
-                            .chars
-                            .abilities
-                            .iter()
-                            .filter_map(|a| match &a.kind {
-                                AbilityKind::Static(s) => match &s.effect {
-                                    StaticEffect::Replacement(d) => Some(key(d)),
-                                    _ => None,
-                                },
-                                _ => None,
-                            })
-                            .collect()
+        loop {
+            if depth > MAX_REPLACEMENT_STEPS {
+                return vec![ev];
+            }
+            if self.dirty {
+                self.recompute();
+            }
+            let mut cands = match &ev {
+                // CR 614.12: which effects modify how a permanent enters, and how, is
+                // determined from the permanent as it would exist on the battlefield.
+                ReplEvent::Move(m) if m.to == Zone::Battlefield => {
+                    let m = m.clone();
+                    let ev2 = ev.clone();
+                    let (mut entry, as_it_would_exist) = self.with_hypothetical_entry(&m, |g| {
+                        (
+                            g.replacement_candidates(&ev2, &applied, CandScope::EntryOnly),
+                            Box::new(g.obj(m.obj).chars.clone()),
+                        )
                     });
-                    v.retain(|c| !own_where(c) || kept.contains(&key(&c.def)));
-                }
-                match &snap {
-                    // Effects that applied to the permanent as the event was proposed
-                    // still apply, even if applying another one (an "as this enters,
-                    // return a permanent" choice) removed what generated them (Rhythm of
-                    // the Wild's riot). See [`EntrySnapshot`].
-                    Some(sn)
-                        if sn.obj == m.obj
-                            && sn.copy_of == m.etb.copy_of
-                            && sn.controller == m.etb.controller
-                            && sn.face == m.etb.face
-                            && sn.transformed == m.etb.transformed
-                            && sn.face_down == m.etb.face_down
-                            && sn.battlefield.iter().any(|o| !self.battlefield.contains(o)) =>
-                    {
-                        for c in &sn.cands {
-                            if !applied.contains(&c.key) && !entry.iter().any(|e| e.key == c.key) {
-                                entry.push(c.clone());
+                    // The others are checked where the object is ("and it wasn't cast": it's on
+                    // the stack), but what they say of the permanent ("if a nontoken creature
+                    // would enter", Containment Priest) is checked against the permanent as it
+                    // would exist on the battlefield (CR 614.12; Containment Priest's ruling:
+                    // a noncreature card entering as a creature is exiled).
+                    let outer = self.entering_chars.replace((m.obj, as_it_would_exist));
+                    let mut v = self.replacement_candidates(&ev, &applied, CandScope::NotEntry);
+                    self.entering_chars = outer;
+                    // The entering object's own conditional entry replacements ("If ~ would
+                    // enter and it wasn't cast, exile it instead") apply only if it would have
+                    // that ability on the battlefield (CR 614.12: not under Humility, Primeval
+                    // Spawn's ruling).
+                    let own_where = |c: &Candidate| {
+                        matches!(c.key, ReplKey::Static(s, _) if s == m.obj)
+                            && matches!(c.def.event, ReplacementEvent::Where { .. })
+                    };
+                    if v.iter().any(own_where) {
+                        let key = |d: &ReplacementDef| serde_json::to_string(d).unwrap_or_default();
+                        let kept: Vec<String> = self.with_hypothetical_entry(&m, |g| {
+                            g.obj(m.obj)
+                                .chars
+                                .abilities
+                                .iter()
+                                .filter_map(|a| match &a.kind {
+                                    AbilityKind::Static(s) => match &s.effect {
+                                        StaticEffect::Replacement(d) => Some(key(d)),
+                                        _ => None,
+                                    },
+                                    _ => None,
+                                })
+                                .collect()
+                        });
+                        v.retain(|c| !own_where(c) || kept.contains(&key(&c.def)));
+                    }
+                    match &snap {
+                        // Effects that applied to the permanent just before applying another
+                        // one (an "as this enters, return a permanent" choice) removed what
+                        // generated them still apply (Rhythm of the Wild's riot). See
+                        // [`EntrySnapshot`].
+                        Some(sn)
+                            if sn.obj == m.obj
+                                && sn.copy_of == m.etb.copy_of
+                                && sn.controller == m.etb.controller
+                                && sn.face == m.etb.face
+                                && sn.transformed == m.etb.transformed
+                                && sn.face_down == m.etb.face_down
+                                && sn.battlefield.iter().any(|o| !self.battlefield.contains(o)) =>
+                        {
+                            for c in &sn.cands {
+                                if !applied.contains(&c.key)
+                                    && !entry.iter().any(|e| e.key == c.key)
+                                {
+                                    entry.push(c.clone());
+                                }
                             }
                         }
+                        // Until a permanent leaves, the effects that apply now, with the
+                        // effects applied so far (CR 614.12, 616.2), are the ones kept: a
+                        // copy, control, back-face or face-down effect applied meanwhile
+                        // changes what applies (Clone entering as a Rescuer Sphinx keeps
+                        // Grumgully's counter as a Sphinx, `entry-effects-of-a-leaving-source`).
+                        _ => {
+                            snap = Some(Rc::new(EntrySnapshot {
+                                obj: m.obj,
+                                copy_of: m.etb.copy_of,
+                                controller: m.etb.controller,
+                                face: m.etb.face,
+                                transformed: m.etb.transformed,
+                                face_down: m.etb.face_down,
+                                battlefield: self.battlefield.clone(),
+                                cands: entry.clone(),
+                            }));
+                        }
                     }
-                    Some(sn) if sn.obj == m.obj => {}
-                    _ => {
-                        snap = Some(Rc::new(EntrySnapshot {
-                            obj: m.obj,
-                            copy_of: m.etb.copy_of,
-                            controller: m.etb.controller,
-                            face: m.etb.face,
-                            transformed: m.etb.transformed,
-                            face_down: m.etb.face_down,
-                            battlefield: self.battlefield.clone(),
-                            cands: entry.clone(),
-                        }));
-                    }
+                    v.extend(entry);
+                    v
                 }
-                v.extend(entry);
-                v
-            }
-            _ => self.replacement_candidates(&ev, &applied, CandScope::All),
-        };
-        if self_only {
-            cands.retain(|c| c.def.self_replacement);
-        }
-        // CR 801.13: not effects that would affect objects or players outside their
-        // controller's range of influence.
-        cands.retain(|c| {
-            crate::multiplayer::range::replacement_in_range(
-                self,
-                c.controller,
-                c.source,
-                &c.def,
-                &ev,
-            )
-        });
-        // "... can't be dealt instead to another permanent or player": redirections don't
-        // apply to that damage (Whippoorwill, Lava Burst; CR 614.9).
-        if let ReplEvent::Damage { source, target, .. } = &ev {
-            if crate::prevention::damage_cant_be_prevented_or_redirected(self, *source, *target) {
-                cands.retain(|c| {
-                    !matches!(
-                        c.def.action,
-                        ReplacementAction::Redirect(_) | ReplacementAction::RedirectNext(..)
-                    )
-                });
-            }
-        }
-        if cands.is_empty() {
-            return vec![ev];
-        }
-        // CR 616.1a–e: self-replacement, then control, then copy, then back-face, then any.
-        let min_class = cands.iter().map(|c| c.class).min().unwrap();
-        cands.retain(|c| c.class == min_class);
-        let chooser = self.affected_player(&ev);
-        // The parts one printed ability of one object was compiled into ("enters with
-        // ... counters and as a Mutant", Master Biomancer) are one replacement effect (CR
-        // 616.1 chooses among effects): they're one option, and once a part is applied
-        // the others follow before any other effect is chosen.
-        let ability_of = |c: &Candidate| match (c.key, c.source) {
-            (ReplKey::Static(..), Some(s)) => Some((s, c.text.clone())),
-            _ => None,
-        };
-        let mut options_of: Vec<usize> = Vec::new();
-        for (i, c) in cands.iter().enumerate() {
-            let a = ability_of(c);
-            if a.is_none() || !options_of.iter().any(|j| ability_of(&cands[*j]) == a) {
-                options_of.push(i);
-            }
-        }
-        let next_part = parts_of
-            .as_ref()
-            .and_then(|p| cands.iter().position(|c| ability_of(c).as_ref() == Some(p)));
-        let pick = if let Some(i) = next_part {
-            i
-        } else if options_of.len() == 1 {
-            0
-        } else {
-            let shown: Vec<Candidate> = options_of.iter().map(|i| cands[*i].clone()).collect();
-            let options = self.replacement_options(&shown);
-            match self.ask(chooser, Decision::ChooseReplacement { options }) {
-                Answer::Index(i) if i < options_of.len() => options_of[i],
-                _ => 0,
-            }
-        };
-        let cand = cands.swap_remove(pick);
-        // The ability whose other parts are applied next: this one's, or the one whose
-        // parts were waiting for a choice of an earlier class (CR 616.1a–d).
-        let parts_of = match ability_of(&cand) {
-            a @ Some(_) if cands.iter().any(|c| ability_of(c) == a) => a,
-            _ if next_part.is_none() => parts_of,
-            _ => None,
-        };
-        let mut applied = applied;
-        applied.push(cand.key);
-        // Optional ("you may") replacements.
-        if cand.def.optional {
-            let who = cand.controller;
-            // The card an event moves is named when the deciding player may see it: the
-            // choice can depend on it (Library of Leng: "You can look at a randomly
-            // discarded card before deciding where it goes.").
-            let about = match &ev {
-                // (A face-down permanent has no name to show.)
-                ReplEvent::Move(m)
-                    if crate::player_control::can_see(self, who, m.obj)
-                        && !self.obj(m.obj).chars.name.is_empty() =>
-                {
-                    format!(" ({})", self.obj(m.obj).chars.name)
-                }
-                _ => String::new(),
+                _ => self.replacement_candidates(&ev, &applied, CandScope::All),
             };
-            let prompt = format!("Apply: {}?{about}", cand.text);
-            if !self.ask_yes_no(who, cand.source, &prompt, true) {
-                return self.replace_rec(ev, applied, depth + 1, self_only, snap, None);
+            if self_only {
+                cands.retain(|c| c.def.self_replacement);
             }
+            // CR 801.13: not effects that would affect objects or players outside their
+            // controller's range of influence.
+            cands.retain(|c| {
+                crate::multiplayer::range::replacement_in_range(
+                    self,
+                    c.controller,
+                    c.source,
+                    &c.def,
+                    &ev,
+                )
+            });
+            // "... can't be dealt instead to another permanent or player": redirections don't
+            // apply to that damage (Whippoorwill, Lava Burst; CR 614.9).
+            if let ReplEvent::Damage { source, target, .. } = &ev {
+                if crate::prevention::damage_cant_be_prevented_or_redirected(self, *source, *target)
+                {
+                    cands.retain(|c| {
+                        !matches!(
+                            c.def.action,
+                            ReplacementAction::Redirect(_) | ReplacementAction::RedirectNext(..)
+                        )
+                    });
+                }
+            }
+            if cands.is_empty() {
+                return vec![ev];
+            }
+            // CR 616.1a–e: self-replacement, then control, then copy, then back-face, then any.
+            let min_class = cands.iter().map(|c| c.class).min().unwrap();
+            cands.retain(|c| c.class == min_class);
+            let chooser = self.affected_player(&ev);
+            // The parts one printed ability of one object was compiled into ("enters with
+            // ... counters and as a Mutant", Master Biomancer) are one replacement effect (CR
+            // 616.1 chooses among effects): they're one option, and once a part is applied
+            // the others follow before any other effect is chosen.
+            let ability_of = |c: &Candidate| match (c.key, c.source) {
+                (ReplKey::Static(..), Some(s)) => Some((s, c.text.clone())),
+                _ => None,
+            };
+            let mut options_of: Vec<usize> = Vec::new();
+            for (i, c) in cands.iter().enumerate() {
+                let a = ability_of(c);
+                if a.is_none() || !options_of.iter().any(|j| ability_of(&cands[*j]) == a) {
+                    options_of.push(i);
+                }
+            }
+            let next_part = parts_of
+                .as_ref()
+                .and_then(|p| cands.iter().position(|c| ability_of(c).as_ref() == Some(p)));
+            let pick = if let Some(i) = next_part {
+                i
+            } else if options_of.len() == 1 {
+                0
+            } else {
+                let shown: Vec<Candidate> = options_of.iter().map(|i| cands[*i].clone()).collect();
+                let options = self.replacement_options(&shown);
+                match self.ask(chooser, Decision::ChooseReplacement { options }) {
+                    Answer::Index(i) if i < options_of.len() => options_of[i],
+                    _ => 0,
+                }
+            };
+            let cand = cands.swap_remove(pick);
+            // The ability whose other parts are applied next: this one's, or the one whose
+            // parts were waiting for a choice of an earlier class (CR 616.1a–d).
+            parts_of = match ability_of(&cand) {
+                a @ Some(_) if cands.iter().any(|c| ability_of(c) == a) => a,
+                _ if next_part.is_none() => parts_of,
+                _ => None,
+            };
+            applied.push(cand.key);
+            // Optional ("you may") replacements.
+            if cand.def.optional {
+                let who = cand.controller;
+                // The card an event moves is named when the deciding player may see it: the
+                // choice can depend on it (Library of Leng: "You can look at a randomly
+                // discarded card before deciding where it goes.").
+                let about = match &ev {
+                    // (A face-down permanent has no name to show.)
+                    ReplEvent::Move(m)
+                        if crate::player_control::can_see(self, who, m.obj)
+                            && !self.obj(m.obj).chars.name.is_empty() =>
+                    {
+                        format!(" ({})", self.obj(m.obj).chars.name)
+                    }
+                    _ => String::new(),
+                };
+                let prompt = format!("Apply: {}?{about}", cand.text);
+                if !self.ask_yes_no(who, cand.source, &prompt, true) {
+                    depth += 1;
+                    parts_of = None;
+                    continue;
+                }
+            }
+            let mut results = self.apply_replacement(&cand, ev, &applied);
+            if let ReplKey::Static(src, uid) = cand.key {
+                crate::structure::record_replacement(self, src, uid);
+            }
+            // CR 801.13a: the parts of the modified event that would have a spell or ability
+            // affect objects or players outside its controller's range of influence do nothing.
+            results.retain(|r| crate::multiplayer::range::replaced_event_in_range(self, r));
+            depth += 1;
+            if results.len() == 1 {
+                ev = results.remove(0);
+                continue;
+            }
+            let mut out = Vec::new();
+            for r in results {
+                out.extend(self.replace_rec(
+                    r,
+                    applied.clone(),
+                    depth,
+                    self_only,
+                    snap.clone(),
+                    parts_of.clone(),
+                ));
+            }
+            return out;
         }
-        let mut results = self.apply_replacement(&cand, ev, &applied);
-        if let ReplKey::Static(src, uid) = cand.key {
-            crate::structure::record_replacement(self, src, uid);
-        }
-        // CR 801.13a: the parts of the modified event that would have a spell or ability
-        // affect objects or players outside its controller's range of influence do nothing.
-        results.retain(|r| crate::multiplayer::range::replaced_event_in_range(self, r));
-        let mut out = Vec::new();
-        for r in results {
-            out.extend(self.replace_rec(
-                r,
-                applied.clone(),
-                depth + 1,
-                self_only,
-                snap.clone(),
-                parts_of.clone(),
-            ));
-        }
-        out
     }
 
     /// The options of a choice among replacement effects (CR 616.1): their texts, with the
@@ -754,6 +784,14 @@ impl Game {
                 // "as this enters" / "enters with" abilities apply instead of its own.
                 // A card entering with another face up (a modal DFC's back face played
                 // as a land, or entering transformed) has that face's abilities.
+                // Looking for the effects that modify how it enters, it's on the
+                // battlefield as it would exist there (`with_hypothetical_entry`: the
+                // copy effect and face it enters with, and "continuous effects that
+                // already exist and would apply to the permanent", CR 614.12): it has
+                // its abilities as computed there, those effects grant included (a
+                // Clone entering as a copy under Rhythm of the Wild has riot).
+                let as_it_would_exist =
+                    scope == CandScope::EntryOnly && o.zone == Zone::Battlefield;
                 let face = if m.etb.transformed {
                     Some(FaceState::Back)
                 } else {
@@ -764,6 +802,7 @@ impl Game {
                     _ => None,
                 };
                 let chars = match (m.etb.copy_of, &face_chars) {
+                    _ if as_it_would_exist => None,
                     (Some(c), _) => Some(m.etb.copied_values(self, c)),
                     (None, Some(fc)) => Some(fc),
                     (None, None) => None,

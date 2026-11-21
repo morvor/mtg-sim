@@ -112,18 +112,19 @@ fn rescuer_sphinx_returning_grumgully_still_gets_its_counter() {
     assert_eq!(plus_counters(&t, sphinx), 2);
 }
 
-/// Fails until fix: once Clone's copy effect has been applied (CR 616.1c), `Game::replace_rec`
-/// keeps the snapshot of the effects determined before it (`EntrySnapshot`, whose entering
-/// mode no longer matches) and never takes another, so no effect is kept for the permanent
-/// the copy goes on to enter as: a Clone entering as a copy of Rescuer Sphinx that returns
-/// Grumgully gets only the Sphinx's own counter, where Rescuer Sphinx itself gets
-/// Grumgully's too (the test above). The Clone has the Sphinx's replacement effect (Clone's
-/// ruling: "Any "as [this creature] enters" or "[this creature] enters with" abilities of
-/// the chosen creature will also work."), and Grumgully's effect applied to it once it was
-/// entering as the Sphinx.
+/// Regression test: once Clone's copy effect had been applied (CR 616.1c), `Game::replace_rec`
+/// kept the snapshot of the effects determined before it (`EntrySnapshot`, whose entering
+/// mode no longer matched) and never took another, so no effect was kept for the permanent
+/// the copy went on to enter as: a Clone entering as a copy of Rescuer Sphinx that returns
+/// Grumgully got only the Sphinx's own counter, where Rescuer Sphinx itself gets Grumgully's
+/// too (the test above). The Clone has the Sphinx's replacement effect (Clone's ruling: "Any
+/// "as [this creature] enters" or "[this creature] enters with" abilities of the chosen
+/// creature will also work."), and Grumgully's effect applied to it once it was entering as
+/// the Sphinx, just before Grumgully left.
 #[test]
 fn a_clone_entering_as_rescuer_sphinx_returning_grumgully_still_gets_its_counter() {
     cr!("614.12", "616.1c", "616.1f");
+    interp!("entry-effects-of-a-leaving-source");
     ruling!(
         "Clone",
         "Any \"as [this creature] enters\" or \"[this creature] enters with\" abilities of the chosen creature will also work"
@@ -136,4 +137,85 @@ fn a_clone_entering_as_rescuer_sphinx_returning_grumgully_still_gets_its_counter
     assert_eq!(t.obj_now(clone).chars.name.as_str(), "Rescuer Sphinx");
     assert!(t.in_hand(P0, "Grumgully, the Generous"));
     assert_eq!(plus_counters(&t, clone), 2);
+}
+
+/// P0 controls Metallic Mimic naming Mutant ("Each other creature you control of the chosen
+/// type enters with an additional +1/+1 counter on it.") and Master Biomancer (2/4: "Each
+/// other creature you control enters with a number of additional +1/+1 counters on it equal
+/// to this creature's power and as a Mutant in addition to its other types."), and Rescuer
+/// Sphinx enters. P0 answers the choices among replacement effects with `picks` (the default
+/// for any left) and returns Metallic Mimic with the Sphinx's ability if asked. Returns the
+/// game, the Sphinx, and the choices among replacement effects asked as the Sphinx entered.
+fn sphinx_under_biomancer_and_mimic(picks: &[usize]) -> (TestGame, ObjectId, Vec<Vec<String>>) {
+    supported("Master Biomancer");
+    supported("Metallic Mimic");
+    supported("Rescuer Sphinx");
+    let mut t = TestGame::new(2);
+    let mutant = mtg_engine::types::subtype_lists()
+        .creature
+        .iter()
+        .position(|x| x == "Mutant")
+        .expect("Mutant is a creature type");
+    t.answer(P0, DecisionKind::Option, Answer::Index(mutant));
+    let mimic = t.enter(P0, "Metallic Mimic");
+    t.settle();
+    assert!(t.obj_now(mimic).chars.has_subtype("Mutant"));
+    t.battlefield(P0, "Master Biomancer");
+    for i in picks {
+        t.answer(P0, DecisionKind::Replacement, Answer::Index(*i));
+    }
+    t.answer_yes(P0, true);
+    t.answer_choose(P0, &[obj(mimic)]);
+    let before = replacement_choices(&t).len();
+    let sphinx = t.enter(P0, "Rescuer Sphinx");
+    let asked = replacement_choices(&t)[before..]
+        .iter()
+        .map(|(p, o)| {
+            assert_eq!(*p, P0);
+            o.clone()
+        })
+        .collect();
+    (t, sphinx, asked)
+}
+
+/// An effect that became applicable through another one (CR 616.2) and whose source then
+/// leaves: P0 applies Master Biomancer's effect first, so the Sphinx would enter as a Mutant
+/// and Metallic Mimic's effect applies to it too; then the Sphinx's, returning Metallic
+/// Mimic. Mimic's effect applied to the event just before Mimic left, so it still applies:
+/// Biomancer's 2 counters, the Sphinx's 1 and Mimic's 1. (Keeping only the effects
+/// determined as the event was proposed, before Biomancer's made it a Mutant, would leave 3.)
+#[test]
+fn metallic_mimics_effect_for_a_sphinx_made_a_mutant_still_applies_once_the_sphinx_returns_it(
+) {
+    cr!("614.12", "616.1f", "616.2");
+    interp!("entry-effects-of-a-leaving-source");
+    ruling!(
+        "Rhythm of the Wild",
+        "If Rhythm of the Wild leaves the battlefield at the same time that a nontoken creature enters the battlefield (most likely because that creature has a replacement effect, such as that of Rescuer Sphinx), that creature still gets a +1/+1 counter or haste."
+    );
+    ruling!(
+        "Rescuer Sphinx",
+        "No player may take actions between the time you choose which permanent to return and the time Rescuer Sphinx is on the battlefield with a +1/+1 counter."
+    );
+    // The first choice: Master Biomancer's effect or the Sphinx's (Mimic's doesn't apply
+    // yet: the Sphinx isn't a Mutant).
+    let (_, _, asked) = sphinx_under_biomancer_and_mimic(&[]);
+    let first = &asked[0];
+    assert_eq!(first.len(), 2, "{first:?}");
+    let biomancer = option_index(first, "Master Biomancer");
+    // The second: Mimic's, now applicable (CR 616.2), or the Sphinx's.
+    let (_, _, asked) = sphinx_under_biomancer_and_mimic(&[biomancer]);
+    let second = &asked[1];
+    assert_eq!(second.len(), 2, "{second:?}");
+    assert!(
+        second.iter().any(|o| o.starts_with("Metallic Mimic")),
+        "{second:?}"
+    );
+    let sphinx_first = option_index(second, "you may return");
+    let (t, sphinx, asked) = sphinx_under_biomancer_and_mimic(&[biomancer, sphinx_first]);
+    // Mimic's effect is then the only one left: nothing more to choose.
+    assert_eq!(asked.len(), 2, "{asked:?}");
+    assert!(t.in_hand(P0, "Metallic Mimic"));
+    assert!(t.obj_now(t.g.current(sphinx)).chars.has_subtype("Mutant"));
+    assert_eq!(plus_counters(&t, sphinx), 4);
 }

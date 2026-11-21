@@ -9,12 +9,12 @@ use mtg_engine::keywords::KeywordKind;
 use mtg_engine::testing::*;
 use mtg_engine::*;
 
-/// Fails until fix: once a permanent is entering as a copy (or with another face up),
-/// `Game::replace_rec`'s candidates take its own "enters" abilities from the copiable values
-/// (or that face's characteristics) only, not from the permanent as it would exist, so the
-/// riot Rhythm of the Wild grants it is lost: Clone entering as a copy of Grizzly Bears gets
-/// neither riot's counter nor haste (Grizzly Bears entering itself gets riot, see
-/// `k702_136_riot.rs`).
+/// Regression test: once a permanent was entering as a copy, `Game::replace_rec`'s candidates
+/// took its own "enters" abilities from the copiable values only, not from the permanent as
+/// it would exist (`Game::replacement_candidates` now takes them from its characteristics
+/// in `with_hypothetical_entry`), so the riot Rhythm of the Wild grants it was lost: Clone
+/// entering as a copy of Grizzly Bears got neither riot's counter nor haste (Grizzly Bears
+/// entering itself gets riot, see `k702_136_riot.rs`).
 #[test]
 fn clone_entering_as_a_copy_under_rhythm_of_the_wild_has_riot() {
     cr!("614.12", "702.136a");
