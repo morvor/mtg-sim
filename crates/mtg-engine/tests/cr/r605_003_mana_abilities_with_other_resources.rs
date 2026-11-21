@@ -290,3 +290,47 @@ fn food_chain_mana_pays_a_creature_spells_kicker() {
     let colony = t.named_on_battlefield("Gnarlid Colony")[0];
     assert_eq!(t.counters(colony, "+1/+1"), 2);
 }
+
+#[test]
+fn creatures_druids_and_foods_tapped_for_mana_by_other_permanents() {
+    cr!("605.3a", "601.2g", "302.6");
+    interp!("automatic-mana-payment");
+    interp!("mana-abilities-planned-with-the-objects-their-costs-take");
+    ruling!(
+        "The Cabbage Merchant",
+        "If an effect refers to a Food, it means any Food artifact, not just a Food artifact token."
+    );
+    // Seton, Krosan Protector ("Tap an untapped Druid you control: Add {G}."), a Druid
+    // itself but already tapped, taps a summoning-sick Llanowar Elves (an Elf Druid).
+    let mut t = main_phase();
+    let seton = t.battlefield(P0, "Seton, Krosan Protector");
+    t.g.objects[seton.0 as usize].tapped = true;
+    let elf = t.battlefield_sick(P0, "Llanowar Elves");
+    let growth = t.hand(P0, "Giant Growth");
+    t.cast(P0, growth).target(elf).go();
+    assert!(on_stack(&t, "Giant Growth"));
+    assert!(tapped(&t, elf));
+    // Supportive Parents ("Tap two untapped creatures you control: Add one mana of any
+    // color."), already tapped, taps two new Grizzly Bears for {U}.
+    let mut t = main_phase();
+    let parents = t.battlefield(P0, "Supportive Parents");
+    t.g.objects[parents.0 as usize].tapped = true;
+    let a = t.battlefield_sick(P0, "Grizzly Bears");
+    let b = t.battlefield_sick(P0, "Grizzly Bears");
+    let opt = t.hand(P0, "Opt");
+    assert!(offered(&mut t, P0, opt));
+    t.cast(P0, opt).go();
+    assert!(on_stack(&t, "Opt"));
+    assert!(tapped(&t, a) && tapped(&t, b));
+    // The Cabbage Merchant ("Tap two untapped Foods you control: Add one mana of any
+    // color.") taps two Gingerbrutes (Artifact Creature — Food Golem).
+    let mut t = main_phase();
+    t.battlefield(P0, "The Cabbage Merchant");
+    let a = t.battlefield_sick(P0, "Gingerbrute");
+    let b = t.battlefield_sick(P0, "Gingerbrute");
+    let opt = t.hand(P0, "Opt");
+    assert!(offered(&mut t, P0, opt));
+    t.cast(P0, opt).go();
+    assert!(on_stack(&t, "Opt"));
+    assert!(tapped(&t, a) && tapped(&t, b));
+}

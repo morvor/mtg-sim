@@ -996,7 +996,11 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   tapping all of them leaves the rest unpayable. Register: `mana-abilities-planned-with-the-objects-
   their-costs-take` (and `automatic-mana-payment`, `default-cost-helpers`, `castability-is-optimistic`
   updated). Tests: `tests/cr/r605_003_mana_abilities_with_other_resources.rs`,
-  `tests/cr/r601_002g_mana_abilities_before_other_costs.rs`. Left: a chain of consumers taking each
+  `tests/cr/r601_002g_mana_abilities_before_other_costs.rs`. Partial sweep (`--names`, 411 cards:
+  the mana abilities above, the repeatable ones, and spells with additional sacrifice, discard, exile,
+  tap or return costs, convoke or improvise): no failures, no tier drops; Food Chain, Seton, Supportive
+  Parents and The Cabbage Merchant became verified; Ritual of the Machine wasn't cast in its two games
+  (a different random game: with `--games-per-card 8` it is), recorded as fuzz-cast. Left: a chain of consumers taking each
   other's permanents in an order other than `exec_key`'s isn't found (optional part 5, not done); an
   object tapped for one planned cost and then sacrificed for a later one (tap an Elf for Heritage
   Druid, then sacrifice it to Phyrexian Altar) isn't planned (under-offered, never reversed); the
