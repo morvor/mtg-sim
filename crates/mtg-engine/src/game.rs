@@ -817,6 +817,11 @@ pub struct Game {
     /// Continuous effects on permanent spells that keep applying to the permanents they
     /// become (CR 611.3d).
     pub carried_effects: Vec<u32>,
+    /// Continuous effects of static abilities that gave a spell an ability that doesn't
+    /// function on the battlefield ("Artifact spells you cast have convoke."): unlike the
+    /// effects of resolved spells and abilities on it (CR 400.7a), they don't apply to the
+    /// permanent the spell becomes (CR 400.7, 400.7b; see `next_spell`).
+    pub stack_only_effects: Vec<u32>,
     /// The continuous effects that are stickers on objects (CR 123).
     pub stickers: Vec<u32>,
     /// Game-ending bookkeeping: draws for individual players, mandatory loops (CR 104).
@@ -990,6 +995,7 @@ impl Game {
             kwa: Default::default(),
             kw_state: Default::default(),
             carried_effects: vec![],
+            stack_only_effects: vec![],
             stickers: vec![],
             end: Default::default(),
             apnap_choices: vec![],

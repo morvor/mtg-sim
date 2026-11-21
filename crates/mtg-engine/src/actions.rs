@@ -558,8 +558,12 @@ impl Game {
             // Effects of resolved spells and abilities that changed a permanent spell
             // continue to apply to the permanent it becomes (CR 112.4, 110.2b, 400.7a).
             // (Prevention effects for damage from it follow it through `Filter::Objects`,
-            // CR 400.7c.)
+            // CR 400.7c.) So do static abilities' grants of abilities that function on the
+            // battlefield (CR 400.7b), not the others (`Game::stack_only_effects`).
             for e in self.effects.iter_mut() {
+                if self.stack_only_effects.contains(&e.id) {
+                    continue;
+                }
                 if let Affected::Objects(v) = &mut e.affected {
                     for x in v.iter_mut().filter(|x| **x == old_id) {
                         *x = new_id;
@@ -809,6 +813,11 @@ impl Game {
                     }
                 }
                 for (k, n, putter) in merged {
+                    // A destination's "with X counters" for X = 0 gives it none: no event,
+                    // and no kind of counter it has none of (CR 122.1, 122.5).
+                    if n == 0 {
+                        continue;
+                    }
                     // Counters placed as it enters are part of the ETB event; replacement
                     // effects on counters still apply (CR 614.16).
                     for e in self.replace(ReplEvent::AddCounters {

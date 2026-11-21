@@ -182,11 +182,15 @@ fn mentions_source(f: &Filter) -> bool {
 pub fn spell_put_on_stack(g: &mut Game, spell: ObjectId, p: PlayerId) {
     g.recompute();
     let turn = g.turn.number;
+    // (The effects on spells gone from the stack are gone, CR 400.7.)
+    g.stack_only_effects
+        .retain(|id| g.effects.iter().any(|e| e.id == *id));
     // Waiting effects that expired ("this turn") are gone.
     g.next_spell_effects.retain(|e| {
         !(matches!(e.expires, Duration::EndOfTurn | Duration::ThisTurn) && e.created_turn != turn)
     });
-    let mut apply: Vec<(Option<ObjectId>, PlayerId, Vec<Modification>)> = Vec::new();
+    // (source, controller, what it gives the spell, whether it's a static ability's)
+    let mut apply: Vec<(Option<ObjectId>, PlayerId, Vec<Modification>, bool)> = Vec::new();
     let pending = std::mem::take(&mut g.next_spell_effects);
     let mut keep = Vec::new();
     for e in pending {
@@ -195,10 +199,10 @@ pub fn spell_put_on_stack(g: &mut Game, spell: ObjectId, p: PlayerId) {
             // "As you cast spells from your hand this turn, they gain cascade": every such
             // spell this turn, not only the next.
             if filter_has_custom(&e.filter, EACH_SPELL_THIS_TURN) {
-                apply.push((e.source, e.player, e.mods.clone()));
+                apply.push((e.source, e.player, e.mods.clone(), false));
                 keep.push(e);
             } else {
-                apply.push((e.source, e.player, e.mods));
+                apply.push((e.source, e.player, e.mods, false));
             }
         } else {
             keep.push(e);
@@ -264,16 +268,19 @@ pub fn spell_put_on_stack(g: &mut Game, spell: ObjectId, p: PlayerId) {
                 continue;
             }
             if g.matches(spell, affected, &ctx) {
-                apply.push((Some(id), o.controller, mods.clone()));
+                apply.push((Some(id), o.controller, mods.clone(), true));
             }
         }
     }
-    for (source, controller, mods) in apply {
+    for (source, controller, mods, from_static) in apply {
         let id = g.new_effect_id();
         let ts = g.new_timestamp();
-        // CR 400.7b: an ability granted to a permanent spell that functions on the
-        // battlefield (offspring's triggered ability) continues to apply to the permanent
-        // the spell becomes.
+        // CR 400.7b: an ability a static ability granted to a permanent spell that
+        // functions on the battlefield (offspring's triggered ability) continues to apply
+        // to the permanent the spell becomes; one that doesn't (convoke) doesn't. The
+        // effect of a resolved spell or ability waiting for the next spell ("The next
+        // spell you cast this turn has improvise", CR 611.2f) changed the spell's
+        // characteristics, so it does (CR 400.7a).
         let carry = mods.iter().any(functions_on_battlefield);
         g.effects.push(ContinuousEffect {
             id,
@@ -288,6 +295,8 @@ pub fn spell_put_on_stack(g: &mut Game, spell: ObjectId, p: PlayerId) {
         });
         if carry {
             g.carried_effects.push(id);
+        } else if from_static {
+            g.stack_only_effects.push(id);
         }
     }
     g.dirty = true;
@@ -329,6 +338,7 @@ pub fn grant_after_payment(g: &mut Game, spell: ObjectId) {
     for (source, controller, mods) in apply {
         let id = g.new_effect_id();
         let ts = g.new_timestamp();
+        // CR 400.7b, as in `spell_put_on_stack`.
         let carry = mods.iter().any(functions_on_battlefield);
         g.effects.push(ContinuousEffect {
             id,
@@ -343,6 +353,8 @@ pub fn grant_after_payment(g: &mut Game, spell: ObjectId) {
         });
         if carry {
             g.carried_effects.push(id);
+        } else {
+            g.stack_only_effects.push(id);
         }
     }
     g.dirty = true;
@@ -400,22 +412,34 @@ pub fn recheck_static_cast_grants(g: &mut Game, spell: ObjectId) {
     if !drop.is_empty() {
         g.effects.retain(|e| !drop.contains(&e.id));
         g.carried_effects.retain(|id| !drop.contains(id));
+        g.stack_only_effects.retain(|id| !drop.contains(id));
         g.dirty = true;
         g.recompute();
     }
 }
 
-/// Whether a granted keyword stands for an ability that functions on the battlefield
-/// (CR 400.7b).
+/// Whether a granted ability, or a granted keyword's abilities, function on the
+/// battlefield (CR 400.7b): offspring's and evoke's triggered abilities, blitz's haste and
+/// "draw a card", whatever its cost ("The blitz cost is equal to its mana cost.",
+/// `Modification::AddKeywordOwnCost`); not convoke, cascade or flash.
 fn functions_on_battlefield(m: &Modification) -> bool {
-    let Modification::AddKeyword(k) = m else {
-        return false;
-    };
-    crate::kw::derived(k).iter().any(|a| match &a.kind {
-        AbilityKind::Triggered(t) => t.zone == FunctionZone::Battlefield,
-        AbilityKind::Static(s) => s.zone == FunctionZone::Battlefield,
+    fn ability(a: &Ability) -> bool {
+        match &a.kind {
+            AbilityKind::Activated(x) => x.zone == FunctionZone::Battlefield,
+            AbilityKind::Triggered(t) => t.zone == FunctionZone::Battlefield,
+            AbilityKind::Static(s) => s.zone == FunctionZone::Battlefield,
+            AbilityKind::Keyword(k) => keyword(k),
+            AbilityKind::Spell(_) | AbilityKind::Unsupported(_) => false,
+        }
+    }
+    fn keyword(k: &crate::keywords::Keyword) -> bool {
+        crate::kw::derived(k).iter().any(ability)
+    }
+    match m {
+        Modification::AddKeyword(k) | Modification::AddKeywordOwnCost(k, _) => keyword(k),
+        Modification::AddAbility(a) => ability(a),
         _ => false,
-    })
+    }
 }
 
 /// Keywords the static abilities of objects `p` controls would make `card` gain as `p`
