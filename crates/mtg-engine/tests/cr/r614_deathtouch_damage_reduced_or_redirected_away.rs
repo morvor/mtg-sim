@@ -68,6 +68,7 @@ fn shield_applies_first_to(t: &mut TestGame, p: PlayerId, first: &'static str) {
 #[test]
 fn deathtouch_damage_lashknife_barrier_reduces_to_0_makes_no_excess_damage() {
     cr!("120.8", "120.10", "702.2c", "614.1a", "510.2");
+    interp!("deathtouch-lethal-for-excess-by-damage-dealt");
     ruling!(
         "Aegar, the Freezing Flame",
         "Even 1 damage dealt to a creature from a source with deathtouch is considered lethal damage"
@@ -101,6 +102,7 @@ fn deathtouch_damage_lashknife_barrier_reduces_to_0_makes_no_excess_damage() {
 #[test]
 fn deathtouch_damage_lancers_en_kor_redirects_makes_no_excess_damage() {
     cr!("614.9", "120.10", "702.2c", "510.2");
+    interp!("deathtouch-lethal-for-excess-by-damage-dealt");
     ruling!(
         "Aegar, the Freezing Flame",
         "Even 1 damage dealt to a creature from a source with deathtouch is considered lethal damage"
@@ -147,6 +149,7 @@ fn deathtouch_damage_lancers_en_kor_redirects_makes_no_excess_damage() {
 #[test]
 fn a_redirection_of_the_next_0_damage_deals_none_of_the_deathtouch_damage_elsewhere() {
     cr!("614.9", "120.8", "120.10", "702.2c", "510.2");
+    interp!("deathtouch-lethal-for-excess-by-damage-dealt");
     ruling!(
         "Aegar, the Freezing Flame",
         "Even 1 damage dealt to a creature from a source with deathtouch is considered lethal damage"

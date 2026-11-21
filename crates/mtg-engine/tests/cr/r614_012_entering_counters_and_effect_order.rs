@@ -170,6 +170,7 @@ fn assert_spirit_detective_mutant(t: &TestGame, escort: ObjectId, what: &str) {
 #[test]
 fn otherworldly_escort_returning_under_master_biomancer_enters_as_a_spirit_detective_mutant() {
     cr!("614.12", "616.2", "611.2e", "614.1c", "702.136a", "702.136b");
+    interp!("entry-types-added-after-what-the-effect-says-it-is");
     ruling!(
         "Rhythm of the Wild",
         "If a creature enters the battlefield with two instances of riot, you may choose to have it get two +1/+1 counters, one +1/+1 counter and haste, or two instances of haste."

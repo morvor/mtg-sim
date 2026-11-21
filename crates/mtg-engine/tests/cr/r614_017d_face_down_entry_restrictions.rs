@@ -19,6 +19,7 @@ use mtg_engine::*;
 #[test]
 fn yedoras_face_down_forest_is_checked_as_a_forest_land_card() {
     cr!("614.17d", "708.3", "708.2a");
+    interp!("face-down-entry-checked-as-the-face-down-card");
     ruling!(
         "Yedora, Grave Gardener",
         "The face-down card has no name or colors. Its only type is land, its only subtype is Forest"
