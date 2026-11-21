@@ -550,10 +550,6 @@ fn a_prevention_follow_ups_damage_is_an_event_of_its_own() {
         "Chandra's Spitfire",
         "The last ability of Chandra's Spitfire triggers just once for each event in which an opponent is dealt noncombat damage, regardless of how much damage that player is dealt."
     );
-    ruling!(
-        "Deflecting Palm",
-        "You choose a source of damage as Deflecting Palm resolves."
-    );
     supported("Chandra's Spitfire");
     supported("Deflecting Palm");
     // Two sentences, each with its own "deals" from the same source: two instructions, each

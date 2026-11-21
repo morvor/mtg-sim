@@ -390,6 +390,59 @@ fn extractor_demon_a_bear_leaving_with_an_owner_out_of_range_triggers_it() {
 }
 
 #[test]
+fn extractor_demon_a_commander_put_into_the_command_zone_is_judged_by_its_controller() {
+    cr!("801.7", "801.7a", "603.10a", "903.9b");
+    supported("Extractor Demon");
+    // CR 801.7a's example with a commander that goes to the command zone instead of its
+    // owner's hand (CR 903.9b): Isamaru, Hound of Konda, a commander that P2 (outside P0's
+    // range) owns and P1 (within it) controls, is returned to its owner's hand, and P2 puts
+    // it into the command zone instead. The leaves-the-battlefield event is judged as
+    // Isamaru last existed on the battlefield, under P1's control (CR 603.10a), not as the
+    // card in the command zone, under its owner's: P0's Extractor Demon triggers.
+    let mut t = TestGame::with_config(
+        5,
+        GameConfig {
+            range_of_influence: Some(1),
+            ..GameConfig::commander_game()
+        },
+    );
+    t.battlefield(P0, "Extractor Demon");
+    let cmdr = t.battlefield(P2, "Isamaru, Hound of Konda");
+    t.g.objects[cmdr.0 as usize].is_commander = true;
+    let name = t.obj(cmdr).card.as_ref().unwrap().name.clone();
+    t.g.players[P2.idx()].commander_names.push(name);
+    apply(
+        &mut t,
+        P1,
+        Effect::GainControl {
+            what: Sel::Target(0),
+            who: PlayerRef::You,
+            duration: Duration::Permanent,
+        },
+        &[cmdr],
+    );
+    assert_eq!(t.obj_now(cmdr).controller, P1);
+    t.answer_yes(P2, true);
+    apply(
+        &mut t,
+        P1,
+        Effect::Move {
+            what: Sel::Target(0),
+            to: Destination::zone(ZoneKind::Hand),
+        },
+        &[cmdr],
+    );
+    t.settle();
+    assert_eq!(
+        t.g.find_in_zone(Zone::Command, "Isamaru, Hound of Konda")
+            .len(),
+        1,
+        "its owner put it into the command zone"
+    );
+    assert_eq!(t.stack_len(), 1, "{}", t.dump_log());
+}
+
+#[test]
 fn pyroclasm_damages_only_creatures_within_alexs_range() {
     cr!("801.10");
     cr_example!("801.10", "Pyroclasm");

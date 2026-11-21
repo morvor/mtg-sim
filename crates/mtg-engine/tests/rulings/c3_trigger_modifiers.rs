@@ -228,6 +228,33 @@ fn elesh_norn_doesnt_stop_an_opponents_delayed_triggered_ability() {
 }
 
 #[test]
+fn elesh_norn_doesnt_double_your_delayed_triggered_ability() {
+    cr!("603.2d", "603.7e");
+    interp!("delayed-abilities-arent-abilities-of-permanents");
+    supported("Thunder of Unity");
+    supported("Elesh Norn, Mother of Machines");
+    // The other half: "If a permanent entering causes a triggered ability of a permanent you
+    // control to trigger, that ability triggers an additional time." refers only to the
+    // triggered abilities the permanent has, not to the delayed ones its abilities create
+    // (CR 603.2d). Thunder of Unity's chapter II ability triggers once for a creature
+    // entering under your Elesh Norn.
+    let mut t = TestGame::new(2);
+    let saga = t.battlefield(P0, "Thunder of Unity");
+    for _ in 0..2 {
+        t.g.add_counters(Entity::Object(saga), counters::LORE, 1, None);
+        t.g.flush_events();
+        t.resolve_all();
+    }
+    assert_eq!(t.life(P0), 18, "chapter I: you draw two cards and you lose 2 life");
+    t.battlefield(P0, "Elesh Norn, Mother of Machines");
+    t.enter(P0, "Grizzly Bears");
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "it triggers once");
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1)), (19, 19));
+}
+
+#[test]
 fn panoptic_projektor_face_up_triggers_twice() {
     cr!("603.2d");
     ruling!(
