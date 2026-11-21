@@ -628,8 +628,8 @@ From [`docs/RULING_DISCREPANCIES.md`](RULING_DISCREPANCIES.md), where each entry
 
 | Kind | open for review | decided | reported | confirmed | Total |
 |---|---:|---:|---:|---:|---:|
-| template error | 11 | 1 | 0 | 0 | 12 |
-| copying error | 3 | 0 | 0 | 0 | 3 |
+| template error | 9 | 1 | 0 | 0 | 10 |
+| copying error | 5 | 0 | 0 | 0 | 5 |
 | misattached | 13 | 0 | 0 | 0 | 13 |
 | inconsistent | 6 | 0 | 0 | 1 | 7 |
 | outdated | 40 | 0 | 0 | 0 | 40 |
@@ -637,7 +637,7 @@ From [`docs/RULING_DISCREPANCIES.md`](RULING_DISCREPANCIES.md), where each entry
 | misleading | 0 | 1 | 0 | 0 | 1 |
 | all | 77 | 2 | 0 | 1 | 80 |
 
-### Template error (12)
+### Template error (10)
 
 | Entry | Status | Card | Ruling date |
 |---|---|---|---|
@@ -648,19 +648,19 @@ From [`docs/RULING_DISCREPANCIES.md`](RULING_DISCREPANCIES.md), where each entry
 | [Acolyte Hybrid: "you" for "its controller"](RULING_DISCREPANCIES.md#acolyte-hybrid-you-for-its-controller) | open for review | Acolyte Hybrid | 2022-10-07 |
 | [Sakashima's Protege: "only a creature" for "any permanent"](RULING_DISCREPANCIES.md#sakashimas-protege-only-a-creature-for-any-permanent) | open for review | Sakashima's Protege | 2020-11-10 |
 | [The Destined White Mage: "second ability" for its third](RULING_DISCREPANCIES.md#the-destined-white-mage-second-ability-for-its-third) | open for review | The Destined White Mage | 2025-10-02 |
-| [Taeko, the Patient Avalanche, Slinza, the Spiked Stampede, Syndicate Heavy and Sorin of House Markov: a hybrid mana symbol written as two mana symbols](RULING_DISCREPANCIES.md#taeko-the-patient-avalanche-slinza-the-spiked-stampede-syndicate-heavy-and-sorin-of-house-markov-a-hybrid-mana-symbol-written-as-two-mana-symbols) | open for review | Taeko, the Patient Avalanche, Slinza, the Spiked Stampede, Syndicate Heavy and 1 more | 2024-02-02, 2024-06-07, 2024-11-08 |
 | [Shredder, Shadow Master: "his last ability" for his first](RULING_DISCREPANCIES.md#shredder-shadow-master-his-last-ability-for-his-first) | open for review | Shredder, Shadow Master | 2026-01-27 |
-| [Siege of Towers: "copy Shattering Spree" for "copy Siege of Towers"](RULING_DISCREPANCIES.md#siege-of-towers-copy-shattering-spree-for-copy-siege-of-towers) | open for review | Siege of Towers | 2024-01-12 |
 | [Swift Reckoning: the spell mastery note "as the spell resolves" on a spell mastery that lets it be cast with flash](RULING_DISCREPANCIES.md#swift-reckoning-the-spell-mastery-note-as-the-spell-resolves-on-a-spell-mastery-that-lets-it-be-cast-with-flash) | open for review | Swift Reckoning | 2015-06-22 |
 | [Seraph: "after being exiled" for a creature put into a graveyard](RULING_DISCREPANCIES.md#seraph-after-being-exiled-for-a-creature-put-into-a-graveyard) | decided | Seraph | 2007-09-16 |
 
-### Copying error (3)
+### Copying error (5)
 
 | Entry | Status | Card | Ruling date |
 |---|---|---|---|
 | [Run Out of Town: "controller" for "owner"](RULING_DISCREPANCIES.md#run-out-of-town-controller-for-owner) | open for review | Run Out of Town | 2022-04-29 |
 | [Sanguine Spy: "cards you control" for "cards in your graveyard"](RULING_DISCREPANCIES.md#sanguine-spy-cards-you-control-for-cards-in-your-graveyard) | open for review | Sanguine Spy | 2022-04-29 |
 | [Heroes' Podium: "in addition to being a land" for an artifact](RULING_DISCREPANCIES.md#heroes-podium-in-addition-to-being-a-land-for-an-artifact) | open for review | Heroes' Podium | 2014-02-01 |
+| [Taeko, the Patient Avalanche, Slinza, the Spiked Stampede, Syndicate Heavy and Sorin of House Markov: a hybrid mana symbol written as two mana symbols](RULING_DISCREPANCIES.md#taeko-the-patient-avalanche-slinza-the-spiked-stampede-syndicate-heavy-and-sorin-of-house-markov-a-hybrid-mana-symbol-written-as-two-mana-symbols) | open for review | Taeko, the Patient Avalanche, Slinza, the Spiked Stampede, Syndicate Heavy and 1 more | 2024-02-02, 2024-06-07, 2024-11-08 |
+| [Siege of Towers: "copy Shattering Spree" for "copy Siege of Towers"](RULING_DISCREPANCIES.md#siege-of-towers-copy-shattering-spree-for-copy-siege-of-towers) | open for review | Siege of Towers | 2024-01-12 |
 
 ### Misattached (13)
 
