@@ -12,6 +12,8 @@
 //!   `shield-divided-among-recipients`) gives a recipient its part only once, even when
 //!   more of the same source's damage is redirected to it (Pariah, CR 614.9), so the rest
 //!   of the shield is left for the other recipients' parts.
+//! - A part goes with the damage it's on when that damage is redirected before the effect
+//!   is applied to it (both entries), even a part of 0.
 
 use crate::r614_audit_common::*;
 use mtg_engine::decision::{Agent, Answer, Decision, PassiveAgent};
@@ -227,9 +229,11 @@ fn a_divided_shield_gives_a_recipient_its_part_once_when_more_damage_is_redirect
     }
 }
 
-/// Fails until fix: a part put on damage that's redirected before the effect is applied to
-/// it is lost (`per_source_division` is keyed by the damage's recipient, and the redirected
-/// damage finds the new recipient's part, already used), so the shield prevents 2, not 3.
+/// Regression test: a part put on damage that was redirected before the effect was applied
+/// to it was lost (`per_source_division` is keyed by the damage's recipient, and the
+/// redirected damage found the new recipient's part, already used), so the shield prevented
+/// 2, not 3. The redirection now moves the part with the damage
+/// (`Game::move_division_parts`).
 #[test]
 fn a_divided_shields_part_goes_with_damage_redirected_before_the_shield_is_applied() {
     cr!("615.7", "614.9", "616.1", "616.1e", "510.2");
@@ -252,9 +256,9 @@ fn a_divided_shields_part_goes_with_damage_redirected_before_the_shield_is_appli
     }
 }
 
-/// Fails until fix: as for the shield above, Cover of Winter's part for P0 is lost when the
-/// damage to P0 is redirected before the Cover is applied to it, so 1 of the Dreadmaw's
-/// damage is prevented, not X = 2.
+/// Regression test: as for the shield above, Cover of Winter's part for P0 was lost when the
+/// damage to P0 was redirected before the Cover was applied to it, so 1 of the Dreadmaw's
+/// damage was prevented, not X = 2.
 #[test]
 fn a_cover_of_winter_part_goes_with_damage_redirected_before_the_cover_is_applied() {
     cr!("615.1a", "614.9", "616.1", "616.1e", "702.19b");
@@ -282,5 +286,59 @@ fn a_cover_of_winter_part_goes_with_damage_redirected_before_the_cover_is_applie
         assert_eq!(t.life(P0), 20, "{first} first");
         assert!(t.on_battlefield(mastodon), "{first} first");
         assert_eq!(damage_on(&t, mastodon), 4, "{first} first");
+    }
+}
+
+/// A part of 0 goes with redirected damage too: Pariah enchants P0's Grizzly Bears, which
+/// the attackers don't damage, and P0 divides Divine Deflection's 3 as 1 to the Mastodon
+/// (blocking the Dreadmaw), 0 to P0 and 2 to the Wall (blocking the Elephant). The
+/// Dreadmaw's 1 to P0 is dealt to the Bears instead, with P0's part of the shield, none, so
+/// the shield prevents none of it (as it prevents none of it applied first, to P0) and the
+/// Wall's 2 is still there for the Wall: the Bears are dealt 1, the Mastodon 4, the Wall 1.
+/// (Leaving the Bears' damage with no part at all would let the shield prevent it, taking
+/// 1 of the Wall's part.)
+#[test]
+fn a_divided_shields_part_of_0_goes_with_damage_redirected_to_a_creature_dealt_none() {
+    cr!("615.7", "614.9", "616.1", "616.1e", "510.2");
+    interp!("shield-divided-among-recipients");
+    ruling!(
+        "Divine Deflection",
+        "you choose which of that damage to prevent if the chosen value for X"
+    );
+    supported("Divine Deflection");
+    supported("Pariah");
+    for first in ["Pariah", "Divine Deflection"] {
+        let mut t = TestGame::new(2);
+        let mastodon = t.battlefield(P0, "Siege Mastodon");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        let pariah = t.battlefield(P0, "Pariah");
+        assert!(t.g.attach(pariah, obj(bears)), "Pariah enchants the Bears");
+        t.g.recompute();
+        let wall = t.battlefield(P0, "Wall of Wood");
+        let wurm = t.battlefield(P1, "Colossal Dreadmaw");
+        let elephant = t.battlefield(P1, "Wild Elephant");
+        t.set_step(P1, Step::PrecombatMain);
+        t.lands(P0, "Plains", 1);
+        t.lands(P0, "Wastes", 3);
+        let deflection = t.hand(P0, "Divine Deflection");
+        t.cast(P0, deflection).x(3).target(Entity::Player(P1)).go();
+        t.resolve_all();
+        p0_answers(
+            &mut t,
+            vec![(obj(mastodon), 1), (Entity::Player(P0), 0), (obj(wall), 2)],
+            first,
+        );
+        t.attack(
+            &[(wurm, Entity::Player(P0)), (elephant, Entity::Player(P0))],
+            &[(mastodon, wurm), (wall, elephant)],
+        );
+        let asked = divisions(&t);
+        assert_eq!(asked.len(), 1, "{asked:?}");
+        assert!(!asked[0].contains(&obj(bears)), "{asked:?}");
+        assert_eq!(t.life(P0), 20, "{first} first");
+        assert_eq!(damage_on(&t, bears), 1, "{first} first");
+        assert_eq!(damage_on(&t, mastodon), 4, "{first} first");
+        assert_eq!(damage_on(&t, wall), 1, "{first} first: the Wall's part is its own");
+        assert_eq!(t.life(P1), 17, "{first} first");
     }
 }

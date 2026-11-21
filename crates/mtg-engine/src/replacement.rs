@@ -2542,6 +2542,7 @@ impl Game {
                 match new_target {
                     // CR 614.9: redirection to something no longer valid does nothing.
                     Some(t) if self.valid_damage_recipient(t) => {
+                        self.move_division_parts(source, target, t, amount, applied);
                         vec![ReplEvent::Damage {
                             source,
                             target: t,
@@ -2602,6 +2603,7 @@ impl Game {
                     let d = &mut self.per_source_division[d].3;
                     *d = d.saturating_sub(moved);
                 }
+                self.move_division_parts(source, target, to, moved, applied);
                 if let Some(i) = inst {
                     let rem = shield - moved;
                     self.replacements[i].remaining = Some(rem);
@@ -2665,6 +2667,48 @@ impl Game {
                 vec![ev]
             }
             (_, ev) => vec![ev],
+        }
+    }
+
+    /// `amount` of the damage `source` would deal to `from` is dealt to `to` instead (CR
+    /// 614.9): the parts of it the prevention effects not yet applied to that damage were
+    /// divided to prevent (`per_source_division`, Cover of Winter's X or a divided shield)
+    /// go with it, up to that amount, to the part each has for `to` (made if `to` has none:
+    /// even a part of 0 keeps the effect from preventing more of that damage there than
+    /// its controller divided). Applying the redirection first, the damage still meets
+    /// those effects, the affected player's choice (CR 616.1), and they still prevent what
+    /// their controller divided (Cover of Winter's ruling: "as long as the total amount of
+    /// that creature's damage that would be prevented is X";
+    /// `per-source-prevention-division`, `shield-divided-among-recipients`).
+    fn move_division_parts(
+        &mut self,
+        source: ObjectId,
+        from: Entity,
+        to: Entity,
+        amount: u32,
+        applied: &[ReplKey],
+    ) {
+        if from == to || amount == 0 {
+            return;
+        }
+        let applied: Vec<u64> = applied.iter().map(|k| numeric_key(*k)).collect();
+        let mut moved: Vec<(u64, u32)> = Vec::new();
+        for d in self.per_source_division.iter_mut() {
+            if d.1 == source && d.2 == from && !applied.contains(&d.0) {
+                let n = d.3.min(amount);
+                d.3 -= n;
+                moved.push((d.0, n));
+            }
+        }
+        for (key, n) in moved {
+            match self
+                .per_source_division
+                .iter_mut()
+                .find(|d| d.0 == key && d.1 == source && d.2 == to)
+            {
+                Some(d) => d.3 += n,
+                None => self.per_source_division.push((key, source, to, n)),
+            }
         }
     }
 
