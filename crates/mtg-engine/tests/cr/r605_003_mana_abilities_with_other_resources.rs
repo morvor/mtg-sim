@@ -465,3 +465,26 @@ fn a_mana_abilitys_instead_is_planned_by_its_condition() {
     t.cast(P0, ritual).go();
     assert!(on_stack(&t, "Dark Ritual"));
 }
+
+#[test]
+fn skirge_familiar_doesnt_discard_the_card_being_cycled() {
+    cr!("605.3a", "601.2g", "702.29a", "118.3");
+    interp!("automatic-mana-payment");
+    interp!("mana-abilities-planned-with-the-objects-their-costs-take");
+    // Cycling Miscalculation ("Cycling {2}": "{2}, Discard this card: Draw a card.") with
+    // Skirge Familiar ("Discard a card: Add {B}.") and two other cards: those two pay the
+    // {2}, and the cycled card is discarded for the cycling cost, never offered for mana.
+    let mut t = main_phase();
+    t.battlefield(P0, "Skirge Familiar");
+    let cycled = t.hand(P0, "Miscalculation");
+    t.hand(P0, "Grizzly Bears");
+    t.hand(P0, "Forest");
+    t.activate(P0, cycled, 0, &[]).expect("cycle Miscalculation");
+    assert_eq!(t.stack_len(), 1);
+    for name in ["Miscalculation", "Grizzly Bears", "Forest"] {
+        assert!(t.in_graveyard(P0, name), "{name}");
+    }
+    let asked = cost_choices(&t, "discard");
+    assert_eq!(asked.len(), 2, "{asked:?}");
+    assert!(asked.iter().all(|c| !c.contains(&Entity::Object(cycled))));
+}
