@@ -148,7 +148,7 @@ fn delays() -> Vec<(&'static str, TriggerCond)> {
         ),
         (
             "at the beginning of the next turn's upkeep",
-            at(TriggerStep::Upkeep, PlayerRel::Any),
+            crate::turn_structure::next_turns_upkeep(),
         ),
         (
             "at the beginning of the next upkeep",

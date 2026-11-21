@@ -1058,12 +1058,79 @@ pub fn required_attack_cost(g: &Game, creature: ObjectId, target: Entity) -> Opt
     Some(total)
 }
 
-/// Whether the total cost to attack as `decl` declares contains {X} (a tax of "{X}, where
-/// X is ...", or War Tax's {X}): mana that may be spent only on costs that contain {X} may
-/// pay any part of it (CR 106.6, 508.1h; see `defined_x_costs`).
-pub fn attack_cost_contains_x(g: &Game, decl: &[(ObjectId, Entity)]) -> bool {
-    decl.iter()
-        .any(|(a, t)| attack_costs(g, *a, *t).iter().any(|(_, _, x)| *x))
+/// A total cost to attack or block (CR 508.1h, 509.1d), with the taxes whose cost contains
+/// {X} (a tax of "{X}, where X is ...", or War Tax's {X}; see `defined_x_costs`) apart from
+/// the others: each tax is a cost of its own (Norn's Annex rulings: "Multiple Norn's Annexes
+/// controlled by the same player will each impose a cost to attack. Players choose how they
+/// pay each cost individually."), so mana that may be spent only on costs that contain {X}
+/// pays only the taxes with {X} (CR 106.6; register `each-attack-tax-is-its-own-cost`).
+#[derive(Clone, Debug, Default)]
+pub struct Taxes {
+    /// The taxes without {X}.
+    pub plain: Cost,
+    /// The taxes with {X}.
+    pub with_x: Cost,
+}
+
+impl Taxes {
+    fn add(&mut self, cost: &Cost, has_x: bool) {
+        let to = if has_x {
+            &mut self.with_x
+        } else {
+            &mut self.plain
+        };
+        crate::casting::add_cost(to, cost);
+    }
+
+    /// The whole total cost.
+    pub fn total(&self) -> Cost {
+        let mut total = self.plain.clone();
+        crate::casting::add_cost(&mut total, &self.with_x);
+        total
+    }
+
+    /// Pays the taxes for `p` (CR 508.1i–j, 509.1e–f), each as a cost of its own: the taxes
+    /// without {X} (which only mana without that restriction can pay) first, then those
+    /// with {X} (which any mana can pay); if that fails, the other way around. Returns
+    /// false (the game rolled back to before the payment) if they can't be paid.
+    fn pay(&self, g: &mut Game, p: PlayerId, ctx: &Ctx) -> bool {
+        let parts: Vec<(&Cost, bool)> = [(&self.plain, false), (&self.with_x, true)]
+            .into_iter()
+            .filter(|(c, _)| !c.is_free())
+            .collect();
+        let pay_all = |g: &mut Game, parts: &[(&Cost, bool)]| {
+            parts.iter().all(|(c, x)| {
+                let mut ctx = ctx.clone();
+                ctx.cost_has_x = *x;
+                g.pay_cost(p, c, None, &ctx)
+            })
+        };
+        if parts.len() < 2 {
+            return pay_all(g, &parts);
+        }
+        let snapshot = g.clone();
+        if pay_all(g, &parts) {
+            return true;
+        }
+        g.roll_back(snapshot.clone());
+        let reversed: Vec<(&Cost, bool)> = parts.iter().rev().copied().collect();
+        if pay_all(g, &reversed) {
+            return true;
+        }
+        g.roll_back(snapshot);
+        false
+    }
+}
+
+/// The total cost to attack as `decl` declares, its taxes with {X} apart (see [`Taxes`]).
+pub fn attack_taxes(g: &Game, decl: &[(ObjectId, Entity)]) -> Taxes {
+    let mut taxes = Taxes::default();
+    for (a, t) in decl {
+        for (_, cost, x) in attack_costs(g, *a, *t) {
+            taxes.add(&cost, x);
+        }
+    }
+    taxes
 }
 
 /// The restrictions that make `creature` pay a cost to attack `target` (CR 508.1d,
@@ -1717,11 +1784,11 @@ fn perform_attack_declaration(
             }
         }
     }
-    // CR 508.1h–j: the total cost is locked in, then paid (mana abilities may be activated).
-    let required = total_attack_cost(g, &declared);
-    let mut ctx = declaring_ctx(ap, declared.iter().map(|(a, _)| *a));
-    ctx.cost_has_x = attack_cost_contains_x(g, &declared);
-    if !required.is_free() && !g.pay_cost(ap, &required, None, &ctx) {
+    // CR 508.1h–j: the total cost is locked in, then paid (mana abilities may be activated),
+    // each tax as a cost of its own.
+    let taxes = attack_taxes(g, &declared);
+    let ctx = declaring_ctx(ap, declared.iter().map(|(a, _)| *a));
+    if !taxes.pay(g, ap, &ctx) {
         return false;
     }
     for (a, cost, _) in &optional {
@@ -2143,13 +2210,13 @@ fn block_restrictions_ok(
 /// Like a cost to attack, every applicable tax is a cost, even one that comes to {0}
 /// (CR 118.5, 509.1c).
 pub fn required_block_cost(g: &Game, blocker: ObjectId) -> Option<Cost> {
-    required_block_cost_x(g, blocker).map(|(c, _)| c)
+    required_block_cost_x(g, blocker).map(|t| t.total())
 }
 
-/// [`required_block_cost`], and whether it contains {X} (War Cadence's tax, CR 106.6).
-fn required_block_cost_x(g: &Game, blocker: ObjectId) -> Option<(Cost, bool)> {
-    let mut total = Cost::default();
-    let mut has_x = false;
+/// [`required_block_cost`], its taxes with {X} apart (War Cadence's tax, CR 106.6; see
+/// [`Taxes`]).
+fn required_block_cost_x(g: &Game, blocker: ObjectId) -> Option<Taxes> {
+    let mut total = Taxes::default();
     let mut any = false;
     for (s, c, r, locked) in g.all_restrictions() {
         if let Restriction::BlockCost { blockers, cost } = &r {
@@ -2159,27 +2226,26 @@ fn required_block_cost_x(g: &Game, blocker: ObjectId) -> Option<(Cost, bool)> {
                 // Scaled amounts are counted from the restriction's point of view (CR 509.1d).
                 let cost = crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx);
                 let (cost, x) = crate::defined_x_costs::fold(g, &cost, &ctx);
-                crate::casting::add_cost(&mut total, &cost);
-                has_x |= x;
+                total.add(&cost, x);
                 any = true;
             }
         }
     }
-    any.then_some((total, has_x))
+    any.then_some(total)
 }
 
 /// The cost required for `blocker` to block the attacking creatures `blocked` (CR 509.1d):
 /// the costs to block at all, and those keyed to what it blocks ("can't block creatures
 /// with power 2 or greater unless you pay {1}"), once each.
 pub fn block_cost_for(g: &Game, blocker: ObjectId, blocked: &[ObjectId]) -> Option<Cost> {
-    block_cost_for_x(g, blocker, blocked).map(|(c, _)| c)
+    block_cost_for_x(g, blocker, blocked).map(|t| t.total())
 }
 
-/// [`block_cost_for`], and whether it contains {X} (CR 106.6).
-fn block_cost_for_x(g: &Game, blocker: ObjectId, blocked: &[ObjectId]) -> Option<(Cost, bool)> {
+/// [`block_cost_for`], its taxes with {X} apart (CR 106.6; see [`Taxes`]).
+fn block_cost_for_x(g: &Game, blocker: ObjectId, blocked: &[ObjectId]) -> Option<Taxes> {
     let base = required_block_cost_x(g, blocker);
     let mut any = base.is_some();
-    let (mut total, mut has_x) = base.unwrap_or_default();
+    let mut total = base.unwrap_or_default();
     for (s, c, r, locked) in g.all_restrictions() {
         if let Restriction::BlockCostAgainst {
             blockers,
@@ -2194,44 +2260,43 @@ fn block_cost_for_x(g: &Game, blocker: ObjectId, blocked: &[ObjectId]) -> Option
             {
                 let cost = crate::kw::cumulative_upkeep::expand_repeated(g, cost, &ctx);
                 let (cost, x) = crate::defined_x_costs::fold(g, &cost, &ctx);
-                crate::casting::add_cost(&mut total, &cost);
-                has_x |= x;
+                total.add(&cost, x);
                 any = true;
             }
         }
     }
-    any.then_some((total, has_x))
+    any.then_some(total)
 }
 
 /// Total cost to block for each player (CR 509.1d).
 pub fn block_costs_by_player(g: &Game, decl: &[(ObjectId, ObjectId)]) -> Vec<(PlayerId, Cost)> {
     block_costs_by_player_x(g, decl)
         .into_iter()
-        .map(|(p, c, _)| (p, c))
+        .map(|(p, t)| (p, t.total()))
         .collect()
 }
 
-/// [`block_costs_by_player`], and whether each player's total cost contains {X}: mana that
-/// may be spent only on costs that contain {X} may pay any part of it (CR 106.6, 509.1d).
-fn block_costs_by_player_x(g: &Game, decl: &[(ObjectId, ObjectId)]) -> Vec<(PlayerId, Cost, bool)> {
+/// [`block_costs_by_player`], each player's taxes with {X} apart: mana that may be spent
+/// only on costs that contain {X} pays only those (CR 106.6, 509.1d; see [`Taxes`]).
+fn block_costs_by_player_x(g: &Game, decl: &[(ObjectId, ObjectId)]) -> Vec<(PlayerId, Taxes)> {
     let mut blockers: Vec<ObjectId> = decl.iter().map(|(b, _)| *b).collect();
     blockers.sort();
     blockers.dedup();
-    let mut out: Vec<(PlayerId, Cost, bool)> = Vec::new();
+    let mut out: Vec<(PlayerId, Taxes)> = Vec::new();
     for b in blockers {
         let blocked: Vec<ObjectId> = decl
             .iter()
             .filter(|(x, _)| *x == b)
             .map(|(_, a)| *a)
             .collect();
-        if let Some((c, x)) = block_cost_for_x(g, b, &blocked) {
+        if let Some(c) = block_cost_for_x(g, b, &blocked) {
             let p = g.obj(b).controller;
-            match out.iter_mut().find(|(q, _, _)| *q == p) {
-                Some((_, t, has_x)) => {
-                    crate::casting::add_cost(t, &c);
-                    *has_x |= x;
+            match out.iter_mut().find(|(q, _)| *q == p) {
+                Some((_, t)) => {
+                    t.add(&c.plain, false);
+                    t.add(&c.with_x, true);
                 }
-                None => out.push((p, c, x)),
+                None => out.push((p, c)),
             }
         }
     }
@@ -2704,10 +2769,9 @@ pub fn declare_blockers_step(g: &mut Game) {
             blocks
         } else {
             let snapshot = g.clone();
-            let ok = costs.iter().all(|(p, c, has_x)| {
-                let mut ctx = declaring_ctx(*p, blocks.iter().map(|(b, _)| *b));
-                ctx.cost_has_x = *has_x;
-                g.pay_cost(*p, c, None, &ctx)
+            let ok = costs.iter().all(|(p, t)| {
+                let ctx = declaring_ctx(*p, blocks.iter().map(|(b, _)| *b));
+                t.pay(g, *p, &ctx)
             });
             if ok {
                 blocks

@@ -773,6 +773,11 @@ pub struct Game {
     /// activates don't sacrifice it to pay their own costs (a Food's own ability can't
     /// also be paid for by sacrificing that Food to Gilded Goose).
     pub mana_reserve: Option<ObjectId>,
+    /// While an automatic mana payment activates one of its planned mana abilities: the
+    /// objects that ability's cost may not sacrifice or exile, as the payment's later
+    /// activations need them (their permanents, and what their own costs take; see
+    /// `mana_abilities::pay_mana`).
+    pub mana_keep: Vec<ObjectId>,
     /// Permanents tapped to pay part of the total cost of the spell being cast other than
     /// with mana (convoke, improvise, CR 702.51a, 702.126a), while the rest of that cost is
     /// paid. They're tapped as the total cost is paid, after mana abilities are activated
@@ -979,6 +984,7 @@ impl Game {
             named_exiles: vec![],
             mana_hint: None,
             mana_reserve: None,
+            mana_keep: Vec::new(),
             paid_otherwise: Vec::new(),
             commander_moved_since_last_sba: BTreeSet::new(),
             search_finds_by_default: true,
