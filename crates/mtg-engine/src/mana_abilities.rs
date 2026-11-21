@@ -21,6 +21,10 @@ pub struct ManaSource {
     pub ability: Ability,
     /// Each unit this source produces: the set of types that unit could be.
     pub units: Vec<Vec<ManaType>>,
+    /// How many of the first `units` are mana of one type, chosen as the ability resolves
+    /// ("Add three mana of any one color.", [`one_type_units`]): the planner pays with
+    /// them as mana of that one type.
+    pub one_type: usize,
     /// Lower is preferred (tapping lands before sacrificing Treasures, etc.).
     pub cost_rank: u8,
     /// For an ability that costs sacrificing other permanents ("{T}, Sacrifice a Food:
@@ -102,6 +106,65 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
             .collect(),
         None => units,
     })
+}
+
+/// How many of the units of mana a mana ability's effect makes ([`production_units`]) are
+/// all of one type the player chooses as it resolves: "Add three mana of any one color."
+/// (Gilded Lotus), "Add X mana of any one color, where X is ..." (Food Chain), "Add X mana
+/// of any one type that land could produce", "Add {B}{B} or {G}{G}." (Cadaverous Bloom).
+/// Two or more, the first units it makes, or 0 (each unit is then planned on its own).
+fn one_type_units(g: &Game, e: &Effect, ctx: &Ctx) -> usize {
+    let at_least_two = |k: usize| if k >= 2 { k } else { 0 };
+    match e {
+        Effect::AddMana {
+            mana: ManaProduction::AnyOneColor(n) | ManaProduction::CouldProduceAmount(_, n),
+            ..
+        } => at_least_two(g.eval_value(n, ctx).max(0) as usize),
+        // Each option adds as much mana of one type ("{B}{B} or {G}{G}"): the merged units
+        // (`production_units`) are of the one type chosen. Not "{W}{W}, {W}{U}, or {U}{U}".
+        Effect::ChooseOne { options, .. } => {
+            let sizes: Option<Vec<usize>> = options
+                .iter()
+                .map(|(_, o)| {
+                    let u = production_units(g, o, ctx)?;
+                    let first = u.first().filter(|t| t.len() == 1)?;
+                    u.iter().all(|t| t == first).then_some(u.len())
+                })
+                .collect();
+            match sizes.as_deref() {
+                Some([k, rest @ ..]) if rest.iter().all(|r| r == k) => at_least_two(*k),
+                _ => 0,
+            }
+        }
+        // The first instruction that adds mana makes the first units.
+        Effect::Seq(v) => v
+            .iter()
+            .find(|x| production_units(g, x, ctx).is_some())
+            .map_or(0, |x| one_type_units(g, x, ctx)),
+        Effect::If {
+            cond,
+            then,
+            otherwise,
+        } => one_type_units(g, if_branch(g, cond, then, otherwise, ctx), ctx),
+        Effect::AddManaWithSpentTrigger { add, .. } => one_type_units(g, add, ctx),
+        Effect::PersistentMana(inner) | Effect::CombatMana(inner) => one_type_units(g, inner, ctx),
+        _ => 0,
+    }
+}
+
+/// The branch of a mana ability's "If ..., add ... instead" that its condition picks now.
+fn if_branch<'e>(
+    g: &Game,
+    cond: &Condition,
+    then: &'e Effect,
+    otherwise: &'e Effect,
+    ctx: &Ctx,
+) -> &'e Effect {
+    if g.eval_cond(cond, ctx) {
+        then
+    } else {
+        otherwise
+    }
 }
 
 /// The mana types of the colors of the first selected object (as it is, or as it last
@@ -329,7 +392,14 @@ fn production_units_raw(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaT
             }
             merged
         }
-        Effect::If { then, .. } => production_units(g, then, ctx),
+        // "Add {C}. If you control an Urza's Mine and an Urza's Power-Plant, add {C}{C}{C}
+        // instead.": the branch its condition picks now, as the mana ability resolves right
+        // after it's activated (CR 605.3b).
+        Effect::If {
+            cond,
+            then,
+            otherwise,
+        } => production_units(g, if_branch(g, cond, then, otherwise, ctx), ctx),
         Effect::AddManaWithSpentTrigger { add, .. } => production_units(g, add, ctx),
         Effect::PersistentMana(inner) | Effect::CombatMana(inner) => {
             production_units(g, inner, ctx)
@@ -1838,6 +1908,17 @@ fn sources_inner(
             let mut ctx = Ctx::new(Some(o.id), p);
             ctx.link = a.link;
             if let Some(units) = production_units(g, &act.body.effect, &ctx) {
+                // "Add three mana of any one color.": the first units are of one type, as
+                // long as no replacement effect changed them (CR 106.12b).
+                let one = one_type_units(g, &act.body.effect, &ctx).min(units.len());
+                let one_kind: Vec<Vec<ManaType>> = units[..one].to_vec();
+                let one_type = |units: &[Vec<ManaType>]| {
+                    if units.len() >= one && units[..one] == one_kind[..] {
+                        one
+                    } else {
+                        0
+                    }
+                };
                 let alternatives = if act.cost.has_tap() && !units.is_empty() {
                     // CR 106.12b: replacement effects that apply when it's tapped for mana
                     // change what it makes ("it produces {B} instead").
@@ -1874,6 +1955,7 @@ fn sources_inner(
                 let source = |units: Vec<Vec<ManaType>>, repeat: u32| ManaSource {
                     obj: o.id,
                     ability: a.clone(),
+                    one_type: one_type(&units),
                     units,
                     cost_rank: rank,
                     sac_pool: sac_pool.clone(),
@@ -1919,6 +2001,8 @@ fn sources_inner(
                             continue;
                         }
                         let mut s = source(units, 0);
+                        // As many of one type as that object gives (Food Chain).
+                        s.one_type = one_type_units(g, &act.body.effect, &cx).min(s.units.len());
                         s.sac_pool = vec![c];
                         s.exact = true;
                         out.push(s);
@@ -2012,6 +2096,7 @@ fn offer_sources(g: &Game, p: PlayerId) -> Vec<ManaSource> {
                 obj,
                 ability: ability.clone(),
                 units: units.clone(),
+                one_type: 0,
                 // After everything that doesn't cost life.
                 cost_rank: 5,
                 sac_pool: Vec::new(),
@@ -2254,6 +2339,7 @@ pub fn potential_mana_count(g: &Game, p: PlayerId, reserve: Option<ObjectId>) ->
                 pool_index: None,
                 restriction_ok: true,
                 generic_ok: true,
+                one_type: false,
             })
         })
         .collect();
@@ -2385,6 +2471,9 @@ struct Unit {
     restriction_ok: bool,
     /// It may pay generic mana ([`ManaRestriction::NotGeneric`]).
     generic_ok: bool,
+    /// It's one of its source's units of one type ([`ManaSource::one_type`]): they pay
+    /// only as one type between them.
+    one_type: bool,
 }
 
 /// Plans which sources to activate. Returns (source index, chosen types per unit) for
@@ -2648,13 +2737,17 @@ fn solve_payment(
             // A rough "could this be paid" check ignores restrictions (CR 106.6).
             restriction_ok: spend.check_only || m.can_spend_in(g, p, spend),
             generic_ok: m.pays_generic(),
+            one_type: false,
         });
     }
+    // Mana spent as though it were mana of another type pays requirements its own type
+    // doesn't (CR 609.4b): units of one type are then planned each on its own.
+    let as_though = !spend.any_color.is_empty() || !rules.is_empty();
     for (si, s) in sources.iter().enumerate() {
         let snow = g.obj(s.obj).chars.has_supertype(Supertype::Snow);
         let ok = source_restriction_ok(g, p, s, spend);
         let generic_ok = source_pays_generic(s);
-        for u in &s.units {
+        for (k, u) in s.units.iter().enumerate() {
             units.push(Unit {
                 types: widen_snow(u.clone(), snow),
                 snow,
@@ -2662,6 +2755,7 @@ fn solve_payment(
                 pool_index: None,
                 restriction_ok: ok,
                 generic_ok,
+                one_type: k < s.one_type && !as_though,
             });
         }
     }
@@ -2685,13 +2779,21 @@ fn solve_payment(
         if planner.in_use[si] == 0 {
             continue;
         }
-        let types = planner
+        // Units of one type are all of the type planned for them (generic mana they pay
+        // takes any), listed first: the ability's one choice follows the first type
+        // (`Game::choose_mana_color`).
+        let kind = planner.one_kind[si].map(|(t, _)| t);
+        let mut types: Vec<(bool, ManaType)> = planner
             .assign
             .iter()
             .filter(|(u, _)| units[*u].source == Some(si))
-            .map(|(_, t)| *t)
+            .map(|(u, t)| match (units[*u].one_type, kind) {
+                (true, Some(k)) => (true, k),
+                (one, _) => (one, *t),
+            })
             .collect();
-        out.push((s.clone(), types));
+        types.sort_by_key(|(one, _)| !*one);
+        out.push((s.clone(), types.into_iter().map(|(_, t)| t).collect()));
     }
     let pool_used = planner
         .assign
@@ -2741,6 +2843,11 @@ struct Planner<'a> {
     /// of those paying it so far.
     x_distinct: bool,
     x_used: ColorSet,
+    /// For each source with units of one type ([`ManaSource::one_type`]): the type they
+    /// pay as, once one of them pays a symbol only that type can, and how many do.
+    one_kind: Vec<Option<(ManaType, u32)>>,
+    /// For each entry of `assign`: it set or counted toward its source's `one_kind`.
+    kind_set: Vec<bool>,
     /// For each source, the previous activation of its ability (`ManaSource::repeat`):
     /// activations of one ability are used in order, so a failing search doesn't try
     /// their permutations.
@@ -2867,6 +2974,8 @@ impl<'a> Planner<'a> {
             life_for: Vec::new(),
             x_distinct: false,
             x_used: ColorSet::NONE,
+            one_kind: vec![None; n],
+            kind_set: Vec::new(),
             prev_copy,
             sac,
             tail,
@@ -2985,7 +3094,19 @@ impl<'a> Planner<'a> {
         cands
     }
 
-    fn take(&mut self, u: usize, t: ManaType) {
+    /// Whether unit `u` may pay a symbol only type `t` pays: a unit of one type
+    /// ([`ManaSource::one_type`]) only as the type its source's others already pay as.
+    fn fits(&self, u: usize, t: ManaType) -> bool {
+        let unit = &self.units[u];
+        !unit.one_type
+            || unit
+                .source
+                .is_none_or(|s| self.one_kind[s].is_none_or(|(k, _)| k == t))
+    }
+
+    /// Pays with unit `u` as type `t`; `specific`: for a symbol only that type pays (not
+    /// generic or snow mana), which fixes the type of its source's units of one type.
+    fn take(&mut self, u: usize, t: ManaType, specific: bool) {
         self.used[u] = true;
         if let Some(s) = self.units[u].source {
             if self.in_use[s] == 0 {
@@ -2994,6 +3115,11 @@ impl<'a> Planner<'a> {
             }
             self.in_use[s] += 1;
         }
+        let sets = specific && self.units[u].one_type;
+        if let (true, Some(s)) = (sets, self.units[u].source) {
+            self.one_kind[s].get_or_insert((t, 0)).1 += 1;
+        }
+        self.kind_set.push(sets);
         self.assign.push((u, t));
     }
 
@@ -3006,6 +3132,16 @@ impl<'a> Planner<'a> {
                     self.life_used -= self.source_life[s];
                     *self.sac_blocked_cache.get_mut() = None;
                 }
+                if self.kind_set.pop() == Some(true) {
+                    if let Some((_, n)) = self.one_kind[s].as_mut() {
+                        *n -= 1;
+                        if *n == 0 {
+                            self.one_kind[s] = None;
+                        }
+                    }
+                }
+            } else {
+                self.kind_set.pop();
             }
         }
     }
@@ -3294,9 +3430,14 @@ impl<'a> Planner<'a> {
     /// cost can be paid too.
     fn try_each(&mut self, i: usize, pred: &dyn Fn(&Unit) -> Option<ManaType>) -> bool {
         let units = self.units;
+        // Snow mana of any type pays {S}; every other symbol here takes a type.
+        let specific = !matches!(self.reqs[i], Req::Snow);
         for u in self.candidates() {
             if let Some(t) = pred(&units[u]) {
-                self.take(u, t);
+                if specific && !self.fits(u, t) {
+                    continue;
+                }
+                self.take(u, t, specific);
                 if self.solve(i + 1) {
                     return true;
                 }
@@ -3323,7 +3464,7 @@ impl<'a> Planner<'a> {
                 if !units[u].generic_ok {
                     continue;
                 }
-                self.take(u, units[u].types[0]);
+                self.take(u, units[u].types[0], false);
                 if self.capacity(&any) >= left {
                     took = true;
                     break;

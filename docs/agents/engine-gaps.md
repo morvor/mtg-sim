@@ -1000,15 +1000,28 @@ items (`gap-items.json`, briefs in `items/<slug>.md`). Sections below are in wor
   the mana abilities above, the repeatable ones, and spells with additional sacrifice, discard, exile,
   tap or return costs, convoke or improvise): no failures, no tier drops; Food Chain, Seton, Supportive
   Parents and The Cabbage Merchant became verified; Ritual of the Machine wasn't cast in its two games
-  (a different random game: with `--games-per-card 8` it is), recorded as fuzz-cast. Left: a chain of consumers taking each
+  (its decks are mono-black: no nonartifact, nonblack creature to target appeared in either game, the
+  review found; with `--games-per-card 8` it is cast), recorded as fuzz-cast. Review (Nov 21): mana of
+  one type the ability chooses as it resolves ("Add three mana of any one color.", Food Chain's X,
+  "any one type that land could produce", Cadaverous Bloom's "{B}{B} or {G}{G}") was planned as units
+  each of any type (old), so Gilded Lotus alone offered a {G}{U} spell and the cast was reversed, and
+  with an Island it couldn't pay Bounding Krasis ({1}{G}{U}) it offered (the plan took {U} from the
+  Lotus too); the planner now pays with such units as one type (`ManaSource::one_type`,
+  `Planner::one_kind`; not while mana may be spent as though it were another type). And a mana
+  ability's "If ..., add ... instead" was planned with the "instead" mana whatever its condition (old:
+  `production_units` took the `then` branch), so Urza's Tower alone was planned as {C}{C}{C} (a {3}
+  spell offered, then reversed), River of Tears before a land play as {B} (a {U} spell not offered),
+  Incubation Druid without a counter as three mana (13 cards); the condition now picks the branch
+  (`if_branch`). Tests: `mana_of_any_one_color_is_planned_as_one_color`,
+  `a_mana_abilitys_instead_is_planned_by_its_condition`. Left: a chain of consumers taking each
   other's permanents in an order other than `exec_key`'s isn't found (optional part 5, not done); an
   object tapped for one planned cost and then sacrificed for a later one (tap an Elf for Heritage
   Druid, then sacrifice it to Phyrexian Altar) isn't planned (under-offered, never reversed); the
   castable-spells list still assumes every convoke or improvise candidate is tapped and none is also
-  sacrificed for mana, and counts restricted mana for any spell (`castability-is-optimistic`); "X mana
-  of any one color" (Food Chain, Gilded Lotus) is planned as X units each of any color, so one
-  activation can be planned for two colors and the cast then reversed (old); a per-object source's
-  mana is planned without the replacement effects and triggered mana abilities of tapping it.
+  sacrificed for mana, and counts restricted mana for any spell (`castability-is-optimistic`); a
+  per-object source's mana is planned without the replacement effects and triggered mana abilities
+  of tapping it; "Add one mana of each of two different colors" (`ManaProduction::DistinctColors`)
+  is planned as units of any colors, the same color twice included.
 
 ---
 

@@ -7,6 +7,7 @@
 //! are offered and cast.
 
 use mtg_engine::decision::{Action, Decision};
+use mtg_engine::mana::ManaType;
 use mtg_engine::object::CastMethod;
 use mtg_engine::testing::*;
 use mtg_engine::turn::Step;
@@ -228,6 +229,17 @@ fn squandered_resources_sacrifices_the_land_whose_mana_was_planned() {
     assert!(on_stack(&t, "Coiling Oracle"));
     assert!(t.named_on_battlefield("Forest").is_empty());
     assert!(t.named_on_battlefield("Island").is_empty());
+    // Activated by hand, it may sacrifice Maze of Ith, which can't produce mana: no mana.
+    let mut t = main_phase();
+    let squandered = t.battlefield(P0, "Squandered Resources");
+    let maze = t.battlefield(P0, "Maze of Ith");
+    t.battlefield(P0, "Forest");
+    t.answer_choose(P0, &[Entity::Object(maze)]);
+    t.activate(P0, squandered, 0, &[])
+        .expect("activate Squandered Resources");
+    assert!(!t.on_battlefield(maze) && t.in_graveyard(P0, "Maze of Ith"));
+    assert!(!t.named_on_battlefield("Forest").is_empty());
+    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
 }
 
 #[test]
@@ -269,7 +281,7 @@ fn food_chain_adds_one_plus_the_exiled_creatures_mana_value() {
 
 #[test]
 fn food_chain_mana_pays_a_creature_spells_kicker() {
-    cr!("605.3a", "601.2f", "106.6", "702.33d");
+    cr!("605.3a", "601.2f", "106.6", "702.33a", "702.33d");
     interp!("automatic-mana-payment");
     interp!("mana-abilities-planned-with-the-objects-their-costs-take");
     ruling!(
@@ -333,4 +345,123 @@ fn creatures_druids_and_foods_tapped_for_mana_by_other_permanents() {
     t.cast(P0, opt).go();
     assert!(on_stack(&t, "Opt"));
     assert!(tapped(&t, a) && tapped(&t, b));
+}
+
+#[test]
+fn relic_of_legends_and_grand_architect_tap_new_creatures_for_mana() {
+    cr!("605.3a", "601.2g", "302.6");
+    interp!("automatic-mana-payment");
+    interp!("mana-abilities-planned-with-the-objects-their-costs-take");
+    ruling!(
+        "Relic of Legends",
+        "You can tap any untapped legendary creature you control, including one you haven't controlled continuously since the beginning of your most recent turn"
+    );
+    ruling!(
+        "Grand Architect",
+        "to pay the cost of Grand Architect's mana ability. This includes Grand Architect itself."
+    );
+    // Relic of Legends ("{T}: Add one mana of any color." and "Tap an untapped legendary
+    // creature you control: Add one mana of any color.") with a new Isamaru, Hound of
+    // Konda: one mana from each ability pays {G}{U}.
+    let mut t = main_phase();
+    let relic = t.battlefield(P0, "Relic of Legends");
+    let isamaru = t.battlefield_sick(P0, "Isamaru, Hound of Konda");
+    let oracle = t.hand(P0, "Coiling Oracle");
+    assert!(offered(&mut t, P0, oracle));
+    t.cast(P0, oracle).go();
+    assert!(on_stack(&t, "Coiling Oracle"));
+    assert!(tapped(&t, relic) && tapped(&t, isamaru));
+    // Grand Architect ("Tap an untapped blue creature you control: Add {C}{C}. Spend this
+    // mana only to cast artifact spells or activate abilities of artifacts."), new itself,
+    // taps itself for Millstone ({2}).
+    let mut t = main_phase();
+    let architect = t.battlefield_sick(P0, "Grand Architect");
+    let millstone = t.hand(P0, "Millstone");
+    assert!(offered(&mut t, P0, millstone));
+    t.cast(P0, millstone).go();
+    assert!(on_stack(&t, "Millstone"));
+    assert!(tapped(&t, architect));
+    assert_eq!(t.g.player(P0).mana_pool.total(), 0);
+}
+
+#[test]
+fn mana_of_any_one_color_is_planned_as_one_color() {
+    cr!("601.2g", "601.2h", "605.3a");
+    interp!("automatic-mana-payment");
+    // Gilded Lotus ("{T}: Add three mana of any one color.") makes {G}{G}{G} or {U}{U}{U},
+    // never {G}{U}: Coiling Oracle ({G}{U}) isn't offered, and trying it is reversed.
+    let mut t = main_phase();
+    let lotus = t.battlefield(P0, "Gilded Lotus");
+    let oracle = t.hand(P0, "Coiling Oracle");
+    assert!(!offered(&mut t, P0, oracle));
+    assert!(t.cast(P0, oracle).try_go().is_err());
+    assert!(!tapped(&t, lotus) && t.in_hand(P0, "Coiling Oracle"));
+    // With an Island, Bounding Krasis ({1}{G}{U}) takes {U} from the Island and {G}{G}
+    // from the Lotus, one {G} left, not {G}{U} from the Lotus.
+    let island = t.battlefield(P0, "Island");
+    let krasis = t.hand(P0, "Bounding Krasis");
+    assert!(offered(&mut t, P0, krasis));
+    t.cast(P0, krasis).go();
+    assert!(on_stack(&t, "Bounding Krasis"));
+    assert!(tapped(&t, lotus) && tapped(&t, island));
+    let pool = &t.g.player(P0).mana_pool;
+    assert_eq!((pool.total(), pool.count(ManaType::G)), (1, 1));
+    // Food Chain: each activation's mana is of one color, so one Grizzly Bears (three
+    // mana) doesn't pay {G}{U}; two do, an activation for each color.
+    let mut t = main_phase();
+    t.battlefield(P0, "Food Chain");
+    let a = t.battlefield(P0, "Grizzly Bears");
+    let oracle = t.hand(P0, "Coiling Oracle");
+    assert!(!offered(&mut t, P0, oracle));
+    let b = t.battlefield(P0, "Grizzly Bears");
+    assert!(offered(&mut t, P0, oracle));
+    t.cast(P0, oracle).go();
+    assert!(on_stack(&t, "Coiling Oracle"));
+    assert!(!t.on_battlefield(a) && !t.on_battlefield(b));
+    // Cadaverous Bloom ("Add {B}{B} or {G}{G}."): one activation doesn't pay Putrid
+    // Leech's {B}{G}; two do, {B}{B} and {G}{G}.
+    let mut t = main_phase();
+    t.battlefield(P0, "Cadaverous Bloom");
+    let leech = t.hand(P0, "Putrid Leech");
+    t.hand(P0, "Forest");
+    assert!(!offered(&mut t, P0, leech));
+    t.hand(P0, "Island");
+    assert!(offered(&mut t, P0, leech));
+    t.cast(P0, leech).go();
+    assert!(on_stack(&t, "Putrid Leech"));
+    assert!(t.in_exile("Forest") && t.in_exile("Island"));
+}
+
+#[test]
+fn a_mana_abilitys_instead_is_planned_by_its_condition() {
+    cr!("605.3a", "605.3b", "601.2g", "608.2c");
+    interp!("automatic-mana-payment");
+    // Urza's Tower ("{T}: Add {C}. If you control an Urza's Mine and an Urza's
+    // Power-Plant, add {C}{C}{C} instead.") alone makes {C}: Bottle Gnomes ({3}) isn't
+    // offered. With the Mine and the Power-Plant the three lands make seven.
+    let mut t = main_phase();
+    t.battlefield(P0, "Urza's Tower");
+    let gnomes = t.hand(P0, "Bottle Gnomes");
+    assert!(!offered(&mut t, P0, gnomes));
+    t.battlefield(P0, "Urza's Mine");
+    t.battlefield(P0, "Urza's Power Plant");
+    let golem = t.hand(P0, "Precursor Golem");
+    assert!(offered(&mut t, P0, golem));
+    t.cast(P0, golem).go();
+    assert!(on_stack(&t, "Precursor Golem"));
+    assert_eq!(t.g.player(P0).mana_pool.total(), 2);
+    // River of Tears ("{T}: Add {U}. If you played a land this turn, add {B} instead.")
+    // makes {U} before a land is played this turn and {B} after.
+    let mut t = main_phase();
+    t.battlefield(P0, "River of Tears");
+    let opt = t.hand(P0, "Opt");
+    let ritual = t.hand(P0, "Dark Ritual");
+    assert!(offered(&mut t, P0, opt));
+    assert!(!offered(&mut t, P0, ritual));
+    let forest = t.hand(P0, "Forest");
+    t.play_land(P0, forest).expect("play the Forest");
+    assert!(!offered(&mut t, P0, opt));
+    assert!(offered(&mut t, P0, ritual));
+    t.cast(P0, ritual).go();
+    assert!(on_stack(&t, "Dark Ritual"));
 }
