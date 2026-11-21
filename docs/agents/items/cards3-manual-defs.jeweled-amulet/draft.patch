@@ -1,0 +1,344 @@
+diff --git a/crates/mtg-engine/src/ability.rs b/crates/mtg-engine/src/ability.rs
+index 6e40127c..e605935e 100644
+--- a/crates/mtg-engine/src/ability.rs
++++ b/crates/mtg-engine/src/ability.rs
+@@ -2532,6 +2532,10 @@ pub enum ManaProduction {
+     /// color." (Nykthos, Shrine to Nyx; CR 700.5): the color is chosen as the ability
+     /// resolves, then the amount is the controller's devotion to it.
+     DevotionToChosenColor,
++    /// One mana of a type a hand-written card's rule names
++    /// ([`crate::kw::KeywordRules::custom_mana_types`]; "one mana of ~'s last noted
++    /// type"): no mana if it names none (CR 607.5a).
++    Custom(SmolStr),
+ }
+ 
+ /// Replacement effect definitions (CR 614–616).
+diff --git a/crates/mtg-engine/src/cards/jeweled_amulet.rs b/crates/mtg-engine/src/cards/jeweled_amulet.rs
+new file mode 100644
+index 00000000..abf3540e
+--- /dev/null
++++ b/crates/mtg-engine/src/cards/jeweled_amulet.rs
+@@ -0,0 +1,116 @@
++//! Jeweled Amulet: "{1}, {T}: Put a charge counter on ~. Note the type of mana spent to
++//! pay this activation cost. Activate only if there are no charge counters on ~." and
++//! "{T}, Remove a charge counter from ~: Add one mana of ~'s last noted type." The two
++//! abilities are linked (CR 607.2e): the note belongs to this object (a new object after
++//! a zone change has none, CR 400.7). With no type noted yet, the mana ability adds no
++//! mana, even if a charge counter got there some other way (ruling, CR 607.5a). If mana
++//! of more than one type was spent (a cost increase), its controller chooses which of
++//! those types is noted (interpretation `jeweled-amulet-several-types`).
++
++use super::{map_effect, parse, ManualAbility};
++use crate::ability::*;
++use crate::eval::Ctx;
++use crate::game::Game;
++use crate::keywords::KeywordKind;
++use crate::kw::{KeywordRegistration, KeywordRules};
++use crate::mana::ManaType;
++use crate::types::ObjectId;
++
++const NOTE: &str = "card:Jeweled Amulet:note the type of mana spent to pay this activation cost";
++const LAST_NOTED: &str = "card:Jeweled Amulet:~'s last noted type";
++const NOTE_TEXT: &str = "{1}, {T}: Put a charge counter on ~. Note the type of mana spent to pay this activation cost. Activate only if there are no charge counters on ~.";
++const ADD_TEXT: &str = "{T}, Remove a charge counter from ~: Add one mana of ~'s last noted type.";
++
++inventory::submit! { ManualAbility {
++    card: "Jeweled Amulet",
++    face: 0,
++    text: NOTE_TEXT,
++    build: |ctx| {
++        parse(ctx, "{1}, {T}: Put a charge counter on ~. Activate only if there are no charge counters on ~.")
++            .iter()
++            .map(|a| {
++                map_effect(a, NOTE_TEXT, |e| {
++                    Effect::Seq(vec![e, Effect::Custom(NOTE.into())])
++                })
++            })
++            .collect()
++    },
++    reason: "notes the type of mana spent to activate it: no other legal card notes a mana type",
++} }
++
++inventory::submit! { ManualAbility {
++    card: "Jeweled Amulet",
++    face: 0,
++    text: ADD_TEXT,
++    build: |ctx| {
++        parse(ctx, "{T}, Remove a charge counter from ~: Add {C}.")
++            .iter()
++            .map(|a| {
++                map_effect(a, ADD_TEXT, |e| match e {
++                    Effect::AddMana { who, restriction, .. } => Effect::AddMana {
++                        who,
++                        mana: ManaProduction::Custom(LAST_NOTED.into()),
++                        restriction,
++                    },
++                    e => e,
++                })
++            })
++            .collect()
++    },
++    reason: "adds mana of the type its linked ability last noted: no other legal card notes a mana type",
++} }
++
++const ORDER: [ManaType; 6] = ManaType::ALL;
++
++/// The type last noted for `obj`.
++fn last_noted(g: &Game, obj: ObjectId) -> Option<ManaType> {
++    g.cards
++        .get(NOTE)
++        .iter()
++        .rev()
++        .find(|r| r.first() == Some(&(obj.0 as i64)))
++        .and_then(|r| r.get(1))
++        .and_then(|i| ORDER.get(*i as usize).copied())
++}
++
++struct Rules;
++
++impl KeywordRules for Rules {
++    fn kinds(&self) -> &'static [KeywordKind] {
++        &[]
++    }
++    fn custom_effect(&self, g: &mut Game, name: &str, ctx: &mut Ctx) -> bool {
++        if name != NOTE {
++            return false;
++        }
++        let (Some(src), Some(ab)) = (ctx.source, ctx.stack_obj) else {
++            return true;
++        };
++        let spent: Vec<ManaType> = g
++            .try_obj(ab)
++            .and_then(|o| o.stack.as_deref())
++            .map(|si| si.cast.mana_spent.clone())
++            .unwrap_or_default();
++        let mut types: Vec<ManaType> = ORDER.iter().copied().filter(|t| spent.contains(t)).collect();
++        // Several types spent (a cost increase): its controller chooses which one is noted.
++        if types.len() > 1 {
++            let names = types.iter().map(|t| format!("{t:?}")).collect();
++            let i = g.ask_option(ctx.controller, Some(src), "Note which type of mana spent?", names);
++            types = vec![types[i.min(types.len() - 1)]];
++        }
++        if let Some(t) = types.first().copied() {
++            let i = ORDER.iter().position(|x| *x == t).unwrap_or(0);
++            g.cards.push(NOTE, vec![src.0 as i64, i as i64]);
++            g.log(|g| format!("{} notes {t:?}", g.describe(src)));
++        }
++        true
++    }
++    fn custom_mana_types(&self, g: &Game, name: &str, ctx: &Ctx) -> Option<Vec<ManaType>> {
++        if name != LAST_NOTED {
++            return None;
++        }
++        Some(ctx.source.and_then(|s| last_noted(g, s)).into_iter().collect())
++    }
++}
++
++inventory::submit! { KeywordRegistration(&Rules) }
+diff --git a/crates/mtg-engine/src/kw/mod.rs b/crates/mtg-engine/src/kw/mod.rs
+index 0b0b171b..cc6a5488 100644
+--- a/crates/mtg-engine/src/kw/mod.rs
++++ b/crates/mtg-engine/src/kw/mod.rs
+@@ -88,6 +88,11 @@ pub trait KeywordRules: Sync + Send {
+     fn land_play_prohibited(&self, g: &Game, p: PlayerId, card: ObjectId) -> bool {
+         false
+     }
++    /// Whether a rule this implementation defines prohibits `p` from venturing into the
++    /// dungeon now (CR 101.2, 701.49). Called for every registered implementation.
++    fn venture_prohibited(&self, g: &Game, p: PlayerId) -> bool {
++        false
++    }
+     /// Ways to cast `card` that don't depend on a keyword it currently has, e.g. a
+     /// foretold card face down in exile (CR 702.143a) or a plotted card (CR 702.170d).
+     /// Called for every registered implementation.
+@@ -596,6 +601,16 @@ pub trait KeywordRules: Sync + Send {
+     }
+     /// A named value (`Value::Custom(name)`) computed by this implementation, e.g. the
+     /// number of spells cast before a storm spell (CR 702.40a).
++    /// The types one mana of [`ManaProduction::Custom`] `name` could be (the producer
++    /// chooses among them; none: no mana), if this implementation defines it.
++    fn custom_mana_types(
++        &self,
++        g: &Game,
++        name: &str,
++        ctx: &crate::eval::Ctx,
++    ) -> Option<Vec<crate::mana::ManaType>> {
++        None
++    }
+     fn custom_value(&self, g: &Game, name: &str, ctx: &crate::eval::Ctx) -> Option<i64> {
+         None
+     }
+@@ -1204,6 +1219,19 @@ pub fn land_play_prohibited(g: &Game, p: PlayerId, card: ObjectId) -> bool {
+         .any(|r| r.land_play_prohibited(g, p, card))
+ }
+ 
++/// See [`KeywordRules::custom_mana_types`].
++pub fn custom_mana_types(g: &Game, name: &str, ctx: &Ctx) -> Vec<crate::mana::ManaType> {
++    registry()
++        .iter()
++        .find_map(|r| r.custom_mana_types(g, name, ctx))
++        .unwrap_or_default()
++}
++
++/// See [`KeywordRules::venture_prohibited`].
++pub fn venture_prohibited(g: &Game, p: PlayerId) -> bool {
++    registry().iter().any(|r| r.venture_prohibited(g, p))
++}
++
+ /// See [`KeywordRules::target_forbidden`].
+ pub fn target_forbidden(g: &Game, spec: &TargetSpec, e: Entity, source: Option<ObjectId>) -> bool {
+     registry()
+diff --git a/crates/mtg-engine/src/mana_abilities.rs b/crates/mtg-engine/src/mana_abilities.rs
+index 7f83ad4e..27aeb660 100644
+--- a/crates/mtg-engine/src/mana_abilities.rs
++++ b/crates/mtg-engine/src/mana_abilities.rs
+@@ -170,6 +170,14 @@ fn production_units(g: &Game, e: &Effect, ctx: &Ctx) -> Option<Vec<Vec<ManaType>
+                     vec![t]
+                 }
+             }
++            ManaProduction::Custom(name) => {
++                let t = crate::kw::custom_mana_types(g, name, ctx);
++                if t.is_empty() {
++                    vec![]
++                } else {
++                    vec![t]
++                }
++            }
+             // CR 106.12a: the types of mana the triggering mana ability produced.
+             ManaProduction::AnyTypeProduced | ManaProduction::TypeProduced => {
+                 let t = crate::resolve::produced_types(ctx);
+diff --git a/crates/mtg-engine/src/oracle/render/effects.rs b/crates/mtg-engine/src/oracle/render/effects.rs
+index 517ed4e9..744fe54b 100644
+--- a/crates/mtg-engine/src/oracle/render/effects.rs
++++ b/crates/mtg-engine/src/oracle/render/effects.rs
+@@ -8227,6 +8227,7 @@ impl Renderer<'_> {
+             ManaProduction::DevotionToChosenColor => {
+                 "an amount of mana of that color equal to your devotion to that color".into()
+             }
++            ManaProduction::Custom(name) => format!("one mana of the type {name} names"),
+         }
+     }
+ 
+diff --git a/crates/mtg-engine/src/resolve.rs b/crates/mtg-engine/src/resolve.rs
+index 5c621ac7..e725dc94 100644
+--- a/crates/mtg-engine/src/resolve.rs
++++ b/crates/mtg-engine/src/resolve.rs
+@@ -3484,6 +3484,14 @@ impl Game {
+                     vec![self.choose_mana_color(p, ctx, &types)]
+                 }
+             }
++            ManaProduction::Custom(name) => {
++                let types = crate::kw::custom_mana_types(self, name, ctx);
++                if types.is_empty() {
++                    vec![]
++                } else {
++                    vec![self.choose_mana_color(p, ctx, &types)]
++                }
++            }
+             // CR 106.12a: one mana of any type the triggering mana ability produced.
+             ManaProduction::AnyTypeProduced | ManaProduction::TypeProduced => {
+                 let types = produced_types(ctx);
+diff --git a/crates/mtg-engine/tests/cards/m_jeweled_amulet.rs b/crates/mtg-engine/tests/cards/m_jeweled_amulet.rs
+new file mode 100644
+index 00000000..8b3f9608
+--- /dev/null
++++ b/crates/mtg-engine/tests/cards/m_jeweled_amulet.rs
+@@ -0,0 +1,78 @@
++//! Jeweled Amulet (hand-written, `src/cards/jeweled_amulet.rs`).
++
++use mtg_engine::mana::ManaType;
++use mtg_engine::testing::*;
++use mtg_engine::*;
++
++fn pool(t: &TestGame, p: PlayerId) -> Vec<ManaType> {
++    t.g.player(p).mana_pool.mana.iter().map(|m| m.ty).collect()
++}
++
++#[test]
++fn stores_mana_of_the_type_spent_to_charge_it() {
++    cr!("607.2e", "605.1a");
++    let mut t = TestGame::new(2);
++    let amulet = t.battlefield(P0, "Jeweled Amulet");
++    t.lands(P0, "Forest", 1);
++    t.activate(P0, amulet, 0, &[]).unwrap();
++    t.resolve_all();
++    assert_eq!(t.counters(amulet, "charge"), 1);
++    // A second charge isn't allowed while it has a charge counter.
++    t.g.untap(amulet);
++    assert!(t.activate(P0, amulet, 0, &[]).is_err());
++    t.activate(P0, amulet, 1, &[]).unwrap();
++    assert_eq!(t.counters(amulet, "charge"), 0);
++    assert_eq!(pool(&t, P0), vec![ManaType::G]);
++}
++
++#[test]
++fn the_last_noted_type_is_used_and_colorless_can_be_noted() {
++    cr!("607.2e");
++    let mut t = TestGame::new(2);
++    let amulet = t.battlefield(P0, "Jeweled Amulet");
++    t.lands(P0, "Island", 1);
++    t.activate(P0, amulet, 0, &[]).unwrap();
++    t.resolve_all();
++    t.g.untap(amulet);
++    t.activate(P0, amulet, 1, &[]).unwrap();
++    assert_eq!(pool(&t, P0), vec![ManaType::U]);
++    t.g.players[P0.idx()].mana_pool.mana.clear();
++    t.g.untap(amulet);
++    t.lands(P0, "Wastes", 1);
++    t.activate(P0, amulet, 0, &[]).unwrap();
++    t.resolve_all();
++    t.g.untap(amulet);
++    t.activate(P0, amulet, 1, &[]).unwrap();
++    assert_eq!(pool(&t, P0), vec![ManaType::C]);
++}
++
++#[test]
++fn with_no_type_noted_it_adds_no_mana() {
++    cr!("607.5a");
++    ruling!("Jeweled Amulet", "the second ability will produce no mana");
++    let mut t = TestGame::new(2);
++    let amulet = t.battlefield(P0, "Jeweled Amulet");
++    t.g.add_counters(Entity::Object(amulet), "charge", 1, None);
++    t.activate(P0, amulet, 1, &[]).unwrap();
++    assert_eq!(t.counters(amulet, "charge"), 0);
++    assert!(pool(&t, P0).is_empty());
++}
++
++#[test]
++fn with_several_types_spent_its_controller_chooses_the_one_noted() {
++    cr!("607.2e");
++    interp!("jeweled-amulet-several-types");
++    let mut t = TestGame::new(2);
++    // "Activated abilities cost {2} more to activate unless they're mana abilities."
++    t.battlefield(P1, "Suppression Field");
++    let amulet = t.battlefield(P0, "Jeweled Amulet");
++    t.lands(P0, "Forest", 1);
++    t.lands(P0, "Island", 2);
++    // Types are offered in WUBRGC order: {U}, then {G}.
++    t.answer(P0, DecisionKind::Option, Answer::Index(1));
++    t.activate(P0, amulet, 0, &[]).unwrap();
++    t.resolve_all();
++    t.g.untap(amulet);
++    t.activate(P0, amulet, 1, &[]).unwrap();
++    assert_eq!(pool(&t, P0), vec![ManaType::G]);
++}
+diff --git a/docs/interpretations/stack-casting-costs.md b/docs/interpretations/stack-casting-costs.md
+index 055c83a6..683915b8 100644
+--- a/docs/interpretations/stack-casting-costs.md
++++ b/docs/interpretations/stack-casting-costs.md
+@@ -63,3 +63,15 @@ index: `docs/INTERPRETATIONS.md`.
+ - Affects: every reversed cast or activation that paid mana by activating mana abilities, e.g. a sacrificed Lotus Petal or Treasure, which returns to the battlefield.
+ - Code: `crates/mtg-engine/src/game.rs` (`roll_back`); `crates/mtg-engine/src/casting.rs` (`cast_with_option`, `activate_ability`).
+ - Tests: `tests/cr/r733_001_library_exceptions.rs` (`a_reversed_action_also_reverses_a_draw_made_while_attempting_it`, `a_reversed_cast_reverses_its_mana_abilities`).
++
++## jeweled-amulet-several-types: When mana of several types was spent on Jeweled Amulet's activation, its controller chooses the type noted
++- Kind: interpretation
++- Status: provisional
++- Rules: Jeweled Amulet: "{1}, {T}: Put a charge counter on this artifact. Note the type of mana spent to pay this activation cost. ..." / 607.2e "If an object has an ability printed on it that allows some information to be noted and another ability which refers to information noted for that object, those abilities are linked. The second ability refers only to information noted as a result of the first ability."
++- Question: The printed cost is {1}, so one type of mana is spent. A cost increase ("Activated abilities cost {2} more to activate unless they're mana abilities", Suppression Field) can make the controller spend mana of several types: which one is "the type of mana spent"?
++- Decision: As the ability resolves, its controller chooses one of the types spent, and that type is noted (with one type spent, that one).
++- Alternatives: (A) Note every type spent, in the order paid, and treat the last as "the last noted type": depends on the engine's payment order, which the player doesn't see. (B) Note nothing when more than one type was spent: the instruction would do nothing in a case the card plainly expects to note something.
++- Why: The singular "the type" reads as one type; when the payment leaves it open, the player who paid decides, like other choices an instruction leaves to its controller (CR 608.2d).
++- Affects: Jeweled Amulet (with an activation cost increase in play).
++- Code: `crates/mtg-engine/src/cards/jeweled_amulet.rs` (`custom_effect`).
++- Tests: `tests/cards/m_jeweled_amulet.rs` (`with_several_types_spent_its_controller_chooses_the_one_noted`).

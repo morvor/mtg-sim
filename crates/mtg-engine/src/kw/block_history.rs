@@ -1,0 +1,197 @@
+//! Combat history: the blocks of this combat and this turn, and the attacks declared
+//! this turn, kept after creatures leave combat or the battlefield.
+//!
+//! * `CombatState::block_history` and `TurnHistory::blocks`: every (blocker, attacker)
+//!   pair, declared (CR 509.1) or created by an effect (CR 509.3, 509.4), for
+//!   [`Filter::BlockRelation`] ("creatures that were blocked by that creature this
+//!   combat", "creatures it was blocking that had become blocked by only that creature
+//!   this combat", "creatures that were blocked by target Wall this turn"). A creature
+//!   put onto the battlefield blocking is blocking, but for effects it never "blocked"
+//!   (CR 509.4): what it blocked and what was blocked by it this combat or this turn
+//!   leave out those blocks (`TurnHistory::entered_blocking`), while it is blocking now.
+//! * `TurnHistory::attacks`: every declared attack, with the defending player (CR 508.1,
+//!   508.5): "a player it has already attacked this turn".
+
+use super::{KeywordRegistration, KeywordRules};
+use crate::ability::{BlockRel, BlockWhen};
+use crate::events::Event;
+use crate::game::Game;
+use crate::keywords::KeywordKind;
+use crate::types::*;
+
+pub struct BlockHistory;
+
+/// `Filter::Custom` prefix: a card owned by the player who controlled the creature in the
+/// variable `<var>` the last time it became blocked this turn by the target in `<slot>`
+/// (`<prefix><slot>:<var>`): "the graveyard of the player who controlled that creature the
+/// last time it became blocked by that Wall" (Glyph of Reincarnation). The creature is the
+/// one that was blocked (as it last existed on the battlefield if it has died since).
+pub const OWNED_BY_CONTROLLER_WHEN_BLOCKED: &str =
+    "block history:owned by the player who controlled it when it became blocked by:";
+
+/// Records that `blocker` blocks `attacker`: declared, made to block by an effect, or
+/// put onto the battlefield blocking it (`entered`, CR 509.4).
+fn record_block(g: &mut Game, blocker: ObjectId, attacker: ObjectId, entered: bool) {
+    let ctl = g.obj(attacker).controller;
+    let pair = (blocker, attacker);
+    if entered {
+        if !g.history.entered_blocking.contains(&pair) {
+            g.history.entered_blocking.push(pair);
+        }
+    } else {
+        // It blocks that attacker for real now (a later combat, or an effect).
+        g.history.entered_blocking.retain(|p| *p != pair);
+    }
+    if let Some(c) = g.combat.as_mut() {
+        if !c.block_history.contains(&(blocker, attacker)) {
+            c.block_history.push((blocker, attacker));
+        }
+    }
+    if !g
+        .history
+        .blocks
+        .iter()
+        .any(|(b, a, _)| *b == blocker && *a == attacker)
+    {
+        g.history.blocks.push((blocker, attacker, ctl));
+    }
+}
+
+impl KeywordRules for BlockHistory {
+    fn kinds(&self) -> &'static [KeywordKind] {
+        &[]
+    }
+
+    fn custom_filter(
+        &self,
+        g: &Game,
+        name: &str,
+        id: ObjectId,
+        ctx: &crate::eval::Ctx,
+    ) -> Option<bool> {
+        let r = name.strip_prefix(OWNED_BY_CONTROLLER_WHEN_BLOCKED)?;
+        let (slot, var) = r.split_once(':')?;
+        let (slot, var): (usize, crate::ability::Var) = (slot.parse().ok()?, var.parse().ok()?);
+        let blocker = ctx
+            .targets
+            .get(slot)
+            .and_then(|t| t.first())
+            .and_then(|e| e.object());
+        let attacker = ctx
+            .vars
+            .get(&var)
+            .and_then(|v| v.first())
+            .and_then(|e| e.object());
+        let (Some(blocker), Some(attacker)) = (blocker, attacker) else {
+            return Some(false);
+        };
+        Some(
+            controller_when_blocked_by(g, blocker, attacker)
+                .is_some_and(|p| g.obj(id).owner == p),
+        )
+    }
+
+    fn on_event(&self, g: &mut Game, ev: &Event) {
+        match ev {
+            Event::BlockersDeclared { blocks } => {
+                for (b, a) in blocks {
+                    record_block(g, *b, *a, false);
+                }
+            }
+            Event::BlockAdded {
+                blocker,
+                attacker,
+                entered,
+                ..
+            } => record_block(g, *blocker, *attacker, *entered),
+            Event::AttackersDeclared { attackers, .. } => {
+                for (a, t) in attackers {
+                    let dp = crate::combat::entity_defender(g, *t);
+                    g.history.attacks.push((*a, *t, dp));
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+inventory::submit! { KeywordRegistration(&BlockHistory) }
+
+/// The (blocker, attacker) pairs a relation looks at.
+fn pairs(g: &Game, when: BlockWhen) -> Vec<(ObjectId, ObjectId)> {
+    match when {
+        BlockWhen::Now => g
+            .combat
+            .as_ref()
+            .map(|c| {
+                c.blockers
+                    .iter()
+                    .flat_map(|b| b.blocking.iter().map(move |a| (b.id, *a)))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        BlockWhen::ThisCombat => g
+            .combat
+            .as_ref()
+            .map(|c| c.block_history.clone())
+            .unwrap_or_default(),
+        BlockWhen::ThisTurn => g.history.blocks.iter().map(|(b, a, _)| (*b, *a)).collect(),
+    }
+}
+
+/// Whether `id` has the block relation `rel` to one of `others` (CR 509.1g-h).
+pub fn block_relation(
+    g: &Game,
+    id: ObjectId,
+    rel: BlockRel,
+    others: &[ObjectId],
+    when: BlockWhen,
+) -> bool {
+    let mut pairs = pairs(g, when);
+    // "Creatures it blocked this turn", "creatures that were blocked by it this combat": a
+    // creature put onto the battlefield blocking never blocked (CR 509.4).
+    if when != BlockWhen::Now && rel != BlockRel::BlockedOnlyBy {
+        pairs.retain(|p| !g.history.entered_blocking.contains(p));
+    }
+    let blocking = |b: ObjectId, a: ObjectId| pairs.contains(&(b, a));
+    match rel {
+        BlockRel::Blocking => others.iter().any(|o| blocking(id, *o)),
+        BlockRel::BlockedBy => others.iter().any(|o| blocking(*o, id)),
+        BlockRel::BlockingOrBlockedBy => {
+            others.iter().any(|o| blocking(id, *o) || blocking(*o, id))
+        }
+        BlockRel::BlockedOnlyBy => {
+            let by: Vec<ObjectId> = pairs
+                .iter()
+                .filter(|(_, a)| *a == id)
+                .map(|(b, _)| *b)
+                .collect();
+            !by.is_empty() && by.iter().all(|b| others.contains(b))
+        }
+    }
+}
+
+/// The players `id` attacked this turn (declared attacks).
+pub fn players_attacked_by(g: &Game, id: ObjectId) -> Vec<PlayerId> {
+    g.history
+        .attacks
+        .iter()
+        .filter(|(a, t, _)| *a == id && matches!(t, Entity::Player(_)))
+        .filter_map(|(_, t, _)| t.player())
+        .collect()
+}
+
+/// The player who controlled `attacker` the last time it became blocked by `blocker`
+/// this turn.
+pub fn controller_when_blocked_by(
+    g: &Game,
+    blocker: ObjectId,
+    attacker: ObjectId,
+) -> Option<PlayerId> {
+    g.history
+        .blocks
+        .iter()
+        .rev()
+        .find(|(b, a, _)| *b == blocker && *a == attacker)
+        .map(|(_, _, p)| *p)
+}

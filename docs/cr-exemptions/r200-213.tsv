@@ -1,0 +1,14 @@
+201.1	Where the name is printed on the physical card (its upper left corner) is card layout; the engine takes each card's name from the Oracle card reference, so there is nothing to execute. Names themselves are tested under 201.2-201.6.
+201.3c	Describes the interchangeable names indicator printed on later printings (bottom left corner); printing information not in the card data. Interchangeable names are tested under 201.3, 201.3a, 201.3b and 201.4g.
+206.1	The expansion symbol identifies the set of a printing and "has no effect on game play"; it isn't a characteristic and the engine's Oracle card data has none. Rules about names originally printed in a set are tested under 206.3.
+206.2	The color of the expansion symbol indicates the printing's rarity; printed information with no effect on game play.
+206.5	Points to the Card Set Archive on the Magic website; states no game rule.
+207.3	Decorative icons in the background of the text box (guild and faction icons) "have no effect on game play" and aren't part of the card data.
+213.1	Information printed below the text box "has no effect on game play"; it's printing information, not part of the Oracle card data the engine uses.
+213.1a	Collector numbers are printing information with no effect on game play.
+213.1b	The rarity letter after the collector number is printing information with no effect on game play.
+213.1c	Promotional information on promotional printings has no effect on game play.
+213.1d	The version information on printings with interchangeable names is printing information; interchangeable names themselves are tested under 201.3.
+213.1e	The set and language codes (and the premium star) are printing information with no effect on game play.
+213.1f	The illustration credit is printing information with no effect on game play.
+213.1g	The legal text (trademark and copyright) is printing information with no effect on game play.
