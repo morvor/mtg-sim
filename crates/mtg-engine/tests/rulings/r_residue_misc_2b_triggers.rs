@@ -261,12 +261,12 @@ fn seraph_triggers_if_it_dies_with_the_creature_but_not_after_leaving() {
 #[test]
 fn seraph_returns_no_token_and_no_card_that_left_the_graveyard() {
     cr!("704.5d", "111.7", "400.7");
-    // The token ceases to exist once it's in the graveyard (the ruling predates the
-    // current wording, which puts the card onto the battlefield from the graveyard).
-    ruling!(
-        "Seraph",
-        "If the other creature is a token, it will cease to exist after being exiled. It won’t be returned to the battlefield."
-    );
+    interp!("ruling-contradicting-oracle-gives-way");
+    // The token ceases to exist once it's in the graveyard, and isn't returned. The ruling's
+    // "it will cease to exist after being exiled" is a template error (Tawnos's Coffin's
+    // ruling of the same day; Seraph exiles nothing): exempt in rulings-P176.tsv, decided by
+    // the user Nov 20, logged in docs/RULING_DISCREPANCIES.md; the rest stays cited.
+    ruling!("Seraph", "It won’t be returned to the battlefield.");
     ruling!(
         "Seraph",
         "You do not get the creature back if the creature is not still in the graveyard at the end of the turn."

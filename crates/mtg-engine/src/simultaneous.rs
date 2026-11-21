@@ -197,7 +197,10 @@ struct Instruction {
 /// The body's instructions (CR 608.2e: its separate sentences and clauses).
 fn instructions(body: &Effect) -> Vec<Instruction> {
     let list: Vec<Effect> = match body {
-        Effect::Seq(v) if !crate::trigger_timing::creates_tokens_together(v) => v.clone(),
+        // A choice stored for counters offers only what can have them (Eye of Doom).
+        Effect::Seq(v) if !crate::trigger_timing::creates_tokens_together(v) => {
+            crate::kw::counter_choice::narrowed_stored_choices(v).unwrap_or_else(|| v.clone())
+        }
         e => vec![e.clone()],
     };
     let mut out: Vec<Instruction> = Vec::new();
