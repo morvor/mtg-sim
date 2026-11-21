@@ -2911,7 +2911,7 @@ fn names_zone_left(t: &TriggerCond) -> bool {
 
 /// Whether a trigger condition is about sacrificing ("whenever you sacrifice a creature"),
 /// the event that causes a creature to die rather than its dying (CR 603.2d).
-fn on_sacrifice(t: &TriggerCond) -> bool {
+pub(crate) fn on_sacrifice(t: &TriggerCond) -> bool {
     match t {
         TriggerCond::Sacrificed(_) | TriggerCond::YouSacrifice(_) => true,
         TriggerCond::Where { trigger, .. }

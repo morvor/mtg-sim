@@ -678,6 +678,65 @@ fn torpor_orb_judges_delayed_abilities_by_the_trigger_event_that_matched() {
 }
 
 #[test]
+fn hushbringer_stops_delayed_dies_abilities_per_event_or_one_or_more() {
+    cr!("603.7", "603.2c", "700.4");
+    ruling!(
+        "Hushbringer",
+        "as well as other triggered abilities that trigger when that creature enters the battlefield or dies"
+    );
+    use crate::r600_common::{gain, CB};
+    use mtg_engine::ability::{BatchPer, Body, Effect, Filter, TriggerCond};
+    supported("Hushbringer");
+    // "This turn, whenever a creature dies" (per event or "one or more", CR 603.2c), "you
+    // gain 1 life", and two Grizzly Bears destroyed at once. A delayed triggered ability
+    // (CR 603.7) is a triggered ability like any other: under Hushbringer ("Creatures
+    // entering or dying don't cause abilities to trigger."), the deaths don't cause it to
+    // trigger, whether it's checked event by event or once for the batch.
+    let dies = TriggerCond::Dies(Filter::creature());
+    for batched in [false, true] {
+        for hush in [false, true] {
+            let mut t = TestGame::new(2);
+            if hush {
+                t.battlefield(P0, "Hushbringer");
+            }
+            let trigger = if batched {
+                TriggerCond::Batched {
+                    trigger: Box::new(dies.clone()),
+                    per: BatchPer::Batch,
+                }
+            } else {
+                dies.clone()
+            };
+            let rite = CB::new("Mourning Rite")
+                .sorcery()
+                .cost("{0}")
+                .spell(Body::effect(Effect::DelayedTrigger {
+                    trigger: TriggerCond::ThisTurn(Box::new(trigger)),
+                    body: Box::new(Body::effect(gain(1))),
+                    once: false,
+                }))
+                .build();
+            let rite = t.custom(P0, rite, Zone::Hand(P0));
+            t.cast(P0, rite).go();
+            t.resolve();
+            let a = t.battlefield(P1, "Grizzly Bears");
+            let b = t.battlefield(P1, "Grizzly Bears");
+            t.g.destroy_all(vec![a, b], None, false);
+            t.settle();
+            t.resolve_all();
+            let case = format!("batched: {batched}, Hushbringer: {hush}");
+            assert_eq!(t.g.players[P1.idx()].graveyard.len(), 2, "{case}");
+            let gained = match (hush, batched) {
+                (true, _) => 0,
+                (false, true) => 1,
+                (false, false) => 2,
+            };
+            assert_eq!(t.life(P0), 20 + gained, "{case}");
+        }
+    }
+}
+
+#[test]
 fn aboleth_spawn_and_firebender_ascension_judge_the_trigger_event_that_matched() {
     cr!("603.2", "603.6a");
     interp!("ability-triggered-cause-is-the-event");

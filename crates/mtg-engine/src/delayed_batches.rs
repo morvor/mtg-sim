@@ -28,7 +28,10 @@ fn batched(t: &TriggerCond) -> Option<(&TriggerCond, BatchPer)> {
 /// trigger only once are removed (CR 603.7b). `entering_off` says, for each event, whether
 /// it's a permanent entering that causes no ability to trigger (Torpor Orb): such an event
 /// triggers only an ability whose trigger event is the card leaving the zone it came from
-/// (`ability-triggered-cause-is-the-event`).
+/// (`ability-triggered-cause-is-the-event`). The other "don't cause abilities to trigger"
+/// statics (creatures dying, Hushbringer) apply as they do to a delayed ability matched
+/// event by event (`detect_triggers`), with no source: a delayed triggered ability isn't an
+/// ability of a permanent (`delayed-abilities-arent-abilities-of-permanents`).
 pub fn triggered_by_batch(
     g: &mut Game,
     batch: &[Event],
@@ -46,6 +49,17 @@ pub fn triggered_by_batch(
             .iter()
             .zip(entering_off)
             .filter(|(ev, off)| !**off || g.matched_leaving_as_it_entered(trigger, &base, ev))
+            .filter(|(ev, _)| {
+                crate::triggers::on_sacrifice(trigger)
+                    || !crate::kw::torpor::suppressed_for(
+                        g,
+                        ev,
+                        None,
+                        d.controller,
+                        crate::triggers::looks_back(trigger, ev),
+                        g.matched_leaving_as_it_entered(trigger, &base, ev),
+                    )
+            })
             .flat_map(|(ev, _)| g.trigger_matches_ctx(trigger, &base, ev))
             .collect();
         if infos.is_empty() {
