@@ -1056,7 +1056,9 @@ decides whether they become a conflict case.
   House Markov"). Wizards' own text has the symbol whole: the Outlaws of Thunder Junction
   Release Notes (Eric Levine, posted 2024-04-05; read in work item web-research-1, Nov 20)
   and Gatherer say "... that spell's mana value is 2 because Cease's mana cost is {1}{B/G}.",
-  so the two-symbol text is Scryfall's copy, the same copying error. No kind fits a wrong cost inside a ruling whose conclusion holds; it stays
+  so the two-symbol text is Scryfall's copy, the same copying error. It stays a note, not
+  an entry: the wrong cost is in a parenthetical example, the ruling's conclusion holds and
+  nothing in it contradicts Kellan's own text, so nothing is exempt; it stays
   cited, tested with the mana value of a split half on the stack
   (`tests/rulings/r_p154_free_casts.rs`, `kellan_uses_the_mana_value_of_the_split_half_cast`:
   Cooperate cast by aftermath has mana value 3, not the combined 7, and Cease cast from
