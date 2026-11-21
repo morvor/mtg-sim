@@ -1882,26 +1882,25 @@ impl Game {
             return;
         }
         let owner = o.owner;
-        let mut dest = crate::keyword_impls::countered_spell_destination(self, id);
-        let mv = |to: (Zone, LibraryPosition)| MoveEv {
+        // CR 701.6a: a countered spell is put into its owner's graveyard, and the
+        // replacement effects that would modify that event apply to it as to any other
+        // (CR 616.1): a self-replacement effect of the effect countering it first ("if
+        // that spell is countered this way, exile it with three time counters on it
+        // instead", CR 616.1a), and among the others, in the order the spell's controller
+        // chooses, the effect of how it was cast: flashback's "exile this card instead of
+        // putting it anywhere else any time it would leave the stack" is a static ability
+        // of the card (CR 702.34a), not part of a spell's effect (CR 614.15), so Rest in
+        // Peace's or Dauthi Voidwalker's may be applied first
+        // (`leaving-the-stack-exile-among-other-replacements`).
+        self.move_object_ev(MoveEv {
             obj: id,
-            to: to.0,
-            pos: to.1,
+            to: Zone::Graveyard(owner),
+            pos: LibraryPosition::Top,
             cause,
             by: None,
             etb: EtbInfo::default(),
             source: None,
-        };
-        // CR 701.6a, 616.1a: a countered spell is put into its owner's graveyard; a
-        // self-replacement effect of the effect countering it ("if that spell is countered
-        // this way, exile it with three time counters on it instead") applies to that
-        // event before the replacement effect of how it was cast (flashback's "exile it
-        // instead of putting it anywhere else"), which then applies to the modified event.
-        let graveyard = (Zone::Graveyard(owner), LibraryPosition::Top);
-        if dest != graveyard && self.self_replacement_applies(&ReplEvent::Move(mv(graveyard))) {
-            dest = graveyard;
-        }
-        self.move_object_ev(mv(dest));
+        });
     }
 
     /// Counters a spell or ability (CR 701.6) by the spell or ability `by` (its

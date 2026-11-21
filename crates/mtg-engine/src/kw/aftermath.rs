@@ -132,15 +132,6 @@ impl KeywordRules for Aftermath {
     ) -> Option<(Zone, LibraryPosition)> {
         cast_from_graveyard(g, spell).then_some((Zone::Exile, LibraryPosition::Top))
     }
-
-    fn countered_destination(
-        &self,
-        g: &Game,
-        spell: ObjectId,
-        _kw: &Keyword,
-    ) -> Option<(Zone, LibraryPosition)> {
-        cast_from_graveyard(g, spell).then_some((Zone::Exile, LibraryPosition::Top))
-    }
 }
 
 inventory::submit! { KeywordRegistration(&Aftermath) }

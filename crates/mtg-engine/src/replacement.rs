@@ -706,14 +706,6 @@ impl Game {
             .any(|c| matches!(c.def.action, ReplacementAction::Prevent) && !c.def.optional)
     }
 
-    /// Whether a self-replacement effect (CR 614.15) applies to the proposed event.
-    pub(crate) fn self_replacement_applies(&self, ev: &ReplEvent) -> bool {
-        let applied: Vec<ReplKey> = self.repl_context.last().cloned().unwrap_or_default();
-        self.replacement_candidates(ev, &applied, CandScope::All)
-            .iter()
-            .any(|c| c.def.self_replacement)
-    }
-
     /// The player who chooses among replacement effects for an event (CR 616.1).
     pub(crate) fn affected_player(&self, ev: &ReplEvent) -> PlayerId {
         match ev {

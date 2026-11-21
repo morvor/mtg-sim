@@ -107,15 +107,6 @@ impl KeywordRules for JumpStart {
     ) -> Option<(Zone, LibraryPosition)> {
         cast_with_jump_start(g, spell).then_some((Zone::Exile, LibraryPosition::Top))
     }
-
-    fn countered_destination(
-        &self,
-        g: &Game,
-        spell: ObjectId,
-        _kw: &Keyword,
-    ) -> Option<(Zone, LibraryPosition)> {
-        cast_with_jump_start(g, spell).then_some((Zone::Exile, LibraryPosition::Top))
-    }
 }
 
 inventory::submit! { KeywordRegistration(&JumpStart) }

@@ -231,15 +231,6 @@ impl KeywordRules for Harmonize {
     ) -> Option<(Zone, LibraryPosition)> {
         cast_with_harmonize(g, spell).then_some((Zone::Exile, LibraryPosition::Top))
     }
-
-    fn countered_destination(
-        &self,
-        g: &Game,
-        spell: ObjectId,
-        _kw: &Keyword,
-    ) -> Option<(Zone, LibraryPosition)> {
-        cast_with_harmonize(g, spell).then_some((Zone::Exile, LibraryPosition::Top))
-    }
 }
 
 inventory::submit! { KeywordRegistration(&Harmonize) }

@@ -327,15 +327,19 @@ pub trait KeywordRules: Sync + Send {
     /// graveyard as it resolves, ...", CR 614.1a): if other replacement effects would
     /// apply to that event, its controller chooses which to apply (CR 616.1). Not so for
     /// an effect that applies wherever the card would go ("exile it instead of putting it
-    /// anywhere else", which still applies after any other), nor for a spell whose own
-    /// instruction puts it somewhere ("Exile this spell.").
+    /// anywhere else", see [`KeywordRules::resolved_destination_anywhere_else`]), nor for a
+    /// spell whose own instruction puts it somewhere ("Exile this spell.").
     fn resolved_destination_replaces(&self) -> bool {
         true
     }
     /// Whether [`KeywordRules::resolved_destination`] is an effect that applies wherever
     /// the card would go ("exile it instead of putting it anywhere else": flashback,
-    /// jump-start, ...): another effect replacing the spell's being put into its owner's
-    /// graveyard may be applied first (CR 616.1), and then this one no longer applies.
+    /// jump-start, ...): a replacement effect of a static ability of the card, which the
+    /// keyword's derived ability generates. The spell is then proposed to its owner's
+    /// graveyard, and its controller chooses among that effect and the others replacing
+    /// the move (CR 616.1; `keyword_impls::choose_resolved_spell_destination`): another
+    /// one applied first (Rest in Peace's, Feather, the Redeemed's), this one no longer
+    /// applies to a card already going to exile.
     fn resolved_destination_anywhere_else(&self) -> bool {
         false
     }
@@ -359,15 +363,6 @@ pub trait KeywordRules: Sync + Send {
     /// After any instant or sorcery spell resolved and was put where it goes (`new`).
     /// Called for every registered implementation.
     fn global_after_spell_resolved(&self, g: &mut Game, spell: ObjectId, new: ObjectId) {}
-    /// Where a countered spell goes, if the keyword changes it.
-    fn countered_destination(
-        &self,
-        g: &Game,
-        spell: ObjectId,
-        kw: &Keyword,
-    ) -> Option<(Zone, LibraryPosition)> {
-        None
-    }
     /// After a permanent spell with this keyword resolves (`new` is the permanent).
     fn after_permanent_resolves(&self, g: &mut Game, spell: ObjectId, new: ObjectId, kw: &Keyword) {
     }
@@ -1230,6 +1225,23 @@ pub fn anywhere_else_destination(
     })
 }
 
+/// The destination the spell's own instruction gives it as it resolves ("Exile this
+/// spell.", paradigm): a keyword's destination that is neither a replacement effect among
+/// which its controller chooses ([`KeywordRules::resolved_destination_replaces`]) nor an
+/// "anywhere else" effect ([`KeywordRules::resolved_destination_anywhere_else`]). The
+/// spell isn't put into a graveyard, so no effect replacing that applies (Feather, the
+/// Redeemed's ruling: "If an instant or sorcery spell's own instructions tell you to exile
+/// it or put it anywhere else, it won't try to be put into your graveyard").
+pub fn own_instruction_destination(g: &Game, spell: ObjectId) -> Option<(Zone, LibraryPosition)> {
+    distinct_kinds(&g.obj(spell).chars).iter().find_map(|kw| {
+        impls_for(kw.kind)
+            .filter(|r| {
+                !r.resolved_destination_replaces() && !r.resolved_destination_anywhere_else()
+            })
+            .find_map(|r| r.resolved_destination(g, spell, kw))
+    })
+}
+
 /// Every destination keywords give the spell as it resolves (see
 /// [`resolved_destination_by`]), one per keyword (e.g. both rebound and buyback, among
 /// which the spell's controller chooses, CR 616.1); or else the one an effect applying to
@@ -1274,18 +1286,6 @@ pub fn after_spell_resolved(g: &mut Game, spell: ObjectId, new: ObjectId) {
             r.after_spell_resolved(g, spell, kw, new);
         }
     }
-}
-
-pub fn countered_destination(g: &Game, spell: ObjectId) -> Option<(Zone, LibraryPosition)> {
-    let kws: Vec<Keyword> = g.obj(spell).chars.keywords().cloned().collect();
-    for kw in &kws {
-        for r in impls_for(kw.kind) {
-            if let Some(d) = r.countered_destination(g, spell, kw) {
-                return Some(d);
-            }
-        }
-    }
-    None
 }
 
 pub fn after_permanent_resolves(g: &mut Game, spell: ObjectId, new: ObjectId) {

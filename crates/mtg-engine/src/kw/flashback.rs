@@ -111,15 +111,6 @@ impl KeywordRules for Flashback {
     ) -> Option<(Zone, LibraryPosition)> {
         cast_with_flashback(g, spell).then_some((Zone::Exile, LibraryPosition::Top))
     }
-
-    fn countered_destination(
-        &self,
-        g: &Game,
-        spell: ObjectId,
-        _kw: &Keyword,
-    ) -> Option<(Zone, LibraryPosition)> {
-        cast_with_flashback(g, spell).then_some((Zone::Exile, LibraryPosition::Top))
-    }
 }
 
 inventory::submit! { KeywordRegistration(&Flashback) }

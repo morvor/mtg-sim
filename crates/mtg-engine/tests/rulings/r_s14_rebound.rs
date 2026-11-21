@@ -611,22 +611,35 @@ fn buyback_and_rest_in_peace_are_chosen_between_like_rebound() {
 
 #[test]
 fn flashback_exiles_the_card_whatever_else_would_apply() {
-    cr!("702.34a", "616.1");
+    cr!("702.34a", "616.1", "608.2n");
+    interp!("leaving-the-stack-exile-among-other-replacements");
     supported("Think Twice");
-    // Think Twice cast with flashback while P1 controls Rest in Peace: it's exiled, with
-    // nothing to choose ("exile it instead of putting it anywhere else" applies after any
-    // other replacement effect anyway).
-    let mut t = TestGame::new(2);
-    t.battlefield(P1, "Rest in Peace");
-    t.lands(P0, "Island", 3);
-    let card = t.graveyard(P0, "Think Twice");
-    let from = t.asked().len();
-    t.cast(P0, card)
-        .method(CastMethod::Keyword(
-            mtg_engine::keywords::KeywordKind::Flashback,
-        ))
-        .go();
-    t.resolve_all();
-    assert!(replacement_choices(&t, from).is_empty());
-    assert!(t.in_exile("Think Twice"));
+    // Think Twice cast with flashback resolves while P1 controls Rest in Peace: flashback's
+    // "exile this card instead of putting it anywhere else" is a replacement effect of a
+    // static ability of the card, so P0 chooses between it and Rest in Peace's effect (CR
+    // 616.1), and either exiles the card ("instead of putting it anywhere else" doesn't
+    // apply to a card already going to exile).
+    for pick in [0, 1] {
+        let mut t = TestGame::new(2);
+        t.battlefield(P1, "Rest in Peace");
+        t.lands(P0, "Island", 3);
+        let card = t.graveyard(P0, "Think Twice");
+        let from = t.asked().len();
+        t.answer(P0, DecisionKind::Replacement, Answer::Index(pick));
+        t.cast(P0, card)
+            .method(CastMethod::Keyword(
+                mtg_engine::keywords::KeywordKind::Flashback,
+            ))
+            .go();
+        t.resolve_all();
+        let choices = replacement_choices(&t, from);
+        assert_eq!(choices.len(), 1, "{choices:?}");
+        assert_eq!(choices[0].len(), 2, "{choices:?}");
+        assert!(
+            choices[0].iter().any(|o| o.contains("Flashback"))
+                && choices[0].iter().any(|o| o.starts_with("Rest in Peace")),
+            "{choices:?}"
+        );
+        assert!(t.in_exile("Think Twice"), "pick {pick}");
+    }
 }

@@ -254,28 +254,38 @@ pub fn choose_resolved_spell_destination(
     if dests.is_empty() {
         return (graveyard, false);
     }
-    // A destination that isn't a replacement effect the player chooses among (flashback's
-    // "exile it instead of putting it anywhere else") applies.
-    if let Some((dest, _)) = dests.iter().find(|(_, l)| l.is_none()) {
+    // The spell's own instruction ("Exile this spell.", paradigm) puts it there: it isn't
+    // put into a graveyard, so nothing replaces that.
+    if let Some(dest) = crate::kw::own_instruction_destination(g, id) {
+        return (dest, false);
+    }
+    // A keyword's "exile this card instead of putting it anywhere else any time it would
+    // leave the stack" (flashback, aftermath, jump-start, harmonize) is a replacement
+    // effect of a static ability of the card (CR 702.34a), not part of the spell's own
+    // effect (CR 614.15): its controller chooses among it and the other effects that
+    // would replace the spell's being put into its owner's graveyard (CR 616.1;
+    // `leaving-the-stack-exile-among-other-replacements`). The spell is proposed to the
+    // graveyard, where the keyword's effect (its derived static ability, functioning on
+    // the stack) is applied with the others (Rest in Peace's, Dauthi Voidwalker's).
+    if let Some((_, kw_label)) = crate::kw::anywhere_else_destination(g, id) {
         // An effect applying to the spell that replaces its being put into its owner's
-        // graveyard (Feather, the Redeemed's "exile that card instead of putting it into
-        // your graveyard") may be applied first (CR 616.1): the card then isn't put
-        // anywhere else, so flashback's effect doesn't apply. Applying flashback's first,
-        // the other effect doesn't happen (nor its delayed return).
-        if let (Some((other, label)), Some((_, kw_label))) = (
-            crate::kw::global_resolved_destination(g, id),
-            crate::kw::anywhere_else_destination(g, id),
-        ) {
+        // graveyard outside that pipeline (Feather, the Redeemed's "exile that card instead
+        // of putting it into your graveyard") is offered against it first (Feather's
+        // ruling: "you may choose to apply Feather's replacement effect first"): the card
+        // then isn't put anywhere else, so the keyword's effect doesn't apply. Not applying
+        // Feather's, the move goes on to the graveyard's replacement effects, the keyword's
+        // among them, and Feather's doesn't happen (nor its delayed return).
+        if let Some((other, label)) = crate::kw::global_resolved_destination(g, id) {
             let options = vec![label, kw_label];
             return match g.ask(
                 controller,
                 crate::decision::Decision::ChooseReplacement { options },
             ) {
-                crate::decision::Answer::Index(1) => (*dest, true),
+                crate::decision::Answer::Index(1) => (graveyard, true),
                 _ => (other, false),
             };
         }
-        return (*dest, false);
+        return (graveyard, false);
     }
     let others = g.applicable_replacements(&crate::replacement::ReplEvent::Move(
         crate::replacement::MoveEv {
@@ -312,14 +322,6 @@ pub fn choose_resolved_spell_destination(
 pub fn after_spell_resolved(g: &mut Game, id: ObjectId, new: ObjectId) {
     crate::adventure::after_resolved(g, id, new);
     crate::kw::after_spell_resolved(g, id, new);
-}
-
-/// Where a countered spell (or one that fails to resolve) goes.
-pub fn countered_spell_destination(g: &Game, id: ObjectId) -> (Zone, LibraryPosition) {
-    let o = g.obj(id);
-    // Flashback (CR 702.34a: exiled instead of anywhere else): see `kw/flashback.rs`.
-    crate::kw::countered_destination(g, id)
-        .unwrap_or((Zone::Graveyard(o.owner), LibraryPosition::Top))
 }
 
 pub fn after_permanent_spell_resolves(g: &mut Game, spell: ObjectId, new: ObjectId) {
