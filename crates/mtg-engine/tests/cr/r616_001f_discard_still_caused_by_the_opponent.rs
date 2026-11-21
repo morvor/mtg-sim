@@ -4,7 +4,9 @@
 //! reveal Darksteel Colossus and shuffle it into its owner's library instead." applied
 //! first, Nephalia Academy's "If a spell or ability an opponent controls causes you to
 //! discard a card, you may reveal that card and put it on top of your library instead of
-//! putting it anywhere else." still applies to the discard Mind Rot causes.
+//! putting it anywhere else." still applies to the discard Mind Rot causes. So it does with
+//! the discarding player's own Rest in Peace or the card's madness applied first (each
+//! exiles the card, which is then "exiled with" that effect's source, CR 607.2b).
 
 use crate::r614_audit_common::*;
 use mtg_engine::decision::{Agent, Answer, Decision, PassiveAgent};
@@ -85,14 +87,15 @@ fn nephalia_academy_still_applies_to_a_darksteel_colossus_its_own_effect_shuffle
     );
 }
 
-/// Regression test for an engine bug found triaging `replacement.rs:2206:49` (fails until
-/// fix). P0's own Rest in Peace ("If a card or token would be put into a graveyard from
-/// anywhere, exile it instead.") applied first to the discard P1's Mind Rot causes makes
-/// Rest in Peace the move's source (to link the exiled card to it, CR 607.2b), which is
-/// also what Nephalia Academy's "If a spell or ability an opponent controls causes you to
-/// discard a card" reads as the discard's cause, so Nephalia Academy's effect is no longer
-/// offered. The discard is still Mind Rot's doing (CR 614.6), and "instead of putting it
-/// anywhere else" applies to a card going to exile (CR 616.1f).
+/// Regression test for an engine bug found triaging `replacement.rs:2206:49`. P0's own Rest
+/// in Peace ("If a card or token would be put into a graveyard from anywhere, exile it
+/// instead.") applied first to the discard P1's Mind Rot causes made Rest in Peace the
+/// move's source (to link the exiled card to it, CR 607.2b), which is also what Nephalia
+/// Academy's "If a spell or ability an opponent controls causes you to discard a card"
+/// reads as the discard's cause, so Nephalia Academy's effect was no longer offered. The
+/// discard is still Mind Rot's doing (CR 614.6), and "instead of putting it anywhere else"
+/// applies to a card going to exile (CR 616.1f). The link is now kept apart from the
+/// move's cause (`EtbInfo::exiled_with`).
 #[test]
 fn nephalia_academy_still_applies_to_a_discard_its_controllers_rest_in_peace_exiles() {
     cr!("616.1f", "614.6");
@@ -128,4 +131,52 @@ fn nephalia_academy_still_applies_to_a_discard_its_controllers_rest_in_peace_exi
     let b = t.g.current(bears);
     assert_eq!(t.zone(b), Zone::Library(P0));
     assert_eq!(t.g.players[P0.idx()].library.last(), Some(&b));
+}
+
+/// The same with the discarded card's own madness ability applied first ("If a player
+/// would discard this card, that player discards it, but exiles it instead of putting it
+/// into their graveyard", CR 702.35a): the discard is still Mind Rot's doing, so Nephalia
+/// Academy's effect is still offered, and applied it puts Biting Rain on top of P0's
+/// library, where madness's "When this card is exiled this way" doesn't see it: P0 isn't
+/// offered to cast it (Nephalia Academy's ruling).
+#[test]
+fn nephalia_academy_still_applies_to_a_discard_madness_exiles_and_then_it_cant_be_cast() {
+    cr!("616.1f", "614.6", "702.35a");
+    ruling!(
+        "Nephalia Academy",
+        "If you discard a card with madness, you’ll choose whether to exile it or put it on top of your library. If you put it on top of your library, you can’t cast it using madness."
+    );
+    supported("Nephalia Academy");
+    supported("Biting Rain");
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Nephalia Academy");
+    let rain = t.hand(P0, "Biting Rain");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.lands(P0, "Swamp", 3);
+    applies_first(&mut t, P0, "Madness");
+    t.answer_yes(P0, true);
+    t.set_step(P1, Step::PrecombatMain);
+    cast_resolve(&mut t, P1, "Mind Rot", &[Entity::Player(P0)]);
+    let choices = replacement_choices(&t);
+    assert_eq!(choices.len(), 1, "{choices:?}");
+    assert_eq!(choices[0].1.len(), 2, "madness or Nephalia Academy: {choices:?}");
+    let asked = |what: &str| {
+        t.asked()
+            .into_iter()
+            .filter(|(p, d)| {
+                *p == P0 && matches!(d, Decision::YesNo { prompt, .. } if prompt.contains(what))
+            })
+            .count()
+    };
+    assert_eq!(
+        asked("Nephalia Academy"),
+        1,
+        "Nephalia Academy's effect is offered once madness's has been applied: {:?}",
+        t.asked()
+    );
+    assert_eq!(asked("madness cost"), 0, "{:?}", t.asked());
+    let r = t.g.current(rain);
+    assert_eq!(t.zone(r), Zone::Library(P0));
+    assert_eq!(t.g.players[P0.idx()].library.last(), Some(&r));
+    assert!(t.on_battlefield(bears), "Biting Rain wasn't cast");
 }

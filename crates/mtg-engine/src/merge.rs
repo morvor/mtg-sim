@@ -452,6 +452,8 @@ pub fn after_leaving(g: &mut Game, old: ObjectId, new: ObjectId, m: &MoveEv) {
             by: m.by,
             etb: EtbInfo {
                 face_down: m.etb.face_down,
+                exiled_with: m.etb.exiled_with,
+                link: m.etb.link,
                 ..Default::default()
             },
             source: m.source,
@@ -571,7 +573,7 @@ fn order_components(g: &mut Game, old: ObjectId, news: &[ObjectId], m: &MoveEv) 
             // The player who exiled it: the one responsible for the move, or the
             // controller of the effect that exiled it.
             let who =
-                m.by.or_else(|| m.source.map(|s| g.obj(s).controller))
+                m.by.or_else(|| m.etb.exiled_with.or(m.source).map(|s| g.obj(s).controller))
                     .unwrap_or_else(|| g.obj(old).controller);
             let order = g.ask_order(
                 who,

@@ -185,7 +185,7 @@ impl Game {
             .iter()
             .filter_map(|(i, e)| match e {
                 ReplEvent::Move(m) if m.to == Zone::Exile && m.etb.face_down.is_some() => {
-                    Some((*i, m.source))
+                    Some((*i, m.etb.exiled_with.or(m.source)))
                 }
                 _ => None,
             })
@@ -934,7 +934,7 @@ impl Game {
         // that has left its zone (sacrificed to pay the ability's cost): the ability's
         // later instructions ("At the beginning of the next end step, return the exiled
         // cards ...") still find them through its last known information.
-        if let (Some(src), Zone::Exile) = (m.source, m.to) {
+        if let (Some(src), Zone::Exile) = (m.etb.exiled_with.or(m.source), m.to) {
             if self.try_obj(src).is_some() {
                 let link = m.etb.link.unwrap_or(self.current_link);
                 self.objects[src.0 as usize]
@@ -949,7 +949,7 @@ impl Game {
         // enters, above.
         if m.to != Zone::Battlefield && !m.etb.counters.is_empty() {
             let how = crate::event_causes::CounterPut {
-                source: m.source,
+                source: m.etb.exiled_with.or(m.source),
                 by: m.by,
                 origin: crate::events::CounterOrigin::Effect,
             };

@@ -97,6 +97,11 @@ pub struct EtbInfo {
     pub cast: Option<CastInfo>,
     /// Face to put onto the battlefield (for MDFCs played/cast as back face).
     pub face: Option<FaceState>,
+    /// For a move to exile caused by a replacement effect: the effect's source, which the
+    /// object is "exiled with" (CR 607.2b, 614.14), with [`EtbInfo::link`]. The move's
+    /// [`MoveEv::source`] stays what caused the move: a discard a spell causes is still
+    /// that spell's doing once a replacement effect exiles the card (CR 614.6).
+    pub exiled_with: Option<ObjectId>,
     /// For a move to exile caused by a replacement effect: the link id of the ability
     /// whose replacement effect exiles the object, so the object is "exiled with" that
     /// ability's source (CR 607.2b, 614.14).
@@ -138,7 +143,8 @@ pub struct MoveEv {
     pub by: Option<PlayerId>,
     pub etb: EtbInfo,
     /// The source that caused the move (for "if a spell or ability an opponent controls
-    /// causes you to discard" style checks and linked abilities).
+    /// causes you to discard" style checks and linked abilities). A replacement effect that
+    /// exiles the object instead doesn't change it ([`EtbInfo::exiled_with`]).
     pub source: Option<ObjectId>,
 }
 
@@ -2233,9 +2239,13 @@ impl Game {
                 let prepared = self.prepare_destination(&dest, &mut ctx);
                 self.redirect_move(&prepared, &mut m, owner, &ctx);
                 // CR 607.2b, 614.14: a card exiled by a replacement effect is exiled with
-                // (linked to) the effect's source.
+                // (linked to) the effect's source. What caused the move still did (CR
+                // 614.6): a discard an opponent's spell causes is still that spell's doing
+                // once the discarding player's own effect exiles the card (Nephalia
+                // Academy's ruling: "When you apply Nephalia Academy’s effect, the card was
+                // still discarded.").
                 if dest.zone == ZoneKind::Exile && cand.source.is_some() {
-                    m.source = cand.source;
+                    m.etb.exiled_with = cand.source;
                     m.etb.link = Some(cand.link);
                 }
                 vec![ReplEvent::Move(m)]
