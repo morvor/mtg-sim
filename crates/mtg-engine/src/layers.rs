@@ -225,8 +225,13 @@ impl Game {
     /// Whether an ability of this object functions where the object currently is
     /// (CR 113.6).
     pub fn ability_functions(&self, obj: &GameObject, zone: FunctionZone, is_cda: bool) -> bool {
-        if is_cda || zone == FunctionZone::Anywhere {
+        if is_cda {
             return true;
+        }
+        // CR 702.26b: a phased-out permanent is treated as though it doesn't exist, so even
+        // its abilities that function everywhere (eminence) don't.
+        if zone == FunctionZone::Anywhere {
+            return !obj.phased_out;
         }
         if let FunctionZone::AnywhereExcept(z) = zone {
             return obj.zone.kind() != Some(z) && !obj.phased_out;

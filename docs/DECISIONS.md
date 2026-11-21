@@ -9,13 +9,13 @@ Sections:
 - [Decided by the user](#decided-by-the-user) (123): the user chose the reading, newest first, by date: the user's own words where the entry quotes them, the reading chosen, the alternatives not chosen, and marks of low confidence ("for now", "not sure", "tentatively", ...) or of being on the "Revisit later" list.
 - [Decided by the sources](#decided-by-the-sources) (9): a Wizards ruling, a rule of the Comprehensive Rules or a dated change answers the question, and the entry says so; one line each, with that basis.
 - [Decided by the coordinator or a worker](#decided-by-the-coordinator-or-a-worker) (72): everything else decided: calls the coordinator, a worker or a review made, most of them defaults for choices an agent leaves unanswered. Those whose entry names no decider are listed apart; one line each, with the entry's reasoning.
-- [Provisional](#provisional) (3): calls a reasonable judge could make the other way, awaiting the user.
+- [Provisional](#provisional) (4): calls a reasonable judge could make the other way, awaiting the user.
 - [Revisit later](#revisit-later) (11): readings the user accepted for now but wants to look at again before the project is called done, copied from the finish-line plan.
 - [Ruling discrepancies](#ruling-discrepancies) (80): Wizards rulings the engine doesn't follow in full, or tests on another card than the one the data attaches them to, by kind and review status; a human checks each and reports the erroneous ones to Wizards.
 - [Policies the user set](#policies-the-user-set) (10): standing rules the user set for whole classes of cases (which source wins, who chooses), drawn from their register entries: the user-decided entries of kind policy whose Affects line names more than one case.
 - [Needs a source line](#needs-a-source-line) (0): decided entries whose words about who decided this file can't read; they need a "Decided by ..." line in the usual form, and are never guessed.
 
-207 register entries: 123 decided by the user, 9 by the sources, 72 by the coordinator or a worker (69 of them naming no decider), 3 provisional, 0 needing a source line.
+208 register entries: 123 decided by the user, 9 by the sources, 72 by the coordinator or a worker (69 of them naming no decider), 4 provisional, 0 needing a source line.
 
 ## Decided by the user
 
@@ -595,6 +595,9 @@ Awaiting the user.
   - The user: "I am really not sure here"
   - Question: Norn's Decree: "Whenever one or more creatures an opponent controls deal combat damage to you, that opponent gets a poison counter." Coveted Jewel: "Whenever one or more creatures an opponent controls attack you and aren't blocked, that player draws three cards and gains control of this artifact. Untap it." …
   - Reading proposed: Provisional (the user, Nov 19: "I am really not sure here"; research item ruling-research-2 found no source that decides it). …
+- **`delayed-abilities-arent-abilities-of-permanents`**: A delayed triggered ability isn't one of the "abilities of permanents" that trigger-modifying statics name (interpretation, [triggers-durations](interpretations/triggers-durations.md#delayed-abilities-arent-abilities-of-permanents-a-delayed-triggered-ability-isnt-one-of-the-abilities-of-permanents-that-trigger-modifying-statics-name))
+  - Question: Is a delayed triggered ability whose source is a permanent (created by that permanent's ability, 603.7e) one of the "abilities of permanents your opponents control" that Elesh Norn's second ability stops? …
+  - Reading proposed: No, as 603.2d reads "a triggered ability of an object" for the first: a permanent's abilities are those it has (113.1a), and no permanent has a delayed triggered ability, though one may be its source (113.7, 603.7e). …
 - **`next-turns-upkeep-is-the-next-turns-first`**: "At the beginning of the next turn's upkeep" is the first upkeep of the next turn; with none, it never triggers (interpretation, [triggers-durations](interpretations/triggers-durations.md#next-turns-upkeep-is-the-next-turns-first-at-the-beginning-of-the-next-turns-upkeep-is-the-first-upkeep-of-the-next-turn-with-none-it-never-triggers))
   - Question: Two delay phrases name an upkeep: "at the beginning of the next upkeep" (Archangel Avacyn, The Eagles Are Coming!, Firion) and "at the beginning of the next turn's upkeep" (Heal, Mishra's Bauble and about 55 other cards). …
   - Reading proposed: "The next upkeep" is the next upkeep step to begin, whoever's turn it is, an additional upkeep step later in the same turn included (Paradox Haze: created during the first, it triggers at the second). …
@@ -626,8 +629,8 @@ From [`docs/RULING_DISCREPANCIES.md`](RULING_DISCREPANCIES.md), where each entry
 
 | Kind | open for review | decided | reported | confirmed | Total |
 |---|---:|---:|---:|---:|---:|
-| template error | 11 | 1 | 0 | 0 | 12 |
-| copying error | 3 | 0 | 0 | 0 | 3 |
+| template error | 9 | 1 | 0 | 0 | 10 |
+| copying error | 5 | 0 | 0 | 0 | 5 |
 | misattached | 13 | 0 | 0 | 0 | 13 |
 | inconsistent | 6 | 0 | 0 | 1 | 7 |
 | outdated | 40 | 0 | 0 | 0 | 40 |
@@ -635,7 +638,7 @@ From [`docs/RULING_DISCREPANCIES.md`](RULING_DISCREPANCIES.md), where each entry
 | misleading | 0 | 1 | 0 | 0 | 1 |
 | all | 77 | 2 | 0 | 1 | 80 |
 
-### Template error (12)
+### Template error (10)
 
 | Entry | Status | Card | Ruling date |
 |---|---|---|---|
@@ -646,19 +649,19 @@ From [`docs/RULING_DISCREPANCIES.md`](RULING_DISCREPANCIES.md), where each entry
 | [Acolyte Hybrid: "you" for "its controller"](RULING_DISCREPANCIES.md#acolyte-hybrid-you-for-its-controller) | open for review | Acolyte Hybrid | 2022-10-07 |
 | [Sakashima's Protege: "only a creature" for "any permanent"](RULING_DISCREPANCIES.md#sakashimas-protege-only-a-creature-for-any-permanent) | open for review | Sakashima's Protege | 2020-11-10 |
 | [The Destined White Mage: "second ability" for its third](RULING_DISCREPANCIES.md#the-destined-white-mage-second-ability-for-its-third) | open for review | The Destined White Mage | 2025-10-02 |
-| [Taeko, the Patient Avalanche, Slinza, the Spiked Stampede, Syndicate Heavy and Sorin of House Markov: a hybrid mana symbol written as two mana symbols](RULING_DISCREPANCIES.md#taeko-the-patient-avalanche-slinza-the-spiked-stampede-syndicate-heavy-and-sorin-of-house-markov-a-hybrid-mana-symbol-written-as-two-mana-symbols) | open for review | Taeko, the Patient Avalanche, Slinza, the Spiked Stampede, Syndicate Heavy and 1 more | 2024-02-02, 2024-06-07, 2024-11-08 |
 | [Shredder, Shadow Master: "his last ability" for his first](RULING_DISCREPANCIES.md#shredder-shadow-master-his-last-ability-for-his-first) | open for review | Shredder, Shadow Master | 2026-01-27 |
-| [Siege of Towers: "copy Shattering Spree" for "copy Siege of Towers"](RULING_DISCREPANCIES.md#siege-of-towers-copy-shattering-spree-for-copy-siege-of-towers) | open for review | Siege of Towers | 2024-01-12 |
 | [Swift Reckoning: the spell mastery note "as the spell resolves" on a spell mastery that lets it be cast with flash](RULING_DISCREPANCIES.md#swift-reckoning-the-spell-mastery-note-as-the-spell-resolves-on-a-spell-mastery-that-lets-it-be-cast-with-flash) | open for review | Swift Reckoning | 2015-06-22 |
 | [Seraph: "after being exiled" for a creature put into a graveyard](RULING_DISCREPANCIES.md#seraph-after-being-exiled-for-a-creature-put-into-a-graveyard) | decided | Seraph | 2007-09-16 |
 
-### Copying error (3)
+### Copying error (5)
 
 | Entry | Status | Card | Ruling date |
 |---|---|---|---|
 | [Run Out of Town: "controller" for "owner"](RULING_DISCREPANCIES.md#run-out-of-town-controller-for-owner) | open for review | Run Out of Town | 2022-04-29 |
 | [Sanguine Spy: "cards you control" for "cards in your graveyard"](RULING_DISCREPANCIES.md#sanguine-spy-cards-you-control-for-cards-in-your-graveyard) | open for review | Sanguine Spy | 2022-04-29 |
 | [Heroes' Podium: "in addition to being a land" for an artifact](RULING_DISCREPANCIES.md#heroes-podium-in-addition-to-being-a-land-for-an-artifact) | open for review | Heroes' Podium | 2014-02-01 |
+| [Taeko, the Patient Avalanche, Slinza, the Spiked Stampede, Syndicate Heavy and Sorin of House Markov: a hybrid mana symbol written as two mana symbols](RULING_DISCREPANCIES.md#taeko-the-patient-avalanche-slinza-the-spiked-stampede-syndicate-heavy-and-sorin-of-house-markov-a-hybrid-mana-symbol-written-as-two-mana-symbols) | open for review | Taeko, the Patient Avalanche, Slinza, the Spiked Stampede, Syndicate Heavy and 1 more | 2024-02-02, 2024-06-07, 2024-11-08 |
+| [Siege of Towers: "copy Shattering Spree" for "copy Siege of Towers"](RULING_DISCREPANCIES.md#siege-of-towers-copy-shattering-spree-for-copy-siege-of-towers) | open for review | Siege of Towers | 2024-01-12 |
 
 ### Misattached (13)
 

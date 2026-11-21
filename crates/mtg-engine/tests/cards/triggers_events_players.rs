@@ -314,6 +314,43 @@ fn that_many_nonland_cards_milled_only_once_each_turn() {
 }
 
 #[test]
+fn a_do_this_only_once_one_or_more_ability_no_longer_triggers_once_done() {
+    cr!("603.2h", "603.2c");
+    supported("Screeching Scorchbeast");
+    ruling!(
+        "Screeching Scorchbeast",
+        "Once you choose to do so, the ability will no longer trigger for the rest of the turn."
+    );
+    // "Whenever one or more nonland cards are milled, you may create that many 2/2 black
+    // Zombie Mutant creature tokens. Do this only once each turn." (once per batch). Once
+    // the tokens were created this turn, it doesn't trigger at all (CR 603.2h: "This ability
+    // triggers only if its source's controller has not yet taken the indicated action that
+    // turn"), rather than triggering and doing nothing.
+    let mut t = TestGame::new(2);
+    t.battlefield(P0, "Screeching Scorchbeast");
+    let mill = |t: &mut TestGame, card: &str| {
+        t.library_top(P1, card);
+        t.g.mill(P1, 1);
+        t.settle();
+    };
+    // Declined: it triggers again.
+    mill(&mut t, "Grizzly Bears");
+    assert_eq!(t.stack_len(), 1);
+    t.answer_yes(P0, false);
+    t.resolve_all();
+    mill(&mut t, "Grizzly Bears");
+    assert_eq!(t.stack_len(), 1, "declined: it triggers again");
+    t.answer_yes(P0, true);
+    t.resolve_all();
+    assert_eq!(count_subtype(&t, "Zombie"), 1);
+    // Done this turn: nothing goes on the stack.
+    mill(&mut t, "Sol Ring");
+    assert_eq!(t.stack_len(), 0, "it doesn't trigger once the tokens were created");
+    t.resolve_all();
+    assert_eq!(count_subtype(&t, "Zombie"), 1);
+}
+
+#[test]
 fn an_opponent_mills_a_nonland_card_from_your_graveyard() {
     cr!("701.17a", "113.6");
     supported("Infesting Radroach");

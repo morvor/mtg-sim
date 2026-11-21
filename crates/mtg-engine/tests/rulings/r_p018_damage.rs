@@ -170,6 +170,41 @@ fn greatbow_doyen_ignores_damage_from_an_archer_spell() {
     assert_eq!(t.life(P0), 22);
 }
 
+#[test]
+fn a_goblin_or_orc_you_control_ignores_damage_from_a_goblin_spell() {
+    cr!("109.2", "603.2");
+    supported("Raging Goblin");
+    supported("Tarfire");
+    // "a Goblin or Orc you control" names subtypes without "card", "spell" or "source": it
+    // means a Goblin or Orc permanent (CR 109.2), as "an Archer you control" does for
+    // Greatbow Doyen. Moria Marauder and Gorbag of Minas Morgul say it of combat damage,
+    // which no spell deals; no card says it of all damage, so the watcher is custom.
+    let watcher = crate::r_s01_common::custom_card(
+        "Warband Drummer",
+        "Creature — Human Warrior",
+        "{1}{R}",
+        Some((1, 1)),
+        "Whenever a Goblin or Orc you control deals damage to a player, you gain 1 life.",
+    );
+    assert!(watcher.is_fully_supported(), "{:?}", watcher.unsupported_text());
+    let mut t = TestGame::new(2);
+    t.custom(P0, watcher, Zone::Battlefield);
+    // A Goblin permanent you control: it triggers.
+    let goblin = t.battlefield(P0, "Raging Goblin");
+    deal(&mut t, goblin, 1, Entity::Player(P1));
+    assert_eq!(t.stack_len(), 1, "a Goblin creature's damage triggers it");
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1)), (21, 19));
+    // Tarfire (Kindred Instant — Goblin) is a Goblin spell you control, not a Goblin you
+    // control: its damage doesn't trigger it.
+    let tarfire = t.hand(P0, "Tarfire");
+    add_mana(&mut t, P0, ManaType::R, 1);
+    t.cast(P0, tarfire).target(Entity::Player(P1)).go();
+    t.resolve_all();
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(t.life(P0), 21, "a kindred Goblin spell isn't a Goblin permanent");
+}
+
 // ---------------------------------------------------------------------------
 // Ohabi Caleria: "Untap all Archers you control during each other player's untap step."
 // ---------------------------------------------------------------------------

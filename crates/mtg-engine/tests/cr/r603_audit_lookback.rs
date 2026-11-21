@@ -581,6 +581,30 @@ fn a_permanent_phasing_out_sees_itself_phase_out() {
 }
 
 #[test]
+fn a_permanent_phasing_out_sees_itself_while_another_with_its_ability_stays() {
+    cr!("603.10b", "603.2");
+    supported("Teferi's Imp");
+    supported("Reality Ripple");
+    // Teferi's Imp: "Whenever this creature phases out, discard a card." Two Imps (one card,
+    // so one set of abilities), and Reality Ripple ("Target artifact, creature, or land
+    // phases out.") on one of them: that one sees itself phase out (CR 603.10b). The other
+    // Imp, still phased in with the same ability, neither triggers nor stops it.
+    let mut t = TestGame::new(2);
+    let a = t.battlefield(P0, "Teferi's Imp");
+    let b = t.battlefield(P0, "Teferi's Imp");
+    let bolt = t.hand(P0, "Lightning Bolt");
+    t.lands(P0, "Island", 2);
+    let ripple = t.hand(P0, "Reality Ripple");
+    t.cast(P0, ripple).target(a).go();
+    t.resolve();
+    assert!(t.obj_now(a).phased_out);
+    assert!(!t.obj_now(b).phased_out);
+    assert_eq!(triggers_of(&t, "Teferi's Imp"), 1);
+    t.resolve_all();
+    assert_eq!(t.zone(bolt), Zone::Graveyard(P0), "the phased-out Imp's discard");
+}
+
+#[test]
 fn creature_cards_leaving_a_graveyard_together_trigger_a_per_card_ability_for_each() {
     cr!("603.10a", "603.2c");
     ruling!(

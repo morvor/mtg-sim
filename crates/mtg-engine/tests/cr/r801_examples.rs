@@ -322,6 +322,127 @@ fn extractor_demon_carissas_triggers_and_alexs_doesnt() {
 }
 
 #[test]
+fn extractor_demon_a_bear_leaving_with_its_owner_is_judged_by_its_controller() {
+    cr!("801.7", "801.7a", "603.6c", "603.10a", "800.4a");
+    supported("Extractor Demon");
+    // CR 801.7a's example, with the Bears leaving the game with their owner (CR 800.4a),
+    // which triggers leaves-the-battlefield abilities (CR 603.6c). Range 1 at a table of
+    // five: P1 and P4 are within P0's range, P2 isn't. The players within each range are
+    // determined as each turn begins (CR 801.2c), so P2 doesn't come within P0's range when
+    // P1 leaves.
+    let mut t = ranged(5, 1);
+    to_turn_of(&mut t, P4);
+    // "Whenever another creature leaves the battlefield, you may have target player mill
+    // two cards."
+    t.battlefield(P0, "Extractor Demon");
+    // Two Grizzly Bears that P1 owns: P1 controls one, P2 the other.
+    let kept = bear(&mut t, P1);
+    let lent = bear(&mut t, P1);
+    apply(
+        &mut t,
+        P2,
+        Effect::GainControl {
+            what: Sel::Target(0),
+            who: PlayerRef::You,
+            duration: Duration::Permanent,
+        },
+        &[lent],
+    );
+    assert_eq!(t.obj_now(lent).controller, P2);
+    concede(&mut t, P1);
+    t.settle();
+    assert!(!on_bf(&t, kept) && !on_bf(&t, lent));
+    // Leaves-the-battlefield abilities look back in time (CR 603.10a): each event is judged
+    // as the Bears last existed on the battlefield. The ones P1 controlled were within P0's
+    // range; the ones P2 controlled weren't, though their owner was.
+    assert_eq!(t.stack_len(), 1, "{}", t.dump_log());
+}
+
+#[test]
+fn extractor_demon_a_bear_leaving_with_an_owner_out_of_range_triggers_it() {
+    cr!("801.7", "801.7a", "603.6c", "603.10a", "800.4a");
+    supported("Extractor Demon");
+    // The other way round: Grizzly Bears that P2 (outside P0's range) owns and P1 (within
+    // it) controls leave the game with P2. As they last existed they were within P0's range:
+    // as in CR 801.7a's example, where Carissa's Extractor Demon triggers "even though the
+    // creature is going to a graveyard outside her range".
+    let mut t = ranged(5, 1);
+    to_turn_of(&mut t, P4);
+    t.battlefield(P0, "Extractor Demon");
+    let theirs = bear(&mut t, P2);
+    let lent = bear(&mut t, P2);
+    apply(
+        &mut t,
+        P1,
+        Effect::GainControl {
+            what: Sel::Target(0),
+            who: PlayerRef::You,
+            duration: Duration::Permanent,
+        },
+        &[lent],
+    );
+    assert_eq!(t.obj_now(lent).controller, P1);
+    concede(&mut t, P2);
+    t.settle();
+    assert!(!on_bf(&t, theirs) && !on_bf(&t, lent));
+    // Only the Bears P1 controlled: P2's own were outside P0's range.
+    assert_eq!(t.stack_len(), 1, "{}", t.dump_log());
+}
+
+#[test]
+fn extractor_demon_a_commander_put_into_the_command_zone_is_judged_by_its_controller() {
+    cr!("801.7", "801.7a", "603.10a", "903.9b");
+    supported("Extractor Demon");
+    // CR 801.7a's example with a commander that goes to the command zone instead of its
+    // owner's hand (CR 903.9b): Isamaru, Hound of Konda, a commander that P2 (outside P0's
+    // range) owns and P1 (within it) controls, is returned to its owner's hand, and P2 puts
+    // it into the command zone instead. The leaves-the-battlefield event is judged as
+    // Isamaru last existed on the battlefield, under P1's control (CR 603.10a), not as the
+    // card in the command zone, under its owner's: P0's Extractor Demon triggers.
+    let mut t = TestGame::with_config(
+        5,
+        GameConfig {
+            range_of_influence: Some(1),
+            ..GameConfig::commander_game()
+        },
+    );
+    t.battlefield(P0, "Extractor Demon");
+    let cmdr = t.battlefield(P2, "Isamaru, Hound of Konda");
+    t.g.objects[cmdr.0 as usize].is_commander = true;
+    let name = t.obj(cmdr).card.as_ref().unwrap().name.clone();
+    t.g.players[P2.idx()].commander_names.push(name);
+    apply(
+        &mut t,
+        P1,
+        Effect::GainControl {
+            what: Sel::Target(0),
+            who: PlayerRef::You,
+            duration: Duration::Permanent,
+        },
+        &[cmdr],
+    );
+    assert_eq!(t.obj_now(cmdr).controller, P1);
+    t.answer_yes(P2, true);
+    apply(
+        &mut t,
+        P1,
+        Effect::Move {
+            what: Sel::Target(0),
+            to: Destination::zone(ZoneKind::Hand),
+        },
+        &[cmdr],
+    );
+    t.settle();
+    assert_eq!(
+        t.g.find_in_zone(Zone::Command, "Isamaru, Hound of Konda")
+            .len(),
+        1,
+        "its owner put it into the command zone"
+    );
+    assert_eq!(t.stack_len(), 1, "{}", t.dump_log());
+}
+
+#[test]
 fn pyroclasm_damages_only_creatures_within_alexs_range() {
     cr!("801.10");
     cr_example!("801.10", "Pyroclasm");

@@ -184,6 +184,7 @@ fn an_additional_trigger_effect_doesnt_double_reflexive_abilities() {
 #[test]
 fn an_additional_trigger_effect_doesnt_double_delayed_abilities() {
     cr!("603.2d", "603.7");
+    interp!("delayed-abilities-arent-abilities-of-permanents");
     ruling!(
         "Cryptek",
         "If the targeted artifact creature is put into a graveyard this turn, that ability triggers and resolves like any other triggered ability."

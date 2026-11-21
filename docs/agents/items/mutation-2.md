@@ -48,3 +48,56 @@ item's row (mutants run, missing tests added, engine bugs) is in docs/agents/yie
   `mixed-each-player-instruction`). Report: docs/MUTATION.md, "Second round, Nov 2026".
   `scripts/mutants.sh` gained `FULL=1` (every mutant) and `RESUME=1` (continue a run a
   machine restart interrupted). Next in the order above: `permissions.rs`.
+- `trigger_timing.rs` + `triggers.rs` half 1 (landed Nov 21, `mutation-2/triggers-half-1`;
+  runs at `45bb684`, tests and fixes in `6b08efb`, review in `9fce77f` and `852fa0c`):
+  trigger_timing.rs full run, 35 mutants, 88.2% → 91.2% (31/34), 3 equivalent survivors;
+  triggers.rs half 1 (`FULL=1 SHARD=0/2`, mutants 1–288 of 576), 81.2% → 88.3% (249/282), all
+  33 remaining survivors equivalent (`361:24` since C1; `1245:25`, (b) in the triage, was
+  equivalent all along: `Game::matches` already range-checks the object as it last existed).
+  22 new tests (implementer), 3 (review). Engine bugs (6): C1 a qualifier over alternatives
+  dropped the "one or more" one (CR 603.2c); C2 a phased-out Edgar Markov's eminence triggered
+  (CR 702.26b); C3 Elesh Norn, Mother of Machines stopped an opponent's delayed triggered
+  ability (Thunder of Unity; CR 113.7, 603.7e); C4 under limited range of influence nothing at
+  all triggered on a permanent leaving the game with its owner (it was seen by no one, judged
+  by its departed owner), and a commander put into the command zone was judged by its owner
+  there (CR 801.7a, 903.9b; the commander case tested by the review); L1 a prevention follow-up
+  ran inside a held "together" damage event (CR 615.5; `rider-order` updated); L2 (review)
+  Hushbringer didn't stop delayed "one or more ... die" abilities (`delayed_batches.rs`).
+  Compiler fix (1): C5, records stripped after `join_instructions` split or merged damage
+  sentences (The Fall of Kroog, Fear, Fire, Foes!; the whole pool's compiled output compared,
+  only those two and Camaraderie, unchanged in behaviour, differ). Provisional register entry
+  `delayed-abilities-arent-abilities-of-permanents`, grounded by the review in CR 603.2d (which
+  settles Elesh Norn's "triggers an additional time" half) and pinned for both halves
+  (`elesh_norn_doesnt_double_your_delayed_triggered_ability`, review). Review test errors: one
+  ruling citation a test didn't exercise; register-entry errors: two (603.2d not quoted, an
+  alternative 603.2d rules out). Latent, not fixed: L1, L3, L4 of triggers.rs (L5 since covered
+  upstream by `that-opponent-fixed-as-it-triggers`), C1's `FirstTimeEachTurn` form, C5's
+  referenced-records case, and dead code to delete (`keyword_has_trigger`, `check_triggers`,
+  `looks_back`'s `Event::Sacrificed` arm, the no-op filter at `319:36`). Report:
+  docs/MUTATION.md, "trigger_timing.rs (full run)" and "triggers.rs, half 1".
+  `scripts/mutants.sh` gained `SHARD=k/n` (a contiguous slice of the file's mutants in
+  `cargo mutants --list` order, saved in `target/mutants/<stem>.shard`; `RESUME=1` with it
+  tests the slice's untested mutants itself, since cargo-mutants shards after
+  `--iterate`/`-E`).
+  - **Half 2**, 288 mutants (289–576 at `45bb684`). At `8199d6d` (the merge this report landed
+    with) the file has 586 mutants and upstream renamed `trigger_matches_ctx`'s body
+    `Game::trigger_event_infos`: half 1's last is the 298th (`triggers.rs:1554:33: delete field
+    amount from struct EventInfo expression in Game::trigger_event_infos`, in the
+    `(PlayerAttacked, AttackersDeclared)` arm), and half 2 is the 299th to the 586th, from
+    `triggers.rs:1555:33: delete field objects from struct EventInfo expression in
+    Game::trigger_event_infos` to `triggers.rs:2976:9: delete match arm TriggerCond::AnyOf(ts)
+    in on_sacrifice`. A plain `SHARD=1/2` (the 294th on) would start five early, so make the
+    slice by hand and run it with `RESUME=1` (docs/MUTATION.md, "triggers.rs, half 1", gives the
+    commands, which find the slice from that arm at whatever commit is measured):
+    `target/mutants/triggers.shard` = the list from the mutant after half 1's last, then
+    `FULL=1 SHARD=1/2 RESUME=1 scripts/mutants.sh triggers`. Ten mutants of half 1's region
+    added since its run (2 by C1, 8 upstream) have never been tested; the same section says how
+    to append them to the slice.
+  - **Operational lesson.** The cloud container is reclaimed when the session is idle with no
+    harness-tracked background task; that killed this run three times. Keep the session
+    active while a run goes: foreground waits of under 10 minutes, or a background
+    `sleep 7000` keepalive re-armed when it expires. After an interruption resume with
+    `RESUME=1` (with the same `SHARD` for a slice). Budget about 5 minutes for a mutant the
+    suite misses (a ~55 s incremental build, then the ~255 s `mtg-engine` suite), less for a
+    caught one, 10 for a timeout.
+- Next: `triggers.rs` half 2 (`FULL=1 SHARD=1/2`, above).

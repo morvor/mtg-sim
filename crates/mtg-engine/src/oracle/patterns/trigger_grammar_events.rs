@@ -43,6 +43,13 @@ pub(crate) fn where_events(c: TriggerCond, cond: Condition) -> TriggerCond {
             trigger: Box::new(where_events(*trigger, cond)),
             cond: batch_cond,
         },
+        // "[A] or [one or more B] during your turn": the qualifier is part of each
+        // alternative, so a batched one is still checked once for its batch (CR 603.2c).
+        TriggerCond::AnyOf(v) if v.iter().any(is_batched) => TriggerCond::AnyOf(
+            v.into_iter()
+                .map(|c| where_events(c, cond.clone()))
+                .collect(),
+        ),
         c => TriggerCond::Where {
             trigger: Box::new(c),
             cond,

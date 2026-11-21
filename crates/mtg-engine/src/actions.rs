@@ -1105,7 +1105,20 @@ impl Game {
     /// Runs the instructions replacement effects left for after their modified events, in
     /// the order they were queued: the order the effects were applied (interpretation
     /// `rider-order`). Instructions queued while one runs come before the rest.
+    ///
+    /// While the events of one simultaneous event are held together (a "deals A and B"
+    /// damage instruction, an instruction each player performs at the same time), they
+    /// wait: they take place after the whole event (CR 615.5: "the rest of the effect takes
+    /// place immediately afterward"), when the event's owner releases the hold and runs
+    /// them.
     pub(crate) fn run_post_replacement_effects(&mut self) {
+        if self.batch_hold == 0 {
+            self.run_post_replacement_effects_now();
+        }
+    }
+
+    /// [`Game::run_post_replacement_effects`], even inside a held simultaneous event.
+    pub(crate) fn run_post_replacement_effects_now(&mut self) {
         let mut batch = std::collections::VecDeque::new();
         loop {
             let queued = std::mem::take(&mut self.post_replacement_effects);
@@ -2275,7 +2288,7 @@ impl Game {
         }) {
             self.execute_repl_event(e);
         }
-        self.run_post_replacement_effects();
+        self.run_post_replacement_effects_now();
         self.post_replacement_effects = outer;
     }
 
