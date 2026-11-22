@@ -574,6 +574,17 @@ impl Game {
             // CR 616.1a–e: self-replacement, then control, then copy, then back-face, then any.
             let min_class = cands.iter().map(|c| c.class).min().unwrap();
             cands.retain(|c| c.class == min_class);
+            // A spell leaving the stack (countered, resolving, returned) lists its own
+            // effects first (flashback's "exile this card instead of putting it anywhere
+            // else", Nexus of Fate's), so a default answer applies the card's own effect, as
+            // between rebound or buyback and another effect
+            // (`keyword_impls::choose_resolved_spell_destination`; register
+            // `default-first-listed-choice`).
+            if let ReplEvent::Move(m) = &ev {
+                if self.obj(m.obj).zone == Zone::Stack {
+                    cands.sort_by_key(|c| c.source != Some(m.obj));
+                }
+            }
             let chooser = self.affected_player(&ev);
             // The parts one printed ability of one object was compiled into ("enters with
             // ... counters and as a Mutant", Master Biomancer) are one replacement effect (CR

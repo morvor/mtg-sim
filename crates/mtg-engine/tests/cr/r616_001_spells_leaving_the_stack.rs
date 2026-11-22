@@ -21,6 +21,7 @@ const FLASHBACK: CastMethod = CastMethod::Keyword(KeywordKind::Flashback);
 #[test]
 fn nexus_of_fate_with_rebound_offers_rebound_and_its_own_effect_once_each() {
     cr!("616.1", "616.1e", "702.88a", "400.6");
+    interp!("questions-only-for-a-choice");
     ruling!(
         "Cast Through Time",
         "you choose whether to apply the rebound effect or the other effect as the spell resolves"
@@ -113,7 +114,10 @@ fn think_twice_choice(permanent: &str, countered: bool) -> (Vec<String>, usize, 
 fn a_countered_flashback_spell_under_rest_in_peace_is_exiled_by_the_effect_its_controller_chooses(
 ) {
     cr!("701.6a", "702.34a", "616.1", "616.1e", "616.1f");
-    interp!("leaving-the-stack-exile-among-other-replacements");
+    interp!(
+        "leaving-the-stack-exile-among-other-replacements",
+        "questions-only-for-a-choice"
+    );
     ruling!(
         "Think Twice",
         "A spell cast using flashback will always be exiled afterward, whether it resolves, is countered, or leaves the stack in some other way."
@@ -155,6 +159,68 @@ fn a_flashback_spell_leaving_the_stack_under_dauthi_voidwalker_gets_a_void_count
             let what = format!("countered {countered}, void counters {void}");
             assert_eq!(t.zone(now), Zone::Exile, "{what}");
             assert_eq!(t.counters(now, "void"), void, "{what}");
+        }
+    }
+}
+
+/// Regression test (review): once the keyword's exile became one of the effects to choose
+/// from, it was listed after Dauthi Voidwalker's (the spell is the newest object), so a
+/// default answer gave the card a void counter, which Dauthi Voidwalker's controller may
+/// then play, where the keyword's exile alone had applied before. A spell leaving the
+/// stack lists its own effects first, so by default the keyword's effect applies: for
+/// flashback (Think Twice), jump-start (Radical Idea: "Draw a card."), harmonize (Unending
+/// Whisper: "Draw a card.") and aftermath (Ribbons: "Each opponent loses X life.", X = 0),
+/// countered or resolving.
+#[test]
+fn by_default_a_spell_leaving_the_stack_is_exiled_by_its_own_keyword_with_no_void_counter() {
+    cr!("616.1", "616.1e", "701.6a", "608.2n", "702.34a", "702.133a", "702.180a", "702.127a");
+    interp!(
+        "default-first-listed-choice",
+        "leaving-the-stack-exile-among-other-replacements"
+    );
+    supported("Dauthi Voidwalker");
+    supported("Radical Idea");
+    supported("Unending Whisper");
+    supported("Cut // Ribbons");
+    let cases = [
+        ("Think Twice", KeywordKind::Flashback, "Island", 3, "Flashback"),
+        ("Radical Idea", KeywordKind::JumpStart, "Island", 2, "Jump-Start"),
+        ("Unending Whisper", KeywordKind::Harmonize, "Island", 6, "Harmonize"),
+        ("Cut // Ribbons", KeywordKind::Aftermath, "Swamp", 2, "Aftermath"),
+    ];
+    for (name, kw, land, lands, label) in cases {
+        for countered in [true, false] {
+            let what = format!("{name}, countered {countered}");
+            let mut t = TestGame::new(2);
+            t.battlefield(P1, "Dauthi Voidwalker");
+            t.lands(P0, land, lands);
+            t.lands(P1, "Island", 2);
+            let card = t.graveyard(P0, name);
+            // Jump-start's discard; harmonize taps no creature; Ribbons's X is 0.
+            t.hand(P0, "Grizzly Bears");
+            if kw == KeywordKind::Harmonize {
+                t.answer(P0, DecisionKind::Entities, Answer::Entities(vec![]));
+            }
+            if kw == KeywordKind::Aftermath {
+                t.answer(P0, DecisionKind::X, Answer::Number(0));
+            }
+            let spell = t.cast(P0, card).method(CastMethod::Keyword(kw)).go();
+            if countered {
+                let counterspell = t.hand(P1, "Counterspell");
+                t.g.turn.priority = Some(P1);
+                t.cast(P1, counterspell).target(spell).go();
+            }
+            t.resolve_all();
+            let choices = replacement_choices(&t);
+            assert_eq!(choices.len(), 1, "{what}: {choices:?}");
+            let (who, options) = &choices[0];
+            assert_eq!(*who, P0, "{what}");
+            assert_eq!(options.len(), 2, "{what}: {options:?}");
+            assert!(options[0].contains(label), "{what}: {options:?}");
+            assert!(options[1].starts_with("Dauthi Voidwalker"), "{what}: {options:?}");
+            let now = t.g.current(spell);
+            assert_eq!(t.zone(now), Zone::Exile, "{what}");
+            assert_eq!(t.counters(now, "void"), 0, "{what}");
         }
     }
 }

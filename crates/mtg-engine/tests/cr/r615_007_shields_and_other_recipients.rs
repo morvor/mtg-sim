@@ -50,6 +50,7 @@ fn pyroclasm_leaves_a_shield_on_one_creature_undivided() {
 #[test]
 fn two_attackers_damage_to_a_player_isnt_ordered_for_a_shield_on_a_creature() {
     cr!("615.7", "510.2");
+    interp!("questions-only-for-a-choice");
     let mut t = TestGame::new(2);
     let bears = t.battlefield(P0, "Grizzly Bears");
     let giant = t.battlefield(P1, "Hill Giant");

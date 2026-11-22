@@ -54,6 +54,7 @@ fn unsummon_commander(name: &str, face_down: bool) -> (TestGame, Vec<String>, Ob
 #[test]
 fn the_question_names_a_face_up_commander_put_into_its_owners_hand() {
     cr!("903.9b");
+    interp!("replacement-question-names-the-card-as-it-is");
     supported("Grumgully, the Generous");
     let (t, prompts, cmdr) = unsummon_commander("Grumgully, the Generous", false);
     assert_eq!(
@@ -66,6 +67,7 @@ fn the_question_names_a_face_up_commander_put_into_its_owners_hand() {
 #[test]
 fn the_question_about_a_face_down_commander_names_nothing() {
     cr!("903.9b", "708.2a", "708.5");
+    interp!("replacement-question-names-the-card-as-it-is");
     // A morph commander turned face down: a 2/2 creature with no name.
     supported("Akroma, Angel of Fury");
     let (t, prompts, cmdr) = unsummon_commander("Akroma, Angel of Fury", true);

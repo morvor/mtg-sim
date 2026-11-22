@@ -63,5 +63,10 @@ item's row (mutants run, missing tests added, engine bugs) is in docs/agents/yie
   (`leaving-the-stack-exile-among-other-replacements`). Report: docs/MUTATION.md,
   "replacement.rs (full run)". `scripts/mutants.sh` gained `REV=<commit>` (measure a fixed
   commit while tests land on top) and a re-run match that ignores whitespace and reports weak
-  matches. `permissions.rs` is done too; next in the order above: `trigger_timing.rs` with
-  `triggers.rs`.
+  matches. Review: every fix's regression tests fail with the fix reverted; a ninth engine bug,
+  in fix 4 (a default answer applied Dauthi Voidwalker's effect before a countered or resolving
+  flashback spell's own exile, giving it a void counter: a spell leaving the stack now lists its
+  own effects first); the implementer's four unregistered readings registered
+  (`copy-effect-doesnt-see-an-original-out-of-range`, provisional; `questions-only-for-a-choice`,
+  `replacement-question-names-the-card-as-it-is`, `parts-of-one-modified-event-unordered`,
+  decided); `2885:9`/`2889:13` re-checked by running one (only the event feed's order changes).

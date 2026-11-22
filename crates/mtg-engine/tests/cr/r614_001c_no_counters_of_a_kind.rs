@@ -20,7 +20,7 @@ use mtg_engine::*;
 
 #[test]
 fn gorma_with_no_creature_dead_leaves_aven_riftwatcher_only_its_time_counters_to_move() {
-    cr!("614.1c", "122.5", "702.63a");
+    cr!("614.1c", "614.1d", "122.5", "702.63a");
     supported("Gorma, the Gullet");
     supported("Aven Riftwatcher");
     supported("Nesting Grounds");

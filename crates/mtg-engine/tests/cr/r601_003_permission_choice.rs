@@ -178,6 +178,7 @@ fn hama_waterbends_the_mana_value_of_the_half_cast_from_a_split_card() {
 #[test]
 fn a_land_ignite_the_future_exiled_after_flashback_is_played_without_a_permission_choice() {
     cr!("305.1", "116.2a");
+    interp!("questions-only-for-a-choice");
     let mut t = TestGame::new(2);
     let ignite = t.graveyard(P0, "Ignite the Future");
     t.lands(P0, "Mountain", 8);

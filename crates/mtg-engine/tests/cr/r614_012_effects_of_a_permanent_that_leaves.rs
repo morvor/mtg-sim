@@ -37,6 +37,7 @@ fn sphinx_returning_rhythm(first: Option<usize>) -> (TestGame, ObjectId) {
 #[test]
 fn riot_from_a_rhythm_of_the_wild_returned_as_the_sphinx_enters_is_still_one_of_the_choices() {
     cr!("614.12", "616.1", "616.1f", "702.136a");
+    interp!("questions-only-for-a-choice");
     ruling!(
         "Rhythm of the Wild",
         "If Rhythm of the Wild leaves the battlefield at the same time that a nontoken creature enters the battlefield (most likely because that creature has a replacement effect, such as that of Rescuer Sphinx), that creature still gets a +1/+1 counter or haste."
@@ -189,10 +190,9 @@ fn metallic_mimics_effect_for_a_sphinx_made_a_mutant_still_applies_once_the_sphi
 ) {
     cr!("614.12", "616.1f", "616.2");
     interp!("entry-effects-of-a-leaving-source");
-    ruling!(
-        "Rhythm of the Wild",
-        "If Rhythm of the Wild leaves the battlefield at the same time that a nontoken creature enters the battlefield (most likely because that creature has a replacement effect, such as that of Rescuer Sphinx), that creature still gets a +1/+1 counter or haste."
-    );
+    // (Rhythm of the Wild's ruling, cited by the riot test above, is the principle applied
+    // here to Metallic Mimic: an effect whose source leaves as the creature enters still
+    // applies.)
     ruling!(
         "Rescuer Sphinx",
         "No player may take actions between the time you choose which permanent to return and the time Rescuer Sphinx is on the battlefield with a +1/+1 counter."

@@ -66,6 +66,7 @@ fn prairie_dog_adds_only_to_plus1_counters_and_only_when_some_are_put() {
 #[test]
 fn no_counters_put_leaves_two_vorinclexes_nothing_to_order() {
     cr!("614.1a", "616.1", "122.6", "122.6a");
+    interp!("questions-only-for-a-choice");
     ruling!(
         "Vorinclex, Monstrous Raider",
         "If two or more effects attempt to modify how many counters would be put onto a permanent you control, you choose the order to apply those effects, no matter who controls the sources of those effects."

@@ -1865,9 +1865,15 @@ changes only the questions is (b).
 - `2885:9`, `2889:13` (`statics_or_instances_have_action` and `watches` → `true`, the fast
   path): the extra work is a `run_post_replacement_effects` at the start of each keyword action.
   The only difference in the pool is Eye for an Eye's rider before Undead Alchemist's mill, which
-  runs just before the milled cards move rather than just after, within one modified event. That
-  is counted as no difference (a judgment call): the rules don't order the parts of one modified
-  event, and the order of the triggers it changes is the player's to choose (CR 603.3b).
+  runs just before the milled cards move rather than just after, within one modified event, as the
+  unmutated engine does too when an effect watches the mill (Bruvac the Grandiloquent). Only the
+  order of the events in the event feed changes: the review applied the `2885:9` mutant and found
+  the triggered abilities listed the same (Undead Alchemist's for the milled creature cards, then
+  Sun Droplet's for Eye for an Eye's damage). Counted as no difference: the rules don't order the
+  parts of one modified event, and nothing is checked between them (register
+  `parts-of-one-modified-event-unordered`, pinned with and without Bruvac by
+  `a_riders_damage_and_the_mill_that_replaced_its_event_trigger_together_whatever_their_order`,
+  `r614_006_parts_of_one_modified_event.rs`).
 
 **Gone with the fixes** (6): `497:33` (`true`, (a), and `false`, (c)), `497:40` ((c)), `607:60`
 and `622:23` ((c)), `681:9` ((b); fix 4 does what it did). The `+`→`-` forms of `607:60` and
@@ -1894,15 +1900,17 @@ state-based action moves stays where it is, and the check repeats forever. These
     timestamp, while on the battlefield they're put after the 611.2e effect (Xu-Ifit,
     Osteoharmonist's return with Tayam, Luminous Enigma's vigilance counter). Nothing reads an
     entering permanent's keywords.
-- Readings kept without a register entry:
-  - `2107:55`'s test reads CR 801.11 as applying to the object a copy effect copies: a creature
-    out of range isn't copied (801.13). `Game::matches`' range check already makes that reading.
-  - The question about a face-down permanent names no card (`598:24`'s test pins the engine's
-    choice).
-  - `2885:9`/`2889:13` (above).
+- Readings the implementer left without a register entry, registered by the review (below):
+  `2107:55`'s test reads CR 801.11 as applying to the object a copy effect copies
+  (`copy-effect-doesnt-see-an-original-out-of-range`); the question about a face-down permanent
+  names no card (`598:24`'s test, `replacement-question-names-the-card-as-it-is`); the parts of
+  one modified event are unordered (`2885:9`/`2889:13`, `parts-of-one-modified-event-unordered`);
+  an extra or missing question to an agent is observable (the policy of this section and of
+  permissions.rs `347:13`, `questions-only-for-a-choice`).
 - The new code (`replace_rec`'s loop and bound, `move_division_parts`, `exiled_with`,
   `stack_only_effects`, `own_instruction_destination`, the `functions_on_battlefield` cases, the
-  zero-count skip) hasn't had its own mutants run.
+  zero-count skip, and the review's ordering of a spell's own effects) hasn't had its own mutants
+  run.
 - Register entries. New ones:
   - `entry-effects-of-a-leaving-source` (replacement-prevention, `cac3507`), provisional;
   - `face-down-entry-checked-as-the-face-down-card` (replacement-prevention, `190bab0`),
@@ -2020,3 +2028,41 @@ state-based action moves stays where it is, and the check repeats forever. These
     damage to be dealt, even if the total amount of damage isn't greater than the creature's
     toughness. Note that a source of damage having deathtouch has no effect on damage dealt to
     planeswalkers.". Provisional because 702.2c says "assigned".
+
+**Review** (the reviewer of `mutation-2` for replacement.rs):
+
+- Each fix's regression tests fail with the fix reverted alone: fix 1 (the bound back at 32:
+  the 34- and 300-Scales tests), 2 (the arm restored: both `entry-effects-of-a-leaving-source`
+  tests), 3, 4 (the whole commit's engine part reverted: its two tests and the rebound file's), 6,
+  7 (both calls removed: the three tests), 8 (the skip removed: the convoke test; every grant
+  left behind: the Archway control; without the `AddKeywordOwnCost` case, removed with the
+  `AddAbility` one: Henzie's two blitz tests in `tests/cards/spell_keyword_grants.rs`; no test
+  pins the `AddAbility` case alone, new code) and 9 (the cause overwritten again: both Nephalia
+  Academy tests).
+- An engine problem in fix 4: the keyword's exile was listed after the other effects (the
+  spell is the newest object), so a default answer applied Dauthi Voidwalker's first and a
+  countered or resolving flashback, jump-start, harmonize or aftermath spell got a void counter,
+  which Dauthi Voidwalker's controller may then play; before fix 4 the keyword's exile applied
+  with no choice. `replace_rec` now lists a spell's own effects first as it leaves the stack, as
+  `choose_resolved_spell_destination` lists rebound or buyback first (register
+  `default-first-listed-choice`, `leaving-the-stack-exile-among-other-replacements`). Test:
+  `by_default_a_spell_leaving_the_stack_is_exiled_by_its_own_keyword_with_no_void_counter`
+  (`r616_001_spells_leaving_the_stack.rs`, all four keywords, countered and resolving; it fails
+  without the ordering). Nexus of Fate countered under Rest in Peace is now shuffled into its
+  owner's library by default (its own effect first), where Rest in Peace's was first before.
+  Probed, not committed: under Rest in Peace (either player's), Leyline of the Void and Wheel of
+  Sun and Moon the card is exiled whichever order is chosen (Wheel of Sun and Moon first: the
+  bottom of the library, then the keyword's exile, CR 616.1f).
+- Four register entries for the readings above: `questions-only-for-a-choice` (policy, decided),
+  `replacement-question-names-the-card-as-it-is` (policy, decided),
+  `copy-effect-doesnt-see-an-original-out-of-range` (interpretation, provisional: no rule or
+  ruling names a copy effect with the limited range of influence option; a judge could let the
+  choice made within range, or Mystic Reflection's last-known-information ruling, carry the copy)
+  and `parts-of-one-modified-event-unordered` (interpretation, decided), each cited by the tests
+  that pin it.
+- The four provisional entries' quotations were checked against the CR and the rulings data, and
+  every ruling of the cards each one involves was read (all dates): none settles them.
+- Spot checks of (a) reasons against the code at `eaa55a4`: `126:29`, `226:36`, `733:17`,
+  `1039:24`/`1039:28`, `1287:46` `*`, `1484:25`–`1499:25`, `1537:55` (`PutCountersBy` is built
+  only by `r122_counters_put_by.rs`, with `kind: None`), `1772:21`, `2273:73`, and `2885:9` (by
+  running it, above): they hold.

@@ -36,7 +36,7 @@ fn divisions(t: &TestGame) -> Vec<Vec<Entity>> {
 #[test]
 fn cover_of_winter_asks_for_no_division_when_there_is_nothing_to_divide() {
     cr!("615.1a", "510.2", "702.19b");
-    interp!("per-source-prevention-division");
+    interp!("per-source-prevention-division", "questions-only-for-a-choice");
     // One recipient: 2 of the unblocked Giant's 3 damage is prevented, with no question.
     let mut t = TestGame::new(2);
     cover_of_winter(&mut t, 2);
