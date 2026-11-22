@@ -10,6 +10,12 @@
 #   FULL=1 RESUME=1 scripts/mutants.sh simultaneous   # continue an interrupted run of the same
 #                                                # commit (same SAMPLE/FULL), skipping what it tested
 #   FULL=1 REV=abc1234 scripts/mutants.sh x   # measure commit abc1234, not HEAD (RESUME too)
+#   FULL=1 SHARD=0/2 scripts/mutants.sh triggers     # a full run of one contiguous slice of the
+#                                                # file's mutants in `cargo mutants --list` order
+#                                                # (half 1 of 2 here); the slice's names are saved
+#                                                # in target/mutants/<stem>.shard
+#   FULL=1 SHARD=0/2 RESUME=1 scripts/mutants.sh triggers   # continue it: the slice's untested
+#                                                # mutants are applied and tested one by one
 #   TIMEOUT=900 scripts/mutants.sh layers        # a longer test timeout per mutant (default 600 s;
 #                                                # the unmutated mtg-engine suite takes ~290 s)
 #
@@ -34,6 +40,41 @@ TIMEOUT=${TIMEOUT:-600}
 REV=${REV:-HEAD}
 LOCK=${LOCK:-/tmp/cargo-heavy.lock}
 mkdir -p "$MS" "$OUT"
+
+# Applies and tests each mutant in ${names[@]} (diffs from $OUT/$stem.list.json) the way
+# cargo-mutants does it: build (unviable if that fails), then the mtg-engine tests (missed if
+# they pass, timeout after TIMEOUT seconds, caught otherwise); outcomes go to $mo/<outcome>.txt.
+test_names() {
+  for name in "${names[@]}"; do
+    python3 - "$OUT/$stem.list.json" "$name" >"$OUT/cur.diff" <<'PY'
+import json, sys
+print(next(m["diff"] for m in json.load(open(sys.argv[1])) if m["name"] == sys.argv[2]), end="")
+PY
+    cp "$MS/$file" "$OUT/cur.orig"
+    if ! patch -s "$MS/$file" <"$OUT/cur.diff"; then
+      cp "$OUT/cur.orig" "$MS/$file"
+      echo "$name" >>"$mo/unviable.txt"
+      echo "UNVIABLE (patch failed) $name"
+      continue
+    fi
+    outcome=$(flock "$LOCK" env CARGO_PROFILE_DEV_DEBUG=false bash -c '
+      cd "$1" || exit
+      timeout -k 10 900 cargo test -p mtg-engine --no-run >/dev/null 2>&1 || { echo unviable; exit; }
+      timeout -k 10 "$2" cargo test -p mtg-engine >/dev/null 2>&1
+      case $? in 0) echo missed ;; 124 | 137) echo timeout ;; *) echo caught ;; esac' _ "$MS" "$TIMEOUT")
+    cp "$OUT/cur.orig" "$MS/$file"
+    # The diff under cargo-mutants' own name for it, for a later RERUN's matching.
+    mkdir -p "$mo/diff"
+    [[ "$name" =~ ^(.*):([0-9]+):([0-9]+): ]] &&
+      cp "$OUT/cur.diff" "$mo/diff/${BASH_REMATCH[1]//\//__}_line_${BASH_REMATCH[2]}_col_${BASH_REMATCH[3]}.diff"
+    for o in caught missed timeout unviable; do
+      grep -vxF -- "$name" "$mo/$o.txt" >"$mo/$o.tmp" || true
+      mv "$mo/$o.tmp" "$mo/$o.txt"
+    done
+    echo "$name" >>"$mo/$outcome.txt"
+    echo "${outcome^^} $name"
+  done
+}
 
 for stem in "$@"; do
   # Fresh, unmutated source of the committed tree (an interrupted --in-place run may have
@@ -104,45 +145,42 @@ PY
       continue
     fi
     # cargo-mutants 27.1 applies neither -F nor -E to "delete field" mutants (it would
-    # test every one of them), so each survivor is applied and tested here, the way
-    # cargo-mutants does it: build (unviable if that fails), then the mtg-engine tests
-    # (missed if they pass, timeout after TIMEOUT seconds, caught otherwise).
+    # test every one of them), so each survivor is applied and tested here (test_names).
     mo=$dest/mutants.out
     # A full re-run starts afresh; with ONLY, the other survivors' results are kept.
     [[ -z "${ONLY:-}" ]] && rm -rf "$dest"
     mkdir -p "$mo"
     touch "$mo"/{caught,missed,timeout,unviable}.txt
     echo "== $stem: re-running ${#names[@]} survivors"
-    for name in "${names[@]}"; do
-      python3 - "$OUT/$stem.list.json" "$name" >"$OUT/cur.diff" <<'PY'
-import json, sys
-print(next(m["diff"] for m in json.load(open(sys.argv[1])) if m["name"] == sys.argv[2]), end="")
-PY
-      cp "$MS/$file" "$OUT/cur.orig"
-      if ! patch -s "$MS/$file" <"$OUT/cur.diff"; then
-        cp "$OUT/cur.orig" "$MS/$file"
-        echo "$name" >>"$mo/unviable.txt"
-        echo "UNVIABLE (patch failed) $name"
-        continue
-      fi
-      outcome=$(flock "$LOCK" env CARGO_PROFILE_DEV_DEBUG=false bash -c '
-        cd "$1" || exit
-        timeout -k 10 900 cargo test -p mtg-engine --no-run >/dev/null 2>&1 || { echo unviable; exit; }
-        timeout -k 10 "$2" cargo test -p mtg-engine >/dev/null 2>&1
-        case $? in 0) echo missed ;; 124 | 137) echo timeout ;; *) echo caught ;; esac' _ "$MS" "$TIMEOUT")
-      cp "$OUT/cur.orig" "$MS/$file"
-      for o in caught missed timeout unviable; do
-        grep -vxF -- "$name" "$mo/$o.txt" >"$mo/$o.tmp" || true
-        mv "$mo/$o.tmp" "$mo/$o.txt"
-      done
-      echo "$name" >>"$mo/$outcome.txt"
-      echo "${outcome^^} $name"
-    done
+    test_names
     c() { wc -l <"$mo/$1.txt"; }
     echo "== $stem: caught $(c caught) missed $(c missed) timeout $(c timeout) unviable $(c unviable)"
     continue
   fi
   ((k > 1)) && args+=(--shard "0/$k" --sharding round-robin)
+  if [[ -n "${SHARD:-}" ]]; then
+    # SHARD=k/n: one contiguous slice of the mutants in list order. RESUME can't use
+    # --iterate/-E here (cargo-mutants shards after those filters, which would shift the
+    # slice), so it tests the slice's mutants that have no outcome yet itself.
+    args+=(--shard "$SHARD" --sharding slice)
+    if [[ -z "${RESUME:-}" ]]; then
+      (cd "$MS" && cargo mutants --list -f "$file" --shard "$SHARD" --sharding slice) >"$OUT/$stem.shard"
+    else
+      mo=$OUT/$stem/mutants.out
+      mkdir -p "$mo"
+      touch "$mo"/{caught,missed,timeout,unviable}.txt
+      (cd "$MS" && cargo mutants --list --json --diff -f "$file") >"$OUT/$stem.list.json"
+      names=()
+      while IFS= read -r name; do
+        grep -qxF -- "$name" "$mo"/{caught,missed,timeout,unviable}.txt || names+=("$name")
+      done <"$OUT/$stem.shard"
+      echo "== $stem: shard $SHARD, resuming ${#names[@]} of $(wc -l <"$OUT/$stem.shard") mutants"
+      ((${#names[@]} > 0)) && test_names
+      c() { wc -l <"$mo/$1.txt"; }
+      echo "== $stem: caught $(c caught) missed $(c missed) timeout $(c timeout) unviable $(c unviable)"
+      continue
+    fi
+  fi
   if [[ -n "${RESUME:-}" ]]; then
     # RESUME=1: continue a run of the same commit that was interrupted (a machine restart).
     # The mutants it tested are skipped: caught and unviable ones through --iterate (which

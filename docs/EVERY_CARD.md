@@ -157,6 +157,76 @@ re-run with these changes and the merged newer engine (pool of 29,744): abilitie
 94.8% → 95.0%, cards fully exercised 95.2% → 95.5%, and its only failures are the two
 Charismatic Conqueror games described above.
 
+### Sweep for the card tiers (Nov 20)
+
+The sweep behind the Nov 20 refresh of `docs/verified-cards.tsv` (engine at cbf0113, pool
+of 32,673 cards, 3 threads, four chunks):
+
+| Chunk | Cards | Games | Time | Cast or played | Abilities used | Fully exercised | Failed games |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `--from 0` | 8,500 | 17,000 | 38.8 min | 8,426 / 8,457 | 7,257 / 7,605 | 8,146 | 2 (slow) |
+| `--from 8500` | 8,500 | 17,000 | 36.1 min | 8,412 / 8,436 | 7,470 / 7,858 | 8,116 | 0 |
+| `--from 17000` | 8,500 | 17,000 | 35.5 min | 8,413 / 8,431 | 7,293 / 7,677 | 8,128 | 0 |
+| `--from 25500` | 7,173 | 14,346 | 30.8 min | 7,080 / 7,101 | 6,402 / 6,707 | 6,882 | 0 |
+| **All** | **32,673** | **65,346** | **141 min** | **32,331 / 32,425 (99.7%)** | **28,422 / 29,847 (95.2%)** | **31,272 (95.7%)** | **2** |
+
+Game kinds: 32,081 standard, 344 commander, 108 planechase, 69 archenemy, 30 vanguard,
+22 attractions, 18 conspiracy, 1 dungeon. No panic, hang or rules violation; the two
+failed games are Charismatic Conqueror's own (card 4509, both games stopped as slow:
+the open loop described above; `mtg-sim --every-card --from 4509 --count 1 --game 0
+--max-turns 30 --log`).
+
+Tiers (of 32,111 cards), before → after the sweep and the regenerated tier file (with the
+Hylda test below): verified 18,113 (56.4%) → 19,827 (61.7%); round-trip 10,457 → 8,901;
+compiled 3,506 → 3,348; unsupported 35 → 35.
+
+The 15 cards that dropped a tier:
+
+- **Aang, at the Crossroads // Aang, Destined Savior and Archangel Avacyn // Avacyn, the
+  Purifier** (round-trip → compiled): not a regression. The round-trip comparison stopped
+  reading "at the beginning of the next upkeep" as "the next turn's upkeep" on Nov 10
+  (register-sweep-1's review, `oracle/render/compare.rs`), after the previous tier file was
+  made; neither card has been in `docs/roundtrip-passing.txt` since. Both wordings compile
+  to one trigger (`BeginningOf { Upkeep, Any }`, the next upkeep step), which the renderer
+  words "the next turn's upkeep"; the fix is a distinct trigger for "the next turn's
+  upkeep" (CR 603.7b), as that review proposed.
+- **Hylda of the Icy Crown** (verified → round-trip, structure): its tests made its
+  trigger trigger but never resolved it, and a structure counts as exercised only when it
+  resolves. `tests/cards/td_tap_causes.rs` now pays for it and resolves a mode; verified
+  again. 15 structure log files is what a whole `cargo test --workspace` writes (as in the
+  Nov 4 refresh); the previous tier file's 16 most likely included a log from a separate
+  partial test run.
+- **Twelve "never cast" cards** (verified → round-trip, fuzz-cast), each replayed
+  (`--from N --count 1 --log`) with the board inspected at every main-phase priority. The
+  decks and games differ from the last sweep's (the pool and the filler changed), and the
+  replays show why none was castable: Aura Finesse (no Aura on the battlefield; the one
+  Giant's Grasp entered face down by manifest dread), Chained to the Rocks (mono-white
+  decks: no Mountain), Combust (no white or blue creature), Feast of Blood (at most one
+  Vampire per player), Hex (at most five creatures at once), Humble the Brute and
+  Radiant's Judgment (no creature with power 4 or more at sorcery speed), It That Betrays
+  (at most 11 untapped lands: upkeep activations of Volrath's Laboratory and Animation
+  Module tapped the rest), Karador, Ghost Chieftain (games over on turns 11 and 14, and no
+  player ever had the lands for its cost after its reduction: 5 to 7 lands against {5}{W}{B}{G}
+  less {1} for each creature card in their graveyard, 6 to 8), Lava Blister (only basic lands:
+  it targets a nonbasic land). Hogaak, Arisen Necropolis was chosen many times, but each
+  cast failed: the focus agent answers convoke's and delve's choices with a random number
+  of creatures and cards, and Hogaak can't be paid with mana for the rest; the report's
+  "offered but never chosen" doesn't tell those apart. **Inspired Ultimatum** hit an
+  engine bug: in game 0 player 0 had Plains ×2, Island ×2, Mountain and two Prism tokens
+  with Diamond Kaleidoscope ("Sacrifice a Prism: Add one mana of any color") from turn
+  17, enough for {U}{U}{R}{R}{R}{W}{W}, but the payment planner uses a mana ability
+  without {T} at most once per payment (`mana_abilities.rs`: one `ManaSource` per
+  ability), so the cast wasn't legal. The same holds for Ashnod's Altar with two
+  creatures paying {4}. An old bug, not a regression; open, with its repro and an approach,
+  in `docs/agents/engine-gaps.md` ("a repeatable mana ability is planned at most once per
+  payment").
+
+The fuzz-cast check moves both ways between sweeps: 32 of the 75 cards this sweep never cast
+were cast in the Nov 5 sweep, and 35 cards that sweep never cast were cast now, of the same
+kinds (spells that need a particular board, such as Aura Graft, Break Open and Wild Ricochet).
+The review replayed Chained to the Rocks, Combust, Lava Blister and Karador (both games each),
+Hogaak and Inspired Ultimatum: the verdicts above hold (Karador's reason corrected).
+
 ### Sweep for the card tiers (Oct 21)
 
 The sweep behind `docs/verified-cards.tsv` (pool of 30,222 cards, 60,444 games, 3 threads,
@@ -217,6 +287,22 @@ Each with a regression test in `crates/mtg-engine/tests`:
   player chooses the face (CR 712.12; `cr/r712_land_faces.rs`).
 - **Triggered mana abilities' resolutions weren't counted** like other abilities'
   (CR 605.4a; `cr/r605_triggered_mana_resolution.rs`).
+- **A repeatable mana ability was planned at most once per payment** (Nov 20 sweep:
+  Inspired Ultimatum with Diamond Kaleidoscope's two Prisms was never castable; Ashnod's
+  Altar with two creatures didn't pay {4}): the payment planner now activates a mana
+  ability whose cost doesn't tap or sacrifice its permanent once per activation the cost
+  needs, with what all the activations sacrifice matched to distinct objects (CR 605.3a,
+  118.3; `cr/r605_003_repeatable_mana_abilities.rs`). Re-swept with `--names` (small-fixes-7):
+  Inspired Ultimatum is cast.
+- **"At the beginning of the next turn's upkeep" fired at an additional upkeep of the same
+  turn** (it compiled like "the next upkeep", CR 603.7b; Paradox Haze): it now waits for
+  the first upkeep of the next turn (`cr/r603_007b_next_turns_upkeep.rs`).
+
+The report tells apart a cast the focus agent chose that never went through ("never cast:
+chosen, but never completed": its payment failed and was reversed, CR 733.1) from one that
+was "offered but never chosen", and the focus agent answers convoke, improvise and delve
+choices for its card with the engine's default (paying that way as much as the rest of the
+cost needs) most of the time (since small-fixes-7; Hogaak's casts failed on random answers).
 
 Hooks added for the fuzzer, usable elsewhere: `Game::observer` (`EventObserver`, sees
 every event and every reversal of an illegal action, `Game::roll_back`),

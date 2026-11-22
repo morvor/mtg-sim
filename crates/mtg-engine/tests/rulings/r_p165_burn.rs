@@ -185,6 +185,32 @@ fn blaze_commando_ignores_spells_that_make_other_objects_deal_damage() {
     assert_eq!(triggers_of(&t, bc), 0);
 }
 
+#[test]
+fn blaze_commando_counts_the_one_deals_of_a_spell_of_three_sentences() {
+    cr!("603.2c", "608.2c");
+    ruling!(
+        "Blaze Commando",
+        "Blaze Commando’s ability triggers each time an instant or sorcery spell you control deals damage (or, put another way, the number of times the word “deals” appears in its instructions), no matter how much damage is dealt or how many players or permanents are dealt damage."
+    );
+    supported("Blaze Commando");
+    supported("The Fall of Kroog");
+    // "Choose target opponent. Destroy target land that player controls. The Fall of Kroog
+    // deals 3 damage to that player and 1 damage to each creature they control.": three
+    // sentences, and one "deals" dealing damage to two recipients at once, one event: one
+    // trigger, two Soldiers.
+    let mut t = TestGame::new(2);
+    let bc = t.battlefield(P0, "Blaze Commando");
+    let forest = t.battlefield(P1, "Forest");
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    cast_new(&mut t, P0, "The Fall of Kroog", &[pl(P1), o(forest)]);
+    t.resolve_all();
+    assert!(!t.on_battlefield(forest));
+    assert_eq!(t.life(P1), 17);
+    assert_eq!(damage_on(&t, bears), 1);
+    assert_eq!(triggers_of(&t, bc), 1);
+    assert_eq!(soldiers(&t, P0), 2);
+}
+
 // ---------------------------------------------------------------------------------------
 // Pyromancer's Swath
 // ---------------------------------------------------------------------------------------
@@ -515,6 +541,89 @@ fn opponent_damage_triggers_once_per_event_regardless_of_amount() {
     t.resolve_all();
     assert_eq!(triggers_of(&t, sp), 2);
     assert_eq!(triggers_of(&t, we), 2);
+}
+
+#[test]
+fn a_prevention_follow_ups_damage_is_an_event_of_its_own() {
+    cr!("615.5", "603.2c");
+    ruling!(
+        "Chandra's Spitfire",
+        "The last ability of Chandra's Spitfire triggers just once for each event in which an opponent is dealt noncombat damage, regardless of how much damage that player is dealt."
+    );
+    supported("Chandra's Spitfire");
+    supported("Deflecting Palm");
+    // Two sentences, each with its own "deals" from the same source: two instructions, each
+    // a sequence of one (`trigger_timing::join_instructions`), each performed on its own.
+    // (No card prints an all-damage text of several sentences with no "instead" or "if".)
+    let def = crate::r_s01_common::custom_card(
+        "Twin Blast",
+        "Sorcery",
+        "{R}",
+        None,
+        "Twin Blast deals 2 damage to each player. Twin Blast deals 1 damage to each creature.",
+    );
+    let mut t = TestGame::new(2);
+    let sp = t.battlefield(P1, "Chandra's Spitfire");
+    t.battlefield(P0, "Mountain");
+    let card = t.custom(P0, def, mtg_engine::object::Zone::Hand(P0));
+    let blast = t.cast_with(P0, card, &[]).unwrap();
+    // P1 responds with Deflecting Palm, choosing Twin Blast as the source as it resolves.
+    lands_for_cost(&mut t, P1, "Deflecting Palm");
+    let palm = t.hand(P1, "Deflecting Palm");
+    let blast_now = t.g.current(blast);
+    t.answer_choose(P1, &[o(blast_now)]);
+    t.cast(P1, palm).go();
+    t.resolve();
+    t.resolve_all();
+    // Twin Blast's first instruction deals 2 damage to P0 and would deal 2 to P1. That
+    // damage is prevented, and right after the event (CR 615.5) Deflecting Palm deals 2
+    // damage to Twin Blast's controller: a second event in which P1's opponent is dealt
+    // noncombat damage, so two triggers.
+    assert_eq!((t.life(P0), t.life(P1)), (16, 20));
+    assert_eq!(triggers_of(&t, sp), 2);
+    assert_eq!(t.pt(sp), (1 + 3 + 3, 3));
+}
+
+#[test]
+fn a_prevention_follow_up_comes_after_the_whole_damage_event() {
+    cr!("615.5", "603.2c");
+    interp!("rider-order");
+    ruling!(
+        "Chandra's Spitfire",
+        "The last ability of Chandra's Spitfire triggers just once for each event in which an opponent is dealt noncombat damage, regardless of how much damage that player is dealt."
+    );
+    supported("Orcish Cannonade");
+    supported("Deflecting Palm");
+    // Orcish Cannonade: "Orcish Cannonade deals 2 damage to any target and 3 damage to you."
+    // is one damage event (one "deals"). Deflecting Palm prevents the 2 damage to P1 and
+    // deals that much damage to Cannonade's controller "immediately afterward" (CR 615.5):
+    // after the whole event, so after the 3 damage Cannonade deals to P0, and as an event
+    // of its own.
+    let mut t = TestGame::new(2);
+    let sp = t.battlefield(P1, "Chandra's Spitfire");
+    t.library_top(P0, "Island");
+    let cannonade = cast_new(&mut t, P0, "Orcish Cannonade", &[pl(P1)]);
+    lands_for_cost(&mut t, P1, "Deflecting Palm");
+    let palm = t.hand(P1, "Deflecting Palm");
+    let cannonade_now = t.g.current(cannonade);
+    t.answer_choose(P1, &[o(cannonade_now)]);
+    t.cast(P1, palm).go();
+    t.resolve();
+    t.resolve_all();
+    assert_eq!((t.life(P0), t.life(P1)), (15, 20));
+    let to_p0: Vec<(String, u32)> = damage_events(&t)
+        .into_iter()
+        .filter(|(_, to, _)| *to == pl(P0))
+        .map(|(src, _, n)| (t.g.obj(src).chars.name.to_string(), n))
+        .collect();
+    assert_eq!(
+        to_p0,
+        [
+            ("Orcish Cannonade".to_string(), 3),
+            ("Deflecting Palm".to_string(), 2)
+        ]
+    );
+    assert_eq!(triggers_of(&t, sp), 2, "two events in which P0 was dealt damage");
 }
 
 #[test]

@@ -278,7 +278,7 @@ pub fn unlock_actions(g: &Game, p: PlayerId) -> Vec<Action> {
                 continue;
             };
             let ctx = crate::eval::Ctx::new(Some(id), p);
-            if g.can_pay_cost(p, &cost, Some(id), &ctx) {
+            if g.can_pay_cost_keeping_source(p, &cost, Some(id), &ctx) {
                 out.push(Action::Special(SpecialAction::Other {
                     name: format!("{UNLOCK_ACTION}{half}"),
                     obj: Some(id),
@@ -328,11 +328,11 @@ pub fn perform(g: &mut Game, p: PlayerId, sa: &SpecialAction) -> Option<Result<(
         return bad("no unlock cost");
     };
     let ctx = crate::eval::Ctx::new(Some(id), p);
-    if !crate::special_actions::pay_for(
+    if !crate::special_actions::pay_keeping_source(
         g,
         p,
         &cost,
-        Some(id),
+        id,
         &ctx,
         Some(crate::mana::SpendPurpose::UnlockDoor),
     ) {

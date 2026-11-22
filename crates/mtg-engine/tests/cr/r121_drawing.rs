@@ -559,6 +559,7 @@ fn offering(name: &str, filter: Filter) -> CardDef {
 fn a_card_drawn_while_a_spell_is_cast_stays_face_down_until_it_becomes_cast() {
     cr!("121.8", "733.1");
     interp!("illegal-action-reversal-restores-libraries");
+    interp!("reveal-as-drawn-chosen-when-revealed");
     // The card drawn by the mana ability has no characteristics while the spell is being
     // cast: it can't be discarded as "a creature card", so the spell can't be cast.
     let setup = |filter: Filter, bears_in_hand: bool| {

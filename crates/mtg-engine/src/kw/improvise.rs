@@ -37,17 +37,18 @@ fn has_mana_ability(g: &Game, id: ObjectId) -> bool {
 /// (preferring ones without mana abilities, which can't pay for the spell another way)
 /// until the rest can be paid.
 fn default_choice(g: &Game, p: PlayerId, spell: ObjectId, cost: &Cost, cands: &[ObjectId]) -> Vec<ObjectId> {
-    let chars = g.obj(spell).chars.clone();
     let generic = cost.mana.as_ref().map_or(0, |m| m.generic_amount());
+    let mut order = cands.to_vec();
+    order.sort_by_key(|c| has_mana_ability(g, *c));
+    // The first `n` artifacts tapped: no mana ability may then tap, sacrifice or exile
+    // them (CR 601.2g–h, `convoke::payable_once_tapped`).
     let payable = |n: usize| {
         let mut c = cost.clone();
         if let Some(m) = c.mana.as_mut() {
             m.reduce_generic(n as u32);
         }
-        g.can_pay_cost_optimistic(p, &c, Some(spell), &chars)
+        super::convoke::payable_once_tapped(g, p, spell, &c, &order[..n])
     };
-    let mut order = cands.to_vec();
-    order.sort_by_key(|c| has_mana_ability(g, *c));
     let max = (generic as usize).min(order.len());
     let n = (0..=max).find(|n| payable(*n)).unwrap_or(max);
     order.truncate(n);

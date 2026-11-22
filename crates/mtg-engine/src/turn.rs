@@ -878,7 +878,9 @@ impl Game {
             self.limit_untaps(active, &mut to_untap);
             self.untap_during_others_untap_steps(&mut to_untap);
             crate::kw::untap_step(self, active, &mut to_untap);
-            for id in to_untap {
+            // A permanent that left as the others untap (returned "as you untap your
+            // permanents", Undiscovered Paradise) is a new object, not untapped (CR 400.7).
+            for id in self.all_present(to_untap) {
                 self.untap(id);
             }
             // CR 701.43a: exertion lasts until its controller's next untap step.

@@ -534,6 +534,11 @@ pub struct SpendContext {
     /// activated before the costs are paid (CR 601.2g-h, 602.2b; Heart Warden's "{T}: Add
     /// {G}" helps pay its "{2}, Sacrifice this creature").
     pub reserve_may_tap: bool,
+    /// The payment's source must stay where it is whatever the cost: a special action
+    /// that acts on it once the cost is paid ("turn it face up", CR 116.2b, 702.37e;
+    /// unlocking a door, 116.2m; `special_actions::pay_keeping_source`). No mana ability
+    /// may sacrifice it (see `reserve_may_tap`).
+    pub keep_source: bool,
     /// What the cost is paid for beyond casting or activating ([`SpendPurpose`]).
     pub purpose: Option<SpendPurpose>,
     /// The mana cost being paid contains {C} ("pay a cost that contains {C}").
@@ -549,6 +554,21 @@ pub struct SpendContext {
     /// its activation has begun (CR 602.2, 605.3a; see `KeywordRules::
     /// activation_allowed_during`).
     pub beginning: Option<(ObjectId, u64)>,
+    /// What the other parts of the cost being paid take, which are paid after the mana
+    /// abilities are activated (CR 601.2g–h): the automatic payment keeps enough of them
+    /// out of what its mana abilities sacrifice, exile, discard or tap (see
+    /// `cost_needs.rs`).
+    pub cost_needs: Vec<CostNeed>,
+}
+
+/// Objects another part of a cost takes ("As an additional cost to cast this spell,
+/// sacrifice a creature."): `count` of `pool`, removed from where they are (sacrificed,
+/// exiled, discarded, returned, or kept in hand to be revealed) or, with `taps`, tapped.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CostNeed {
+    pub pool: Vec<ObjectId>,
+    pub count: usize,
+    pub taps: bool,
 }
 
 /// Ways a payer may spend mana as though it were mana of another type (CR 609.4b): "You

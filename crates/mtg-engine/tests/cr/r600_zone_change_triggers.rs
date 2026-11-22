@@ -251,6 +251,61 @@ fn from_anywhere_triggers_are_not_leaves_the_battlefield_abilities() {
 }
 
 #[test]
+fn put_into_a_library_from_anywhere_sees_the_permanent_as_it_last_existed() {
+    cr!("603.10", "603.10a");
+    crate::r600_examples_common::supported("March of the Machines");
+    crate::r600_examples_common::supported("Oust");
+    // "Whenever a creature card is put into a library from anywhere" triggers when an object
+    // all players can see is put into a library, so it looks back in time (CR 603.10a): it
+    // sees a permanent put there from the battlefield as the permanent was immediately
+    // before. Under March of the Machines ("Each noncreature artifact is an artifact
+    // creature with base power and toughness each equal to its mana value."), Sol Ring is an
+    // artifact creature card on the battlefield; in a library it's a noncreature card. (The
+    // pool's "put into a library" abilities, Dutiful Knowledge Seeker's and Wan Shi Tong's,
+    // say "cards", which the permanent and the card both are, so the watcher is compiled
+    // text.)
+    let watcher = compile_def(
+        "Library Watcher",
+        "Enchantment",
+        "{1}{U}",
+        "Whenever a creature card is put into a library from anywhere, you gain 1 life.",
+    );
+    let abs = abilities(&watcher);
+    assert!(
+        abs.iter().any(|a| matches!(
+            &a.kind,
+            AbilityKind::Triggered(tr) if matches!(
+                tr.trigger,
+                TriggerCond::ZoneChange {
+                    from: None,
+                    to: Some(ZoneKind::Library),
+                    ..
+                }
+            )
+        )),
+        "{abs:?}"
+    );
+    let mut t = TestGame::new(2);
+    t.custom(P0, watcher, Zone::Battlefield);
+    t.battlefield(P0, "March of the Machines");
+    let ring = t.battlefield(P1, "Sol Ring");
+    t.g.recompute();
+    assert!(
+        t.obj(ring).is_creature(),
+        "an artifact creature under March of the Machines"
+    );
+    // Oust: "Put target creature into its owner's library second from the top. Its
+    // controller gains 3 life."
+    t.lands(P0, "Plains", 1);
+    let oust = t.hand(P0, "Oust");
+    t.cast(P0, oust).target(ring).go();
+    t.resolve_all();
+    assert!(matches!(t.zone(ring), Zone::Library(_)));
+    assert_eq!(t.life(P1), 23);
+    assert_eq!(t.life(P0), 21, "a creature card was put into a library");
+}
+
+#[test]
 fn a_permanent_leaving_the_game_with_its_owner_triggers_leaves_the_battlefield_abilities() {
     cr!("603.6c");
     let mut t = TestGame::new(3);

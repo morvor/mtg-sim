@@ -377,8 +377,10 @@ impl Game {
                 }
                 other => (other, None),
             };
-            let alternatives: Vec<(&Box<TriggerCond>, &BatchPer)> = match batched {
-                TriggerCond::Batched { trigger, per } => vec![(trigger, per)],
+            // A batched alternative: its events and its condition on the whole batch.
+            type Alternative<'a> = (&'a Box<TriggerCond>, &'a BatchPer, Option<&'a Condition>);
+            let alternatives: Vec<Alternative<'_>> = match batched {
+                TriggerCond::Batched { trigger, per } => vec![(trigger, per, batch_cond)],
                 // Batched alternatives of a trigger with several conditions: "when enchanted
                 // creature becomes tapped or is dealt damage" (the other alternatives
                 // trigger per event), "whenever one or more other permanents phase out
@@ -390,12 +392,20 @@ impl Game {
                     let mut probe = Ctx::new(Some(src), ctl);
                     probe.link = a.link;
                     probe.ability_uid = a.uid;
+                    // (An alternative may have a condition on its whole batch: "attacks
+                    // or is dealt 3 or more damage".)
                     v.iter()
                         .filter_map(|c| match c {
-                            TriggerCond::Batched { trigger, per } => Some((trigger, per)),
+                            TriggerCond::Batched { trigger, per } => Some((trigger, per, None)),
+                            TriggerCond::Where { trigger, cond } => match &**trigger {
+                                TriggerCond::Batched { trigger, per } => {
+                                    Some((trigger, per, Some(cond)))
+                                }
+                                _ => None,
+                            },
                             _ => None,
                         })
-                        .filter(|(t, _)| {
+                        .filter(|(t, _, _)| {
                             batch
                                 .iter()
                                 .any(|ev| !self.trigger_matches_ctx(t, &probe, ev).is_empty())
@@ -404,7 +414,7 @@ impl Game {
                 }
                 _ => continue,
             };
-            for (trigger, per) in alternatives {
+            for (trigger, per, batch_cond) in alternatives {
                 // "… for the first time each turn": the first batch this turn with a matching
                 // event (its events are matched without the qualifier, see below).
                 let (trigger, first_time) = match &**trigger {
@@ -681,6 +691,9 @@ impl Game {
                 *self.history.crimes.entry(*player).or_insert(0) += 1
             }
             Event::Damage { source, .. } => crate::kw::value_results::record_damage(self, *source),
+            Event::ExcessDamage { obj, .. } => {
+                crate::kw::value_results::record_excess_damage(self, *obj)
+            }
             // What a permanent was as it entered (its characteristics are computed by
             // now): conditions about permanents that entered this turn look at that, not
             // at what it is later ("a face-down creature entered ...").
@@ -1007,16 +1020,23 @@ impl Game {
             base.source = d.source;
             // "you" in its trigger condition is the player who performs it.
             base.controller = d.performer.unwrap_or(d.controller);
+            // "At the beginning of the next turn's upkeep" (see `turn_structure`).
+            base.nums.insert(
+                crate::turn_structure::DELAYED_CREATED_TURN,
+                d.created_turn as i64,
+            );
             let left_zone = self.matched_leaving_as_it_entered(&d.trigger, &base, ev);
             if entering_off && !left_zone {
                 continue;
             }
-            // "Creatures dying don't cause abilities to trigger" (Hushbringer).
+            // "Creatures dying don't cause abilities to trigger" (Hushbringer). A delayed
+            // triggered ability isn't an ability of the object that is its source (CR
+            // 113.7, 603.7e; `delayed-abilities-arent-abilities-of-permanents`).
             if !on_sacrifice(&d.trigger)
                 && crate::kw::torpor::suppressed_for(
                     self,
                     ev,
-                    d.source,
+                    None,
                     d.controller,
                     looks_back(&d.trigger, ev),
                     left_zone,
@@ -2942,7 +2962,7 @@ fn names_zone_left(t: &TriggerCond) -> bool {
 
 /// Whether a trigger condition is about sacrificing ("whenever you sacrifice a creature"),
 /// the event that causes a creature to die rather than its dying (CR 603.2d).
-fn on_sacrifice(t: &TriggerCond) -> bool {
+pub(crate) fn on_sacrifice(t: &TriggerCond) -> bool {
     match t {
         TriggerCond::Sacrificed(_) | TriggerCond::YouSacrifice(_) => true,
         TriggerCond::Where { trigger, .. }

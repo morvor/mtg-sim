@@ -138,7 +138,7 @@ impl KeywordRules for MorphFaceUp {
                     if let Some(m) = cost.mana.clone().filter(|m| m.has_x()) {
                         cost.mana = Some(m.with_x(0));
                     }
-                    g.can_pay_cost(p, &cost, Some(o.id), &Ctx::new(Some(o.id), p))
+                    g.can_pay_cost_keeping_source(p, &cost, Some(o.id), &Ctx::new(Some(o.id), p))
                 })
             })
             .map(|o| Action::Special(SpecialAction::TurnFaceUp { obj: o.id }))
@@ -184,7 +184,7 @@ impl KeywordRules for MorphFaceUp {
         ctx.cost_has_x = chosen_x.is_some();
         // Mana that may be spent only to turn permanents face up pays it (CR 106.6).
         let purpose = Some(crate::mana::SpendPurpose::TurnFaceUp(way));
-        if !crate::special_actions::pay_for(g, p, &cost, Some(obj), &ctx, purpose) {
+        if !crate::special_actions::pay_keeping_source(g, p, &cost, obj, &ctx, purpose) {
             return Some(Err(Illegal("can't pay the cost to turn it face up".into())));
         }
         // CR 702.37f: other abilities of the permanent that refer to X use the value

@@ -762,6 +762,44 @@ fn nimble_trapfinder_checks_the_types_entering_permanents_had_as_they_entered() 
 }
 
 #[test]
+fn nimble_trapfinder_looks_at_each_of_simultaneous_entrants_as_it_entered() {
+    cr!("509.1b");
+    ruling!("Nimble Trapfinder", "gained the type later in the turn");
+    supported("Raise the Alarm");
+    supported("Arcane Adaptation");
+    // Two Soldier tokens enter at the same time (one event: two records of permanents
+    // entering, checked together), then both become Clerics. Neither was a Cleric as it
+    // entered, so the Trapfinder can still be blocked.
+    let mut t = TestGame::new(2);
+    let trap = old(&mut t, P0, "Nimble Trapfinder");
+    t.lands(P0, "Plains", 2);
+    let alarm = t.hand(P0, "Raise the Alarm");
+    t.cast(P0, alarm).go();
+    t.resolve_all();
+    let soldiers: Vec<ObjectId> = t
+        .g
+        .battlefield
+        .iter()
+        .copied()
+        .filter(|id| has_subtype(&t, *id, "Soldier"))
+        .collect();
+    assert_eq!(soldiers.len(), 2);
+    let cleric = subtype_lists()
+        .creature
+        .iter()
+        .position(|x| x == "Cleric")
+        .unwrap();
+    t.answer(P0, DecisionKind::Option, Answer::Index(cleric));
+    t.enter(P0, "Arcane Adaptation");
+    t.g.flush_events();
+    t.settle();
+    assert!(soldiers.iter().all(|s| has_subtype(&t, *s, "Cleric")));
+    let wall = old(&mut t, P1, "Wall of Stone");
+    attack_with(&mut t, &[(trap, pl(P1))]);
+    assert!(t.g.can_block(wall, trap));
+}
+
+#[test]
 fn family_s_favor_triggers_are_mandatory() {
     cr!("603.5", "122.1c");
     ruling!(

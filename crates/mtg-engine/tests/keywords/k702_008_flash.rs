@@ -10,7 +10,10 @@ use mtg_engine::*;
 #[test]
 fn flash_creature_can_be_cast_any_time_you_could_cast_an_instant() {
     cr!("702.8a");
-    assert_eq!(printed_keywords("Ambush Viper", KeywordKind::Flash).len(), 1);
+    assert_eq!(
+        printed_keywords("Ambush Viper", KeywordKind::Flash).len(),
+        1
+    );
     let mut t = TestGame::new(2);
     t.lands(P0, "Forest", 4);
     let viper = t.hand(P0, "Ambush Viper");
@@ -18,7 +21,10 @@ fn flash_creature_can_be_cast_any_time_you_could_cast_an_instant() {
     // The opponent's end step, with P0 holding priority.
     t.set_step(P1, Step::End);
     t.g.turn.priority = Some(P0);
-    assert!(t.cast(P0, bears).try_go().is_err(), "no flash: sorcery timing");
+    assert!(
+        t.cast(P0, bears).try_go().is_err(),
+        "no flash: sorcery timing"
+    );
     assert!(t.in_hand(P0, "Grizzly Bears"));
     let spell = t.cast(P0, viper).go();
     assert_eq!(t.stack_len(), 1);
@@ -114,8 +120,8 @@ fn a_creature_without_flash_on_top_of_the_library_needs_sorcery_timing() {
 }
 
 #[test]
-fn conditional_flash_functions_in_the_hand() {
-    cr!("702.8a", "601.3d");
+fn conditional_flash_lets_the_card_be_begun_from_the_hand() {
+    cr!("702.8a", "601.3d", "113.6e");
     assert_supported("Colossal Rattlewurm");
     let mut t = TestGame::new(2);
     t.lands(P0, "Forest", 4);
@@ -126,11 +132,19 @@ fn conditional_flash_functions_in_the_hand() {
     assert!(t.cast(P0, wurm).try_go().is_err());
     t.battlefield(P0, "Desert");
     t.g.recompute();
-    assert!(t.obj(wurm).has_keyword(KeywordKind::Flash));
+    // "Colossal Rattlewurm has flash as long as you control a Desert." grants the card an
+    // ability that modifies how it can be cast, so it functions only on the stack (CR
+    // 113.6e): the card in hand doesn't have flash, but with a Desert it may be begun as
+    // though it had flash (CR 601.3d), and as a spell it has flash.
+    assert!(!t.obj(wurm).has_keyword(KeywordKind::Flash));
     t.g.turn.priority = Some(P0);
     t.cast(P0, wurm).go();
+    let spell = t.g.current(wurm);
+    assert!(t.obj(spell).has_keyword(KeywordKind::Flash));
     t.resolve();
-    assert_eq!(t.named_on_battlefield("Colossal Rattlewurm").len(), 1);
+    let on_bf = t.named_on_battlefield("Colossal Rattlewurm");
+    assert_eq!(on_bf.len(), 1);
+    assert!(!t.obj(on_bf[0]).has_keyword(KeywordKind::Flash));
 }
 
 #[test]

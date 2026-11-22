@@ -191,21 +191,22 @@ pub fn mentions_group(e: &Effect) -> bool {
 
 /// At the end of a text: keeps the group stores if something refers to the group, or
 /// removes them and restores "it" otherwise. `outer` is the group of an enclosing text
-/// being parsed with the same builder.
-pub fn finish(e: Effect, b: &mut Builder, outer: Option<GroupRef>) -> Effect {
+/// being parsed with the same builder. Done for each instruction before they are joined
+/// into one effect, so each keeps its own shape.
+pub fn finish(effects: Vec<Effect>, b: &mut Builder, outer: Option<GroupRef>) -> Vec<Effect> {
     let Some(g) = b.group.take() else {
         b.group = outer;
-        return e;
+        return effects;
     };
-    if mentions_group(&e) {
+    if effects.iter().any(mentions_group) {
         b.group = Some(g);
-        return e;
+        return effects;
     }
     if matches!(b.it, Sel::Var(GROUP)) {
         b.it = g.it_before;
     }
     b.group = outer;
-    strip_group_stores(e)
+    effects.into_iter().map(strip_group_stores).collect()
 }
 
 /// Removes the group stores from an effect.

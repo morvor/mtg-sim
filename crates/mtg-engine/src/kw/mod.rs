@@ -904,6 +904,22 @@ pub fn cast_options(g: &Game, p: PlayerId, card: ObjectId) -> Vec<CastOption> {
     out
 }
 
+/// The ways `kws` (keywords `card` has, or would have, CR 601.3e) offer to cast it.
+pub fn keyword_cast_options(
+    g: &Game,
+    p: PlayerId,
+    card: ObjectId,
+    kws: &[Keyword],
+) -> Vec<CastOption> {
+    let mut out = Vec::new();
+    for kw in kws {
+        for r in impls_for(kw.kind) {
+            out.extend(r.cast_options(g, p, card, kw));
+        }
+    }
+    out
+}
+
 /// See [`KeywordRules::playable_lands`].
 pub fn playable_lands(g: &Game, p: PlayerId) -> Vec<ObjectId> {
     registry()

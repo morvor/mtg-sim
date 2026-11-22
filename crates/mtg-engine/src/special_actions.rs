@@ -234,7 +234,7 @@ fn morph_or_disguise_payable(g: &Game, p: PlayerId, id: ObjectId) -> bool {
         if let Some(m) = cost.mana.clone().filter(|m| m.has_x()) {
             cost.mana = Some(m.with_x(0));
         }
-        g.can_pay_cost(p, &cost, Some(id), &Ctx::new(Some(id), p))
+        g.can_pay_cost_keeping_source(p, &cost, Some(id), &Ctx::new(Some(id), p))
     })
 }
 
@@ -270,7 +270,7 @@ pub fn available(g: &Game, p: PlayerId) -> Vec<Action> {
         let o = g.obj(id);
         if o.controller == p && o.face_down {
             if let Some(cost) = turn_face_up_cost(g, id) {
-                if g.can_pay_cost(p, &cost, Some(id), &Ctx::new(Some(id), p)) {
+                if g.can_pay_cost_keeping_source(p, &cost, Some(id), &Ctx::new(Some(id), p)) {
                     out.push(Action::Special(SpecialAction::TurnFaceUp { obj: id }));
                 }
             }
@@ -372,11 +372,45 @@ pub fn pay_for(
     ctx: &Ctx,
     purpose: Option<crate::mana::SpendPurpose>,
 ) -> bool {
+    pay_inner(g, p, cost, src, ctx, purpose, false)
+}
+
+/// [`pay_for`], for a special action that acts on the permanent `src` once the cost is
+/// paid: turning it face up (CR 116.2b, 702.37e), unlocking one of its doors (CR 116.2m).
+/// The payment keeps it on the battlefield: no mana ability sacrifices it
+/// (`SpendContext::keep_source`; `Game::can_pay_cost_keeping_source` says whether the
+/// cost can be paid so). If it leaves anyway as the cost is paid (chosen for a part such
+/// as "return a Bird you control to its owner's hand"), it's a new object (CR 400.7) the
+/// action can't act on: the action can't be completed, so it's reversed and nothing is
+/// paid (CR 733.1). Actions that don't act on their source once it's paid ("sacrifice a
+/// permanent ... to ignore this effect", which may be the source itself, CR 116.2d;
+/// discarding Circling Vultures, CR 116.2e) use [`pay`].
+pub fn pay_keeping_source(
+    g: &mut Game,
+    p: PlayerId,
+    cost: &Cost,
+    src: ObjectId,
+    ctx: &Ctx,
+    purpose: Option<crate::mana::SpendPurpose>,
+) -> bool {
+    pay_inner(g, p, cost, Some(src), ctx, purpose, true)
+}
+
+fn pay_inner(
+    g: &mut Game,
+    p: PlayerId,
+    cost: &Cost,
+    src: Option<ObjectId>,
+    ctx: &Ctx,
+    purpose: Option<crate::mana::SpendPurpose>,
+    keep_source: bool,
+) -> bool {
     let snapshot = g.clone();
     let mut cost = cost.clone();
     crate::cost_rules::choose_payment_ways(g, p, src, &mut cost);
     let spend = SpendContext {
         source: src,
+        keep_source,
         purpose,
         // "Spend this mana only on costs that contain {X}": a special action's cost with
         // {X}, X chosen immediately before it's paid (CR 107.3d; `ctx.cost_has_x` says so
@@ -385,8 +419,8 @@ pub fn pay_for(
         ..Default::default()
     };
     match g.pay_total_cost(p, &cost, src, &spend, ctx) {
-        Ok(_) => true,
-        Err(_) => {
+        Ok(_) if !keep_source || src.is_none_or(|s| g.is_live(s)) => true,
+        _ => {
             g.roll_back(snapshot);
             false
         }
@@ -422,7 +456,8 @@ pub fn perform(g: &mut Game, p: PlayerId, sa: &SpecialAction) -> Option<Result<(
             // 701.58c–d): its controller chooses when both costs could be paid.
             let cost = turn_face_up_cost(g, obj)?;
             if morph_or_disguise_payable(g, p, obj) {
-                let mana_payable = g.can_pay_cost(p, &cost, Some(obj), &Ctx::new(Some(obj), p));
+                let mana_payable =
+                    g.can_pay_cost_keeping_source(p, &cost, Some(obj), &Ctx::new(Some(obj), p));
                 if !mana_payable
                     || g.ask_option(
                         p,
@@ -441,7 +476,7 @@ pub fn perform(g: &mut Game, p: PlayerId, sa: &SpecialAction) -> Option<Result<(
                 crate::mana::FaceUpWay::Manifest
             };
             let purpose = Some(crate::mana::SpendPurpose::TurnFaceUp(way));
-            if !pay_for(g, p, &cost, Some(obj), &Ctx::new(Some(obj), p), purpose) {
+            if !pay_keeping_source(g, p, &cost, obj, &Ctx::new(Some(obj), p), purpose) {
                 return bad("can't pay the cost");
             }
             crate::facedown::turn_face_up(g, obj, true);

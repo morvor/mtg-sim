@@ -225,8 +225,13 @@ impl Game {
     /// Whether an ability of this object functions where the object currently is
     /// (CR 113.6).
     pub fn ability_functions(&self, obj: &GameObject, zone: FunctionZone, is_cda: bool) -> bool {
-        if is_cda || zone == FunctionZone::Anywhere {
+        if is_cda {
             return true;
+        }
+        // CR 702.26b: a phased-out permanent is treated as though it doesn't exist, so even
+        // its abilities that function everywhere (eminence) don't.
+        if zone == FunctionZone::Anywhere {
+            return !obj.phased_out;
         }
         if let FunctionZone::AnywhereExcept(z) = zone {
             return obj.zone.kind() != Some(z) && !obj.phased_out;
@@ -2082,7 +2087,7 @@ pub fn apply_mod(
             // you do, it gains \"... if ~ is exiled ...\"", Cosima) is its own, from the
             // object it is now.
             let from = ctx.source.map(|s| if g.current(s) == _target { _target } else { s });
-            c.abilities.push(acquired_ability(a, from, _target))
+            c.abilities.push(acquired_ability(g, a, from, _target))
         }
         // Replaced by the ability itself as the effect is created (`Game::fix_mods`).
         Modification::AddThisAbility => {}
@@ -2209,29 +2214,41 @@ pub fn apply_mod(
 /// restrictions on its use apply only to it as acquired from that object (CR 602.5c),
 /// and linked abilities acquired together are linked only to each other (CR 607.5).
 /// Derived abilities are cached so their identity is stable across recomputation.
-pub fn acquired_ability(a: &Ability, from: Option<ObjectId>, target: ObjectId) -> Ability {
+pub fn acquired_ability(
+    g: &Game,
+    a: &Ability,
+    from: Option<ObjectId>,
+    target: ObjectId,
+) -> Ability {
     use std::sync::{Mutex, OnceLock};
-    static CACHE: OnceLock<Mutex<HashMap<(u64, u32), Ability>>> = OnceLock::new();
+    static CACHE: OnceLock<Mutex<HashMap<(u64, u32, u16), Ability>>> = OnceLock::new();
     let m = CACHE.get_or_init(Default::default);
     let Some(src) = from.filter(|s| *s != target) else {
         // An ability an object grants itself that names its granter ("Until end of turn,
         // Ms. Marvel gains \"Ms. Marvel's base power is ...\""): the granter is that object.
         if let Some(s) = from.filter(|_| crate::granted_by::refers_to_granter(a)) {
-            let mut g = m.lock().unwrap();
-            return g
-                .entry((a.uid, s.0 | 0x8000_0000))
+            let mut c = m.lock().unwrap();
+            return c
+                .entry((a.uid, s.0 | 0x8000_0000, a.link))
                 .or_insert_with(|| crate::granted_by::bind_granter(a, s))
                 .clone();
         }
         return a.clone();
     };
-    let mut g = m.lock().unwrap();
-    g.entry((a.uid, src.0))
+    // A link distinct from those of printed abilities and of abilities the object acquires
+    // from other objects (CR 607.5), the same each time characteristics are computed
+    // (`acquired_links`).
+    let link = crate::acquired_links::link(
+        g,
+        target,
+        crate::acquired_links::LinkKey::Given {
+            source: src,
+            link: a.link,
+        },
+    );
+    let mut c = m.lock().unwrap();
+    c.entry((a.uid, src.0, link))
         .or_insert_with(|| {
-            // A link id distinct from those of printed abilities and of abilities acquired
-            // from other objects (CR 607.5).
-            // (0x8000 to 0xbfff: below the links resolving effects give, `ability_grants`.)
-            let link = 0x8000 | ((a.link as u32 * 131 + src.0 * 31) % 0x4000) as u16;
             // "Sacrifice Blazing Torch": the object granting the ability (`granted_by`).
             let kind = if crate::granted_by::refers_to_granter(a) {
                 crate::granted_by::bind_granter(a, src).kind.clone()

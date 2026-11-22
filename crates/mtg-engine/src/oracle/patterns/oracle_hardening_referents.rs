@@ -271,18 +271,28 @@ pub fn note_introduced(e: &mut Effect, b: &mut Builder, intro: &mut Introduced) 
 
 /// At the end of a text: keeps the [`INTRODUCED`] stores if something refers to the
 /// found cards, or removes them and restores "it" otherwise (so the compiled
-/// ability is unchanged for texts without such a pronoun).
-pub fn finish_introduced(e: Effect, b: &mut Builder, intro: Introduced) -> Effect {
+/// ability is unchanged for texts without such a pronoun). Done for each instruction before
+/// they are joined into one effect, so each keeps its own shape.
+pub fn finish_introduced(
+    effects: Vec<Effect>,
+    b: &mut Builder,
+    intro: Introduced,
+) -> Vec<Effect> {
     let Some(before) = intro.0 else {
-        return e;
+        return effects;
     };
-    let mentioned =
-        serde_json::to_string(&e).is_ok_and(|s| s.contains(&format!("{{\"Var\":{INTRODUCED}}}")));
+    let mentioned = effects.iter().any(|e| {
+        serde_json::to_string(e).is_ok_and(|s| s.contains(&format!("{{\"Var\":{INTRODUCED}}}")))
+    });
     if mentioned {
-        return e;
+        return effects;
     }
     abandon_introduced(b, Introduced(Some(before)));
-    strip_introduced(e)
+    effects
+        .into_iter()
+        .filter(|e| !is_introduced_store(e))
+        .map(strip_introduced)
+        .collect()
 }
 
 /// A text failed to parse: "it" no longer refers to cards it found.

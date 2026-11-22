@@ -43,6 +43,13 @@ pub(crate) fn where_events(c: TriggerCond, cond: Condition) -> TriggerCond {
             trigger: Box::new(where_events(*trigger, cond)),
             cond: batch_cond,
         },
+        // "[A] or [one or more B] during your turn": the qualifier is part of each
+        // alternative, so a batched one is still checked once for its batch (CR 603.2c).
+        TriggerCond::AnyOf(v) if v.iter().any(is_batched) => TriggerCond::AnyOf(
+            v.into_iter()
+                .map(|c| where_events(c, cond.clone()))
+                .collect(),
+        ),
         c => TriggerCond::Where {
             trigger: Box::new(c),
             cond,
@@ -613,11 +620,12 @@ fn state_trigger(r: &str) -> Option<Parsed> {
     // Bombshell): its controller, who controls this ability, doesn't own it.
     if r == "a player other than ~'s owner controls it" {
         let cond = Condition::SelMatches(Sel::This, Filter::not(Filter::OwnedBy(PlayerRel::You)));
-        // "That player" is that controller.
+        // "That player" is that controller as it triggered, who controls the ability (CR
+        // 603.3a): if it changes control again first, that player can't sacrifice it.
         return Some((
             TriggerCond::State(cond),
             Sel::This,
-            PlayerRef::ControllerOf(Box::new(Sel::This)),
+            PlayerRef::ControllerAsTriggered(Box::new(Sel::This)),
         ));
     }
     if !STATE_STARTS.iter().any(|p| r.starts_with(p)) {

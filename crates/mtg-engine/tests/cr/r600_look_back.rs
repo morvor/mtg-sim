@@ -2,6 +2,7 @@
 //! triggered abilities that look back in time.
 
 use super::r600_common::*;
+use crate::r603_audit_common::supported;
 use mtg_engine::ability::*;
 use mtg_engine::object::*;
 use mtg_engine::testing::*;
@@ -139,6 +140,152 @@ fn phasing_out_abilities_look_back_in_time() {
     t.resolve_all();
     assert!(t.obj(a).phased_out_indirectly);
     assert_eq!(t.life(P0), 24);
+}
+
+#[test]
+fn a_qualified_phasing_out_ability_still_looks_back() {
+    cr!("603.10", "603.10b");
+    // "Whenever this creature phases out during your turn, you gain 3 life.": the qualifier
+    // wraps the phases-out trigger (`TriggerCond::Where`), and the ability still looks back
+    // to when its permanent was phased in. (No card in the pool qualifies a phases-out
+    // trigger, so the text is compiled for a custom creature.)
+    let compiled = compile_def(
+        "Flickering Warden",
+        "Creature — Spirit",
+        "{1}{W}",
+        "Whenever this creature phases out during your turn, you gain 3 life.",
+    );
+    let abs = abilities(&compiled);
+    assert_eq!(abs.len(), 1, "{abs:?}");
+    let AbilityKind::Triggered(tr) = &abs[0].kind else {
+        panic!("{abs:?}");
+    };
+    assert!(
+        matches!(
+            &tr.trigger,
+            TriggerCond::Where { trigger, cond: Condition::YourTurn }
+                if matches!(**trigger, TriggerCond::PhasesOut(Filter::Source))
+        ),
+        "{:?}",
+        tr.trigger
+    );
+    let def = CB::new("Flickering Warden")
+        .creature(2, 2)
+        .ability(abs[0].clone())
+        .build();
+    let mut t = TestGame::new(2);
+    let w = t.custom(P0, def, Zone::Battlefield);
+    let p = t.custom(P0, phase_test(), Zone::Hand(P0));
+    t.cast(P0, p).target(w).go();
+    t.resolve_all();
+    assert!(t.obj(w).phased_out);
+    assert_eq!(t.life(P0), 23);
+}
+
+/// "Target creature phases out." for {0}.
+fn phase_test() -> CardDef {
+    CB::new("Phase Test")
+        .instant()
+        .cost("{0}")
+        .spell(Body::simple(
+            vec![target_creature()],
+            Effect::PhaseOut {
+                what: Sel::Target(0),
+            },
+        ))
+        .build()
+}
+
+/// P0 casts Reality Ripple ("Target artifact, creature, or land phases out.") on `target`
+/// and it resolves.
+fn ripple(t: &mut TestGame, target: ObjectId) {
+    supported("Reality Ripple");
+    t.lands(P0, "Island", 2);
+    let spell = t.hand(P0, "Reality Ripple");
+    t.cast(P0, spell).target(target).go();
+    t.resolve();
+    assert!(t.obj_now(target).phased_out);
+}
+
+/// An Aura: "Whenever enchanted creature phases out, you gain 2 life." (No card has one.)
+fn phasing_ward() -> CardDef {
+    CB::new("Phasing Ward")
+        .enchantment()
+        .subtypes(&["Aura"])
+        .ability(AbilityDef::new(
+            AbilityKind::Keyword(keywords::Keyword::with_filter(
+                keywords::KeywordKind::Enchant,
+                Filter::creature(),
+            )),
+            "Enchant creature",
+        ))
+        .ability(trig(
+            TriggerCond::PhasesOut(Filter::AttachedToSource),
+            Body::effect(gain(2)),
+        ))
+        .build()
+}
+
+#[test]
+fn an_aura_that_cant_phase_out_sees_its_creature_phase_out_once() {
+    cr!("603.10b", "603.2c", "704.5m");
+    ruling!(
+        "Spatial Binding",
+        "If used on an Aura and the permanent enchanted by that Aura phases out, the Aura will not phase out."
+    );
+    supported("Spatial Binding");
+    // Spatial Binding: "Pay 1 life: Until your next upkeep, target permanent can't phase
+    // out." on an Aura with "Whenever enchanted creature phases out, you gain 2 life." When
+    // the creature phases out, the Aura stays phased in (and then falls off, CR 704.5m). Its
+    // ability existed before the event and still does: one trigger for the one event (CR
+    // 603.2c), not one as an ability on the battlefield and another as an ability of what's
+    // attached to the permanent phasing out (CR 603.10b).
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let ward = t.custom(P0, phasing_ward(), Zone::Battlefield);
+    t.g.objects[ward.0 as usize].attached_to = Some(Entity::Object(bears));
+    t.g.recompute();
+    let binding = t.battlefield(P0, "Spatial Binding");
+    t.activate(P0, binding, 0, &[Entity::Object(ward)]).unwrap();
+    t.resolve_all();
+    assert_eq!(t.life(P0), 19);
+    ripple(&mut t, bears);
+    assert!(t.in_graveyard(P0, "Phasing Ward"), "it didn't phase out, and fell off");
+    assert_eq!(t.stack_len(), 1, "one event, one trigger");
+    t.resolve_all();
+    assert_eq!(t.life(P0), 21);
+}
+
+#[test]
+fn a_permanent_phased_out_earlier_doesnt_see_another_phase_out() {
+    cr!("702.26b", "603.10b");
+    // "Whenever another creature phases out, you gain 1 life." A phased-out permanent is
+    // treated as though it doesn't exist (CR 702.26b): once the watcher has phased out, a
+    // creature phasing out later doesn't trigger it. (The look-back is to the abilities that
+    // existed immediately before that event, CR 603.10; the watcher was already phased out.)
+    let watcher = CB::new("Phase Watcher")
+        .creature(1, 1)
+        .ability(trig(
+            TriggerCond::PhasesOut(Filter::creature().other()),
+            Body::effect(gain(1)),
+        ))
+        .build();
+    let mut t = TestGame::new(2);
+    let w = t.custom(P0, watcher, Zone::Battlefield);
+    let bears = t.battlefield(P0, "Grizzly Bears");
+    let giant = t.battlefield(P1, "Hill Giant");
+    // Phased in, it sees another creature phase out.
+    ripple(&mut t, bears);
+    assert_eq!(t.stack_len(), 1);
+    t.resolve_all();
+    assert_eq!(t.life(P0), 21);
+    // It phases out itself: not "another creature".
+    ripple(&mut t, w);
+    assert_eq!(t.stack_len(), 0);
+    // Phased out, it doesn't see the Hill Giant phase out.
+    ripple(&mut t, giant);
+    assert_eq!(t.stack_len(), 0, "a phased-out permanent's ability triggered");
+    assert_eq!(t.life(P0), 21);
 }
 
 #[test]

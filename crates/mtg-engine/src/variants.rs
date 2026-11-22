@@ -25,17 +25,24 @@ pub const SET_THIS_IN_MOTION: &str = "set this scheme in motion";
 pub const VISIT: &str = "visit";
 
 /// CR 613.7i, 613.7j: at the beginning of the game, each face-up vanguard card and each
-/// conspiracy card in the command zone receives a timestamp.
+/// conspiracy card in the command zone receives a timestamp. They receive them together,
+/// so in APNAP order (CR 613.7m), each player's in the order they were created (register
+/// `simultaneous-entries-listed-by-owner-then-creation`).
 pub fn begin_game(g: &mut Game) {
-    for id in g.command.clone() {
-        let o = g.obj(id);
-        let gets =
-            (o.base.is(CardType::Vanguard) && !o.face_down) || o.base.is(CardType::Conspiracy);
-        if gets {
-            let ts = g.new_timestamp();
-            g.objects[id.0 as usize].timestamp = ts;
-            g.dirty = true;
-        }
+    let mut gets: Vec<ObjectId> = g
+        .command
+        .iter()
+        .copied()
+        .filter(|id| {
+            let o = g.obj(*id);
+            (o.base.is(CardType::Vanguard) && !o.face_down) || o.base.is(CardType::Conspiracy)
+        })
+        .collect();
+    g.sort_objects_apnap(&mut gets);
+    for id in gets {
+        let ts = g.new_timestamp();
+        g.objects[id.0 as usize].timestamp = ts;
+        g.dirty = true;
     }
 }
 
@@ -82,10 +89,11 @@ pub fn scheme_deck(g: &Game, p: PlayerId) -> Vec<ObjectId> {
         .collect()
 }
 
-/// CR 103.3a: each scheme deck's owner shuffles it before the game begins.
+/// CR 103.3a: each scheme deck's owner shuffles it before the game begins: with their own
+/// randomness (`Game::rng_for`), in APNAP order (see `shuffle_attraction_decks`).
 pub fn shuffle_scheme_decks(g: &mut Game) {
     use rand::seq::SliceRandom;
-    for p in g.player_ids() {
+    for p in g.apnap() {
         let slots: Vec<usize> = g
             .command
             .iter()
@@ -97,7 +105,7 @@ pub fn shuffle_scheme_decks(g: &mut Game) {
             .map(|(i, _)| i)
             .collect();
         let mut ids: Vec<ObjectId> = slots.iter().map(|i| g.command[*i]).collect();
-        ids.shuffle(&mut g.rng);
+        ids.shuffle(g.rng_for(p));
         for (i, id) in slots.iter().zip(ids) {
             g.command[*i] = id;
         }

@@ -532,6 +532,10 @@ impl Game {
                 .map(|id| (*id, self.obj(*id).controller))
                 .collect();
             let destroyed: Vec<ObjectId> = to_destroy.clone();
+            // An object a replaced loss moved (where the state-based action would have, if
+            // its controller chose that, CR 400.6) is a new object: not moved again (CR
+            // 400.7).
+            let moves: Vec<MoveEv> = moves.into_iter().filter(|m| self.is_live(m.obj)).collect();
             let res = self.move_objects(moves);
             let _ = res;
             for (id, p) in sac_ids {

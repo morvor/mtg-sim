@@ -403,3 +403,30 @@ fn a_creature_whose_equipment_phased_out_isnt_equipped() {
     assert!(t.obj_now(duelist).has_keyword(KeywordKind::DoubleStrike));
     assert_eq!(pt(&mut t, duelist), (3, 1));
 }
+
+#[test]
+fn a_phased_out_permanents_eminence_ability_doesnt_trigger() {
+    cr!("702.26b", "702.26d");
+    supported("Edgar Markov");
+    supported("Child of Night");
+    // Edgar Markov: "Eminence — Whenever you cast another Vampire spell, if Edgar is in the
+    // command zone or on the battlefield, create a 1/1 black Vampire creature token." It
+    // functions in more zones than the battlefield, but a phased-out permanent is treated as
+    // though it doesn't exist (and as though it isn't on the battlefield).
+    let tokens = |t: &TestGame| t.g.permanents().filter(|o| o.is_token()).count();
+    let mut t = TestGame::new(2);
+    let edgar = t.battlefield(P0, "Edgar Markov");
+    t.lands(P0, "Swamp", 2);
+    let child = t.hand(P0, "Child of Night");
+    t.cast(P0, child).go();
+    t.resolve_all();
+    assert_eq!(tokens(&t), 1, "phased in, it triggers");
+    ripple(&mut t, P0, edgar);
+    t.lands(P0, "Swamp", 2);
+    let child = t.hand(P0, "Child of Night");
+    t.cast(P0, child).go();
+    t.settle();
+    assert_eq!(t.stack_len(), 1, "only the Child of Night spell");
+    t.resolve_all();
+    assert_eq!(tokens(&t), 1);
+}

@@ -500,11 +500,13 @@ pub struct TurnHistory {
     /// they draw in each of their draw steps", CR 504.1). Recorded by `draw_rules`.
     #[serde(default)]
     pub draw_step_draws: Vec<(PlayerId, usize, ObjectId)>,
-    /// Cards revealed as they were drawn by "You may reveal the first card you draw each
-    /// turn as you draw it" (Inquisitor Eisenhorn): "Whenever you reveal ... this way"
-    /// triggers only for them. Recorded by `kw/reveal_first_draw.rs`.
+    /// Cards revealed as they were drawn by "Reveal the first card you draw each turn" and
+    /// "You may reveal the first card you draw each turn as you draw it" (Primitive
+    /// Etchings, Inquisitor Eisenhorn), with each permanent whose ability revealed them:
+    /// that permanent's "Whenever you reveal ... this way" triggers only for them.
+    /// Recorded by `kw/reveal_first_draw.rs`.
     #[serde(default)]
-    pub first_draws_revealed: Vec<ObjectId>,
+    pub first_draws_revealed: Vec<(ObjectId, ObjectId)>,
     /// Permanents that regenerated this turn, once for each time (CR 701.19a: a
     /// regeneration shield was used to replace its destruction). Recorded by
     /// `replacement.rs`; read by `kw/paper_history.rs`.
@@ -771,6 +773,11 @@ pub struct Game {
     /// activates don't sacrifice it to pay their own costs (a Food's own ability can't
     /// also be paid for by sacrificing that Food to Gilded Goose).
     pub mana_reserve: Option<ObjectId>,
+    /// While an automatic mana payment activates one of its planned mana abilities: the
+    /// objects that ability's cost may not sacrifice or exile, as the payment's later
+    /// activations need them (their permanents, and what their own costs take; see
+    /// `mana_abilities::pay_mana`).
+    pub mana_keep: Vec<ObjectId>,
     /// Permanents tapped to pay part of the total cost of the spell being cast other than
     /// with mana (convoke, improvise, CR 702.51a, 702.126a), while the rest of that cost is
     /// paid. They're tapped as the total cost is paid, after mana abilities are activated
@@ -865,6 +872,8 @@ pub struct Game {
     pub linked_notes: crate::linked_notes::LinkedNotes,
     /// The links handed out to abilities resolving effects give (CR 607.5).
     pub fresh_links: crate::ability_grants::FreshLinks,
+    /// The links objects acquired from continuously reevaluated effects (CR 607.5).
+    pub acquired_links: crate::acquired_links::AcquiredLinks,
     /// Every event, for observers outside the engine (off unless enabled).
     pub event_feed: crate::event_feed::EventFeed,
     /// Watches every event as it's processed, with the game as it is then (see
@@ -980,6 +989,7 @@ impl Game {
             named_exiles: vec![],
             mana_hint: None,
             mana_reserve: None,
+            mana_keep: Vec::new(),
             paid_otherwise: Vec::new(),
             commander_moved_since_last_sba: BTreeSet::new(),
             search_finds_by_default: true,
@@ -1017,6 +1027,7 @@ impl Game {
             cards: Default::default(),
             linked_notes: Default::default(),
             fresh_links: Default::default(),
+            acquired_links: Default::default(),
             event_feed: Default::default(),
             observer: None,
             timing: Default::default(),

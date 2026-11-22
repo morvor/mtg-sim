@@ -252,16 +252,23 @@ struct Candidate {
 }
 
 /// The replacement effects that would modify how a permanent enters the battlefield,
-/// determined from the permanent as it would exist there with the effects applied so far
-/// (CR 614.12, 616.2): taken again at each step of the event's replacement until a
-/// permanent leaves the battlefield. They still apply if applying one of them made a
-/// permanent leave the battlefield (an "as this enters, return a permanent you control"
-/// choice returning the permanent that grants riot): those that applied just before it
-/// left, as long as the permanent still enters the same way, not once a copy, control,
-/// back-face, or face-down effect has changed what applies (CR 616.1b–d, 616.1f; register
-/// `entry-effects-of-a-leaving-source`). For several permanents entering at the same time,
-/// each one's are first determined as that event is proposed, before any of their effects
-/// is applied ([`Game::entry_snapshot`]).
+/// determined as the event is first proposed and again at each step of its replacement,
+/// from the permanent as it would exist there with the effects applied so far (CR 614.12,
+/// 616.2: an effect that becomes applicable through another one is kept too). They still
+/// apply whatever happens meanwhile to what generates them (registers
+/// `simultaneous-entries-ordered-by-controller`, `entry-effects-of-a-leaving-source`): if
+/// applying one of them made a permanent leave the battlefield (an "as this enters, return
+/// a permanent you control" choice returning the permanent that grants riot, Rhythm of the
+/// Wild's ruling) or turned it face down (Ixidron turning Grumgully, the Generous face down
+/// as a creature enters with it), as long as the permanent still enters the same way (a
+/// copy, control, back-face, or face-down effect applied meanwhile changes what applies,
+/// CR 616.1b–d, 616.1f: they're then determined again from what applies now), and only
+/// while each one still applies to the permanent as it would now exist, with the effects
+/// already applied (CR 614.12, 616.1f: Metallic Mimic naming Human as it enters, that
+/// choice applied first, no longer gets Grumgully's counter for non-Humans;
+/// [`Game::still_modifies`]). For several permanents entering at the same time, each one's
+/// are first determined as that event is proposed, before any of their effects is applied
+/// ([`Game::entry_snapshot`]).
 pub(crate) struct EntrySnapshot {
     obj: ObjectId,
     copy_of: Option<ObjectId>,
@@ -269,7 +276,6 @@ pub(crate) struct EntrySnapshot {
     face: Option<FaceState>,
     transformed: bool,
     face_down: Option<KeywordKind>,
-    battlefield: Vec<ObjectId>,
     cands: Vec<Candidate>,
 }
 
@@ -280,6 +286,18 @@ impl EntrySnapshot {
         self.cands
             .iter()
             .map(|c| (c.text.as_str(), &c.def.action, c.source == Some(self.obj)))
+    }
+
+    /// Whether `m` moves the object these effects were determined for onto the
+    /// battlefield the same way: not once a copy, control, back-face, or face-down effect
+    /// has changed what applies (CR 616.1b–d, 616.1f).
+    fn enters_the_same_way(&self, m: &MoveEv) -> bool {
+        self.obj == m.obj
+            && self.copy_of == m.etb.copy_of
+            && self.controller == m.etb.controller
+            && self.face == m.etb.face
+            && self.transformed == m.etb.transformed
+            && self.face_down == m.etb.face_down
     }
 }
 
@@ -415,7 +433,6 @@ impl Game {
             face: m.etb.face,
             transformed: m.etb.transformed,
             face_down: m.etb.face_down,
-            battlefield: self.battlefield.clone(),
             cands,
         })
     }
@@ -456,12 +473,32 @@ impl Game {
                 ReplEvent::Move(m) if m.to == Zone::Battlefield => {
                     let m = m.clone();
                     let ev2 = ev.clone();
-                    let (mut entry, as_it_would_exist) = self.with_hypothetical_entry(&m, |g| {
-                        (
-                            g.replacement_candidates(&ev2, &applied, CandScope::EntryOnly),
-                            Box::new(g.obj(m.obj).chars.clone()),
-                        )
-                    });
+                    let (mut entry, as_it_would_exist, still_applying) = self
+                        .with_hypothetical_entry(&m, |g| {
+                            let entry =
+                                g.replacement_candidates(&ev2, &applied, CandScope::EntryOnly);
+                            // Effects that applied to the permanent at an earlier step (as the
+                            // event was proposed, or after another one made them applicable)
+                            // still apply, whatever happened to what generated them meanwhile:
+                            // applying another one removed it (an "as this enters, return a
+                            // permanent" choice returning Rhythm of the Wild) or turned it face
+                            // down (Ixidron's). But each must still apply to the permanent as
+                            // it would now exist (CR 614.12, 616.1f). See [`EntrySnapshot`].
+                            let still_applying: Vec<Candidate> = match snap.as_deref() {
+                                Some(sn) if sn.enters_the_same_way(&m) => sn
+                                    .cands
+                                    .iter()
+                                    .filter(|c| {
+                                        !applied.contains(&c.key)
+                                            && !entry.iter().any(|e| e.key == c.key)
+                                            && g.still_modifies(c, &ev2)
+                                    })
+                                    .cloned()
+                                    .collect(),
+                                _ => Vec::new(),
+                            };
+                            (entry, Box::new(g.obj(m.obj).chars.clone()), still_applying)
+                        });
                     // The others are checked where the object is ("and it wasn't cast": it's on
                     // the stack), but what they say of the permanent ("if a nontoken creature
                     // would enter", Containment Priest) is checked against the permanent as it
@@ -496,46 +533,23 @@ impl Game {
                         });
                         v.retain(|c| !own_where(c) || kept.contains(&key(&c.def)));
                     }
-                    match &snap {
-                        // Effects that applied to the permanent just before applying another
-                        // one (an "as this enters, return a permanent" choice) removed what
-                        // generated them still apply (Rhythm of the Wild's riot). See
-                        // [`EntrySnapshot`].
-                        Some(sn)
-                            if sn.obj == m.obj
-                                && sn.copy_of == m.etb.copy_of
-                                && sn.controller == m.etb.controller
-                                && sn.face == m.etb.face
-                                && sn.transformed == m.etb.transformed
-                                && sn.face_down == m.etb.face_down
-                                && sn.battlefield.iter().any(|o| !self.battlefield.contains(o)) =>
-                        {
-                            for c in &sn.cands {
-                                if !applied.contains(&c.key)
-                                    && !entry.iter().any(|e| e.key == c.key)
-                                {
-                                    entry.push(c.clone());
-                                }
-                            }
-                        }
-                        // Until a permanent leaves, the effects that apply now, with the
-                        // effects applied so far (CR 614.12, 616.2), are the ones kept: a
-                        // copy, control, back-face or face-down effect applied meanwhile
-                        // changes what applies (Clone entering as a Rescuer Sphinx keeps
-                        // Grumgully's counter as a Sphinx, `entry-effects-of-a-leaving-source`).
-                        _ => {
-                            snap = Some(Rc::new(EntrySnapshot {
-                                obj: m.obj,
-                                copy_of: m.etb.copy_of,
-                                controller: m.etb.controller,
-                                face: m.etb.face,
-                                transformed: m.etb.transformed,
-                                face_down: m.etb.face_down,
-                                battlefield: self.battlefield.clone(),
-                                cands: entry.clone(),
-                            }));
-                        }
-                    }
+                    // They're added back, and with the effects that apply now (one that another
+                    // effect already applied made applicable, CR 616.2: Master Biomancer's "as
+                    // a Mutant" making Metallic Mimic naming Mutant apply) they're kept for the
+                    // next steps. Once a copy, control, back-face or face-down effect has
+                    // changed how the permanent enters, those kept are the ones that apply
+                    // now (Clone entering as a Rescuer Sphinx that returns Grumgully keeps
+                    // Grumgully's counter as a Sphinx; `entry-effects-of-a-leaving-source`).
+                    entry.extend(still_applying);
+                    snap = Some(Rc::new(EntrySnapshot {
+                        obj: m.obj,
+                        copy_of: m.etb.copy_of,
+                        controller: m.etb.controller,
+                        face: m.etb.face,
+                        transformed: m.etb.transformed,
+                        face_down: m.etb.face_down,
+                        cands: entry.clone(),
+                    }));
                     v.extend(entry);
                     v
                 }
@@ -1161,6 +1175,31 @@ impl Game {
             }
         }
         out
+    }
+
+    /// Whether `c`, an effect determined at an earlier step of an entering event's
+    /// replacement (see [`EntrySnapshot`]), still modifies `ev`, that event as the effects
+    /// applied so far have modified it, with the permanent as it would now exist on the
+    /// battlefield (CR 614.12, 616.1f: "taking into account only replacement or prevention
+    /// effects that would now be applicable"). The effect is the one determined then,
+    /// whatever has happened to its source since; what the permanent now enters as is
+    /// checked again: Metallic Mimic naming Human as it enters, that choice applied first,
+    /// is a Human, so Grumgully, the Generous's "Each other non-Human creature you control
+    /// enters with an additional +1/+1 counter on it." no longer applies to it (as
+    /// Grumgully's ruling has a creature entering as a copy of a Human get no counter).
+    fn still_modifies(&self, c: &Candidate, ev: &ReplEvent) -> bool {
+        let mut ctx = Ctx::new(c.source, c.controller);
+        ctx.link = c.link;
+        let locked = match c.instance {
+            Some(id) => match self.replacements.iter().find(|r| r.id == id) {
+                Some(inst) => inst.objects.as_deref(),
+                // Used up by another permanent entering at the same time: it applies once
+                // for all of them (`ZoneState::entry_batch_uses`).
+                None => return true,
+            },
+            None => None,
+        };
+        self.repl_event_matches(&c.def.event, &ctx, ev, locked)
     }
 
     /// Whether the resolved replacement/prevention effect with this id would apply to

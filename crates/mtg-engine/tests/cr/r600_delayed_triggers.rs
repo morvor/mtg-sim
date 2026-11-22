@@ -208,6 +208,110 @@ fn simultaneous_events_let_the_controller_choose_which_causes_the_delayed_trigge
     let _ = (a, b);
 }
 
+/// The options P0 was offered for the choice of the simultaneous event that causes a
+/// delayed trigger (CR 603.7b).
+fn event_choices(t: &TestGame) -> Vec<String> {
+    let asked: Vec<Vec<String>> = t
+        .asked()
+        .into_iter()
+        .filter_map(|(p, d)| match d {
+            Decision::ChooseOption {
+                prompt, options, ..
+            } if p == P0 && prompt.contains("causes the delayed trigger") => Some(options),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asked.len(), 1, "{asked:?}");
+    asked.into_iter().next().unwrap()
+}
+
+#[test]
+fn the_simultaneous_events_offered_are_named_by_their_object_or_player() {
+    cr!("603.7b");
+    // The controller chooses which of the simultaneous events causes the ability to trigger
+    // (CR 603.7b): each option names its event's object, or its player when it has none, so
+    // that the options can be told apart (an external agent sees only their texts).
+    // "When a creature dies this turn, you gain 1 life." (once), and two of P1's creatures
+    // destroyed at once: the options are the two cards.
+    let mut t = TestGame::new(2);
+    let s = t.custom(
+        P0,
+        sorcery(
+            "Watch the Fallen",
+            Body::effect(delayed(TriggerCond::Dies(Filter::creature()), gain(1), true)),
+        ),
+        Zone::Hand(P0),
+    );
+    t.cast(P0, s).go();
+    t.resolve();
+    t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    let wrath = t.custom(
+        P0,
+        sorcery(
+            "Wrath",
+            Body::effect(Effect::Destroy {
+                what: Sel::All(Filter::creature()),
+                no_regen: true,
+            }),
+        ),
+        Zone::Hand(P0),
+    );
+    t.cast(P0, wrath).go();
+    t.resolve_all();
+    let mut options = event_choices(&t);
+    options.sort();
+    assert_eq!(options.len(), 2, "{options:?}");
+    assert_ne!(options[0], options[1]);
+    assert!(options[0].starts_with("Grizzly Bears"), "{options:?}");
+    assert!(options[1].starts_with("Hill Giant"), "{options:?}");
+    assert_eq!(t.life(P0), 21, "it triggered once");
+    // "When a player loses life this turn, that player gains 3 life." (once), and each
+    // player losing 1 life at once: these events have no object, and the options are the
+    // players.
+    let mut t = TestGame::new(2);
+    let s = t.custom(
+        P0,
+        sorcery(
+            "Watch the Wounded",
+            Body::effect(delayed(
+                TriggerCond::LosesLife {
+                    who: PlayerRel::Any,
+                },
+                Effect::GainLife {
+                    who: PlayerRef::TriggerPlayer,
+                    n: Value::c(3),
+                },
+                true,
+            )),
+        ),
+        Zone::Hand(P0),
+    );
+    t.cast(P0, s).go();
+    t.resolve();
+    let drain = t.custom(
+        P0,
+        sorcery(
+            "Drain",
+            Body::effect(Effect::LoseLife {
+                who: PlayerRef::EachPlayer,
+                n: Value::c(1),
+            }),
+        ),
+        Zone::Hand(P0),
+    );
+    t.answer(P0, DecisionKind::Option, Answer::Index(1));
+    t.cast(P0, drain).go();
+    t.resolve_all();
+    let options = event_choices(&t);
+    let mut sorted = options.clone();
+    sorted.sort();
+    assert_eq!(sorted, ["P0", "P1"], "{options:?}");
+    // The event chosen (the second option) is the one that triggered it.
+    let (chosen, other) = if options[1] == "P1" { (P1, P0) } else { (P0, P1) };
+    assert_eq!((t.life(chosen), t.life(other)), (22, 19));
+}
+
 #[test]
 fn a_delayed_trigger_affects_its_object_despite_changes_but_not_a_new_object() {
     cr!("603.7c");

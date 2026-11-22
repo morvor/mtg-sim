@@ -622,12 +622,15 @@ pub fn parse_effect_text(t: &str, b: &mut Builder) -> Option<Effect> {
         }
     }
     super::patterns::followup_loops::finish(&mut effects);
-    let e = super::patterns::oracle_hardening_referents::finish_introduced(
-        crate::trigger_timing::join_instructions(effects),
-        b,
-        introduced,
-    );
-    Some(groups::finish(e, b, outer_group))
+    // The records of the objects a pronoun could have referred to are dropped, if nothing
+    // referred to them, before the instructions are joined: the join reads each
+    // instruction as written ("~ deals 3 damage to that player and 1 damage to each
+    // creature they control" is one damage event, CR 608.2c), and a record left between
+    // two damage effects would split it.
+    let effects =
+        super::patterns::oracle_hardening_referents::finish_introduced(effects, b, introduced);
+    let effects = groups::finish(effects, b, outer_group);
+    Some(crate::trigger_timing::join_instructions(effects))
 }
 
 /// Parses one sentence.

@@ -120,23 +120,11 @@ fn sources(g: &Game, from: &Sel, ctx: &Ctx, target: Option<ObjectId>) -> Vec<Obj
     v
 }
 
-/// The link an ability with link `link` has when the object the effect from `granter`
-/// affects has it because of `from` (CR 607.5): the same for abilities `from` has with
-/// the same link, distinct from the links of printed abilities and of abilities gained
-/// from other objects or other effects.
-fn gained_link(link: u16, granter: u32, from: u32) -> u16 {
-    let h = (link as u64 * 131)
-        .wrapping_add(granter as u64 * 31)
-        .wrapping_add(from as u64 * 7919)
-        .wrapping_add(0x3d1);
-    0x8000 | (h % 0x4000) as u16
-}
-
 /// The links of the abilities a resolving effect gives ([`snapshot`]): from `0xC000` on,
 /// apart from printed links (below `0x4000`), the links of copied abilities (`0x4000` to
 /// `0x7ffd`, see `layers::copied_link`; haunt's and the pregame links are `0x7ffe` and
 /// `0x7fff`) and those of abilities a continuously
-/// reevaluated effect gives (`0x8000` to `0xbfff`, [`gained_link`]).
+/// reevaluated effect gives (`0x8000` to `0xbfff`, `acquired_links`).
 pub const FRESH_LINK_BASE: u16 = 0xC000;
 const FRESH_LINK_COUNT: u32 = 0x4000;
 
@@ -216,18 +204,37 @@ fn fresh_link(g: &mut Game, taken: &mut Vec<u16>) -> u16 {
     }
 }
 
-/// Ability `a` of `from` as an object gains it through an effect of `granter`, with a
+/// Ability `a` of `from` as `target` gains it through an effect of `granter`, with a
 /// stable identity across recomputation; the effect's activation instructions become part
-/// of it (CR 113.10a).
-fn gained(a: &Ability, granter: Option<ObjectId>, from: ObjectId, terms: &GainedTerms) -> Ability {
+/// of it (CR 113.10a). Its link is the same for abilities `from` has with the same link,
+/// distinct from the links of printed abilities and of abilities gained from other objects
+/// or other effects (CR 607.5, `acquired_links`).
+fn gained(
+    game: &Game,
+    target: ObjectId,
+    a: &Ability,
+    granter: Option<ObjectId>,
+    from: ObjectId,
+    terms: &GainedTerms,
+) -> Ability {
     type Key = (
         u64,
         u32,
         u32,
+        u16,
         Option<u32>,
         Option<Vec<crate::mana::ManaType>>,
     );
     static CACHE: OnceLock<Mutex<HashMap<Key, Ability>>> = OnceLock::new();
+    let link = crate::acquired_links::link(
+        game,
+        target,
+        crate::acquired_links::LinkKey::Gained {
+            granter,
+            from,
+            link: a.link,
+        },
+    );
     let g = granter.map_or(u32::MAX, |s| s.0);
     let m = CACHE.get_or_init(Default::default);
     let mut c = m.lock().unwrap();
@@ -235,16 +242,11 @@ fn gained(a: &Ability, granter: Option<ObjectId>, from: ObjectId, terms: &Gained
         a.uid,
         g,
         from.0,
+        link,
         terms.max_per_turn,
         terms.spend_as_any_color.clone(),
     ))
-    .or_insert_with(|| {
-        AbilityDef::with_link(
-            with_terms(&a.kind, terms),
-            a.text.clone(),
-            gained_link(a.link, g, from.0),
-        )
-    })
+    .or_insert_with(|| AbilityDef::with_link(with_terms(&a.kind, terms), a.text.clone(), link))
     .clone()
 }
 
@@ -295,7 +297,7 @@ pub fn abilities_for(
     let mut out = Vec::new();
     for o in sources(g, from, ctx, Some(target)) {
         for a in gained_from_with(g, which, o, terms) {
-            out.push(gained(&a, ctx.source, o, terms));
+            out.push(gained(g, target, &a, ctx.source, o, terms));
         }
     }
     out

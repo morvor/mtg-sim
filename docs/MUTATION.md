@@ -999,6 +999,8 @@ Kill rate as above: (caught + timeout) / (caught + missed + timeout).
 |---|---|---|---|---|---|---|---|
 | simultaneous.rs (full run) | 279 | 191 | 75 | 0 | 13 | 71.8% (191/266) | 98.1% (261/266): the 5 survivors not killed are equivalent (one, `1117:14`, in code the fixes removed) |
 | permissions.rs (full run) | 238 | 153 | 74 | 0 | 11 | 67.4% (153/227) | 81.9% (186/227): the 41 survivors not killed are equivalent (three, `514:17`–`516:17`, only since the `attach` fix) |
+| trigger_timing.rs (full run) | 35 | 30 | 4 | 0 | 1 | 88.2% (30/34) | 91.2% (31/34): the 3 survivors not killed are equivalent (`123:13` since the L1 fix) |
+| triggers.rs, half 1 (mutants 1–288 of 576) | 288 | 228 | 53 | 1 | 6 | 81.2% (229/282) | 88.3% (249/282): the 33 survivors not killed are equivalent (`361:24` since the C1 fix; `1245:25`, classified (b) in the triage, was equivalent all along) |
 | replacement.rs (full run) | 536 | 404 | 112 | 2 | 18 | 78.4% (406/518) | 88.2% (457/518): of the 61 survivors not killed, 55 are equivalent and 6 are gone with code the fixes removed (89.2%, 462/518, counting the five engine problems among them as killed, as for simultaneous.rs) |
 
 ### simultaneous.rs (full run)
@@ -1363,7 +1365,10 @@ otherwise.
   ability ends the other's permissions, though CR 607.1c ("An ability printed on an object
   that fulfills both criteria described in rule 607.1 is linked to itself.") and 607.5 keep
   each linked only to itself. Telling them apart needs the ability's identity on the grant;
-  no other card has two such abilities.
+  no other card has two such abilities. Fixed by small-fixes-5: the permission records the
+  link of the ability that gave it (`PlayTerms::given_by_link`), which `given` compares too
+  (register `until-another-per-ability-instance`; tests
+  `tests/cr/r607_005_until_another_instances.rs`).
 - Register entry `own-permission-first` (`docs/interpretations/decisions-policies.md`,
   policy, provisional): a card's own permission is the one used when an effect's permission
   would allow the same way, without asking; the player is asked only among effects'
@@ -1411,7 +1416,389 @@ applied in the hand too). Changes:
   with "as though it had flash if you pay {2} more" (Rout, Harbinger of the Tides, Ghitu Fire,
   Mystical Tether, ...); the fix belongs with the offered alternative costs
   (`kw::offered_costs::extend_cast_options`, which already extends every way without an
-  alternative cost).
+  alternative cost). Fixed by small-fixes-5: `Game::permitted_cast_options` offers
+  Omniscience-style permissions with each of the card's own ways that has no alternative cost
+  (the flash way, in each of its three wordings; fused, CR 702.102a, teamwork's flash way,
+  offering, CR 702.48a, and prototyped, CR 718.3, which had the same gap), never with its own
+  alternative costs (CR 118.9a); tests `tests/cr/r601_003c_omniscience_own_flash_cost.rs`.
+
+### trigger_timing.rs (full run)
+
+A full run (`FULL=1 scripts/mutants.sh trigger_timing`) of the file at `45bb684` (the engine is
+the same at the docs commit `5781312`): all 35 mutants (17 in October), about 2 hours (an
+incremental build of ~50 s, then the ~255 s `mtg-engine` suite). 30 caught, 4 missed, 0
+timeouts, 1 unviable (`204:9`, `Game::atomically -> R` with `Default::default()`: `R` has no
+`Default` bound): kill rate **88.2%** (30/34).
+
+The survivors were classified from the code (no cargo ran while the run used the machine).
+The tests and fixes are in `6b08efb`; every killing test was checked by hand to fail with its
+mutant applied and to pass without it (the review re-checked `137:22`'s, applying the mutant
+alone and running only that test). The re-run (`RERUN=1 scripts/mutants.sh trigger_timing` at
+`6b08efb`, where this file is unchanged) caught `137:22` and missed the other three. Final:
+**91.2%** (31/34), with 3 equivalent survivors.
+
+**Survivor killed by a new test (b):**
+
+- `137:22` `<`→`>` in `join_instructions` (a text of three or more instructions skipped the
+  join, so a "deals A and B" damage sentence became two damage events, and three damage
+  sentences of one source one event): `blaze_commando_counts_the_one_deals_of_a_spell_of_three_sentences`
+  (`tests/rulings/r_p165_burn.rs`: The Fall of Kroog, one trigger and two Soldiers; Blaze
+  Commando's ruling, "the number of times the word “deals” appears in its instructions"). The
+  tests had only two-instruction texts (Orcish Cannonade, Twin Shot), so `==` and `<=` were
+  caught and `>` wasn't. The test also pins the compiler fix C5 (below).
+
+**Equivalent (a)**, still missed by the re-run:
+
+- `123:13` `>`→`>=` in `deals_damage_together`: a one-element `[DealDamage]` (each sentence of
+  an all-damage text of several sentences, which the join makes a sequence of one) is
+  performed "together", with the event batch held. The triage classified it (b): under the
+  hold a prevention follow-up (Deflecting Palm) joined the damage's batch, against CR 615.5.
+  `a_prevention_follow_ups_damage_is_an_event_of_its_own` (`tests/rulings/r_p165_burn.rs`:
+  Deflecting Palm and Chandra's Spitfire with a custom two-sentence sorcery; no card prints an
+  all-damage text of several sentences without an "instead" or "if") kills it on the tree
+  without L1's fix. With L1 fixed, riders wait for a held batch and run after it, so the hold
+  no longer moves a follow-up, and the mutant is equivalent. (The hold's one other effect,
+  keeping the events of several "instead" actions inside one damage effect in one batch, is
+  where the unmutated code is the approximation the module documents.)
+- `101:13` `>`→`>=` in `creates_tokens_together`: the only one-element creation sequence is
+  Eternalize's ability (`kw/embalm.rs`), and nothing inside one token creation ends a batch
+  (token-creation replacements modify the event, no `Also` rider applies to a token, and an
+  `AsEnters` action runs before the creation's events). The `simultaneous.rs` callers never
+  see a one-element body. This confirms October's `95:13`.
+- `155:9` delete match arm `0` in `join_instructions`: the joined list is empty only when
+  every instruction is a target declaration or every spell ability is modal (no card for
+  either), and `Seq([])` does nothing, as `Noop` does.
+
+**Engine bug (c)**, found while tracing `123:13`, fixed with a regression test that fails
+before the fix:
+
+- L1 (CR 615.5: "the rest of the effect takes place immediately afterward"): a prevention
+  follow-up of one part of a held "together" event ran before the later parts and inside the
+  event's batch. Deflecting Palm choosing Orcish Cannonade ("deals 2 damage to any target and
+  3 damage to you") dealt its 2 damage before Cannonade's 3, in the same batch, so Chandra's
+  Spitfire triggered once instead of twice. Riders queued while a batch is held now wait
+  (`run_post_replacement_effects` does nothing while `batch_hold > 0`), and the hold's owners
+  (the together `Seq` arm in `resolve.rs`, `simultaneous::run`) run them once the hold is
+  released. Register `rider-order` (decided) updated: the riders come after the whole event.
+  `a_prevention_follow_up_comes_after_the_whole_damage_event` (`tests/rulings/r_p165_burn.rs`).
+
+**Compiler fix:**
+
+- C5 (CR 608.2c, Blaze Commando's ruling; `oracle/effects.rs` `parse_effect_text`): the
+  records a pronoun could refer to (`oracle_hardening_referents::finish_introduced`,
+  `pronoun_groups::finish`) were removed, when nothing referred to them, from the effect
+  `join_instructions` had already built, so the join saw them between the instructions: "deals
+  A and B" sentences were flattened into two damage events (The Fall of Kroog; Fear, Fire,
+  Foes!) and separate damage sentences were merged into one. They are now removed from each
+  instruction before the join. Not changed: a text whose records are referred to keeps them
+  among the instructions the join reads. The review compiled the whole pool with C5 and C1's
+  compiler changes and without them and compared every ability's AST: exactly three cards
+  differ, The Fall of Kroog and Fear, Fire, Foes! (now one damage event, the fix) and
+  Camaraderie (verified; its first instruction is now a nested sequence, which adds only a
+  no-op boundary; it still round-trips). C1's compiler changes alter no card. (Found on the way,
+  unrelated: the compiled output isn't the same in every process. Wonderscape Sage's "a
+  nonbasic land type" lists the land types in `HashSet` order,
+  `referents_values_5::returned_land_had_nonbasic_type` iterating
+  `types::subtype_lists().land`; the meaning is the same.) The regression test is
+  `blaze_commando_counts_the_one_deals_of_a_spell_of_three_sentences`: it fails without the fix.
+
+### triggers.rs, half 1 (mutants 1–288)
+
+`triggers.rs` had 576 mutants at `45bb684`, about two days at five minutes each, so it is run
+in two halves. `scripts/mutants.sh` gained `SHARD=k/n`: one contiguous slice of the file's
+mutants in `cargo mutants --list` order (`--shard k/n --sharding slice`; the slice's names are
+saved in `target/mutants/<stem>.shard`). With `RESUME=1` the script tests the slice's untested
+mutants itself, since cargo-mutants shards after `--iterate`/`-E`, which would shift the slice.
+
+Half 1 is `FULL=1 SHARD=0/2 scripts/mutants.sh triggers` at `45bb684` (engine identical at
+`5781312`): mutants 1–288, from `triggers.rs:17:5: replace keyword_has_trigger -> bool with
+true` to `triggers.rs:1491:33: delete field amount from struct EventInfo expression in
+Game::trigger_matches_ctx`. The list isn't strictly in line order: the slice also holds
+`2208:18`, a match guard of `trigger_matches_ctx` listed with `1240:18`. The run went from Nov
+19 22:30 to Nov 20 16:10; the cloud container was reclaimed three times while the session was
+idle, and the run was resumed each time with `FULL=1 SHARD=0/2 RESUME=1` (244, 209 and 208 of
+the 288 left). A missed mutant took about five minutes (a ~55 s build, then the ~255 s suite).
+228 caught, 53 missed, 1 timeout (`1197:9`, `Game::trigger_matches_ctx -> Vec<EventInfo>`
+with `vec![Default::default()]`), 6 unviable (`37:5`, `175:9`, `382:29`, `684:9`, `1054:9`,
+`1367:21`): kill rate **81.2%** (229/282).
+
+The 53 survivors were classified from the code in five batches, which proposed tests T1–T14
+and found four engine bugs (C1, behind `361:24`; C2–C4 on the way) and five latent problems
+(L1–L5, of which the review fixed L2, a fifth engine bug). The tests and fixes are in
+`6b08efb`, the review's in `9fce77f` and `852fa0c`; every killing test was checked by hand to
+fail with its mutant applied and to pass without it. The review re-checked 13 of the 20 kills
+(`90:32`, `139:26`, `162:9`, `421:30`, `436:24`, `581:49` `==`, `671:44`, `782:58`, `790:72`,
+`790:81`, `986:16`, `1103:25`, `1298:40`): each mutant applied alone fails its own test. The
+re-run (`RERUN=1 scripts/mutants.sh triggers` at `6b08efb`: the 53 survivors and the timeout,
+about five hours): 20 caught, 33 missed, and `1197:9` timed out again. Final: **88.3%**
+(249/282), with 33 equivalent survivors.
+
+Line numbers below are the run's (`45bb684`). At `6b08efb` the code from line 364 on is 10 to
+12 lines further down (the re-run's `1257:25` is `1245:25`).
+
+**Survivors killed by new tests (b)** (test file in brackets):
+
+- `90:32` `!=`→`==` in `looks_back` (only cards from `Nowhere` put into a hand or library
+  looked back): Dutiful Knowledge Seeker and Wan Shi Tong, All-Knowing put into a library
+  stopped seeing their own move (CR 603.10a). `one_or_more_cards_put_into_a_library_sees_its_own_permanent_put_there`
+  (`tests/cards/triggers_events_zones.rs`).
+- `139:9` delete arm `Filter::Or`, `139:26` delete `!` in `describes_permanents`: "a Goblin or
+  Orc you control" stopped meaning permanents (CR 109.2), so a kindred Goblin spell's damage
+  triggered it. Every card with such a subject is combat damage only, so the watcher is
+  custom. `a_goblin_or_orc_you_control_ignores_damage_from_a_goblin_spell`
+  (`tests/rulings/r_p018_damage.rs`: Raging Goblin, Tarfire).
+- `162:9` delete the wrapper arm (`Where`, `FirstTimeEachTurn`, ...) in `phase_out_trigger`: a
+  qualified phases-out ability ("during your turn") stopped looking back (CR 603.10b). No card
+  qualifies one, but the compiler does. `a_qualified_phasing_out_ability_still_looks_back`
+  (`tests/cr/r600_look_back.rs`, compiled text on a custom creature).
+- `421:30` `&&`→`||` in `check_batch_triggers` (the look-back snapshot check also for current
+  sources): Kotis, Sibsig Champion's batched enters ability stopped seeing Kotis itself enter
+  from a graveyard (CR 603.6a, 603.10). `kotis_sees_itself_enter_from_a_graveyard`
+  (`tests/cards/history_conditions.rs`, Reanimate).
+- `436:24` delete `!` (the batch path's torpor check only for sacrifice abilities): Hushbringer
+  stopped stopping "one or more ... die" abilities and started stopping "you sacrifice one or
+  more" ones. `hushbringer_one_or_more_dies_abilities_dont_trigger_but_sacrifice_ones_do`
+  (`tests/rulings/c3_trigger_modifiers.rs`: Vengeful Townsfolk, Forge Boss).
+- `580:42` `|`→`&`, `581:49` `>`→`==` and `>`→`<` (the batch path's "Do this only once each
+  turn" pre-check never fired): the ability triggered again and did nothing on resolution,
+  against CR 603.2h ("This ability triggers only if ...") and Screeching Scorchbeast's ruling.
+  `a_do_this_only_once_one_or_more_ability_no_longer_triggers_once_done`
+  (`tests/cards/triggers_events_players.rs`, checking the stack).
+- `671:44` `&&`→`||` in `record_history`: with two permanents entering in one event, the first
+  one's "as it entered" record stayed empty and was read as it is now (Nimble Trapfinder's
+  ruling: "It doesn’t apply if an entering object gained the type later in the turn").
+  `nimble_trapfinder_looks_at_each_of_simultaneous_entrants_as_it_entered`
+  (`tests/rulings/r_p040_curiosity.rs`: Raise the Alarm, Arcane Adaptation).
+- `782:58` `==`→`!=` in the phase-out look-back block of `detect_triggers` (its sources became
+  every permanent *not* attached to the one phasing out): a permanent that had phased out
+  earlier saw another creature phase out (CR 702.26b, 603.10b).
+  `a_permanent_phased_out_earlier_doesnt_see_another_phase_out` (`tests/cr/r600_look_back.rs`:
+  a custom "whenever another creature phases out" watcher, Reality Ripple).
+- `789:29`, `790:29` `&&`→`||`, `790:67`, `790:81` `==`→`!=` (the block's duplicate check): an
+  Aura that Spatial Binding keeps phased in when its creature phases out (Spatial Binding's
+  ruling) triggered twice for the one event (CR 603.2c).
+  `an_aura_that_cant_phase_out_sees_its_creature_phase_out_once` (`tests/cr/r600_look_back.rs`:
+  a custom "whenever enchanted creature phases out" Aura, Spatial Binding, Reality Ripple). This
+  overturns the first run's (a) for `602:29`, whose "phased-out objects aren't in the source
+  list" missed an attachment that can't phase out.
+- `790:72` `&&`→`||`, and `790:67` again: two copies of a card share their abilities' uids, so a
+  phased-in Teferi's Imp kept another one, phasing out, from seeing itself phase out (CR
+  603.10b). `a_permanent_phasing_out_sees_itself_while_another_with_its_ability_stays`
+  (`tests/cr/r603_audit_lookback.rs`: two Teferi's Imps, Reality Ripple).
+- `986:16` delete `!` (the torpor check of delayed triggers only for sacrifice abilities):
+  Hushbringer stopped no delayed "dies" ability; Searing Blood's "When that creature dies this
+  turn" still dealt its 3 damage. `hushbringer_stops_searing_bloods_delayed_dies_ability`
+  (`tests/rulings/c3_trigger_modifiers.rs`, Hushbringer's ruling).
+- `1102:25`, `1103:25` (delete the arm naming an event's object, or its player, in the CR
+  603.7b choice of `fire_once_delayed`): every option read "event", so the controller couldn't
+  tell the simultaneous events apart (an agent gets only the option texts), like
+  `casting.rs:420:41`. No card's once-delayed ability matches two simultaneous events, so the
+  abilities are hand-built, as in the existing 603.7b test.
+  `the_simultaneous_events_offered_are_named_by_their_object_or_player`
+  (`tests/cr/r600_delayed_triggers.rs`: two creatures destroyed at once; each player losing life
+  at once).
+- `1298:40` `||`→`&&` in the `ZoneChange` arm of `trigger_matches_ctx`: "[a card] put into a
+  hand or library from anywhere" was judged by the card in its new zone, not as the object last
+  existed (CR 603.10a). The pool's two such abilities say "cards", which can't tell the
+  difference; the compiler accepts any card subject.
+  `put_into_a_library_from_anywhere_sees_the_permanent_as_it_last_existed`
+  (`tests/cr/r600_zone_change_triggers.rs`: a compiled "creature card" watcher, Sol Ring
+  animated by March of the Machines, Oust).
+
+**Equivalent (a)**, still missed by the re-run:
+
+- Dead code: `17:5` `keyword_has_trigger` → `true` and → `false`, and `705:9`
+  `Game::check_triggers` → `()` (no caller in the workspace, as the first run's `17:5` and
+  `530:9`); `97:9` delete the `(Sacrificed | YouSacrifice, Event::Sacrificed)` arm of
+  `looks_back` (no trigger condition matches `Event::Sacrificed`: sacrifice triggers match the
+  zone change).
+- `24:33`, `26:34` `<<`→`>>` (`turn_keys::RESOLVED`, `DONE_ONCE` become 0): the count moves to
+  the plain key, which is read only for once-per-turn abilities, as `> 0`. A once-per-turn
+  ability has always been counted this turn before it resolves, and no ability is both
+  once-per-turn and do-once or reads its own resolution count (Oracle scan). mtg-sim's
+  coverage agent also reads `RESOLVED`, outside the measured package.
+- `580:42`, `892:62` `|`→`^` (the do-once key, batch and per-event paths): uids come from a
+  counter starting at 1, so bit 62 is clear and `uid ^ DONE_ONCE == uid | DONE_ONCE`.
+  `581:49` `>`→`>=`: a `DONE_ONCE` count is only inserted as it's incremented, so a present one
+  is at least 1 (the second run's `561:49`).
+- `601:44`, `909:40`, `1034:40`, `1117:32` `+=`→`*=` (the order number of batch, detected,
+  delayed-with-a-duration and fired once-delayed triggers): equivalent in practice, as the
+  first run's `688:40` and the second run's `877:40`. A trigger taking the current number only
+  ties with the one numbered before it, the numbers stay non-decreasing in push order, and the
+  stable sort in `put_triggers_on_stack`, their only reader, keeps that order. The exception, a
+  triggered mana ability resolved in the push loop that creates a reflexive trigger, doesn't
+  exist.
+- `156:5` `phase_out_trigger` → `true`: the extra abilities of a phased-out permanent can't
+  match `Event::PhasedOut` (only `PhasesOut` and `Phases { phased_in: false }` do, through
+  exactly the wrappers the function accepts), and the duplicate check prevents doubles.
+- `194:35` `||`→`&&` in `flush_events`, for every card in the pool: the empty fast path then
+  runs a pass that ends no "until" effect without a pending event and recomputes idempotently.
+  Re-entrant passes come only from a triggered mana ability resolving during detection (its
+  `TappedForMana` is the outer list's last event, and no batched or once-delayed trigger reads
+  the activation's events) or from a rider of a move `check_untils` makes (Land Equilibrium on a
+  land creature: no rules difference a test could pin).
+- `319:36` delete `!` (the initiative check given only the "entering triggers nothing"
+  events), in the pool: the filter is a no-op (`monarch_initiative::detect_batch` reads only
+  combat damage to a player), and a batch with both a Torpor-suppressed entering and combat
+  damage would need an inline "instead" damage replacement that creates a creature (only
+  Oozeavite, an Un-card outside the pool).
+- `361:24` guard `matches!(**trigger, TriggerCond::Batched { .. })` → `true` in
+  `check_batch_triggers`: classified (c) in the triage. The mutant handled `Where { AnyOf([..,
+  Batched, ..]) }`, the shape C1 (below) made and the unmutated code dropped. Since C1's fix the
+  compiler doesn't make that shape, and a `Where` reaching the guard holds a `Batched` (the same
+  in both versions) or a per-event trigger (`continue` in both).
+- `952:17`, `954:17` (delete the `BeginningOf` / `Where { BeginningOf }` arms of `begins`),
+  `966:39` `==`→`!=`, `969:34` `!=`→`==`, in the pool: they only change the "not in the step it
+  was created in" skip of delayed triggers (CR 513.2, 603.7a), which never runs. It needs a
+  delayed trigger created after its step's `StepBegan` was emitted and before that event was
+  checked, and every creator flushes the pending events first (`Effect::DelayedTrigger`,
+  `Effect::AtNext`, epic, `delayed_for_rest_of_game`) or runs only while a spell resolves
+  (paradigm, CR 608.3g). A second cleanup step has its own `step_log` entry, so the
+  `!= Cleanup` conjunct is redundant. The caught siblings (`967:25`, `967:43`, `968:25`,
+  `969:25`) over-skip.
+- `1098:39` `>`→`>=` (the CR 603.7b choice asked for one event): `Game::ask_option` returns 0
+  without asking for one option (as `casting.rs:194:9`). `1118:73` `-`→`+`, `-`→`/`
+  (`infos[pick.min(infos.len() - 1)]`): `ask_option` returns an index below the number of
+  options, so the `.min` never applies (as `casting.rs:4329:53`).
+- `1240:18`, `2208:18` (the guard `*to != Zone::Battlefield` of the `LeavesBattlefield` and
+  `LoseControl` arms → `true`), in the pool: no zone change from the battlefield to the
+  battlefield happens. No replacement sends a permanent leaving the battlefield there, every move
+  onto the battlefield is of an object in another zone, and no effect leaves a permanent in
+  place when it's exiled or bounced (so "exile it, then return that card" can't either).
+- `1220:25`, `1269:25` delete `player` (entering, dying): the compiler never binds a pronoun of
+  these triggers to the event's player ("that player" is the controller of the object or of its
+  last known information), so only the range-of-influence check reads the field, and its object
+  check asks the same question. For an entering battle the object check also counts its
+  protector (CR 801.2d), a judgment call (L3).
+- `1245:25` delete `player` (leaving; the re-run's `1257:25`): classified (b) in the triage, on
+  a trace that missed the range check `Game::matches` itself makes (CR 801.10–801.11,
+  `sees_object`): the trigger's filter is matched against the object as it last existed, so
+  its controller then is already asked about whenever the filter matches, and before C4 a
+  permanent leaving the game with its owner was seen by no one (below). The triage's test,
+  `extractor_demon_a_bear_leaving_with_its_owner_is_judged_by_its_controller`
+  (`tests/cr/r801_examples.rs`), fails without C4, mutant or not, so it never killed the
+  mutant; it stays as one of C4's regression tests. Equivalent at `45bb684` too.
+- `1246:25`, `1270:25` delete `cause` (leaving, dying): a trigger's `cause` is read only by
+  "milled" (zone changes from a library) and "without being played" (entering only).
+- `1345:25` delete `object` (`NthSpellCast`): `spell` holds the same object, and every reader
+  that can see a cast trigger's info reads `spell` ("it" and "that spell" are `TriggerSpell`),
+  or `spell` first, or checks it the same way (range).
+- `1412:21` delete `objects` (attacks), in practice: no single attack trigger compiles to the
+  trigger's objects, and the range check drops them for the bare combat conditions or finds
+  them all controlled by the attacking player. This is the first run's `1088:21`, recorded then
+  as "(b) not killed".
+
+**Engine bugs (c)**, each fixed generally, with a regression test that fails before the fix:
+
+- C1 (`361:24`; CR 603.2, 603.2c): a qualifier over alternatives with a "one or more" member
+  ("becomes tapped or is dealt damage during your turn") wrapped the whole `AnyOf`
+  (`where_events`, and the enchanted-player and "a spell causes" triggers), and the batch path
+  dropped that shape, so the batched alternative never triggered. `where_events` now
+  distributes the qualifier over the alternatives when one is batched, and the batch path
+  accepts an alternative with its own batch condition ("attacks or is dealt 3 or more damage").
+  No pool card has such a head. `a_qualified_trigger_with_a_one_or_more_alternative_triggers_once_for_its_batch`,
+  `a_qualified_alternative_with_a_condition_on_its_batch_keeps_it`
+  (`tests/cr/r603_002c_qualified_alternatives.rs`, compiled text on a custom creature).
+- C2 (`layers.rs` `ability_functions`; CR 702.26b): a phased-out permanent's abilities that
+  function everywhere (eminence) still functioned: a phased-out Edgar Markov made a Vampire
+  token. `a_phased_out_permanents_eminence_ability_doesnt_trigger`
+  (`tests/cr/r702_026_audit_phased_out_actions.rs`).
+- C3 (CR 113.7, 603.7e): Elesh Norn, Mother of Machines stopped an opponent's delayed triggered
+  ability whose source is a permanent (Thunder of Unity's chapter II): `kw::torpor` took a
+  delayed ability's source for the permanent that has it. The delayed loop of `detect_triggers`
+  now asks with no source. Register `delayed-abilities-arent-abilities-of-permanents`
+  (provisional), which the review grounded in CR 603.2d: "An effect that states a triggered
+  ability of an object triggers additional times refers only to triggered abilities that object
+  has, not to any delayed or reflexive triggered abilities ... that may be created by abilities
+  the object has." That settles Elesh Norn's other ability (her "triggers an additional time")
+  and reads "abilities of permanents your opponents control" the same way (the entry's
+  Alternatives had both abilities apply, against 603.2d).
+  `elesh_norn_doesnt_stop_an_opponents_delayed_triggered_ability`, and for the other half the
+  review's `elesh_norn_doesnt_double_your_delayed_triggered_ability`
+  (`tests/rulings/c3_trigger_modifiers.rs`) and the existing
+  `an_additional_trigger_effect_doesnt_double_delayed_abilities` (Cryptek and Teysa Karlov,
+  `tests/cr/r603_audit_reflexive.rs`), which now cites the entry.
+- C4 (`multiplayer/range.rs`; CR 603.6c, 800.4a, 801.7a): under the limited range of influence
+  option, a permanent leaving the game with its owner was seen by no one. The range check of a
+  trigger's filter (`Game::matches` → `sees_object` → `object_in_range`) judged it by its owner,
+  who has left and is in no one's range, so nothing at all triggered on its leaving; and the
+  check of the event judged it by its owner's seat, and a commander put into the command zone
+  from the battlefield (CR 903.9b) by its owner there. An object that left the battlefield is
+  now judged by its controller as it last existed there, wherever it went.
+  `extractor_demon_a_bear_leaving_with_its_owner_is_judged_by_its_controller`,
+  `extractor_demon_a_bear_leaving_with_an_owner_out_of_range_triggers_it` (801.7a's example
+  with the Bears leaving with their owner) and the review's
+  `extractor_demon_a_commander_put_into_the_command_zone_is_judged_by_its_controller`
+  (`tests/cr/r801_examples.rs`): all three fail without the fix.
+- L2 (found by the triage, fixed by the review; `delayed_batches.rs`; CR 603.7, Hushbringer's
+  ruling "Hushbringer affects ... other triggered abilities that trigger when that creature
+  enters the battlefield or dies"): the delayed "one or more" path
+  (`delayed_batches::triggered_by_batch`) filtered a batch's events only by the all-scope
+  entering statics, so Hushbringer didn't stop a delayed "this turn, whenever one or more
+  creatures die" ability, though it stops the per-event one. The batch path now asks
+  `torpor::suppressed_for` as the per-event path does (with no source, C3). No card creates
+  such an ability, so the delayed abilities are hand-built:
+  `hushbringer_stops_delayed_dies_abilities_per_event_or_one_or_more`
+  (`tests/cr/r603_audit_stack.rs`, per event and batched, with and without Hushbringer).
+
+**Latent, not fixed:**
+
+- L1 (judgment call, no card): an attachment phasing out with its permanent sees it phase out
+  (the phase-out block adds its abilities), unlike The War Doctor's ruling for permanents
+  phasing out together ("If The War Doctor phases out at the same time as any other permanents,
+  its first ability won't trigger."). No pool Aura or Equipment has a phase-out trigger; it
+  needs a register entry if kept.
+- L3 (judgment call): a battle entering under limited range of influence counts its
+  controller as a party of the event, though CR 801.2d puts it in range through its protector.
+  By `range-combat-trigger-events`' reading of 801.7 (the event is what the trigger condition
+  names), the `1220:25` mutant's result would be the right one.
+- L4: `trigger_in_range`'s exemption for combat conditions (`range-combat-trigger-events`)
+  covers only the bare `Attacks`, `Blocks`, `BecomesBlocked` and `BlocksOrBecomesBlocked`
+  conditions, not wrapped ones ("attacks alone", "enters or attacks").
+- L5 (judgment call): "that player" of "whenever a creature an opponent controls enters"
+  (Suture Priest, Blood Seeker) was the creature's current controller, so a control change
+  before the ability resolves changed it. Covered since the run by the register entry
+  `that-opponent-fixed-as-it-triggers` (provisional), landed upstream: it's the controller the
+  object had as the ability triggered (`EventInfo::object_controller`, not the event's
+  `player`, so `1220:25` stays equivalent).
+- C1's `FirstTimeEachTurn` form: "the first time [A] or [one or more B] ... each turn" also wraps
+  the `AnyOf` whole, so its batched alternative never triggers; it can't simply be distributed
+  ("the first time X or Y happens" isn't "the first X, and the first Y"). No card.
+- Dead code to delete later: `keyword_has_trigger`, `check_triggers`, the `Event::Sacrificed`
+  arm of `looks_back`, and the no-op filter of the initiative pre-check (`319:36`). Deleting it
+  removes five of the equivalent survivors.
+
+**Half 2** (next session): 288 mutants, mutants 289–576 at `45bb684`, from `triggers.rs:1492:33:
+delete field objects from struct EventInfo expression in Game::trigger_matches_ctx` to
+`triggers.rs:2913:9: delete match arm TriggerCond::AnyOf(ts) in on_sacrifice`. The code has
+moved since: at `8199d6d` (this report's merge of the upstream branch) the file has 586 mutants,
+and upstream moved the body of `trigger_matches_ctx` into `Game::trigger_event_infos`, which
+renamed its mutants. Half 1's last mutant (`1491:33` at `45bb684`, the `amount` field of the
+`EventInfo` that the `(PlayerAttacked, AttackersDeclared)` arm pushes) is the 298th,
+`triggers.rs:1554:33: delete field amount from struct EventInfo expression in
+Game::trigger_event_infos`, and half 2 is the 299th to the 586th, from `triggers.rs:1555:33:
+delete field objects from struct EventInfo expression in Game::trigger_event_infos` to
+`triggers.rs:2976:9: delete match arm TriggerCond::AnyOf(ts) in on_sacrifice`. A plain
+`SHARD=1/2` (the 294th to the 586th) would start five mutants early. So run it from a slice
+made by hand, at the commit to be measured, found from that arm (its line moves with the code):
+
+```sh
+L=$(grep -n 'if n >= (\*min).max(1) {' crates/mtg-engine/src/triggers.rs | cut -d: -f1)  # 1551 at 8199d6d
+mkdir -p target/mutants && cargo mutants --list -f crates/mtg-engine/src/triggers.rs > target/mutants/triggers.all
+first=$(grep -nF "triggers.rs:$((L + 4)):33: delete field objects from struct EventInfo expression in Game::trigger_event_infos" target/mutants/triggers.all | cut -d: -f1)  # 299
+tail -n +"$first" target/mutants/triggers.all > target/mutants/triggers.shard  # 288 at 8199d6d
+FULL=1 SHARD=1/2 RESUME=1 scripts/mutants.sh triggers
+```
+
+`RESUME=1` tests the slice's mutants that have no outcome in `target/mutants/triggers/` (half 1's
+outcomes there were removed with the worktree). Ten mutants of half 1's region have never been
+tested, because the code was added after half 1's run: the two match arms C1 added to
+`check_batch_triggers`' alternatives (`383:17`, `400:29` at `8199d6d`) and eight in code
+upstream added since `45bb684` (`seen_as_triggered`, `295:9` and `295:61` twice; the
+`ObjectController` grouping, `554:25` and `555:25`; `record_history`'s `ExcessDamage` arm,
+`694:13`; `trigger_matches_ctx`'s new wrapper, `1246:9` twice). To cover them in the same run,
+append them to the slice before running it (their positions at `8199d6d`; check the names):
+`sed -n '58,60p;70p;73p;94,95p;124p;229,230p' target/mutants/triggers.all >> target/mutants/triggers.shard`.
 
 ### replacement.rs (full run)
 
@@ -1673,7 +2060,8 @@ changes only the questions is (b).
   matched, and nothing was kept: Clone entering as a copy of Rescuer Sphinx that returns
   Grumgully, the Generous lost Grumgully's counter. The snapshot is now retaken at every step
   until a permanent leaves (the arm `Some(sn) if sn.obj == m.obj => {}` is deleted; F2 of the
-  triage, register `entry-effects-of-a-leaving-source`, provisional). Tests:
+  triage, register `entry-effects-of-a-leaving-source`, provisional; since the merge with
+  user-decisions-nov20b, at every step, see the review below). Tests:
   `a_clone_entering_as_rescuer_sphinx_returning_grumgully_still_gets_its_counter` (Clone's
   ruling "Any "as [this creature] enters" or "[this creature] enters with" abilities of the
   chosen creature will also work") and
@@ -2053,6 +2441,16 @@ state-based action moves stays where it is, and the check repeats forever. These
   Probed, not committed: under Rest in Peace (either player's), Leyline of the Void and Wheel of
   Sun and Moon the card is exiled whichever order is chosen (Wheel of Sun and Moon first: the
   bottom of the library, then the keyword's exile, CR 616.1f).
+- Merged with user-decisions-nov20b, which landed while this item ran: `EntrySnapshot` keeps
+  the effects determined as an entering event is proposed whatever happens to their source
+  (Ixidron turning Grumgully face down; the user's decision of Nov 20 in
+  `simultaneous-entries-ordered-by-controller`), adds them back at each step only while they
+  still apply to the permanent as it would now exist (`Game::still_modifies`), and no longer
+  compares the battlefield. Fix 2 is kept on top: the snapshot is taken again at each step, the
+  effects that apply then with those kept, so an effect made applicable at a later step (after a
+  copy effect, or through another effect, CR 616.2) is kept too once its source leaves
+  (`entry-effects-of-a-leaving-source` rewritten to match). Both sides' tests pass
+  (`r614_012_effects_of_a_permanent_that_leaves.rs`, `rulings/entering_together_order.rs`).
 - Four register entries for the readings above: `questions-only-for-a-choice` (policy, decided),
   `replacement-question-names-the-card-as-it-is` (policy, decided),
   `copy-effect-doesnt-see-an-original-out-of-range` (interpretation, provisional: no rule or

@@ -339,7 +339,9 @@ fn to_bottom_face_down(g: &mut Game, id: ObjectId) {
 }
 
 /// Shuffles each planar deck (CR 103.3a): the face-down planar cards of each deck are put
-/// in a random order among their places in the command zone.
+/// in a random order among their places in the command zone. A player's own deck is
+/// shuffled with their own randomness (`Game::rng_for`), the decks in APNAP order (see
+/// `attraction_cards::shuffle_attraction_decks`).
 pub fn shuffle_planar_decks(g: &mut Game) {
     use rand::seq::SliceRandom;
     if !is_planechase(g) {
@@ -348,7 +350,7 @@ pub fn shuffle_planar_decks(g: &mut Game) {
     let owners: Vec<Option<PlayerId>> = if g.config.single_planar_deck {
         vec![None]
     } else {
-        g.player_ids().into_iter().map(Some).collect()
+        g.apnap().into_iter().map(Some).collect()
     };
     for owner in owners {
         let slots: Vec<usize> = g
@@ -362,7 +364,10 @@ pub fn shuffle_planar_decks(g: &mut Game) {
             .map(|(i, _)| i)
             .collect();
         let mut ids: Vec<ObjectId> = slots.iter().map(|i| g.command[*i]).collect();
-        ids.shuffle(&mut g.rng);
+        match owner {
+            Some(p) => ids.shuffle(g.rng_for(p)),
+            None => ids.shuffle(&mut g.rng),
+        }
         for (i, id) in slots.iter().zip(ids) {
             g.command[*i] = id;
         }

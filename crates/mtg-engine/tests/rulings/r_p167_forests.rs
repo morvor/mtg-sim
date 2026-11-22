@@ -25,6 +25,7 @@ const REVEAL_LANDS: [(&str, &str); 2] =
 #[test]
 fn a_land_entering_from_hand_at_the_same_time_can_be_revealed() {
     cr!("614.12", "614.12a");
+    interp!("entering-cards-may-be-revealed");
     ruling!(
         "Fortified Village",
         "If a Forest or Plains is entering the battlefield from your hand at the same time as Fortified Village, you may reveal the other land to have Fortified Village enter untapped."

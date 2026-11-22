@@ -50,6 +50,12 @@ impl Game {
     /// Moves several objects simultaneously. Returns, for each proposed move, the new id
     /// of that object after the (possibly replaced) move.
     pub fn move_objects(&mut self, moves: Vec<MoveEv>) -> Vec<Option<ObjectId>> {
+        for m in &moves {
+            // (Or a newly created object that hasn't been put anywhere yet, `can_move`.)
+            if !self.is_new_object(m.obj) {
+                self.assert_live(m.obj, "move");
+            }
+        }
         if self.dirty {
             self.recompute();
         }
@@ -376,11 +382,17 @@ impl Game {
         {
             return false;
         }
-        self.is_live(id)
-            || (o.zone == Zone::Nowhere
-                && o.next.is_none()
-                && o.prev.is_none()
-                && o.kind != ObjKind::StackAbility)
+        self.is_live(id) || self.is_new_object(id)
+    }
+
+    /// Whether `id` is a newly created object (a token or card) that hasn't been put
+    /// anywhere yet.
+    pub(crate) fn is_new_object(&self, id: ObjectId) -> bool {
+        let o = self.obj(id);
+        o.zone == Zone::Nowhere
+            && o.next.is_none()
+            && o.prev.is_none()
+            && o.kind != ObjKind::StackAbility
     }
 
     /// The player who will control a permanent entering the battlefield with this move.
@@ -416,14 +428,28 @@ impl Game {
             ReplEvent::Move(m) => g.entry_controller(m),
             _ => g.turn.active,
         };
+        // Each player's objects are listed (and, by default, given timestamps) in an order
+        // that doesn't depend on seats, as `sort_objects_apnap` orders them: by owner in
+        // APNAP order, then in creation order. Not in the order the moves were proposed,
+        // which can follow object ids across owners.
+        let moved = |e: &Option<(usize, ReplEvent)>| match e {
+            Some((_, ReplEvent::Move(m))) => Some(m.obj),
+            _ => None,
+        };
+        let mut seat_free: Vec<ObjectId> = entries.iter().filter_map(moved).collect();
+        self.sort_objects_apnap(&mut seat_free);
+        let key = |e: &Option<(usize, ReplEvent)>| {
+            moved(e).and_then(|o| seat_free.iter().position(|x| *x == o))
+        };
         let mut ordered: Vec<(usize, ReplEvent)> = Vec::new();
         for p in self.apnap() {
-            let mine: Vec<usize> = entries
+            let mut mine: Vec<usize> = entries
                 .iter()
                 .enumerate()
                 .filter(|(_, e)| e.as_ref().is_some_and(|(_, ev)| controller(self, ev) == p))
                 .map(|(k, _)| k)
                 .collect();
+            mine.sort_by_key(|k| key(&entries[*k]));
             let order: Vec<usize> = if mine.len() >= 2 {
                 let names = mine
                     .iter()
@@ -751,6 +777,9 @@ impl Game {
                     // CR 205.3d: not a subtype it can't have as it enters (Rise from the
                     // Grave returning a noncreature God, `subtype_gain.rs`).
                     crate::subtype_gain::lock_ungainable_parts(self, first);
+                    // CR 113.11: nor an ability it can't have (Valkyrie's Call's "It has
+                    // flying" for a creature that can't have flying, `kw/cant_have.rs`).
+                    crate::kw::cant_have::drop_ungrantable_keywords(self, first);
                 }
                 self.recompute();
                 // Counters it enters with (CR 122.6): planeswalker loyalty (CR 306.5b),
@@ -1085,7 +1114,20 @@ impl Game {
     /// Runs the instructions replacement effects left for after their modified events, in
     /// the order they were queued: the order the effects were applied (interpretation
     /// `rider-order`). Instructions queued while one runs come before the rest.
+    ///
+    /// While the events of one simultaneous event are held together (a "deals A and B"
+    /// damage instruction, an instruction each player performs at the same time), they
+    /// wait: they take place after the whole event (CR 615.5: "the rest of the effect takes
+    /// place immediately afterward"), when the event's owner releases the hold and runs
+    /// them.
     pub(crate) fn run_post_replacement_effects(&mut self) {
+        if self.batch_hold == 0 {
+            self.run_post_replacement_effects_now();
+        }
+    }
+
+    /// [`Game::run_post_replacement_effects`], even inside a held simultaneous event.
+    pub(crate) fn run_post_replacement_effects_now(&mut self) {
         let mut batch = std::collections::VecDeque::new();
         loop {
             let queued = std::mem::take(&mut self.post_replacement_effects);
@@ -1357,6 +1399,7 @@ impl Game {
         by: Option<PlayerId>,
         attacking: bool,
     ) -> bool {
+        self.assert_live(obj, "tap");
         let o = self.obj(obj);
         // Only a permanent: an object that has left the battlefield keeps its zone as
         // last known information, but it's no longer there to tap (CR 400.7); a phased-out
@@ -1377,6 +1420,7 @@ impl Game {
     }
 
     pub fn untap(&mut self, obj: ObjectId) -> bool {
+        self.assert_live(obj, "untap");
         let o = self.obj(obj);
         // A phased-out permanent can't be affected (CR 702.26b): it stays tapped.
         if !self.is_in_zone(obj, Zone::Battlefield) || !o.tapped || o.phased_out {
@@ -1432,6 +1476,7 @@ impl Game {
     /// Destroys a permanent (CR 701.8); `cause` is the spell or ability doing it (none for
     /// a state-based action). Returns true if it left the battlefield.
     pub fn destroy_by(&mut self, obj: ObjectId, cause: crate::event_causes::Cause) -> bool {
+        self.assert_live(obj, "destroy");
         if self.dirty {
             self.recompute();
         }
@@ -1484,7 +1529,12 @@ impl Game {
         let (source, by) = (cause.obj, cause.by);
         let mut moves = Vec::new();
         let mut causes: Vec<(Option<ObjectId>, Option<PlayerId>)> = Vec::new();
+        for obj in &objs {
+            self.assert_live(*obj, "destroy");
+        }
         for obj in objs {
+            // (One may leave as an earlier one's destruction is replaced: "destroy this
+            // Aura instead", CR 702.89a.)
             // Not a phased-out permanent (CR 702.26b; see `destroy_by`).
             if !self.is_live(obj)
                 || self.obj(obj).zone != Zone::Battlefield
@@ -1561,6 +1611,7 @@ impl Game {
 
     /// Sacrifices a permanent (CR 701.21). Only the controller can sacrifice.
     pub fn sacrifice(&mut self, obj: ObjectId, by: PlayerId) -> Option<ObjectId> {
+        self.assert_live(obj, "sacrifice");
         if self.dirty {
             self.recompute();
         }
@@ -1644,6 +1695,9 @@ impl Game {
         n: u32,
         how: crate::event_causes::CounterPut,
     ) -> u32 {
+        if let Some(o) = target.object() {
+            self.assert_live(o, "put counters");
+        }
         // An object that has left its zone is a new object (CR 400.7): nothing is put on
         // it, so "if you do" sees no counters put (Thought Gorger).
         if n == 0 || target.object().is_some_and(|o| !self.is_live(o)) {
@@ -1740,6 +1794,9 @@ impl Game {
         n: u32,
         by: Option<PlayerId>,
     ) -> u32 {
+        if let Some(o) = target.object() {
+            self.assert_live(o, "remove counters");
+        }
         // CR 810.10b: a player losing poison counters in Two-Headed Giant: the team does.
         if let Some(k) =
             crate::multiplayer::two_headed::remove_team_poison(self, target, kind, n, by)
@@ -1947,6 +2004,13 @@ impl Game {
 
     /// Deals several damage events simultaneously (e.g. combat damage, CR 510.2).
     pub fn deal_damage_batch(&mut self, events: Vec<(ObjectId, Entity, u32)>, combat: bool) {
+        // The source may have left: it deals the damage as it last existed (CR 608.2h).
+        // The recipient is the object as it is now.
+        for (_, t, _) in &events {
+            if let Some(o) = t.object() {
+                self.assert_live(o, "deal damage to");
+            }
+        }
         if self.dirty {
             self.recompute();
         }
@@ -2233,7 +2297,7 @@ impl Game {
         }) {
             self.execute_repl_event(e);
         }
-        self.run_post_replacement_effects();
+        self.run_post_replacement_effects_now();
         self.post_replacement_effects = outer;
     }
 
@@ -2301,16 +2365,31 @@ impl Game {
         &mut self,
         batch: Vec<(PlayerId, TokenCreate, u32, Option<ObjectId>)>,
     ) -> Vec<Vec<ObjectId>> {
+        self.create_tokens_in_groups(batch, &[])
+    }
+
+    /// [`Game::create_tokens_together`], where only creations in the same group (`groups`,
+    /// one for each entry of `batch`; group 0 if missing) can be combined.
+    pub(crate) fn create_tokens_in_groups(
+        &mut self,
+        batch: Vec<(PlayerId, TokenCreate, u32, Option<ObjectId>)>,
+        groups: &[usize],
+    ) -> Vec<Vec<ObjectId>> {
         if self.dirty {
             self.recompute();
         }
         let mut out = vec![Vec::new(); batch.len()];
         let mut moves = Vec::new();
         let mut made_by = Vec::new();
-        for (i, (controller, spec, count, source)) in batch.into_iter().enumerate() {
+        // The same tokens for the same player are one creation (one "for each"
+        // instruction's tokens: `for_each_events`).
+        for (controller, spec, count, source, parts) in
+            crate::for_each_events::merge_creations(batch, groups)
+        {
             if count == 0 {
                 continue;
             }
+            let start = moves.len();
             for e in self.replace(ReplEvent::CreateTokens {
                 controller,
                 spec: Box::new(spec),
@@ -2326,12 +2405,12 @@ impl Game {
                     } => {
                         for _ in 0..count {
                             moves.push((controller, self.token_entry(controller, &spec)));
-                            made_by.push(i);
                         }
                     }
                     e => self.execute_repl_event(e),
                 }
             }
+            made_by.extend(crate::for_each_events::credit(&parts, moves.len() - start));
         }
         let entered = self.enter_tokens(moves);
         self.run_post_replacement_effects();
@@ -2451,6 +2530,10 @@ impl Game {
     }
 
     fn attach_checked(&mut self, obj: ObjectId, to: Entity, as_creature: bool) -> bool {
+        self.assert_live(obj, "attach");
+        if let Some(o) = to.object() {
+            self.assert_live(o, "attach to");
+        }
         if self.dirty {
             self.recompute();
         }
@@ -2484,6 +2567,7 @@ impl Game {
     }
 
     pub fn unattach(&mut self, obj: ObjectId) {
+        self.assert_live(obj, "unattach");
         if let Some(prev) = self.obj(obj).attached_to {
             // Remembered only when it became unattached because what it was attached to
             // left the battlefield (CR 704.5n): "Equipment attached to that creature" then

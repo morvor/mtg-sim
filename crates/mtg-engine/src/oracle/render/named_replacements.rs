@@ -94,10 +94,12 @@ impl Renderer<'_> {
         else {
             return None;
         };
-        let Condition::SelMatches(Sel::This, Filter::Custom(n)) = c.as_ref() else {
+        let Condition::SelMatches(Sel::This, Filter::In(s)) = c.as_ref() else {
             return None;
         };
-        if n != crate::transform_rules::TRANSFORMED || !matches!(otherwise.as_ref(), Effect::Noop) {
+        if !matches!(**s, Sel::Var(v) if v == crate::transform_rules::TRANSFORMED_THIS_WAY)
+            || !matches!(otherwise.as_ref(), Effect::Noop)
+        {
             return None;
         }
         let m = self.me();
