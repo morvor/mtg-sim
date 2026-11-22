@@ -54,9 +54,10 @@ for stem in "$@"; do
     k=1
     # Each survivor is found again in today's list of the file's mutants: the same mutation
     # in the same function whose diff (the mutated line and the lines around it, from the
-    # earlier run's mutants.out/diff/) matches best, then the same column and the nearest
-    # line (edits elsewhere in the file may have moved it; line distance alone can pick
-    # a neighbouring identical mutation).
+    # earlier run's mutants.out/diff/, whitespace aside) matches best, then the same column
+    # and the nearest line (edits elsewhere in the file may have moved it; line distance
+    # alone can pick a neighbouring identical mutation). A best match whose diff is less than
+    # half the same is reported as a weak match: usually the survivor's code is gone.
     cat "$prev/missed.txt" "$prev/timeout.txt" 2>/dev/null >"$OUT/$stem.survivors"
     (cd "$MS" && cargo mutants --list --json --diff -f "$file") >"$OUT/$stem.list.json"
     names=()
@@ -67,8 +68,10 @@ for stem in "$@"; do
 import difflib, json, os, re, sys
 pat = re.compile(r"^(.*?):(\d+):(\d+): (.*)$")
 def body(diff):
-    # The hunk without its file and @@ header lines (which carry line numbers).
-    return [l for l in diff.splitlines() if not l.startswith(("---", "+++", "@@"))]
+    # The hunk without its file and @@ header lines (which carry line numbers), each line's
+    # whitespace collapsed: a fix that wraps code in a block re-indents every line of it, and
+    # with the indentation compared a re-indented survivor matched an unrelated mutant.
+    return [" ".join(l.split()) for l in diff.splitlines() if not l.startswith(("---", "+++", "@@"))]
 now = []
 for m in json.load(open(sys.argv[2])):
     g = pat.match(m["name"])
@@ -89,6 +92,10 @@ for line in open(sys.argv[1]).read().splitlines():
         sim = difflib.SequenceMatcher(None, ob, c[4]).ratio() if ob is not None else 0
         return (-sim, c[2] != col, abs(int(c[1]) - int(ln)))
     best = min(cands, key=score)
+    sim = -score(best)[0]
+    if ob is not None and sim < 0.5:
+        # Most likely the survivor's code is gone and this is another mutant of the same kind.
+        print(f"weak match (diff similarity {sim:.2f}): {line} -> {best[1]}:{best[2]}", file=sys.stderr)
     print(f"{best[0]}:{best[1]}:{best[2]}: {best[3]}")
 PY
     )

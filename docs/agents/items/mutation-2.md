@@ -48,3 +48,20 @@ item's row (mutants run, missing tests added, engine bugs) is in docs/agents/yie
   `mixed-each-player-instruction`). Report: docs/MUTATION.md, "Second round, Nov 2026".
   `scripts/mutants.sh` gained `FULL=1` (every mutant) and `RESUME=1` (continue a run a
   machine restart interrupted). Next in the order above: `permissions.rs`.
+- `replacement.rs` (Nov 22, branch `wip/mutation-2-replacement`): full run of all 536 mutants at
+  `eaa55a4` (31 h), 78.4% → 88.2% (457/518). The 51 killable survivors are caught (56 new tests
+  with the fixes' regression tests, one adjusted); the 55 left are equivalent; 6 are gone with
+  code the fixes removed (89.2% counting the five engine problems among them as killed). 8
+  engine fixes (a replacement chain cut after 33 effects, CR 616.1f; entry effects after a copy
+  effect and copies' granted entry abilities, CR 614.12; the CR 616.1 choice for a spell's
+  "exile it instead"; a kind of counter with no counters; division parts on redirected damage;
+  stack-only grants on the permanent, CR 400.7; a move's cause and its exile link). Four
+  provisional register entries (`entry-effects-of-a-leaving-source`,
+  `face-down-entry-checked-as-the-face-down-card`,
+  `entry-types-added-after-what-the-effect-says-it-is`,
+  `deathtouch-lethal-for-excess-by-damage-dealt`) and one decided
+  (`leaving-the-stack-exile-among-other-replacements`). Report: docs/MUTATION.md,
+  "replacement.rs (full run)". `scripts/mutants.sh` gained `REV=<commit>` (measure a fixed
+  commit while tests land on top) and a re-run match that ignores whitespace and reports weak
+  matches. `permissions.rs` is done too; next in the order above: `trigger_timing.rs` with
+  `triggers.rs`.

@@ -13,6 +13,7 @@ cargo install cargo-mutants --locked          # v27.1.0 was used
 export CARGO_BUILD_JOBS=2
 scripts/mutants.sh sba trigger_timing ...     # one file at a time, results in target/mutants/<stem>/
 RERUN=1 scripts/mutants.sh sba                # re-test only that file's survivors (target/mutants/sba-rerun/)
+FULL=1 REV=abc1234 scripts/mutants.sh x       # every mutant, of commit abc1234 (RESUME=1 continues it)
 ```
 
 `scripts/mutants.sh` runs, for each file stem, under the global build lock
@@ -43,10 +44,13 @@ A baseline that doesn't fit the timeout means no mutant is tested at all.)
   loop counts as `timeout`, which is a detection.
 - The re-run after adding tests (`RERUN=1`) finds each survivor again in the file's
   current mutant list (same function and mutation whose diff, the mutated line with the
-  lines around it as saved in the earlier run's `mutants.out/diff/`, matches best; then
-  the same column and the nearest line, since merges move lines) and tests exactly those.
-  Matching by line distance alone picked a neighbouring identical
-  mutation once code had moved by more than the distance between them. cargo-mutants
+  lines around it as saved in the earlier run's `mutants.out/diff/`, matches best,
+  whitespace aside; then the same column and the nearest line, since merges move lines)
+  and tests exactly those. Matching by line distance alone picked a neighbouring identical
+  mutation once code had moved by more than the distance between them, and comparing the
+  indentation too matched two survivors to unrelated mutants once a fix had re-indented
+  their function (replacement.rs, November 2026). A best match less than half the same is
+  reported as a weak match: usually the survivor's code is gone. cargo-mutants
   27.1 applies neither `-F` nor `-E` to "delete field" mutants (it selected every one of
   them, 163 for triggers.rs), so the re-run applies each survivor's diff to
   `target/mutsrc` itself and runs the same build and `cargo test -p mtg-engine` (the same
@@ -995,6 +999,7 @@ Kill rate as above: (caught + timeout) / (caught + missed + timeout).
 |---|---|---|---|---|---|---|---|
 | simultaneous.rs (full run) | 279 | 191 | 75 | 0 | 13 | 71.8% (191/266) | 98.1% (261/266): the 5 survivors not killed are equivalent (one, `1117:14`, in code the fixes removed) |
 | permissions.rs (full run) | 238 | 153 | 74 | 0 | 11 | 67.4% (153/227) | 81.9% (186/227): the 41 survivors not killed are equivalent (three, `514:17`–`516:17`, only since the `attach` fix) |
+| replacement.rs (full run) | 536 | 404 | 112 | 2 | 18 | 78.4% (406/518) | 88.2% (457/518): of the 61 survivors not killed, 55 are equivalent and 6 are gone with code the fixes removed (89.2%, 462/518, counting the five engine problems among them as killed, as for simultaneous.rs) |
 
 ### simultaneous.rs (full run)
 
@@ -1407,3 +1412,611 @@ applied in the hand too). Changes:
   Mystical Tether, ...); the fix belongs with the offered alternative costs
   (`kw::offered_costs::extend_cast_options`, which already extends every way without an
   alternative cost).
+
+### replacement.rs (full run)
+
+A full run (`FULL=1 REV=eaa55a4 scripts/mutants.sh replacement`) of the file at `eaa55a4`: all
+536 mutants, in one go from 2026-11-20 06:08 to 2026-11-21 13:15 UTC (31 hours, about 3.5
+minutes per mutant; the machine never restarted, so no `RESUME` was needed). `REV=<commit>` is
+back in `scripts/mutants.sh` (`eaa55a4`; the permissions.rs worktree had one, which its merge
+dropped): the run, and any `RESUME` of it, measures that commit's tree while the tests for its
+survivors are committed on top. 404 caught, 112 missed, 2 timeouts, 18 unviable: kill rate
+**78.4%** (406/518).
+
+The 112 survivors were classified from the code in seven batches, written while the run went on:
+58 killable (b), 50 equivalent (a), and 4 engine bugs (c) (`607:60` and `622:23`, two mutants of
+one bug, and `497:33` → `false` and `497:40` of another). The tests of batches 1–6 were
+committed unbuilt while the run used the machine (`d834032`–`5396924`); batch 7's (`1954907`)
+were checked by hand against their mutants once the run had ended. The triage also found five
+engine bugs that no survivor showed, and one survivor, `681:9`, rested on a judgment call (the
+spell's controller's CR 616.1 choice). Then the engine was fixed (`cac3507`–`8cfcfee`, eight
+fixes with the register entries they needed, below), and the judgment calls of batches 4 and 7
+were registered (`190bab0`). The fixes changed six classes, (b) to (a): `424:18` (both),
+`1536:20`, `1981:50`, `1990:29` and `2206:49` (each below). And they removed the code of six
+survivors: `497:33` (both), `497:40`, `607:60`, `622:23` and `681:9`.
+
+The 112 survivors and the 2 timeouts were re-run at the fixed commit (`RERUN=1
+scripts/mutants.sh replacement` at `190bab0`, about 9 hours). The fixes moved the code by 5 to
+85 lines, and fix 1 re-indented the body of `replace_rec` inside a loop. Five names are no
+longer generated (`497:33` both ways, `607:60`, `622:23`, `681:9`). The other 109 matched 108
+mutants: 52 caught, 54 missed, and the 2 timeouts again. Three of those matches were wrong, all
+in `replace_rec`. The script compared the diffs with their indentation, so after the
+re-indentation:
+
+- `566:76` and `583:63` matched unrelated mutants of the same kind (`576:38` and `589:85`, both
+  caught), so `566:76` looked killed without being tested;
+- `497:40`, whose code fix 2 deleted, matched `492:89`'s mutant (`515:68`).
+
+The script now compares the diffs whitespace aside, and it reports a best match that is less than
+half the same as a weak match (only `497:40` is, at 0.39). With that change `566:76` is `595:80`
+and `583:63` is `612:67`. The two wrong lines were dropped from the re-run's `caught.txt`, and a
+second re-run (`ONLY='replacement\.rs:(595:80|612:67): ' RERUN=1`) caught `595:80` and missed
+`612:67`. Final: **51 caught, 55 missed** (all equivalent), and 6 survivors gone. Kill rate after
+the new tests: **88.2%** (457/518: 406 + 51). Of the six gone, five were engine problems whose fix
+does what the mutant did: `497:33` → `false`, `497:40`, `607:60`, `622:23`, and `681:9` once the
+616.1 choice was decided (fix 4). Counted as killed, the way the simultaneous.rs entry counts
+them, the rate is 89.2% (462/518). `497:33` → `true` was equivalent. Each test named below for a
+(b) survivor was also checked by hand: with the survivor's mutant applied to `replacement.rs` at
+`190bab0`, the test fails. Where two tests are named, every mutant fails at least one of them:
+`2779:9` only the Lashknife Barrier test, `2782:9` only the Wickerbough Elder one, `2582:26` only
+the Captain's Maneuver one, `2590:27` only the Lancers en-Kor one.
+
+Line numbers below are the run's (`eaa55a4`). New tests are in `tests/cr/`. The same policy as
+for permissions.rs `347:13` applies throughout: a mutant that adds or drops a question or an
+option to an agent is observable (the agent protocol shows every decision), so a survivor that
+changes only the questions is (b).
+
+**Survivors killed by new tests (b)** (51):
+
+- Keys (`numeric_key`). `283:53` `^`→`|`: the counter effects' pseudo-uids have every high bit
+  set, so every permanent's shield key comes out the same. Two shielded creatures dealt damage at
+  once share one "remove a shield counter" follow-up, and the second keeps its counter.
+  `pyroclasm_removes_a_shield_counter_from_each_shielded_creature`
+  (`r615_013_separate_prevention_effects.rs`; Swooping Protector's ruling "that damage is
+  prevented and only one shield counter is removed"). `285:70` `^`→`&` (every player key the
+  same): two protection abilities of one player merge their prevented-damage events (CR 615.13),
+  and Selfless Squire triggers once.
+  `two_runed_halos_preventing_two_attackers_damage_trigger_selfless_squire_twice` (same file;
+  its ruling "Selfless Squire's second triggered ability doesn't trigger only when damage is
+  prevented by its first triggered ability's effect.").
+- Cover of Winter's division (`divide_per_source_prevention`, `r615_per_source_division.rs`,
+  register `per-source-prevention-division`):
+  - `317:72` `&&`→`||`: another creature's damage joins the group.
+    `cover_of_winter_divides_each_creatures_damage_on_its_own` (its rulings "This prevention is
+    applied creature by creature" and "you decide how to divide the prevention effect").
+  - `329:26` `<`→`>`: a division is asked for one recipient and never for three.
+    `cover_of_winter_divides_x_among_a_tramplers_two_blockers_and_you` (the ruling's own example,
+    "You may prevent damage that would be dealt to the first creature, the second creature,
+    and/or you, as long as the total amount of that creature's damage that would be prevented is
+    X.").
+  - `329:30`, `329:40` `||`→`&&`: a division is asked with one recipient, with X = 0, or with no
+    more damage than X. `cover_of_winter_asks_for_no_division_when_there_is_nothing_to_divide`;
+    the register entry now says when nothing is asked.
+  - `344:24` (guard → `true`), `345:25`, `346:25`, `347:25` `&&`→`||`: an answer that isn't a
+    division of X is accepted ([2, 2] for X = 2 prevents 4).
+    `cover_of_winter_an_answer_that_isnt_a_division_of_x_prevents_x_in_order` ("as long as the
+    total amount of that creature's damage that would be prevented is X").
+- `replace_rec`:
+  - `535:21` delete `!`: for damage that "can't be prevented or dealt instead to another
+    permanent or player", only the redirections are kept, not dropped. Furnace of Rath stops
+    doubling Lava Burst, and Palisade Giant takes it.
+    `lava_burst_to_a_creature_isnt_redirected_but_is_still_doubled`
+    (`r614_009_damage_that_cant_be_redirected.rs`; CR 614.9; Lava Burst's ruling "Prevention and
+    redirection effects will have no effect on damage dealt by Lava Burst to a creature.").
+  - `575:37` (guard → `true`), `575:39` `<`→`<=`: an answer one past the last option indexes out
+    of bounds (a panic) instead of taking the default.
+    `an_answer_one_past_the_last_replacement_option_applies_the_first_listed`
+    (`r616_001_choosing_among_effects.rs`, `interp!("default-first-listed-choice")`).
+  - `566:76` `==`→`!=`: after one part of an ability, the next effect applied without a question
+    is the first candidate *not* of that ability.
+    `master_biomancers_second_part_follows_before_the_next_choice` (same file; Master
+    Biomancer's "as a Mutant" follows its counters, then P0 chooses between Grumgully's and Spike
+    Feeder's own; CR 616.1, 616.1e, 616.1f). This is the survivor the first re-run matched
+    wrongly.
+  - `492:89` `==`→`!=`: an effect of the entry snapshot is added back only once every other
+    pending effect is applied, one question fewer.
+    `riot_from_a_rhythm_of_the_wild_returned_as_the_sphinx_enters_is_still_one_of_the_choices`
+    (`r614_012_effects_of_a_permanent_that_leaves.rs`; Rhythm of the Wild's ruling "If Rhythm of
+    the Wild leaves the battlefield at the same time that a nontoken creature enters the
+    battlefield (most likely because that creature has a replacement effect, such as that of
+    Rescuer Sphinx), that creature still gets a +1/+1 counter or haste.").
+  - `598:24` (guard → `true`), `599:25` `&&`→`||`: an optional effect's question names a card the
+    deciding player can't see, or one with no name ("... ()").
+    `the_question_about_a_face_down_commander_names_nothing`, with the control
+    `the_question_names_a_face_up_commander_put_into_its_owners_hand`
+    (`r614_optional_replacement_prompts.rs`; CR 903.9b, 708.2a, 708.5).
+- `replacement_options` and `replacement_candidates`:
+  - `641:70` `<`→`>`: a text no other option shares gets the "(controlled by P0, object N)"
+    suffix, and three or more identical texts lose it.
+    `effects_with_the_same_text_are_told_apart_and_a_unique_one_is_named_by_its_text`
+    (`r616_001_option_names.rs`: three Hardened Scales and Corpsejack Menace; Hardened Scales's
+    ruling "If two or more effects attempt to modify how many counters would be put on a
+    creature you control, you choose the order to apply those effects, no matter who controls
+    the sources of those effects.").
+  - `853:20` delete `!`, `855:49` and `855:68` `==`→`!=`: the moving object's own zone-change
+    ability (CR 400.6) is pushed a second time, so rebound is offered against two copies of Nexus
+    of Fate's own effect. `nexus_of_fate_with_rebound_offers_rebound_and_its_own_effect_once_each`
+    (`r616_001_spells_leaving_the_stack.rs`, with Cast Through Time; Cast Through Time's ruling
+    "you choose whether to apply the rebound effect or the other effect as the spell resolves" and
+    Nexus of Fate's "Nexus of Fate’s last ability applies if it would be put into a graveyard in
+    any way, including while it’s resolving.").
+- Shields (`instance_matches`: `1121:9` → `true`, `1123:17` and `1124:17` `&&`→`||`): every
+  shield "applies" to every damage event, so a shield on one permanent is divided among, or
+  ordered for, damage to recipients it doesn't cover (CR 615.7).
+  `pyroclasm_leaves_a_shield_on_one_creature_undivided` and
+  `two_attackers_damage_to_a_player_isnt_ordered_for_a_shield_on_a_creature`
+  (`r615_007_shields_and_other_recipients.rs`, Samite Healer's shield).
+- The permanent as it would exist (`with_hypothetical_entry`,
+  `r614_012_entering_counters_and_effect_order.rs`; CR 614.12, 616.2):
+  - `1185:59` and `1188:59` `+=`→`*=`: the hypothetical permanent has none of the counters it
+    enters with, so Sigarda's Summons doesn't make it an Angel for Metallic Mimic naming Angel.
+    `a_creature_given_a_counter_by_grumgully_enters_as_an_angel_under_sigardas_summons` and
+    `tribute_counters_make_ornitharch_enter_as_an_angel_under_sigardas_summons` (Ornitharch's
+    ruling "If the opponent pays tribute, the creature will enter the battlefield with the
+    specified number of +1/+1 counters on it. It won’t enter the battlefield and then have the
+    +1/+1 counters placed on it.").
+  - `1262:42` `-`, `*`: what the putting effect says the permanent is (CR 611.2e) is timestamped
+    before the permanent's own static abilities, against 613.7n.
+    `mephidross_vampire_put_onto_the_battlefield_by_the_master_is_a_mutant_and_no_vampire` (The
+    Master, Transcendent).
+  - `1287:46` `-`, `1287:50` `*` and `-`: an "enters as" modification is timestamped before the
+    611.2e effect.
+    `otherworldly_escort_returning_under_master_biomancer_enters_as_a_spirit_detective_mutant`
+    (Rhythm of the Wild's ruling "If a creature enters the battlefield with two instances of riot,
+    you may choose to have it get two +1/+1 counters, one +1/+1 counter and haste, or two
+    instances of haste."; register `entry-types-added-after-what-the-effect-says-it-is`).
+- `1330:24` `&&`→`||` in `cant_enter`: any "[cards] in [zones] can't enter the battlefield" that
+  covers the card's zone stops a face-down entry, whatever the face-down card is.
+  `yedoras_face_down_forest_is_checked_as_a_forest_land_card`
+  (`r614_017d_face_down_entry_restrictions.rs`: Yedora's Forest enters under Grafdigger's Cage and
+  Weathered Runestone, not under Soulless Jailer; Yedora's ruling "The face-down card has no name
+  or colors. Its only type is land, its only subtype is Forest" and Soulless Jailer's "Putting a
+  permanent card onto the battlefield from a graveyard is an impossible action while Soulless
+  Jailer is on the battlefield."; register `face-down-entry-checked-as-the-face-down-card`).
+- `repl_event_matches`:
+  - `1500:21` `&&`→`||`: "damage that would reduce your life total to less than 1" and Archon of
+    Coronation apply to damage dealt to every player.
+    `angels_grace_keeps_only_its_controllers_life_total_at_1` (the one-shot form) and
+    `ali_from_cairo_keeps_only_its_controllers_life_total_at_1` (the static form), in
+    `r614_001a_damage_reducing_your_life_total.rs` (Angel's Grace's ruling "It only changes the
+    result of damage dealt to you.").
+  - `1558:21` `||`→`&&`: Prairie Dog's "one or more +1/+1 counters" also adds to Blastoderm's fade
+    counters. `prairie_dog_adds_only_to_plus1_counters_and_only_when_some_are_put`
+    (`r614_001a_one_or_more_counters_of_a_kind.rs`; its ruling "If a creature you control would
+    enter the battlefield with a number of +1/+1 counters on it on a turn where Prairie Dog’s last
+    ability has resolved once, it enters with that many plus one instead."). The test's Memnite X
+    = 0 part no longer contributes since fix 6.
+- Prevention bookkeeping (`apply_replacement`):
+  - `1860:43` `==`→`!=`, `1860:50` and `1860:67` `&&`→`||`: each uses up the wrong division entry,
+    so two Covers of Winter dividing the same damage use up each other's parts.
+    `two_covers_of_winter_each_prevent_their_own_part_of_a_tramplers_damage`
+    (`r615_divided_prevention_parts.rs`, in all four orders; Cover of Winter's ruling "you decide
+    how to divide the prevention effect").
+  - `1857:33` `||`→`&&`, `1857:55` delete `!`: a division part is never used up, so a recipient
+    that more of a source's damage is redirected to gets its part again, and the shield runs out
+    before another recipient's part.
+    `a_divided_shield_gives_a_recipient_its_part_once_when_more_damage_is_redirected_to_it` (same
+    file: Divine Deflection divided among Siege Mastodon under Pariah, P0 and Wall of Wood; its
+    ruling "you choose which of that damage to prevent if the chosen value for X won’t prevent all
+    the damage"; register `shield-divided-among-recipients`). It still kills them after fix 7:
+    the part of 0 moves and adds nothing.
+  - `1918:51` `+=`→`*=`: "that damage" of a follow-up merged over simultaneous damage is the
+    product. `angel_of_suffering_mills_twice_the_damage_two_attackers_would_deal_at_once`
+    (`r615_005_followup_of_simultaneous_damage.rs`; 2 + 3 damage mills 10, not 12; CR 615.5).
+    The existing Rock Hydra test has 2 + 2 = 2 × 2.
+- Entering (`apply_replacement`):
+  - `2022:29` `&&`→`||` in `AsEnters`: effects that already applied to the spell are re-stamped
+    for the permanent. `painters_servant_turned_red_as_a_spell_is_red_and_its_chosen_color`
+    (`r614_012_effects_on_the_spell_keep_their_timestamp.rs`: Chaoslace on the spell, blue
+    chosen; CR 400.7a, 613.7b; Painter's Servant's ruling "This ability doesn't overwrite any
+    previous colors").
+  - `2107:55` `&&`→`||` in `EnterAsCopy`: a chosen creature out of the copy effect's
+    controller's range of influence is copied anyway.
+    `mystic_reflection_doesnt_copy_its_chosen_creature_once_a_player_out_of_range_controls_it`
+    (`r614_001c_copy_entry_out_of_range.rs`: five players, range 1; CR 801.11, 801.13).
+- Life floors, the entering view, event amounts and redirection (`apply_replacement`,
+  `EnteringView`, `event_amount`):
+  - `2272:53` `+`→`-`: a life floor counts the life the player gains in the same damage event
+    (lifelink, CR 120.4d) the wrong way.
+    `worship_counts_the_life_a_lifelink_blocker_gains_in_the_same_damage_event`
+    (`r614_001a_life_floor_counts_lifelink_gained_at_once.rs`; Worship's ruling "It reduces your
+    life total to 1, not the damage to 1.").
+  - `2682:9` (`EnteringView::controller_override` → `None`), `2682:13` `==`→`!=`: Uphill
+    Battle's "Creatures played by your opponents enter tapped." reads a land's owner instead of
+    the player who plays it.
+    `uphill_battle_taps_its_controllers_dryad_arbor_an_opponent_plays_from_their_graveyard`
+    (`r614_012_land_played_from_another_players_graveyard.rs`: P0 plays P1's Dryad Arbor from P1's
+    graveyard with Shaman's Trance and Crucible of Worlds; Dryad Arbor's ruling "Dryad Arbor is
+    played as a land."). Overturns October's (a) for `1786:9`.
+  - `event_amount` (`2778:5` → `None` and → `Some(1)`, `2779:9` and `2782:9` delete the
+    damage/life and counters arms): an event that a `Subtract` leaves at 0 is kept. Two tests:
+    - `wickerbough_elder_entering_under_vizier_of_remedies_has_no_minus1_kind_to_move`
+      (`r614_001a_counters_reduced_to_none.rs`: with the mutants Nesting Grounds offers an empty
+      -1/-1 kind; Vizier of Remedies's ruling "it enters with that many counters minus one" and
+      Nesting Grounds's "You choose which kind of counter to move as that ability resolves.");
+    - `deathtouch_damage_lashknife_barrier_reduces_to_0_makes_no_excess_damage`
+      (`r614_deathtouch_damage_reduced_or_redirected_away.rs`: with the mutants Typhoid Rats' 1,
+      reduced to 0, still makes 1 damage lethal for Aegar's excess-damage trigger; Aegar, the
+      Freezing Flame's ruling "Even 1 damage dealt to a creature from a source with deathtouch is
+      considered lethal damage"; register `deathtouch-lethal-for-excess-by-damage-dealt`).
+
+    The triage expected fix 6 to make their counters half equivalent, but a `Subtract` that the
+    mutants leave at 0 still records the kind. Overturns October's (a) for `1875:5`.
+  - `2582:26`, `2590:27` `>`→`>=` in `RedirectNext`: a 0-damage event is added for the new
+    recipient, or for the old one when the shield redirects all of the damage.
+    `a_redirection_of_the_next_0_damage_deals_none_of_the_deathtouch_damage_elsewhere` (Captain's
+    Maneuver for X = 0) and `deathtouch_damage_lancers_en_kor_redirects_makes_no_excess_damage`,
+    in the same file (with the same ruling and register entry).
+
+**Engine bugs (c)**, each fixed generally, with a regression test that failed before the fix
+(numbered as in the commits; 5 and 10 were judgment calls only, registered in `190bab0`):
+
+- **Fix 1: the depth guard cut long chains** (CR 614.5, 616.1f; the survivors `607:60` and
+  `622:23` (`depth + 1` → `depth * 1`, so the chain stops growing `depth`), found with
+  `424:18`). Once 33 effects had been applied or declined along an event's chain, `replace_rec`
+  returned the event unmodified, so 34 Hardened Scales turned Battlegrowth's one counter into
+  34, not 35. A step that yields one event (or declines an optional effect) now goes on in a
+  loop. The bound is `MAX_REPLACEMENT_STEPS` = 4096 steps, which only a loop reaches: `applied`
+  bounds every real chain (CR 614.5), and the one effect that may apply again, the junkyard rule
+  (CR 717.6), ends in the command zone. Raising the bound alone overflowed the stack at 300
+  Hardened Scales (a debug `replace_rec` frame is about 9.9 KB). Tests:
+  `thirty_four_hardened_scales_each_add_a_counter` and
+  `three_hundred_hardened_scales_each_add_a_counter` (`r616_001_long_replacement_chains.rs`;
+  Hardened Scales's ruling "Each additional Hardened Scales you control will increase the number
+  of +1/+1 counters placed on a creature you control by one."). Overturns October's (a) for
+  `233:18` ("no real chain gets near 32 levels"). Commit `cac3507`.
+- **Fix 2: after a copy effect, the effects of a permanent that leaves were lost** (CR 614.12,
+  616.1f, 616.2; the survivors `497:33` → `false` and `497:40`, which behave as the fix does).
+  `EntrySnapshot` keeps an entering permanent's effects when a permanent that generated them
+  leaves as it enters (Rhythm of the Wild's ruling above). It was taken once. So once a copy,
+  control, face or face-down effect had changed how the permanent enters, the snapshot no longer
+  matched, and nothing was kept: Clone entering as a copy of Rescuer Sphinx that returns
+  Grumgully, the Generous lost Grumgully's counter. The snapshot is now retaken at every step
+  until a permanent leaves (the arm `Some(sn) if sn.obj == m.obj => {}` is deleted; F2 of the
+  triage, register `entry-effects-of-a-leaving-source`, provisional). Tests:
+  `a_clone_entering_as_rescuer_sphinx_returning_grumgully_still_gets_its_counter` (Clone's
+  ruling "Any "as [this creature] enters" or "[this creature] enters with" abilities of the
+  chosen creature will also work") and
+  `metallic_mimics_effect_for_a_sphinx_made_a_mutant_still_applies_once_the_sphinx_returns_it`
+  (4 counters; 3 under F1, which retakes the snapshot only when the entry's mode changes), both
+  in `r614_012_effects_of_a_permanent_that_leaves.rs`. Commit `cac3507`.
+- **Fix 3: copies lost the entry abilities that other effects grant them** (CR 614.12, "... and
+  continuous effects that already exist and would apply to the permanent."; found triaging batch
+  2). Once a permanent was entering as a copy (or with another face up), its own "enters"
+  abilities were taken from the copiable values (or that face's characteristics) alone. So Clone
+  entering as a copy of Grizzly Bears under Rhythm of the Wild had no riot. Inside the
+  hypothetical entry, the entering object's abilities are now its computed ones: copied
+  abilities with the same links, keywords' derived abilities, grants. Test:
+  `clone_entering_as_a_copy_under_rhythm_of_the_wild_has_riot`
+  (`r614_012_copies_have_granted_entry_abilities.rs`, CR 702.136a). Commit `cac3507`.
+- **Fix 4: a spell's "exile this card instead of putting it anywhere else" wasn't one of the
+  effects to choose from** (CR 616.1, 616.1e, 614.15, 702.34a, 701.6a, 608.2n; the survivor
+  `681:9`, `self_replacement_applies` → `true`, (b) at triage pending this decision). A
+  countered or resolving flashback (aftermath, jump-start, harmonize) spell was exiled by the
+  keyword directly, so its controller could never choose Dauthi Voidwalker's "exile it with a
+  void counter" or Valgavoth, Terror Eater's effect. Now `counter_or_fizzle` (stack.rs) and
+  `keyword_impls::choose_resolved_spell_destination` propose the move to the owner's graveyard,
+  where the keyword's static ability is one candidate among the others. Feather, the Redeemed's
+  question still comes first, and a spell's own "Exile this spell." (paradigm) goes through the
+  new `kw::own_instruction_destination`. Removed as dead code:
+  `KeywordRules::countered_destination` and its four impls, `kw::countered_destination`,
+  `keyword_impls::countered_spell_destination`, `Game::self_replacement_applies`. Register
+  `leaving-the-stack-exile-among-other-replacements` (decided). Tests:
+  `a_countered_flashback_spell_under_rest_in_peace_is_exiled_by_the_effect_its_controller_chooses`
+  (it replaces batch 3's no-choice test) and
+  `a_flashback_spell_leaving_the_stack_under_dauthi_voidwalker_gets_a_void_counter_only_if_chosen`
+  (`r616_001_spells_leaving_the_stack.rs`; Think Twice's ruling "A spell cast using flashback
+  will always be exiled afterward, whether it resolves, is countered, or leaves the stack in
+  some other way."). `rulings/r_s14_rebound.rs`'s
+  `flashback_exiles_the_card_whatever_else_would_apply` now expects the question. Commit
+  `9892ff4`.
+- **Fix 6: a kind of counter with no counters** (CR 122.5, 614.1c; batch 5's latent note, found
+  triaging `1536:20`). A destination's "with X counters" for X = 0 (Abuelo's Awakening, Vision
+  Quest) proposed a 0-counter event, and the permanent got that kind with 0 counters. Nesting
+  Grounds' "Choose a kind of counter" offered it: Sphere of the Suns returned for X = 0 had
+  "+1/+1" before "charge", and the default moved nothing. `perform_move_now`'s entering loop now
+  skips a count of 0, as every "enters with" path already did. Test:
+  `sphere_of_the_suns_returned_with_no_additional_counters_has_only_charge_counters_to_move`
+  (`r614_001c_no_counters_of_a_kind.rs`). Commit `530639a`.
+- **Fix 7: a division part on damage redirected before the dividing effect is applied was lost**
+  (CR 615.7, 614.9, 616.1; Cover of Winter's ruling above, Divine Deflection's "If damage is
+  dealt to multiple permanents you control, or is dealt to you and at least one permanent you
+  control, you choose which of that damage to prevent if the chosen value for X won’t prevent
+  all the damage. ..."; found triaging `1857:33`/`1857:55`). `per_source_division` is keyed by
+  the damage as it was proposed. With Pariah's redirection applied first, Divine Deflection
+  divided [Mastodon 1, P0 1, Wall 1] prevented 2, and the Mastodon died. The new
+  `Game::move_division_parts`, called by the `Redirect` and `RedirectNext` arms, moves the parts
+  of the effects not yet applied with the damage, up to the amount moved (a part of 0 goes too).
+  Tests: `a_divided_shields_part_goes_with_damage_redirected_before_the_shield_is_applied`,
+  `a_cover_of_winter_part_goes_with_damage_redirected_before_the_cover_is_applied` and
+  `a_divided_shields_part_of_0_goes_with_damage_redirected_to_a_creature_dealt_none`
+  (`r615_divided_prevention_parts.rs`). The register entries `shield-divided-among-recipients`
+  and `per-source-prevention-division` each got the sentence, with the old behavior as an
+  alternative. Commit `d3c238c`.
+- **Fix 8: static grants of abilities that work only on the stack stayed on the permanent** (CR
+  400.7, 400.7a, 400.7b, 611.3d, 702.51a; outside this file, found triaging `2022:29`).
+  `perform_move`'s CR 400.7a loop rewrote every effect naming a resolving permanent spell to
+  name the permanent. So Memnite cast with Chief Engineer's convoke kept convoke on the
+  battlefield, and wasn't 3/3 under Muraganda Petroglyphs. `next_spell` now records a static
+  ability's grant that doesn't function on the battlefield in the new
+  `Game::stack_only_effects`, which the loop leaves behind. `functions_on_battlefield` also
+  reads `AddKeywordOwnCost` and `AddAbility` (Henzie's blitz). Tests:
+  `memnite_cast_with_chief_engineers_convoke_has_no_abilities_on_the_battlefield` and
+  `memnite_cast_with_archway_of_innovations_improvise_keeps_it_on_the_battlefield` (a resolved
+  ability's effect still follows, CR 400.7a, 611.2f), in
+  `r400_007b_grants_that_dont_function_on_the_battlefield.rs`. Register
+  `cast-grant-have-after-cast` updated. Commit `530639a`.
+- **Fix 9: a move's cause and its exile link were one field** (CR 614.6, 616.1f, 607.2b,
+  801.13a; found triaging `2206:49`). To link an exiled card, the `MoveInstead` arm overwrote
+  `MoveEv::source` with the effect's source. So once the discarding player's own exile effect
+  (Rest in Peace, madness) applied first, Mind Rot's discard was no longer an opponent's doing,
+  and Nephalia Academy wasn't offered. The link is now `EtbInfo::exiled_with`. It is read by the
+  linked exile, the counters an exiled card is given, the face-down exile piles and merged
+  permanents' moves; `DiscardCausedBy`, the range of influence, the commander and ante rules
+  keep reading the cause. Tests:
+  `nephalia_academy_still_applies_to_a_discard_its_controllers_rest_in_peace_exiles` and
+  `nephalia_academy_still_applies_to_a_discard_madness_exiles_and_then_it_cant_be_cast`
+  (`r616_001f_discard_still_caused_by_the_opponent.rs`; Nephalia Academy's rulings "When you
+  apply Nephalia Academy’s effect, the card was still discarded." and "If you discard a card
+  with madness, you’ll choose whether to exile it or put it on top of your library. If you put
+  it on top of your library, you can’t cast it using madness."). Commit `8cfcfee`.
+
+**Equivalent survivors (a)** (55), missed by the re-run:
+
+- Keys. `126:29` (`EtbInfo::copied_values`'s guard → `true`): `copy_values` is only written
+  together with `copy_of`, for the same object, and every caller passes the `copy_of` object.
+  `226:36` (`JUNKYARD_KEY = u64::MAX / 717`): the key is only compared with the same object's
+  other static keys (ability uids counted from 1, 0, `u64::MAX - 1..3`, Silhouette's object id),
+  none of which can be about 2.6·10^16.
+  `284:46` `|`→`^`, `285:47` and `285:70` `^`→`|`: the operands share no bits. `284:39` `<<`→`>>`
+  (an instance key is the bare instance id): keys are only compared for equality, and instance ids
+  (below 2^32) still differ from every static key (an object id of at least 1 in the high 32 bits)
+  and every player key (bits 62 and 63 set). `285:40`, `285:47` `^`→`&`, `285:63`: a player key
+  loses the player (and the tag bits) but keeps its index. Player keys come only from players'
+  protection, whose one consumer, `merge_prevention_events`, merges by recipient and key, and a
+  player key's recipient is its own player. October's `1207:74` (the key losing the player, left
+  "(b) not killed") is this case.
+- `424:18` `>`→`==`, `>=` ((b) at triage, (a) since fix 1): the guard is now `depth >
+  MAX_REPLACEMENT_STEPS`. The mutants take at most 4,096 steps instead of 4,097, which only a
+  loop, or a chain of 4,097 effects on one event, reaches. The 33-, 34- and 300-Hardened-Scales
+  tests pass with them.
+- `434:35` (the entry branch's guard → `true`: every move is looked at as a hypothetical entry).
+  For a move that isn't to the battlefield, the branch adds only entry effects, which need a move
+  to the battlefield, or a counter effect listed twice under one key (a finality counter's), which
+  is still one option. Its other differences (`entering_chars`, the own `Where` abilities, the
+  snapshot) are read only for an entry, and `with_hypothetical_entry` restores what it changes.
+- `584:18` (`next_part.is_none()` → `true`, → `false`), `583:63` (`ability_of(c) == a` → `!=`):
+  the parts of one ability (Master Biomancer, the kicker creatures' "enters with A and with B",
+  two instances of one keyword) apply to the same event and stay applicable, and none of them
+  makes an effect of an earlier class applicable. The abilities whose parts are in different
+  classes never have two parts among one class's candidates. So the ability these keep or drop
+  as `parts_of` has no part left to find, or the next step offers just that one part.
+- `733:17` (delete the `Where` arm of `replacement_candidates::entry`): it matters only for a
+  `Where` nested in a `Where`, which no card compiles to.
+- `763:46` (`f != o.face` → `false`: the other face an object enters with is never looked up).
+  Inside the hypothetical entry the object already has that face, and since fix 3 its abilities
+  there are its computed ones. Outside it, the face's characteristics give only its own `Where {
+  EntersBattlefield(Source) }` abilities, and only Primeval Spawn has one (single-faced).
+- `855:58` (`&&`→`||` in the CR 400.6 dedupe of the object's own zone-change abilities): it
+  differs only for an object outside every zone (a token being created, a merged permanent's card
+  component). No such object has an own zone-change replacement that applies to its entering, and
+  the mutant pushes no second copy.
+- `869:18` (`entering_now` → `true`: entering sources are skipped for counters put on any
+  object): the only counters put while entering objects' statics are collected are the ones the
+  entering permanents enter with, on themselves.
+- `1039:28` `&&`→`||`, `1039:24` `>`→`>=` (keyword prevention offered for 0 damage, or in the
+  `EntryOnly` scope): no damage event of 0 reaches the candidates (CR 120.8: `deal_damage_batch`
+  drops 0 damage, and the pipeline drops an event left with 0), and no damage event is looked up
+  in the `EntryOnly` scope.
+- `1287:46` `*` (`S * 2 + k`): S is at least 2 there, so every "enters as" modification stays
+  after everything at S and S+1, in the same order.
+- `1359:25` (`&&`→`||` in a resolved "can't enter" rule effect): dead code. Only Worms of the
+  Earth's static pattern makes a `CantEnter` or `CantEnterBattlefield` restriction, and no effect
+  creates one, so no rule effect holds one.
+- `1484:25` (GainLife), `1487:25` (LoseLife), `1499:25` (LifeLossFromDamage), `1582:25`
+  (CreateTokens), `1592:24` (CreateTokensMatching), each `>`→`>=`: no event of 0 is proposed (CR
+  119.10, 120.8; the token functions skip 0) or produced (the actions multiply, add, keep the
+  number or drop an event left with 0).
+- `1536:20` `>`→`>=` in `PutCountersBy` ((b) at triage, by the policy: two Vorinclexes were asked
+  to order a return with 0 counters; (a) since fix 6): no counter event of 0 is proposed any more.
+  Its test, `no_counters_put_leaves_two_vorinclexes_nothing_to_order`, stays.
+- `1537:55` (`x == k` → `!=` in `PutCountersBy`'s kind check): `PutCountersBy` is only built
+  with `kind: None`.
+- `1665:35`, `1702:39` (`m.to == Zone::Battlefield` → `true` in `used_by_this_entry` and in the
+  batch record). Every limited-use instance has one use and is about an entry, a draw, damage, a
+  destruction, a loss of the game or a skipped combat phase, never another zone change. Unlimited
+  instances are never looked up in the batch list.
+- `1711:31` (`used.contains(&id)` → `false`): every limited-use effect has one use, and
+  `saturating_sub` keeps 0 at 0.
+- `1750:17` (delete the `Hand | Library | Graveyard` arm for the player who reveals the card): a
+  card in those zones is controlled by its owner (CR 108.4a, 400.3), so both arms name the same
+  player.
+- `1772:21` (delete `ReplacementAction::Prevent => (None, None)`): the match falls through to
+  `_ => (None, None)`.
+- `1816:33` (`budget_key.is_some()` → `true`): with no key, the used budget sums no records.
+  `1857:52` (`… || !unpreventable`): the extra effects have no division entry, and damage that
+  can't be prevented takes 0 off. `1865:65` (`prevented > 0` → `>= 0`): a record of 0 adds 0.
+- `1965:25` (delete `object` from the event info an "enters with" amount is evaluated with): no
+  "enters with" amount in the pool reads the event's object.
+- `1981:50` (`**n > 0` → `>=` among the kinds of counter on Blue, Loyal Raptor) and `1990:29`
+  (`n > 0` → `>=` for a plain "enters with"), both (b) at triage and (a) since fix 6. No
+  permanent has a kind with 0 counters any more, and the `(kind, 0)` that `1990:29` adds is
+  skipped as the permanent enters (in the hypothetical permanent, every reader ignores a kind with
+  0 counters). The two tests stay (Blue's copy returned for X = 0; Gorma with no creature dead).
+  `1985:34` (`n > 0` → `>=` in the each-kind loop): its amount is always 1.
+- `2206:49` (`&&`→`||` for the exile link in `MoveInstead`; (b) at triage, (a) since fix 9): the
+  condition now sets only `exiled_with` and `link`. They are read for a move to exile, and
+  `exiled_with` also for the counters a card is given as it moves to a zone other than the
+  battlefield, but no `MoveInstead` destination other than exile gives counters. And no exile
+  `MoveInstead` lacks a source. Its test stays (a CR 616.1f check, Darksteel Colossus).
+- `2273:73` (`<`→`<=` in the life floor): at `life - amount == floor`, the replaced amount is
+  `amount` itself.
+- `2475:28` (guard → `true`), `2476:29` (`&&`→`||`): the only other `Subtract(Diff(..))` the
+  compiler makes, "half that damage", gives the half either way (October's `1600:28`).
+- `2670:24`, `2675:9`, `2675:15` (`EnteringView::chars`'s guard; `controller`): the view is only
+  ever asked about the entering object, and `controller` is never called (`controller_override`
+  answers first).
+- `2783:9`, `2784:9` (delete `event_amount`'s `CreateTokens` and `Action` arms): no legal card
+  subtracts from a token creation or a keyword action.
+- `2792:39` (`FOLLOW_IT = vars::USER * 4242`): it is the key of one rider's fresh context, and
+  both sides use the constant.
+- `2891:17` (delete the `Where` arm of `watches`): no keyword-action pattern is wrapped in a
+  `Where`.
+- `2885:9`, `2889:13` (`statics_or_instances_have_action` and `watches` → `true`, the fast
+  path): the extra work is a `run_post_replacement_effects` at the start of each keyword action.
+  The only difference in the pool is Eye for an Eye's rider before Undead Alchemist's mill, which
+  runs just before the milled cards move rather than just after, within one modified event. That
+  is counted as no difference (a judgment call): the rules don't order the parts of one modified
+  event, and the order of the triggers it changes is the player's to choose (CR 603.3b).
+
+**Gone with the fixes** (6): `497:33` (`true`, (a), and `false`, (c)), `497:40` ((c)), `607:60`
+and `622:23` ((c)), `681:9` ((b); fix 4 does what it did). The `+`→`-` forms of `607:60` and
+`622:23` were caught in the run. Fix 1 turned those expressions into `depth += 1` statements,
+whose `-=` and `*=` mutants are mutants of new code, not survivors.
+
+**The timeouts**, `378:9` (`replace_entering` → `vec![]`) and `424:9` (`replace_rec` →
+`vec![]`), timed out again: every replaced event comes back as nothing, so an object that a
+state-based action moves stays where it is, and the check repeats forever. These are detections.
+
+**Not fixed / notes:**
+
+- The step bound itself: a chain of more than 4,097 effects on one event (4,098 Hardened Scales)
+  would be cut, against CR 616.1f. No game reaches it short of a loop, and 300 Hardened Scales is
+  the longest chain tested.
+- Latent, no card (batch 4):
+  - `with_hypothetical_entry` keeps the counters the object had in its previous zone (a card
+    exiled with Dauthi Voidwalker's void counter and played as a land), though the new permanent
+    has none (CR 122.2, 400.7).
+  - For a face-down entry, the hypothetical permanent gets the listed characteristics as a
+    `Duration::Permanent` effect in layers 4–7, not as the layer-1b face-down values that
+    `perform_move` creates. With today's cards the two agree.
+  - In the hypothetical permanent, the keyword counters it enters with get the object's own
+    timestamp, while on the battlefield they're put after the 611.2e effect (Xu-Ifit,
+    Osteoharmonist's return with Tayam, Luminous Enigma's vigilance counter). Nothing reads an
+    entering permanent's keywords.
+- Readings kept without a register entry:
+  - `2107:55`'s test reads CR 801.11 as applying to the object a copy effect copies: a creature
+    out of range isn't copied (801.13). `Game::matches`' range check already makes that reading.
+  - The question about a face-down permanent names no card (`598:24`'s test pins the engine's
+    choice).
+  - `2885:9`/`2889:13` (above).
+- The new code (`replace_rec`'s loop and bound, `move_division_parts`, `exiled_with`,
+  `stack_only_effects`, `own_instruction_destination`, the `functions_on_battlefield` cases, the
+  zero-count skip) hasn't had its own mutants run.
+- Register entries. New ones:
+  - `entry-effects-of-a-leaving-source` (replacement-prevention, `cac3507`), provisional;
+  - `face-down-entry-checked-as-the-face-down-card` (replacement-prevention, `190bab0`),
+    provisional;
+  - `entry-types-added-after-what-the-effect-says-it-is` (characteristics-layers, `190bab0`),
+    provisional;
+  - `deathtouch-lethal-for-excess-by-damage-dealt` (combat, `190bab0`), provisional;
+  - `leaving-the-stack-exile-among-other-replacements` (replacement-prevention, `9892ff4`),
+    decided: the CR text and Feather's ruling agree.
+
+  Updated (all decided): `per-source-prevention-division` (when Cover of Winter asks nothing,
+  `d834032`; fix 7) and `shield-divided-among-recipients` (fix 7), `cast-grant-have-after-cast`
+  (fix 8), and `simultaneous-entries-ordered-by-controller` (a cross-reference to the first new
+  entry). The four provisional ones, with their rules and rulings:
+  - `entry-effects-of-a-leaving-source`: the effects that applied just before their source left
+    the battlefield still apply (fix 2, F2). Rules: 614.12 "... To determine which replacement
+    effects apply and how they apply, check the characteristics of the permanent as it would exist
+    on the battlefield, taking into account replacement effects that have already modified how it
+    enters the battlefield (see rule 616.1), continuous effects from the permanent’s own static
+    abilities that would apply to it once it’s on the battlefield, and continuous effects that
+    already exist and would apply to the permanent."; 616.1f "Once the chosen effect has been
+    applied, this process is repeated (taking into account only replacement or prevention effects
+    that would now be applicable) until there are no more left to apply."; 616.2 "A replacement or
+    prevention effect can become applicable to an event as the result of another replacement or
+    prevention effect that modifies the event."; 611.3b "The effect applies at all times that the
+    permanent generating it is on the battlefield or the object generating it is in the
+    appropriate zone."; 613.1 "The values of an object’s characteristics are determined by
+    starting with the actual object. ... Then all applicable continuous effects are applied in a
+    series of layers in the following order:". Rulings:
+    - Rhythm of the Wild (2019-05-03), above;
+    - Rescuer Sphinx (2019-05-03): "You choose whether to return a nonland permanent and which one
+      to return for Rescuer Sphinx’s ability while it’s entering the battlefield. No player may take
+      actions between the time you choose which permanent to return and the time Rescuer Sphinx is
+      on the battlefield with a +1/+1 counter." and "If the returned permanent had an ability that
+      would otherwise have triggered when Rescuer Sphinx enters the battlefield (such as that of
+      Kronch Wrangler), that ability won’t trigger.";
+    - Clone (2025-10-02): "Any enters abilities of the copied creature will trigger when Clone
+      enters. Any "as [this creature] enters" or "[this creature] enters with" abilities of the
+      chosen creature will also work.";
+    - Grumgully, the Generous (2019-10-04): "If a non-Human creature enters the battlefield as a
+      copy of a Human creature, it won't get a +1/+1 counter. Similarly, if a Human enters as a
+      non-Human creature, it will get a +1/+1 counter.";
+    - Metallic Mimic (2017-02-09): "Even though Metallic Mimic is a Shapeshifter, other
+      Shapeshifter creatures you control won't get a +1/+1 counter unless you chose Shapeshifter as
+      Metallic Mimic entered the battlefield. If you do, that creature must be entering the
+      battlefield as a Shapeshifter to get a +1/+1 counter. It won't get a +1/+1 counter if it
+      enters the battlefield as a copy of a non-Shapeshifter creature.";
+    - Master Biomancer (2013-01-24): "To determine how many additional +1/+1 counters a creature
+      enters with, use Master Biomancer's power as that creature is entering.".
+
+    Provisional because no ruling covers an effect that became applicable through another (616.2)
+    whose source then leaves.
+  - `face-down-entry-checked-as-the-face-down-card`: Yedora, Grave Gardener's face-down card is
+    checked against "[cards] in [zones] can't enter the battlefield" as the Forest land card it is
+    turned into. Rules: 708.3 "Objects that are put onto the battlefield face down are turned face
+    down before they enter the battlefield, so the permanent’s enters-the-battlefield abilities
+    won’t trigger (if triggered) or have any effect (if static)."; 708.2 "Face-down spells and
+    face-down permanents have no characteristics other than those listed by the ability or rules
+    that allowed the spell or permanent to be face down. ..."; 708.2a "... A permanent that enters
+    the battlefield face down also has these characteristics unless otherwise specified by the
+    effect that put it onto the battlefield face down or allowed it to be cast face down. ...";
+    701.40a "To manifest a card, turn it face down. It becomes a 2/2 face-down creature card with
+    no text, no name, no subtypes, and no mana cost. ..."; 614.17d "... To determine which “can’t”
+    effects apply, check the characteristics of the permanent as it would exist on the battlefield,
+    ...". Rulings:
+    - Yedora, Grave Gardener (2021-04-16): "The face-down card has no name or colors. Its only type
+      is land, its only subtype is Forest, and its only ability is "{T}: Add {G}."";
+    - Grafdigger's Cage (2019-07-12): "Look at the card as it exists in your graveyard to determine
+      whether it can enter the battlefield. For example, Sculpting Steel can be put onto the
+      battlefield as a copy of a creature, but Phyrexian Metamorph can't be put onto the
+      battlefield, even if it would copy a noncreature artifact." and "Manifesting a card from a
+      graveyard or library is an impossible action while Grafdigger's Cage is on the
+      battlefield.";
+    - Weathered Runestone (2021-02-05): "Look at the card as it exists in your graveyard or library
+      to determine whether it can enter the battlefield. If it’s a double-faced card, use its
+      front-face characteristics only.";
+    - Kunoros, Hound of Athreos (2020-01-24): "Look at the card as it exists in your graveyard to
+      determine whether it can enter the battlefield. ...";
+    - Soulless Jailer (2023-02-04), above.
+
+    Provisional because no ruling covers a face-down entry whose effect lists characteristics, and
+    "as it exists in your graveyard" can be read as the face-up card.
+  - `entry-types-added-after-what-the-effect-says-it-is`: Master Biomancer's "as a Mutant in
+    addition to its other types" applies after Otherworldly Escort's "It's a Spirit Detective".
+    Rules: 611.2e "If a resolving spell or ability both puts a nontoken permanent onto the
+    battlefield and creates a continuous effect stating that the permanent “is [characteristic],”
+    that it “has [characteristic],” or that it doesn’t have a particular characteristic, that
+    continuous effect applies simultaneously with the permanent entering the battlefield. ...";
+    613.7n "If a continuous effect generated by a static ability of an object and a continuous
+    effect generated by a resolving spell or ability that applies to that object would receive a
+    timestamp simultaneously, such as due to an effect that puts that object onto the battlefield
+    and sets its characteristics (see rule 611.2e), the continuous effect from the object’s own
+    static ability receives an earlier relative timestamp."; 613.7a "A continuous effect generated
+    by a static ability has the same timestamp as the object the static ability is on, or the
+    timestamp of the effect that created the ability, whichever is later. ..."; 613.7b "A
+    continuous effect generated by the resolution of a spell or ability receives a timestamp at the
+    time it’s created."; 614.1c "Effects that read “[This permanent] enters with . . . ,” “As [this
+    permanent] enters . . . ,” or “[This permanent] enters as . . . “ are replacement effects.";
+    614.12 (above). Ruling: Master Biomancer's only one (2013-01-24, above); Otherworldly Escort
+    has none. Provisional because a judge could give the Mutant type Master Biomancer's timestamp
+    (613.7a), and then "It's a Spirit Detective" overwrites it.
+  - `deathtouch-lethal-for-excess-by-damage-dealt`: deathtouch makes 1 damage lethal for excess
+    damage by the damage dealt, not the damage assigned. Rules: 702.2c "Any nonzero amount of
+    combat damage assigned to a creature by a source with deathtouch is considered to be lethal
+    damage for the purposes of determining if excess damage is being dealt."; 120.10 "Some
+    triggered abilities check whether a permanent has been dealt excess damage. These abilities
+    check after the permanent has been dealt damage by one or more sources. If those sources
+    together dealt an amount of damage to a creature greater than lethal damage, excess damage
+    equal to the difference was dealt to that creature. ..."; 120.8 "If a source would deal 0
+    damage, it does not deal damage at all. ..."; 614.9 "Some effects replace damage dealt to one
+    battle, creature, planeswalker, or player with the same damage dealt to another battle,
+    creature, planeswalker, or player; such effects are called redirection effects. ...". Ruling:
+    Aegar, the Freezing Flame (2021-02-05): "Even 1 damage dealt to a creature from a source with
+    deathtouch is considered lethal damage, so any amount greater than that will cause excess
+    damage to be dealt, even if the total amount of damage isn't greater than the creature's
+    toughness. Note that a source of damage having deathtouch has no effect on damage dealt to
+    planeswalkers.". Provisional because 702.2c says "assigned".
