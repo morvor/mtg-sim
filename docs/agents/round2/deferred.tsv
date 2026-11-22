@@ -1,0 +1,4 @@
+cards	text	example_card	category
+1	{N}{W}: Another target creature perpetually gains lifelink.	Pearl Collector	digital-only mechanic: perpetual (DEFERRED.md, Digital-only cards)
+1	If a Rigger you control would assemble a Contraption, it assembles two Contraptions instead.	Steamflogger Boss	Contraptions (DEFERRED.md, out of scope)
+1	When ~ enters the battlefield, you gain N life. You get a one-time boon with "When you cast a creature spell, that creature enters the battlefield with an additional +N/+N counter, trample counter, and vigilance counter on it."	Tenacious Pup	digital-only mechanic: boon (DEFERRED.md, Digital-only cards)

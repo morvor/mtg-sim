@@ -1,0 +1,17 @@
+710.3	Physical play: players mark flipped permanents with coins or dice; the engine keeps the flipped status on the object (tested under 710.4)
+712.2a	Physical card presentation: the front-face symbol printed on nonmodal double-faced cards has no game effect
+712.2b	Physical card presentation: the back-face symbol printed on nonmodal double-faced cards has no game effect
+712.3a	Physical card presentation: the front-face symbol printed on modal double-faced cards has no game effect
+712.3b	Physical card presentation: the back-face symbol printed on modal double-faced cards has no game effect
+712.6	Information access: an agent allowed to look at a card sees its whole card definition, both faces included; there is no partial view to test
+712.7	Physical play: opaque sleeves or substitute cards keep double-faced cards in hidden zones indistinguishable; engine objects in hidden zones are never shown to players who can't look at them
+719.1	Physical card presentation: a Case card's illustration and type line placement have no game effect
+719.2	Physical card presentation: the Case frame has no rules meaning by definition; the card's abilities are what the engine compiles
+713.1	Physical play: a substitute card is a paper proxy with a normal card back; the engine uses the double-faced or meld card definition itself
+713.2	Physical card presentation: what is written on a paper substitute card has no engine representation
+713.2a	Physical card presentation: 2011-2018 checklist substitute cards with fill-in circles are paper proxies only
+713.2b	Physical card presentation: the Core Set 2019 Nicol Bolas, the Ravager substitute card is a paper proxy only
+713.2c	Physical card presentation: Zendikar Rising write-in modal double-faced substitute cards are paper proxies only
+713.3	Physical play: setting aside the represented card for a paper proxy; engine decks contain the double-faced or meld card definitions directly
+713.4	Physical play: a paper proxy stands in for the represented card; engine objects are always the represented card itself
+713.5	Physical play: swapping a face-up paper proxy for the real card; engine objects are always the represented card itself

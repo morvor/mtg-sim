@@ -1,0 +1,98 @@
+//! Shared helpers for the tests of rulings batch P125 (`r_p125_*.rs`): effects that
+//! protect a group of permanents (the group is fixed as the effect resolves), fogs and
+//! damage prevention for groups, "blocks [creature] this turn if able" requirements,
+//! commander-matters modal spells, and skipping combat. (The helpers of batches S01–P120
+//! are used too.)
+
+#![allow(dead_code)]
+
+use mtg_engine::keywords::KeywordKind;
+use mtg_engine::testing::*;
+use mtg_engine::*;
+
+pub use crate::r_p108_common::{end_step, obj, put_counters, resolved};
+pub use crate::r_s01_common::{attack_with, block_and_finish, creatures, supported, triggers_on_stack};
+pub use crate::r_s02_common::{create_token, destroy};
+pub use crate::r_s05_common::run_from;
+pub use crate::r_s20_common::to_beginning_of_combat;
+pub use crate::r_s21_common::{blocks_now, castable, go_to, legal_blocks};
+pub use crate::r_s25_common::{cast_new, lands_for_cost};
+
+/// Attack declarations of the given creatures, each attacking player P1.
+pub fn at_p1(attackers: &[ObjectId]) -> Vec<(ObjectId, Entity)> {
+    attackers.iter().map(|a| (*a, Entity::Player(P1))).collect()
+}
+
+/// Whether the object (followed across zone changes) has the keyword now.
+pub fn has(t: &TestGame, id: ObjectId, k: KeywordKind) -> bool {
+    t.obj_now(id).has_keyword(k)
+}
+
+/// Whether the object (followed across zone changes) is indestructible now.
+pub fn indestructible(t: &TestGame, id: ObjectId) -> bool {
+    has(t, id, KeywordKind::Indestructible)
+}
+
+/// Whether the object (followed across zone changes) has hexproof now.
+pub fn hexproof(t: &TestGame, id: ObjectId) -> bool {
+    has(t, id, KeywordKind::Hexproof)
+}
+
+/// Queues `p`'s answer to a "choose a color" decision.
+pub fn choose_color(t: &mut TestGame, p: PlayerId, c: mtg_engine::types::Color) {
+    let i = mtg_engine::types::Color::ALL
+        .iter()
+        .position(|x| *x == c)
+        .unwrap();
+    t.answer(p, DecisionKind::Option, mtg_engine::decision::Answer::Index(i));
+}
+
+pub use crate::r_s29_common::damage_marked;
+
+/// Exiles the permanent (making it an illegal target) and settles.
+pub fn exile_now(t: &mut TestGame, id: ObjectId) {
+    let id = t.g.current(id);
+    t.g.exile_object(id, None);
+    t.g.flush_events();
+    t.settle();
+}
+
+/// From P0's beginning of combat: P0 attacks P1 with `attackers`, P1 blocks with `blocks`,
+/// and combat damage is dealt (the game advances to the end of combat step).
+pub fn fight_it_out(t: &mut TestGame, attackers: &[ObjectId], blocks: &[(ObjectId, ObjectId)]) {
+    to_beginning_of_combat(t, P0);
+    attack_with(t, &at_p1(attackers));
+    t.resolve_all();
+    block_and_finish(t, P1, blocks);
+}
+
+/// Whether `p` shuffled their library this turn.
+pub fn shuffled(t: &TestGame, p: PlayerId) -> bool {
+    t.g.turn_events
+        .iter()
+        .any(|e| matches!(e, mtg_engine::events::Event::Shuffled { player } if *player == p))
+}
+
+/// Queues `p`'s answer to a "choose a creature type" decision.
+pub fn choose_creature_type(t: &mut TestGame, p: PlayerId, ty: &str) {
+    let i = mtg_engine::types::subtype_lists()
+        .creature
+        .iter()
+        .position(|x| x == ty)
+        .unwrap_or_else(|| panic!("no creature type {ty}"));
+    t.answer(p, DecisionKind::Option, mtg_engine::decision::Answer::Index(i));
+}
+
+/// The option lists of the "choose one of these" decisions asked of `p` since decision
+/// `from`, with their prompts.
+pub fn options_asked(t: &TestGame, p: PlayerId, from: usize) -> Vec<(String, Vec<String>)> {
+    t.asked()[from..]
+        .iter()
+        .filter_map(|(q, d)| match d {
+            mtg_engine::decision::Decision::ChooseOption {
+                prompt, options, ..
+            } if *q == p => Some((prompt.clone(), options.clone())),
+            _ => None,
+        })
+        .collect()
+}

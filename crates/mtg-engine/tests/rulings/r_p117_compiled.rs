@@ -1,0 +1,236 @@
+//! Rulings batch P117 — cards newly compiled for this batch: "Choose a color. Add one mana
+//! of that color for each [count]" mana abilities (Selvala, Eager Trailblazer; Astral
+//! Cornucopia; CR 605.1a, 106.1b), "if it has the least power or is tied for least
+//! power among creatures on the battlefield" (Wretched Banquet; CR 608.2c), "if [a] or if
+//! [b]" (Reptilian Recruiter), and "whenever ~ attacks, blocks, or becomes the target of
+//! a spell" (Giggling Skitterspike; CR 603.2c).
+
+use crate::r_p117_common::*;
+use mtg_engine::decision::Answer;
+use mtg_engine::mana::ManaType;
+use mtg_engine::testing::*;
+use mtg_engine::turn::Step;
+use mtg_engine::*;
+
+/// Taps `src` for mana, choosing green; returns the green mana in P0's pool.
+fn tap_for_green(t: &mut TestGame, src: ObjectId) -> u32 {
+    // The color options are in WUBRG order.
+    t.answer(P0, DecisionKind::Option, Answer::Index(4));
+    t.activate(P0, src, 0, &[]).unwrap();
+    crate::r_s24_common::pool(t, P0, ManaType::G)
+}
+
+#[test]
+fn selvala_counts_different_powers_among_creatures_you_control() {
+    cr!("605.1a", "608.2h");
+    ruling!(
+        "Selvala, Eager Trailblazer",
+        "Selvala’s last ability looks at the creatures you control as it resolves to determine how much mana of the chosen color to add. For example, if you control Selvala (a 4/5 creature), a 1/1 creature, and a 2/1 creature, there are three different powers among creatures you control."
+    );
+    ruling!(
+        "Selvala, Eager Trailblazer",
+        "Selvala’s last ability doesn’t care what color or colors the creatures you control are. It cares only about the power of those creatures."
+    );
+    supported("Selvala, Eager Trailblazer");
+    let mut t = TestGame::new(2);
+    let selvala = t.battlefield(P0, "Selvala, Eager Trailblazer");
+    t.battlefield(P0, "Llanowar Elves");
+    t.battlefield(P0, "Elite Vanguard");
+    // Another 2-power creature and an opponent's 3/3 add no new power.
+    t.battlefield(P0, "Grizzly Bears");
+    t.battlefield(P1, "Hill Giant");
+    assert_eq!(tap_for_green(&mut t, selvala), 3);
+}
+
+#[test]
+fn selvala_mana_ability_doesnt_use_the_stack() {
+    cr!("605.1a", "605.3a");
+    ruling!(
+        "Selvala, Eager Trailblazer",
+        "Selvala’s last ability is a mana ability. It doesn’t use the stack and can’t be responded to."
+    );
+    let mut t = TestGame::new(2);
+    let selvala = t.battlefield(P0, "Selvala, Eager Trailblazer");
+    assert_eq!(tap_for_green(&mut t, selvala), 1);
+    assert_eq!(stack(&t), 0);
+}
+
+#[test]
+fn astral_cornucopia_adds_one_mana_of_a_chosen_color_per_charge_counter() {
+    cr!("605.1a", "106.1b");
+    supported("Astral Cornucopia");
+    let mut t = TestGame::new(2);
+    let c = t.battlefield(P0, "Astral Cornucopia");
+    put_counters(&mut t, c, "charge", 2);
+    assert_eq!(tap_for_green(&mut t, c), 2);
+    assert_eq!(stack(&t), 0);
+}
+
+#[test]
+fn wretched_banquet_checks_power_only_as_it_resolves() {
+    cr!("608.2c", "115.1");
+    ruling!(
+        "Wretched Banquet",
+        "Wretched Banquet may target any creature. The creature’s power is checked only as Wretched Banquet resolves. If another creature has less power than the targeted creature at that time, Wretched Banquet does nothing."
+    );
+    supported("Wretched Banquet");
+    // (pump the target in response, exile the Elves in response, destroyed)
+    for (pump, exile_elves, destroyed) in [
+        (false, false, false),
+        (false, true, true),
+        (true, true, false),
+    ] {
+        let mut t = TestGame::new(2);
+        let bears = t.battlefield(P1, "Grizzly Bears");
+        let elves = t.battlefield(P0, "Llanowar Elves");
+        t.battlefield(P1, "Hill Giant");
+        // The Bears aren't the least powerful as Wretched Banquet is cast.
+        cast_new(&mut t, P0, "Wretched Banquet", &[obj(bears)]);
+        if exile_elves {
+            exile(&mut t, elves);
+        }
+        if pump {
+            giant_growth(&mut t, bears);
+        }
+        t.resolve_all();
+        assert_eq!(
+            t.in_graveyard(P1, "Grizzly Bears"),
+            destroyed,
+            "pump {pump}, exile {exile_elves}"
+        );
+    }
+    // Tied for the least power: destroyed.
+    let mut t = TestGame::new(2);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    t.battlefield(P0, "Grizzly Bears");
+    cast_new(&mut t, P0, "Wretched Banquet", &[obj(bears)]);
+    t.resolve_all();
+    assert!(t.in_graveyard(P1, "Grizzly Bears"));
+}
+
+#[test]
+fn reptilian_recruiter_checks_its_condition_as_it_resolves() {
+    cr!("608.2c", "115.1");
+    ruling!(
+        "Reptilian Recruiter",
+        "You can target any creature with Reptilian Recruiter’s triggered ability. Whether or not the ability does anything when it resolves will depend on whether that creature’s power is 2 or less or if you control another Lizard at the time the ability resolves."
+    );
+    supported("Reptilian Recruiter");
+    // (target, before it resolves: pump the target / a Lizard enters, P0 gains control)
+    let cases = [
+        ("Grizzly Bears", false, false, true),
+        ("Grizzly Bears", true, false, false),
+        ("Hill Giant", false, false, false),
+        ("Hill Giant", false, true, true),
+    ];
+    for (name, pump, lizard, gains) in cases {
+        let mut t = TestGame::new(2);
+        let target = t.battlefield(P1, name);
+        t.g.objects[target.0 as usize].tapped = true;
+        t.answer_targets(P0, &[obj(target)]);
+        t.enter(P0, "Reptilian Recruiter");
+        t.settle();
+        assert_eq!(stack(&t), 1);
+        if pump {
+            cast_new(&mut t, P1, "Giant Growth", &[obj(target)]);
+            t.resolve();
+        }
+        if lizard {
+            t.battlefield(P0, "Lizard Warrior");
+        }
+        t.resolve_all();
+        let c = t.obj_now(target);
+        assert_eq!(c.controller == P0, gains, "{name} {pump} {lizard}");
+        assert_eq!(!c.tapped, gains, "untapped only if it was gained");
+    }
+}
+
+#[test]
+fn giggling_skitterspike_uses_its_last_known_power() {
+    cr!("608.2h", "113.7a", "603.2c");
+    ruling!(
+        "Giggling Skitterspike",
+        "If Giggling Skitterspike is no longer on the battlefield when its second ability resolves, use its power as it last existed on the battlefield to determine how much damage it deals."
+    );
+    supported("Giggling Skitterspike");
+    let mut t = TestGame::new(2);
+    let spike = t.battlefield(P0, "Giggling Skitterspike");
+    attack_with(&mut t, &[(spike, Entity::Player(P1))]);
+    assert_eq!(stack(&t), 1);
+    grow_then_exile(&mut t, spike, 2);
+    t.resolve_all();
+    assert_eq!(lost(&t, P1), 3);
+    // It also triggers when it blocks, and when it becomes the target of a spell.
+    let mut t = TestGame::new(2);
+    let spike = t.battlefield(P0, "Giggling Skitterspike");
+    cast_new(&mut t, P0, "Giant Growth", &[obj(spike)]);
+    t.settle();
+    assert_eq!(stack(&t), 2);
+    t.resolve_all();
+    assert_eq!(lost(&t, P1), 1, "Giant Growth resolves after the trigger");
+    t.set_step(P1, Step::BeginningOfCombat);
+    let bears = t.battlefield(P1, "Grizzly Bears");
+    attack_with(&mut t, &[(bears, Entity::Player(P0))]);
+    t.answer(
+        P0,
+        DecisionKind::Blockers,
+        Answer::Blockers(vec![(spike, bears)]),
+    );
+    t.advance_to(P1, Step::DeclareBlockers);
+    t.settle();
+    assert_eq!(stack(&t), 1);
+    t.resolve_all();
+    assert_eq!(lost(&t, P1), 1 + 4);
+}
+
+#[test]
+fn self_event_list_with_differing_players_has_no_that_player() {
+    cr!("603.2c");
+    // "~ attacks" (you) and "~ becomes the target of a spell" (the spell's controller)
+    // give "that player" different meanings: such an effect isn't compiled.
+    use mtg_engine::oracle::{self, CompileContext};
+    use mtg_engine::types::TypeLine;
+    let tl = TypeLine::parse("Creature — Test");
+    let ctx = CompileContext {
+        card_name: "Test Spike",
+        full_name: "Test Spike",
+        type_line: &tl,
+        layout: mtg_engine::card::Layout::Normal,
+        face_index: 0,
+        keywords: &[],
+        power: Some("1"),
+        toughness: Some("1"),
+    };
+    let c = oracle::compile(
+        "Whenever Test Spike attacks, blocks, or becomes the target of a spell, that player loses 2 life.",
+        &ctx,
+    );
+    assert!(!c.unsupported.is_empty());
+    let c = oracle::compile(
+        "Whenever Test Spike attacks, blocks, or becomes the target of a spell, each opponent loses 2 life.",
+        &ctx,
+    );
+    assert!(c.unsupported.is_empty(), "{:?}", c.unsupported);
+}
+
+#[test]
+fn strength_testing_hammer_draws_if_greatest_or_tied_for_greatest_power() {
+    cr!("608.2c", "706.1");
+    supported("Strength-Testing Hammer");
+    // Grizzly Bears (2/2) with the Hammer attacks; P1 has Craw Wurm (6/4).
+    for (roll, draws) in [(3, false), (4, true), (5, true)] {
+        let mut t = TestGame::new(2);
+        stack_library(&mut t, P0, &["Forest"]);
+        let hammer = t.battlefield(P0, "Strength-Testing Hammer");
+        let bears = t.battlefield(P0, "Grizzly Bears");
+        t.battlefield(P1, "Craw Wurm");
+        assert!(t.g.attach_as_creature(hammer, Entity::Object(bears)));
+        t.g.recompute();
+        t.g.dice.loaded.push_back(roll);
+        let hand = t.hand_size(P0);
+        attack_with(&mut t, &[(bears, Entity::Player(P1))]);
+        t.resolve_all();
+        assert_eq!(t.pt(bears).0, 2 + roll as i32, "roll {roll}");
+        assert_eq!(t.hand_size(P0), hand + usize::from(draws), "roll {roll}");
+    }
+}
